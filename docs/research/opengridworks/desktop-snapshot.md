@@ -1,0 +1,134 @@
+- generic [ref=e1] [box=0,0,1440,1000]:
+  - navigation "Main navigation" [ref=e2] [box=0,0,64,1000]:
+    - generic [ref=e3] [box=12,16,39,52]:
+      - link "OpenGridWorks home" [ref=e4] [cursor=pointer] [box=8,16,48,52]:
+        - /url: /
+        - generic [box=56,32,0,21]: OpenGridWorks
+      - button "Expand navigation" [ref=e5] [cursor=pointer] [box=61,28,28,28]:
+        - img [ref=e362] [box=68,35,14,14]
+    - link "Plants" [ref=e9] [cursor=pointer] [box=10,92,44,44]:
+      - /url: /power-plants
+      - img [ref=e11] [box=16,104,20,20]
+      - generic [box=50,104,0,21]: Plants
+    - generic [ref=e23] [box=20,925,23,43]:
+      - link "Sign in" [ref=e24] [cursor=pointer] [box=20,925,40,33]:
+        - /url: /sign-in
+        - img [ref=e25] [box=26,932,20,20]
+        - generic [box=54,931,0,21]: Sign in
+      - generic [box=9,968,63,0]:
+        - link "About" [ref=e15] [cursor=pointer] [box=22,968,36,18]:
+          - /url: /about
+        - link "Privacy" [ref=e16] [cursor=pointer] [box=20,990,40,18]:
+          - /url: /privacy
+        - link "Terms" [ref=e17] [cursor=pointer] [box=23,1012,34,18]:
+          - /url: /terms
+        - link "Attribution" [ref=e18] [cursor=pointer] [box=9,1034,63,18]:
+          - /url: /attribution
+  - main [ref=e19] [box=0,0,1440,1000]:
+    - generic [ref=e28] [box=0,0,1440,1000]:
+      - button "Open search" [ref=e486] [cursor=pointer] [box=356,16,44,44]:
+        - img [ref=e487] [box=369,29,18,18]
+      - button "Enable spotlight selection (Circle)" [ref=e490] [cursor=pointer] [box=356,120,44,44]:
+        - img [ref=e491] [box=369,133,18,18]
+      - button "Sign in to turn on relay mode" [ref=e493] [cursor=pointer] [box=1264,16,34,34]:
+        - img [ref=e494] [box=1271,23,20,20]
+        - generic [box=1194,57,173,28]: Sign in to turn on relay mode
+      - generic [ref=e37] [box=0,0,1440,1000]:
+        - region "Map" [active] [ref=e38] [box=0,0,1440,1000]
+        - group [ref=e39] [box=1406,966,24,24]:
+          - generic "Toggle attribution" [ref=e40] [cursor=pointer] [box=1406,966,24,24]
+        - generic [ref=e380] [box=577,527,287,198]:
+          - generic [ref=e381] [box=577,527,287,20]: Pacific Crossing-1 (PC-1)
+          - generic [ref=e382] [box=577,549,287,20]: Pacific Crossing
+          - link "TeleGeography ↗" [ref=e384] [cursor=pointer] [box=577,571,127,25]:
+            - /url: https://www.submarinecablemap.com/submarine-cable/pacific-crossing-1-pc-1
+          - generic [ref=e387] [box=577,602,287,88]
+          - generic [ref=e396] [box=577,694,287,31]: Ajigaura, Japan; Shima, Japan; Grover Beach, CA, United States; Harbour Pointe, WA, United States
+          - button "Close" [ref=e397] [cursor=pointer] [box=836,531,21,16]: ✕
+      - generic [box=620,969,200,8]:
+        - generic [box=781,969,39,4]:
+          - generic [box=796,952,24,16]
+        - generic [box=759,972,61,4]:
+          - generic [box=796,977,24,16]
+      - status [ref=e44] [box=-1,999,1,1]
+      - generic [ref=e322] [box=356,812,162,164]:
+        - button "Map layers" [ref=e324] [cursor=pointer] [box=356,812,77,77]:
+          - generic [ref=e325] [box=367,862,55,17]
+        - generic [ref=e500] [box=356,899,162,77]:
+          - button "Custom layers are available for early test users" [ref=e502] [cursor=pointer] [box=356,899,77,77]
+          - button "Switch to NASA map type" [ref=e504] [cursor=pointer] [box=441,899,77,77]
+      - generic [ref=e46] [box=97,33,211,1106]:
+        - generic [ref=e47] [box=97,33,211,27]:
+          - button "Beta" [ref=e505] [cursor=pointer] [box=261,33,47,17]
+          - heading "Show preset views" [level=2] [ref=e51] [box=97,33,111,27]
+          - button "Display settings" [ref=e507] [cursor=pointer] [box=280,63,28,28]
+        - paragraph [ref=e512] [box=96,32,1,1]: "Reorder top-level legend rows by dragging. Keyboard shortcut: Alt+ArrowUp or Alt+ArrowDown on the focused row."
+        - button "Operating plants Show preset views Show filters" [ref=e319] [cursor=pointer] [box=97,68,211,22]:
+          - generic [ref=e60] [box=107,70,101,17]: Operating plants
+          - generic [ref=e61] [box=260,68,48,22]
+        - generic [ref=e69] [box=97,102,211,303]:
+          - generic [ref=e70] [box=97,102,211,21]
+          - generic [ref=e76] [box=97,123,211,282]
+        - generic [ref=e116] [box=97,417,211,132]:
+          - generic [ref=e117] [box=97,417,211,22]
+          - generic [ref=e120] [box=97,445,211,104]
+        - generic [ref=e344] [box=97,560,211,66]:
+          - generic [ref=e345] [box=97,560,211,22]
+          - generic [ref=e355] [box=97,586,211,40]
+        - generic [ref=e139] [box=97,1060,211,66]:
+          - generic [ref=e140] [box=97,1060,211,22]
+          - generic [ref=e145] [box=97,1086,211,40]
+        - generic [ref=e152] [box=97,638,211,176]:
+          - generic [ref=e153] [box=97,638,211,22]
+          - generic [ref=e158] [box=97,664,211,150]
+        - generic [ref=e180] [box=97,826,211,154]:
+          - generic [ref=e181] [box=97,826,211,22]
+          - generic [ref=e186] [box=97,852,211,128]
+        - generic [ref=e205] [box=97,992,211,22]:
+          - generic [ref=e206] [box=97,992,211,22]
+          - generic [box=97,1014,211,0]
+        - generic [ref=e236] [box=97,1026,211,22]:
+          - generic [ref=e237] [box=97,1026,211,22]
+          - generic [box=97,1048,211,0]
+      - generic [ref=e513] [box=1222,16,34,34]:
+        - button "Globe controls" [ref=e514] [cursor=pointer] [box=1222,16,34,34]:
+          - img [ref=e515] [box=1231,25,16,16]
+        - generic "Globe controls" [box=1039,44,217,515]:
+          - generic [box=1039,48,217,511]
+      - generic [ref=e518] [box=1180,16,34,34]:
+        - button "Label settings" [ref=e519] [cursor=pointer] [box=1180,16,34,34]:
+          - img [ref=e520] [box=1189,25,16,16]
+        - generic "Label settings" [box=980,44,234,612]:
+          - generic [box=980,48,234,609]
+      - button "Reset all filters to defaults" [ref=e522] [cursor=pointer] [box=1054,16,34,34]:
+        - img [ref=e523] [box=1063,25,16,16]
+        - generic [box=1030,57,81,25]: Reset filters
+      - generic [box=773,16,231,34]:
+        - generic "488 people doodling duck curves" [box=773,16,231,34]:
+          - generic [box=797,27,22,12]: "488"
+          - generic [box=827,27,167,12]: people doodling duck curves
+      - generic [ref=e526] [box=1138,16,34,34]:
+        - button "Preset views" [disabled] [box=1138,16,34,34]:
+          - img [box=1147,25,16,16]
+        - generic "Preset views" [box=867,44,305,153]:
+          - generic [box=867,48,305,149]
+      - generic [ref=e527] [box=1012,16,34,34]:
+        - button "Saved views (admin only)" [disabled] [box=1012,16,34,34]:
+          - img [box=1021,25,16,16]
+      - button "Cinematic view" [ref=e528] [cursor=pointer] [box=1096,16,34,34]:
+        - img [ref=e529] [box=1105,25,16,16]
+        - generic [box=1064,57,99,25]: Cinematic view
+      - button "Share map link" [ref=e538] [cursor=pointer] [box=1348,16,34,34]:
+        - img [ref=e539] [box=1358,26,14,14]
+        - generic [box=1330,57,69,25]: Share link
+      - button "Export map as PNG" [ref=e545] [cursor=pointer] [box=1306,16,34,34]:
+        - img [ref=e546] [box=1316,26,14,14]
+        - generic [box=1284,57,78,25]: Screenshot
+      - generic [ref=e551] [box=1308,840,120,120]:
+        - generic [box=1309,841,117,0]:
+          - region "Map" [ref=e552] [box=1309,841,117,117]
+          - button "Map marker" [box=1363,895,10,10]
+      - button "Send feedback" [ref=e282] [cursor=pointer] [box=356,68,40,40]
+      - button "Open cards panel" [ref=e553] [cursor=pointer] [box=1390,16,34,34]:
+        - img [ref=e554] [box=1399,25,16,16]
+  - alert [ref=e22] [box=-1,999,1,1]

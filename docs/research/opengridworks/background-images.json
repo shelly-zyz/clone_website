@@ -1,0 +1,50 @@
+[
+  {
+    "tag": "summary",
+    "cls": "maplibregl-ctrl-attrib-button",
+    "text": "",
+    "bg": "url(\"data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' fill-rule='evenodd' viewBox='0 0 20 20'%3E%3Cpath d='M4 10a6 6 0 1 0 12 0 6 6 0 1 0-12 0m5-3a1 1 0 1 0 2 0 1 1 0 1 0-2 0m0 3a1 1 0 1 1 2 0v3a1 1 0 1 1-2 0'/%3E%3C/svg%3E\")",
+    "box": [
+      1406,
+      966,
+      24,
+      24
+    ]
+  },
+  {
+    "tag": "span",
+    "cls": "layer-switcher-trigger-thumb layer-switcher-trigger-thumb-layers",
+    "text": "",
+    "bg": "url(\"https://opengridworks.com/layers-thumb.png\")",
+    "box": [
+      357,
+      813,
+      76,
+      76
+    ]
+  },
+  {
+    "tag": "span",
+    "cls": "layer-switcher-map-type-thumb layer-switcher-map-type-thumb-custom-upload",
+    "text": "",
+    "bg": "linear-gradient(rgba(2, 6, 23, 0.16), rgba(2, 6, 23, 0.66)), radial-gradient(circle at 22% 24%, rgba(125, 211, 252, 0.58), rgba(0, 0, 0, 0) 46%), radial-gradient(circle at 80% 72%, rgba(236, 72, 153, 0.4), rgba(0, 0, 0, 0) 52%), url(\"https://opengridworks.com/map-type-thumb-satellite.png\")",
+    "box": [
+      357,
+      900,
+      76,
+      76
+    ]
+  },
+  {
+    "tag": "span",
+    "cls": "layer-switcher-map-type-thumb layer-switcher-imagery-thumb-nasa",
+    "text": "",
+    "bg": "url(\"https://opengridworks.com/map-type-thumb-nasa.png\")",
+    "box": [
+      442,
+      900,
+      76,
+      76
+    ]
+  }
+]

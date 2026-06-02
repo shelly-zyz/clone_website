@@ -1,0 +1,23 @@
+{
+  "generatedBy": "scripts/build-china-map-data.py",
+  "sourceFile": "supplement data/inuncoast_historical_nosub_hist_rp0005_0.tif",
+  "renderByDefault": false,
+  "use": "Candidate coastal flood exposure overlay for later risk analysis; not part of the base map.",
+  "rasterMetadata": {
+    "crs": "EPSG:4326",
+    "bounds": [
+      -180,
+      -90,
+      180,
+      90
+    ],
+    "pixelSizeDegrees": [
+      0.008333333333333333,
+      0.008333333333333333
+    ],
+    "nodata": -9999
+  },
+  "samplingStatus": "skipped",
+  "reason": "rasterio is not installed in the current Python environment.",
+  "assetExposureRows": 0
+}

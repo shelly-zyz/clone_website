@@ -1,0 +1,4116 @@
+[
+  {
+    "code": "ABW",
+    "name": "Aruba",
+    "continent": "North America",
+    "subregion": "Caribbean",
+    "pop": 106314,
+    "center": [
+      -69.9728,
+      12.5174
+    ],
+    "bbox": [
+      -70.0661,
+      12.423,
+      -69.8957,
+      12.6141
+    ]
+  },
+  {
+    "code": "AFG",
+    "name": "Afghanistan",
+    "continent": "Asia",
+    "subregion": "Southern Asia",
+    "pop": 38041754,
+    "center": [
+      66.4966,
+      34.1643
+    ],
+    "bbox": [
+      60.4857,
+      29.3919,
+      74.8913,
+      38.4564
+    ]
+  },
+  {
+    "code": "AGO",
+    "name": "Angola",
+    "continent": "Africa",
+    "subregion": "Middle Africa",
+    "pop": 31825295,
+    "center": [
+      17.9842,
+      -12.1828
+    ],
+    "bbox": [
+      11.7431,
+      -18.0197,
+      24.0467,
+      -4.4289
+    ]
+  },
+  {
+    "code": "AIA",
+    "name": "Anguilla",
+    "continent": "North America",
+    "subregion": "Caribbean",
+    "pop": 14731,
+    "center": [
+      -63.0264,
+      18.243
+    ],
+    "bbox": [
+      -63.16,
+      18.1714,
+      -62.9796,
+      18.2697
+    ]
+  },
+  {
+    "code": "ALB",
+    "name": "Albania",
+    "continent": "Europe",
+    "subregion": "Southern Europe",
+    "pop": 2854191,
+    "center": [
+      20.1138,
+      40.6549
+    ],
+    "bbox": [
+      19.2807,
+      39.6535,
+      21.0311,
+      42.6479
+    ]
+  },
+  {
+    "code": "ALD",
+    "name": "Åland",
+    "continent": "Europe",
+    "subregion": "Northern Europe",
+    "pop": 29884,
+    "center": [
+      19.8697,
+      60.1565
+    ],
+    "bbox": [
+      19.519,
+      60.0117,
+      20.6113,
+      60.4058
+    ]
+  },
+  {
+    "code": "AND",
+    "name": "Andorra",
+    "continent": "Europe",
+    "subregion": "Southern Europe",
+    "pop": 77142,
+    "center": [
+      1.5394,
+      42.5476
+    ],
+    "bbox": [
+      1.4148,
+      42.4345,
+      1.7402,
+      42.6427
+    ]
+  },
+  {
+    "code": "ARE",
+    "name": "United Arab Emirates",
+    "continent": "Asia",
+    "subregion": "Western Asia",
+    "pop": 9770529,
+    "center": [
+      54.5473,
+      23.4663
+    ],
+    "bbox": [
+      51.5684,
+      22.6215,
+      56.388,
+      26.0682
+    ]
+  },
+  {
+    "code": "ARG",
+    "name": "Argentina",
+    "continent": "South America",
+    "subregion": "South America",
+    "pop": 44938712,
+    "center": [
+      -64.1733,
+      -33.5012
+    ],
+    "bbox": [
+      -73.5763,
+      -55.0321,
+      -53.6686,
+      -21.8025
+    ]
+  },
+  {
+    "code": "ARM",
+    "name": "Armenia",
+    "continent": "Asia",
+    "subregion": "Western Asia",
+    "pop": 2957731,
+    "center": [
+      44.8006,
+      40.4591
+    ],
+    "bbox": [
+      43.4395,
+      38.869,
+      46.5848,
+      41.291
+    ]
+  },
+  {
+    "code": "ASM",
+    "name": "American Samoa",
+    "continent": "Oceania",
+    "subregion": "Polynesia",
+    "pop": 55312,
+    "center": [
+      -170.7472,
+      -14.3267
+    ],
+    "bbox": [
+      -170.8205,
+      -14.3598,
+      -170.5681,
+      -14.2574
+    ]
+  },
+  {
+    "code": "ATA",
+    "name": "Antarctica",
+    "continent": "Antarctica",
+    "subregion": "Antarctica",
+    "pop": 4490,
+    "center": [
+      35.8855,
+      -79.8432
+    ],
+    "bbox": [
+      -180,
+      -89.9989,
+      180,
+      -60.5209
+    ]
+  },
+  {
+    "code": "ATC",
+    "name": "Ashmore and Cartier Islands",
+    "continent": "Oceania",
+    "subregion": "Australia and New Zealand",
+    "pop": 0,
+    "center": [
+      123.5864,
+      -12.4326
+    ],
+    "bbox": [
+      123.5725,
+      -12.4359,
+      123.5952,
+      -12.4239
+    ]
+  },
+  {
+    "code": "ATF",
+    "name": "French Southern and Antarctic Lands",
+    "continent": "Seven seas (open ocean)",
+    "subregion": "Seven seas (open ocean)",
+    "pop": 140,
+    "center": [
+      69.1221,
+      -49.3037
+    ],
+    "bbox": [
+      51.6593,
+      -49.7099,
+      70.5555,
+      -46.3269
+    ]
+  },
+  {
+    "code": "ATG",
+    "name": "Antigua and Barbuda",
+    "continent": "North America",
+    "subregion": "Caribbean",
+    "pop": 97118,
+    "center": [
+      -61.7906,
+      17.3522
+    ],
+    "bbox": [
+      -61.8871,
+      16.9972,
+      -61.686,
+      17.7141
+    ]
+  },
+  {
+    "code": "AUS",
+    "name": "Australia",
+    "continent": "Oceania",
+    "subregion": "Australia and New Zealand",
+    "pop": 25364307,
+    "center": [
+      134.0497,
+      -24.1295
+    ],
+    "bbox": [
+      112.9082,
+      -54.7492,
+      158.9589,
+      -10.0518
+    ]
+  },
+  {
+    "code": "AUT",
+    "name": "Austria",
+    "continent": "Europe",
+    "subregion": "Western Europe",
+    "pop": 8877067,
+    "center": [
+      14.1305,
+      47.5189
+    ],
+    "bbox": [
+      9.524,
+      46.3997,
+      17.1474,
+      49.0011
+    ]
+  },
+  {
+    "code": "AZE",
+    "name": "Azerbaijan",
+    "continent": "Asia",
+    "subregion": "Western Asia",
+    "pop": 10023318,
+    "center": [
+      47.211,
+      40.4024
+    ],
+    "bbox": [
+      44.7683,
+      38.3987,
+      50.3659,
+      41.891
+    ]
+  },
+  {
+    "code": "BDI",
+    "name": "Burundi",
+    "continent": "Africa",
+    "subregion": "Eastern Africa",
+    "pop": 11530580,
+    "center": [
+      29.9171,
+      -3.3328
+    ],
+    "bbox": [
+      29.0142,
+      -4.4559,
+      30.8114,
+      -2.313
+    ]
+  },
+  {
+    "code": "BEL",
+    "name": "Belgium",
+    "continent": "Europe",
+    "subregion": "Western Europe",
+    "pop": 11484055,
+    "center": [
+      4.8004,
+      50.7854
+    ],
+    "bbox": [
+      2.5249,
+      49.5109,
+      6.3645,
+      51.4911
+    ]
+  },
+  {
+    "code": "BEN",
+    "name": "Benin",
+    "continent": "Africa",
+    "subregion": "Western Africa",
+    "pop": 11801151,
+    "center": [
+      2.352,
+      10.3248
+    ],
+    "bbox": [
+      0.7634,
+      6.2168,
+      3.8345,
+      12.3838
+    ]
+  },
+  {
+    "code": "BFA",
+    "name": "Burkina Faso",
+    "continent": "Africa",
+    "subregion": "Western Africa",
+    "pop": 20321378,
+    "center": [
+      -1.3639,
+      12.673
+    ],
+    "bbox": [
+      -5.5235,
+      9.4247,
+      2.3892,
+      15.0779
+    ]
+  },
+  {
+    "code": "BGD",
+    "name": "Bangladesh",
+    "continent": "Asia",
+    "subregion": "Southern Asia",
+    "pop": 163046161,
+    "center": [
+      89.685,
+      24.215
+    ],
+    "bbox": [
+      88.0234,
+      20.7904,
+      92.6316,
+      26.5715
+    ]
+  },
+  {
+    "code": "BGR",
+    "name": "Bulgaria",
+    "continent": "Europe",
+    "subregion": "Eastern Europe",
+    "pop": 6975761,
+    "center": [
+      25.1571,
+      42.5088
+    ],
+    "bbox": [
+      22.344,
+      41.2436,
+      28.5854,
+      44.2378
+    ]
+  },
+  {
+    "code": "BHR",
+    "name": "Bahrain",
+    "continent": "Asia",
+    "subregion": "Western Asia",
+    "pop": 1641172,
+    "center": [
+      50.5548,
+      26.056
+    ],
+    "bbox": [
+      50.4524,
+      25.8068,
+      50.6175,
+      26.2464
+    ]
+  },
+  {
+    "code": "BHS",
+    "name": "The Bahamas",
+    "continent": "North America",
+    "subregion": "Caribbean",
+    "pop": 389482,
+    "center": [
+      -77.1467,
+      26.4018
+    ],
+    "bbox": [
+      -78.9856,
+      20.9374,
+      -72.7473,
+      26.9401
+    ]
+  },
+  {
+    "code": "BIH",
+    "name": "Bosnia and Herzegovina",
+    "continent": "Europe",
+    "subregion": "Southern Europe",
+    "pop": 3301000,
+    "center": [
+      18.0684,
+      44.0911
+    ],
+    "bbox": [
+      15.7366,
+      42.5597,
+      19.5838,
+      45.2766
+    ]
+  },
+  {
+    "code": "BLM",
+    "name": "Saint Barthélemy",
+    "continent": "North America",
+    "subregion": "Caribbean",
+    "pop": 9961,
+    "center": [
+      -62.8332,
+      17.902
+    ],
+    "bbox": [
+      -62.8754,
+      17.8752,
+      -62.7997,
+      17.9223
+    ]
+  },
+  {
+    "code": "BLR",
+    "name": "Belarus",
+    "continent": "Europe",
+    "subregion": "Eastern Europe",
+    "pop": 9466856,
+    "center": [
+      28.4177,
+      53.8219
+    ],
+    "bbox": [
+      23.1751,
+      51.265,
+      32.7103,
+      56.1458
+    ]
+  },
+  {
+    "code": "BLZ",
+    "name": "Belize",
+    "continent": "North America",
+    "subregion": "Central America",
+    "pop": 390353,
+    "center": [
+      -88.713,
+      17.2021
+    ],
+    "bbox": [
+      -89.2375,
+      15.8887,
+      -87.7886,
+      18.4823
+    ]
+  },
+  {
+    "code": "BMU",
+    "name": "Bermuda",
+    "continent": "North America",
+    "subregion": "Northern America",
+    "pop": 63918,
+    "center": [
+      -64.7636,
+      32.2966
+    ],
+    "bbox": [
+      -64.8628,
+      32.2596,
+      -64.6683,
+      32.3869
+    ]
+  },
+  {
+    "code": "BOL",
+    "name": "Bolivia",
+    "continent": "South America",
+    "subregion": "South America",
+    "pop": 11513100,
+    "center": [
+      -64.5934,
+      -16.666
+    ],
+    "bbox": [
+      -69.6457,
+      -22.8917,
+      -57.4957,
+      -9.7104
+    ]
+  },
+  {
+    "code": "BRA",
+    "name": "Brazil",
+    "continent": "South America",
+    "subregion": "South America",
+    "pop": 211049527,
+    "center": [
+      -49.5594,
+      -12.0987
+    ],
+    "bbox": [
+      -74.0021,
+      -33.7422,
+      -34.8055,
+      5.258
+    ]
+  },
+  {
+    "code": "BRB",
+    "name": "Barbados",
+    "continent": "North America",
+    "subregion": "Caribbean",
+    "pop": 287025,
+    "center": [
+      -59.569,
+      13.1637
+    ],
+    "bbox": [
+      -59.6467,
+      13.0622,
+      -59.4276,
+      13.3177
+    ]
+  },
+  {
+    "code": "BRN",
+    "name": "Brunei",
+    "continent": "Asia",
+    "subregion": "South-Eastern Asia",
+    "pop": 433285,
+    "center": [
+      114.5519,
+      4.4483
+    ],
+    "bbox": [
+      114.0639,
+      4.024,
+      115.3268,
+      5.0224
+    ]
+  },
+  {
+    "code": "BTN",
+    "name": "Bhutan",
+    "continent": "Asia",
+    "subregion": "Southern Asia",
+    "pop": 763092,
+    "center": [
+      90.0403,
+      27.5367
+    ],
+    "bbox": [
+      88.7388,
+      26.7016,
+      92.0834,
+      28.3112
+    ]
+  },
+  {
+    "code": "BWA",
+    "name": "Botswana",
+    "continent": "Africa",
+    "subregion": "Southern Africa",
+    "pop": 2303697,
+    "center": [
+      24.1792,
+      -22.1026
+    ],
+    "bbox": [
+      19.9773,
+      -26.8542,
+      29.3648,
+      -17.7876
+    ]
+  },
+  {
+    "code": "CAF",
+    "name": "Central African Republic",
+    "continent": "Africa",
+    "subregion": "Middle Africa",
+    "pop": 4745185,
+    "center": [
+      20.9069,
+      6.9897
+    ],
+    "bbox": [
+      14.4312,
+      2.2701,
+      27.4033,
+      10.9962
+    ]
+  },
+  {
+    "code": "CAN",
+    "name": "Canada",
+    "continent": "North America",
+    "subregion": "Northern America",
+    "pop": 37589262,
+    "center": [
+      -101.9107,
+      60.3243
+    ],
+    "bbox": [
+      -141.0021,
+      41.6749,
+      -52.6537,
+      83.1161
+    ]
+  },
+  {
+    "code": "CHE",
+    "name": "Switzerland",
+    "continent": "Europe",
+    "subregion": "Western Europe",
+    "pop": 8574832,
+    "center": [
+      7.464,
+      46.7191
+    ],
+    "bbox": [
+      5.97,
+      45.83,
+      10.4546,
+      47.7756
+    ]
+  },
+  {
+    "code": "CHL",
+    "name": "Chile",
+    "continent": "South America",
+    "subregion": "South America",
+    "pop": 18952038,
+    "center": [
+      -72.3189,
+      -38.1518
+    ],
+    "bbox": [
+      -109.4341,
+      -55.8917,
+      -66.4358,
+      -17.5061
+    ]
+  },
+  {
+    "code": "CHN",
+    "name": "People's Republic of China",
+    "continent": "Asia",
+    "subregion": "Eastern Asia",
+    "pop": 1397715000,
+    "center": [
+      106.3373,
+      32.4982
+    ],
+    "bbox": [
+      73.6073,
+      18.2183,
+      134.7523,
+      53.5556
+    ]
+  },
+  {
+    "code": "CIV",
+    "name": "Ivory Coast",
+    "continent": "Africa",
+    "subregion": "Western Africa",
+    "pop": 25716544,
+    "center": [
+      -5.5686,
+      7.4914
+    ],
+    "bbox": [
+      -8.6036,
+      4.3513,
+      -2.5059,
+      10.7241
+    ]
+  },
+  {
+    "code": "CMR",
+    "name": "Cameroon",
+    "continent": "Africa",
+    "subregion": "Middle Africa",
+    "pop": 25876380,
+    "center": [
+      12.4735,
+      4.585
+    ],
+    "bbox": [
+      8.5328,
+      1.6762,
+      16.1834,
+      13.0785
+    ]
+  },
+  {
+    "code": "COD",
+    "name": "Democratic Republic of the Congo",
+    "continent": "Africa",
+    "subregion": "Middle Africa",
+    "pop": 86790567,
+    "center": [
+      23.4588,
+      -1.8582
+    ],
+    "bbox": [
+      12.2137,
+      -13.4538,
+      31.274,
+      5.3121
+    ]
+  },
+  {
+    "code": "COG",
+    "name": "Republic of the Congo",
+    "continent": "Africa",
+    "subregion": "Middle Africa",
+    "pop": 5380508,
+    "center": [
+      15.9005,
+      0.1423
+    ],
+    "bbox": [
+      11.1302,
+      -5.0043,
+      18.6222,
+      3.6873
+    ]
+  },
+  {
+    "code": "COK",
+    "name": "Cook Islands",
+    "continent": "Oceania",
+    "subregion": "Polynesia",
+    "pop": 17459,
+    "center": [
+      -159.7857,
+      -21.216
+    ],
+    "bbox": [
+      -159.8425,
+      -21.2495,
+      -159.7369,
+      -21.1864
+    ]
+  },
+  {
+    "code": "COL",
+    "name": "Colombia",
+    "continent": "South America",
+    "subregion": "South America",
+    "pop": 50339443,
+    "center": [
+      -73.1743,
+      3.3731
+    ],
+    "bbox": [
+      -79.0254,
+      -4.2359,
+      -66.876,
+      12.4344
+    ]
+  },
+  {
+    "code": "COM",
+    "name": "Comoros",
+    "continent": "Africa",
+    "subregion": "Eastern Africa",
+    "pop": 850886,
+    "center": [
+      43.3181,
+      -11.7277
+    ],
+    "bbox": [
+      43.2267,
+      -12.3683,
+      44.5268,
+      -11.3685
+    ]
+  },
+  {
+    "code": "CPV",
+    "name": "Cape Verde",
+    "continent": "Africa",
+    "subregion": "Western Africa",
+    "pop": 549935,
+    "center": [
+      -23.6394,
+      15.0748
+    ],
+    "bbox": [
+      -25.3416,
+      14.8182,
+      -22.6819,
+      17.1937
+    ]
+  },
+  {
+    "code": "CRI",
+    "name": "Costa Rica",
+    "continent": "North America",
+    "subregion": "Central America",
+    "pop": 5047561,
+    "center": [
+      -84.0779,
+      10.0651
+    ],
+    "bbox": [
+      -85.908,
+      8.0707,
+      -82.5636,
+      11.1895
+    ]
+  },
+  {
+    "code": "CUB",
+    "name": "Cuba",
+    "continent": "North America",
+    "subregion": "Caribbean",
+    "pop": 11333483,
+    "center": [
+      -77.9759,
+      21.334
+    ],
+    "bbox": [
+      -84.8872,
+      19.8555,
+      -74.1368,
+      23.1904
+    ]
+  },
+  {
+    "code": "CUW",
+    "name": "Curaçao",
+    "continent": "North America",
+    "subregion": "Caribbean",
+    "pop": 157538,
+    "center": [
+      -68.9206,
+      12.145
+    ],
+    "bbox": [
+      -69.1589,
+      12.0455,
+      -68.7511,
+      12.3803
+    ]
+  },
+  {
+    "code": "CYM",
+    "name": "Cayman Islands",
+    "continent": "North America",
+    "subregion": "Caribbean",
+    "pop": 64948,
+    "center": [
+      -81.2405,
+      19.3199
+    ],
+    "bbox": [
+      -81.4191,
+      19.2719,
+      -79.7423,
+      19.7657
+    ]
+  },
+  {
+    "code": "CYN",
+    "name": "Turkish Republic of Northern Cyprus",
+    "continent": "Asia",
+    "subregion": "Western Asia",
+    "pop": 326000,
+    "center": [
+      33.6924,
+      35.2161
+    ],
+    "bbox": [
+      32.7127,
+      35.0003,
+      34.5561,
+      35.6621
+    ]
+  },
+  {
+    "code": "CYP",
+    "name": "Cyprus",
+    "continent": "Asia",
+    "subregion": "Western Asia",
+    "pop": 1198575,
+    "center": [
+      33.0842,
+      34.9133
+    ],
+    "bbox": [
+      32.301,
+      34.5696,
+      34.0502,
+      35.1827
+    ]
+  },
+  {
+    "code": "CZE",
+    "name": "Czech Republic",
+    "continent": "Europe",
+    "subregion": "Eastern Europe",
+    "pop": 10669709,
+    "center": [
+      15.3776,
+      49.8824
+    ],
+    "bbox": [
+      12.0897,
+      48.5762,
+      18.8322,
+      51.0378
+    ]
+  },
+  {
+    "code": "DEU",
+    "name": "Germany",
+    "continent": "Europe",
+    "subregion": "Western Europe",
+    "pop": 83132799,
+    "center": [
+      9.6783,
+      50.9617
+    ],
+    "bbox": [
+      5.8575,
+      47.2788,
+      15.0166,
+      55.0587
+    ]
+  },
+  {
+    "code": "DJI",
+    "name": "Djibouti",
+    "continent": "Africa",
+    "subregion": "Eastern Africa",
+    "pop": 973560,
+    "center": [
+      42.4988,
+      11.9763
+    ],
+    "bbox": [
+      41.7646,
+      10.941,
+      43.4098,
+      12.7086
+    ]
+  },
+  {
+    "code": "DMA",
+    "name": "Dominica",
+    "continent": "North America",
+    "subregion": "Caribbean",
+    "pop": 71808,
+    "center": [
+      -61.345,
+      15.4588
+    ],
+    "bbox": [
+      -61.4812,
+      15.2273,
+      -61.2511,
+      15.6331
+    ]
+  },
+  {
+    "code": "DNK",
+    "name": "Denmark",
+    "continent": "Europe",
+    "subregion": "Northern Europe",
+    "pop": 5818553,
+    "center": [
+      9.0182,
+      55.967
+    ],
+    "bbox": [
+      8.1215,
+      54.6289,
+      15.1371,
+      57.7369
+    ]
+  },
+  {
+    "code": "DOM",
+    "name": "Dominican Republic",
+    "continent": "North America",
+    "subregion": "Caribbean",
+    "pop": 10738958,
+    "center": [
+      -70.654,
+      19.1041
+    ],
+    "bbox": [
+      -72.0004,
+      17.6356,
+      -68.3392,
+      19.914
+    ]
+  },
+  {
+    "code": "DZA",
+    "name": "Algeria",
+    "continent": "Africa",
+    "subregion": "Northern Africa",
+    "pop": 43053054,
+    "center": [
+      2.8082,
+      27.3974
+    ],
+    "bbox": [
+      -8.6834,
+      18.9866,
+      11.9679,
+      37.0924
+    ]
+  },
+  {
+    "code": "ECU",
+    "name": "Ecuador",
+    "continent": "South America",
+    "subregion": "South America",
+    "pop": 17373662,
+    "center": [
+      -78.1884,
+      -1.2591
+    ],
+    "bbox": [
+      -91.6542,
+      -4.9906,
+      -75.2496,
+      1.4554
+    ]
+  },
+  {
+    "code": "EGY",
+    "name": "Egypt",
+    "continent": "Africa",
+    "subregion": "Northern Africa",
+    "pop": 100388073,
+    "center": [
+      29.4458,
+      26.1862
+    ],
+    "bbox": [
+      24.7032,
+      21.9949,
+      36.8714,
+      31.655
+    ]
+  },
+  {
+    "code": "ERI",
+    "name": "Eritrea",
+    "continent": "Africa",
+    "subregion": "Eastern Africa",
+    "pop": 6081196,
+    "center": [
+      38.2856,
+      15.7874
+    ],
+    "bbox": [
+      36.4268,
+      12.3766,
+      43.1167,
+      18.0051
+    ]
+  },
+  {
+    "code": "ESP",
+    "name": "Spain",
+    "continent": "Europe",
+    "subregion": "Southern Europe",
+    "pop": 47076781,
+    "center": [
+      -3.4647,
+      40.091
+    ],
+    "bbox": [
+      -18.1605,
+      27.6464,
+      4.3221,
+      43.7646
+    ]
+  },
+  {
+    "code": "EST",
+    "name": "Estonia",
+    "continent": "Europe",
+    "subregion": "Northern Europe",
+    "pop": 1326590,
+    "center": [
+      25.8671,
+      58.7249
+    ],
+    "bbox": [
+      21.8545,
+      57.5255,
+      28.1511,
+      59.639
+    ]
+  },
+  {
+    "code": "ETH",
+    "name": "Ethiopia",
+    "continent": "Africa",
+    "subregion": "Eastern Africa",
+    "pop": 112078730,
+    "center": [
+      39.0886,
+      8.0328
+    ],
+    "bbox": [
+      32.9989,
+      3.4561,
+      47.9782,
+      14.8523
+    ]
+  },
+  {
+    "code": "FIN",
+    "name": "Finland",
+    "continent": "Europe",
+    "subregion": "Northern Europe",
+    "pop": 5520314,
+    "center": [
+      27.2764,
+      63.2524
+    ],
+    "bbox": [
+      20.6222,
+      59.816,
+      31.5365,
+      70.0648
+    ]
+  },
+  {
+    "code": "FJI",
+    "name": "Fiji",
+    "continent": "Oceania",
+    "subregion": "Melanesia",
+    "pop": 889953,
+    "center": [
+      177.9754,
+      -17.8261
+    ],
+    "bbox": [
+      -180,
+      -21.7059,
+      180,
+      -12.477
+    ]
+  },
+  {
+    "code": "FLK",
+    "name": "Falkland Islands",
+    "continent": "South America",
+    "subregion": "South America",
+    "pop": 3398,
+    "center": [
+      -58.7386,
+      -51.6089
+    ],
+    "bbox": [
+      -61.145,
+      -52.308,
+      -57.7918,
+      -51.2699
+    ]
+  },
+  {
+    "code": "FRA",
+    "name": "France",
+    "continent": "Europe",
+    "subregion": "Western Europe",
+    "pop": 67059887,
+    "center": [
+      2.5523,
+      46.6961
+    ],
+    "bbox": [
+      -61.7941,
+      -21.369,
+      55.8391,
+      51.0971
+    ]
+  },
+  {
+    "code": "FRO",
+    "name": "Faroe Islands",
+    "continent": "Europe",
+    "subregion": "Northern Europe",
+    "pop": 48678,
+    "center": [
+      -7.0584,
+      62.1856
+    ],
+    "bbox": [
+      -7.4226,
+      61.4143,
+      -6.4061,
+      62.3557
+    ]
+  },
+  {
+    "code": "FSM",
+    "name": "Federated States of Micronesia",
+    "continent": "Oceania",
+    "subregion": "Micronesia",
+    "pop": 113815,
+    "center": [
+      158.234,
+      6.8876
+    ],
+    "bbox": [
+      138.0619,
+      5.2772,
+      162.9935,
+      9.5933
+    ]
+  },
+  {
+    "code": "GAB",
+    "name": "Gabon",
+    "continent": "Africa",
+    "subregion": "Middle Africa",
+    "pop": 2172579,
+    "center": [
+      11.8359,
+      -0.4377
+    ],
+    "bbox": [
+      8.7031,
+      -3.9163,
+      14.4806,
+      2.3022
+    ]
+  },
+  {
+    "code": "GBR",
+    "name": "United Kingdom",
+    "continent": "Europe",
+    "subregion": "Northern Europe",
+    "pop": 66834405,
+    "center": [
+      -2.1163,
+      54.4027
+    ],
+    "bbox": [
+      -8.1448,
+      50.0214,
+      1.7466,
+      60.8319
+    ]
+  },
+  {
+    "code": "GEO",
+    "name": "Georgia",
+    "continent": "Asia",
+    "subregion": "Western Asia",
+    "pop": 3720382,
+    "center": [
+      43.7357,
+      41.8701
+    ],
+    "bbox": [
+      39.9783,
+      41.0702,
+      46.6726,
+      43.5698
+    ]
+  },
+  {
+    "code": "GGY",
+    "name": "Guernsey",
+    "continent": "Europe",
+    "subregion": "Northern Europe",
+    "pop": 62792,
+    "center": [
+      -2.5617,
+      49.4635
+    ],
+    "bbox": [
+      -2.6461,
+      49.4287,
+      -2.5123,
+      49.5066
+    ]
+  },
+  {
+    "code": "GHA",
+    "name": "Ghana",
+    "continent": "Africa",
+    "subregion": "Western Africa",
+    "pop": 30417856,
+    "center": [
+      -1.0369,
+      7.7176
+    ],
+    "bbox": [
+      -3.2439,
+      4.7625,
+      1.1872,
+      11.1669
+    ]
+  },
+  {
+    "code": "GIN",
+    "name": "Guinea",
+    "continent": "Africa",
+    "subregion": "Western Africa",
+    "pop": 12771246,
+    "center": [
+      -10.0164,
+      10.6185
+    ],
+    "bbox": [
+      -15.0512,
+      7.2159,
+      -7.6812,
+      12.6739
+    ]
+  },
+  {
+    "code": "GMB",
+    "name": "The Gambia",
+    "continent": "Africa",
+    "subregion": "Western Africa",
+    "pop": 2347706,
+    "center": [
+      -14.9983,
+      13.6417
+    ],
+    "bbox": [
+      -16.8248,
+      13.0642,
+      -13.8267,
+      13.8121
+    ]
+  },
+  {
+    "code": "GNB",
+    "name": "Guinea-Bissau",
+    "continent": "Africa",
+    "subregion": "Western Africa",
+    "pop": 1920922,
+    "center": [
+      -14.5241,
+      12.1637
+    ],
+    "bbox": [
+      -16.7118,
+      10.9401,
+      -13.6735,
+      12.6799
+    ]
+  },
+  {
+    "code": "GNQ",
+    "name": "Equatorial Guinea",
+    "continent": "Africa",
+    "subregion": "Middle Africa",
+    "pop": 1355986,
+    "center": [
+      8.9902,
+      2.333
+    ],
+    "bbox": [
+      8.4343,
+      0.9601,
+      11.3354,
+      3.7583
+    ]
+  },
+  {
+    "code": "GRC",
+    "name": "Greece",
+    "continent": "Europe",
+    "subregion": "Southern Europe",
+    "pop": 10716322,
+    "center": [
+      21.7257,
+      39.4928
+    ],
+    "bbox": [
+      19.6465,
+      34.9345,
+      28.2318,
+      41.7438
+    ]
+  },
+  {
+    "code": "GRD",
+    "name": "Grenada",
+    "continent": "North America",
+    "subregion": "Caribbean",
+    "pop": 112003,
+    "center": [
+      -61.6805,
+      12.1132
+    ],
+    "bbox": [
+      -61.7822,
+      12.0084,
+      -61.607,
+      12.237
+    ]
+  },
+  {
+    "code": "GRL",
+    "name": "Greenland",
+    "continent": "North America",
+    "subregion": "Northern America",
+    "pop": 56225,
+    "center": [
+      -39.3353,
+      74.3194
+    ],
+    "bbox": [
+      -72.8181,
+      59.8155,
+      -11.4255,
+      83.5996
+    ]
+  },
+  {
+    "code": "GTM",
+    "name": "Guatemala",
+    "continent": "North America",
+    "subregion": "Central America",
+    "pop": 16604026,
+    "center": [
+      -90.4971,
+      14.9821
+    ],
+    "bbox": [
+      -92.2352,
+      13.7365,
+      -88.2283,
+      17.8164
+    ]
+  },
+  {
+    "code": "GUM",
+    "name": "Guam",
+    "continent": "Oceania",
+    "subregion": "Micronesia",
+    "pop": 167294,
+    "center": [
+      144.7036,
+      13.3542
+    ],
+    "bbox": [
+      144.6493,
+      13.2575,
+      144.9408,
+      13.6224
+    ]
+  },
+  {
+    "code": "GUY",
+    "name": "Guyana",
+    "continent": "South America",
+    "subregion": "South America",
+    "pop": 782766,
+    "center": [
+      -58.9426,
+      5.1243
+    ],
+    "bbox": [
+      -61.3908,
+      1.2012,
+      -56.4828,
+      8.5493
+    ]
+  },
+  {
+    "code": "HKG",
+    "name": "Hong Kong",
+    "continent": "Asia",
+    "subregion": "Eastern Asia",
+    "pop": 7507400,
+    "center": [
+      114.0978,
+      22.4488
+    ],
+    "bbox": [
+      113.8389,
+      22.1952,
+      114.3353,
+      22.565
+    ]
+  },
+  {
+    "code": "HMD",
+    "name": "Heard Island and McDonald Islands",
+    "continent": "Seven seas (open ocean)",
+    "subregion": "Seven seas (open ocean)",
+    "pop": 0,
+    "center": [
+      73.5052,
+      -53.1035
+    ],
+    "bbox": [
+      73.2512,
+      -53.1846,
+      73.8378,
+      -52.9663
+    ]
+  },
+  {
+    "code": "HND",
+    "name": "Honduras",
+    "continent": "North America",
+    "subregion": "Central America",
+    "pop": 9746117,
+    "center": [
+      -86.8876,
+      14.7948
+    ],
+    "bbox": [
+      -89.3626,
+      12.9792,
+      -83.1575,
+      16.514
+    ]
+  },
+  {
+    "code": "HRV",
+    "name": "Croatia",
+    "continent": "Europe",
+    "subregion": "Southern Europe",
+    "pop": 4067500,
+    "center": [
+      16.3724,
+      45.8058
+    ],
+    "bbox": [
+      13.5172,
+      42.4329,
+      19.401,
+      46.5346
+    ]
+  },
+  {
+    "code": "HTI",
+    "name": "Haiti",
+    "continent": "North America",
+    "subregion": "Caribbean",
+    "pop": 11263077,
+    "center": [
+      -72.2241,
+      19.2638
+    ],
+    "bbox": [
+      -74.4781,
+      18.0392,
+      -71.6453,
+      20.0937
+    ]
+  },
+  {
+    "code": "HUN",
+    "name": "Hungary",
+    "continent": "Europe",
+    "subregion": "Eastern Europe",
+    "pop": 9769949,
+    "center": [
+      19.4479,
+      47.0868
+    ],
+    "bbox": [
+      16.0931,
+      45.753,
+      22.8767,
+      48.5535
+    ]
+  },
+  {
+    "code": "IDN",
+    "name": "Indonesia",
+    "continent": "Asia",
+    "subregion": "South-Eastern Asia",
+    "pop": 270625568,
+    "center": [
+      101.8929,
+      -0.9544
+    ],
+    "bbox": [
+      95.2066,
+      -10.9097,
+      140.9762,
+      5.907
+    ]
+  },
+  {
+    "code": "IMN",
+    "name": "Isle of Man",
+    "continent": "Europe",
+    "subregion": "Northern Europe",
+    "pop": 84584,
+    "center": [
+      -4.5301,
+      54.2208
+    ],
+    "bbox": [
+      -4.7854,
+      54.0587,
+      -4.338,
+      54.4072
+    ]
+  },
+  {
+    "code": "IND",
+    "name": "India",
+    "continent": "Asia",
+    "subregion": "Southern Asia",
+    "pop": 1366417754,
+    "center": [
+      79.3581,
+      22.6869
+    ],
+    "bbox": [
+      68.165,
+      6.7487,
+      97.3436,
+      35.4959
+    ]
+  },
+  {
+    "code": "IOA",
+    "name": "Australian Indian Ocean Territories",
+    "continent": "Asia",
+    "subregion": "Seven seas (open ocean)",
+    "pop": 2387,
+    "center": [
+      105.6726,
+      -10.4908
+    ],
+    "bbox": [
+      96.8259,
+      -12.1998,
+      105.7254,
+      -10.4307
+    ]
+  },
+  {
+    "code": "IOT",
+    "name": "British Indian Ocean Territory",
+    "continent": "Seven seas (open ocean)",
+    "subregion": "Seven seas (open ocean)",
+    "pop": 3000,
+    "center": [
+      71.3483,
+      -6.1908
+    ],
+    "bbox": [
+      72.3497,
+      -7.4354,
+      72.4985,
+      -7.2204
+    ]
+  },
+  {
+    "code": "IRL",
+    "name": "Ireland",
+    "continent": "Europe",
+    "subregion": "Northern Europe",
+    "pop": 4941444,
+    "center": [
+      -7.7986,
+      53.0787
+    ],
+    "bbox": [
+      -10.3902,
+      51.4737,
+      -6.0274,
+      55.3658
+    ]
+  },
+  {
+    "code": "IRN",
+    "name": "Iran",
+    "continent": "Asia",
+    "subregion": "Southern Asia",
+    "pop": 82913906,
+    "center": [
+      54.9315,
+      32.1662
+    ],
+    "bbox": [
+      44.0232,
+      25.1021,
+      63.3052,
+      39.7686
+    ]
+  },
+  {
+    "code": "IRQ",
+    "name": "Iraq",
+    "continent": "Asia",
+    "subregion": "Western Asia",
+    "pop": 39309783,
+    "center": [
+      43.2618,
+      33.094
+    ],
+    "bbox": [
+      38.7735,
+      29.0637,
+      48.5465,
+      37.3719
+    ]
+  },
+  {
+    "code": "ISL",
+    "name": "Iceland",
+    "continent": "Europe",
+    "subregion": "Northern Europe",
+    "pop": 361313,
+    "center": [
+      -18.6737,
+      64.7793
+    ],
+    "bbox": [
+      -24.4757,
+      63.4067,
+      -13.5561,
+      66.5261
+    ]
+  },
+  {
+    "code": "ISR",
+    "name": "Israel",
+    "continent": "Asia",
+    "subregion": "Western Asia",
+    "pop": 9053300,
+    "center": [
+      34.8479,
+      30.9111
+    ],
+    "bbox": [
+      34.2453,
+      29.4773,
+      35.888,
+      33.4157
+    ]
+  },
+  {
+    "code": "ITA",
+    "name": "Italy",
+    "continent": "Europe",
+    "subregion": "Southern Europe",
+    "pop": 60297396,
+    "center": [
+      11.0769,
+      44.7325
+    ],
+    "bbox": [
+      6.6277,
+      36.6878,
+      18.4858,
+      47.0821
+    ]
+  },
+  {
+    "code": "JAM",
+    "name": "Jamaica",
+    "continent": "North America",
+    "subregion": "Caribbean",
+    "pop": 2948279,
+    "center": [
+      -77.3188,
+      18.1371
+    ],
+    "bbox": [
+      -78.3395,
+      17.7149,
+      -76.2108,
+      18.5222
+    ]
+  },
+  {
+    "code": "JEY",
+    "name": "Jersey",
+    "continent": "Europe",
+    "subregion": "Northern Europe",
+    "pop": 107800,
+    "center": [
+      -2.0901,
+      49.2208
+    ],
+    "bbox": [
+      -2.2358,
+      49.1698,
+      -2.0099,
+      49.2664
+    ]
+  },
+  {
+    "code": "JOR",
+    "name": "Jordan",
+    "continent": "Asia",
+    "subregion": "Western Asia",
+    "pop": 10101694,
+    "center": [
+      36.376,
+      30.805
+    ],
+    "bbox": [
+      34.9508,
+      29.1905,
+      39.2928,
+      33.3722
+    ]
+  },
+  {
+    "code": "JPN",
+    "name": "Japan",
+    "continent": "Asia",
+    "subregion": "Eastern Asia",
+    "pop": 126264931,
+    "center": [
+      138.4422,
+      36.1425
+    ],
+    "bbox": [
+      123.6798,
+      24.2661,
+      145.833,
+      45.5095
+    ]
+  },
+  {
+    "code": "KAS",
+    "name": "Siachen Glacier",
+    "continent": "Asia",
+    "subregion": "Southern Asia",
+    "pop": 6000,
+    "center": [
+      77.1296,
+      35.3406
+    ],
+    "bbox": [
+      76.7669,
+      35.1099,
+      77.7994,
+      35.6617
+    ]
+  },
+  {
+    "code": "KAZ",
+    "name": "Kazakhstan",
+    "continent": "Asia",
+    "subregion": "Central Asia",
+    "pop": 18513930,
+    "center": [
+      68.6855,
+      49.0541
+    ],
+    "bbox": [
+      46.6092,
+      40.6086,
+      87.3229,
+      55.3896
+    ]
+  },
+  {
+    "code": "KEN",
+    "name": "Kenya",
+    "continent": "Africa",
+    "subregion": "Eastern Africa",
+    "pop": 52573973,
+    "center": [
+      37.9076,
+      0.549
+    ],
+    "bbox": [
+      33.9,
+      -4.6924,
+      41.884,
+      5.4923
+    ]
+  },
+  {
+    "code": "KGZ",
+    "name": "Kyrgyzstan",
+    "continent": "Asia",
+    "subregion": "Central Asia",
+    "pop": 6456900,
+    "center": [
+      74.5326,
+      41.6685
+    ],
+    "bbox": [
+      69.2291,
+      39.2075,
+      80.2462,
+      43.2404
+    ]
+  },
+  {
+    "code": "KHM",
+    "name": "Cambodia",
+    "continent": "Asia",
+    "subregion": "South-Eastern Asia",
+    "pop": 16486542,
+    "center": [
+      104.5049,
+      12.6476
+    ],
+    "bbox": [
+      102.3197,
+      10.4112,
+      107.6055,
+      14.7051
+    ]
+  },
+  {
+    "code": "KIR",
+    "name": "Kiribati",
+    "continent": "Oceania",
+    "subregion": "Micronesia",
+    "pop": 117606,
+    "center": [
+      -157.3846,
+      1.8204
+    ],
+    "bbox": [
+      -174.5408,
+      -11.4568,
+      174.7789,
+      3.9235
+    ]
+  },
+  {
+    "code": "KNA",
+    "name": "Saint Kitts and Nevis",
+    "continent": "North America",
+    "subregion": "Caribbean",
+    "pop": 52834,
+    "center": [
+      -62.758,
+      17.3366
+    ],
+    "bbox": [
+      -62.8405,
+      17.1006,
+      -62.5322,
+      17.4026
+    ]
+  },
+  {
+    "code": "KOR",
+    "name": "South Korea",
+    "continent": "Asia",
+    "subregion": "Eastern Asia",
+    "pop": 51709098,
+    "center": [
+      128.1295,
+      36.3849
+    ],
+    "bbox": [
+      126.0075,
+      33.2015,
+      130.9343,
+      38.6234
+    ]
+  },
+  {
+    "code": "KOS",
+    "name": "Kosovo",
+    "continent": "Europe",
+    "subregion": "Southern Europe",
+    "pop": 1794248,
+    "center": [
+      20.8607,
+      42.5936
+    ],
+    "bbox": [
+      20.0295,
+      41.8538,
+      21.7529,
+      43.2611
+    ]
+  },
+  {
+    "code": "KWT",
+    "name": "Kuwait",
+    "continent": "Asia",
+    "subregion": "Western Asia",
+    "pop": 4207083,
+    "center": [
+      47.314,
+      29.4136
+    ],
+    "bbox": [
+      46.5314,
+      28.5332,
+      48.4425,
+      30.0973
+    ]
+  },
+  {
+    "code": "LAO",
+    "name": "Laos",
+    "continent": "Asia",
+    "subregion": "South-Eastern Asia",
+    "pop": 7169455,
+    "center": [
+      102.5339,
+      19.4318
+    ],
+    "bbox": [
+      100.1149,
+      13.9212,
+      107.6531,
+      22.4953
+    ]
+  },
+  {
+    "code": "LBN",
+    "name": "Lebanon",
+    "continent": "Asia",
+    "subregion": "Western Asia",
+    "pop": 6855713,
+    "center": [
+      35.9929,
+      34.1334
+    ],
+    "bbox": [
+      35.1086,
+      33.0757,
+      36.585,
+      34.6787
+    ]
+  },
+  {
+    "code": "LBR",
+    "name": "Liberia",
+    "continent": "Africa",
+    "subregion": "Western Africa",
+    "pop": 4937374,
+    "center": [
+      -9.4604,
+      6.4472
+    ],
+    "bbox": [
+      -11.5075,
+      4.3513,
+      -7.3999,
+      8.5377
+    ]
+  },
+  {
+    "code": "LBY",
+    "name": "Libya",
+    "continent": "Africa",
+    "subregion": "Northern Africa",
+    "pop": 6777452,
+    "center": [
+      18.011,
+      26.6389
+    ],
+    "bbox": [
+      9.3103,
+      19.4966,
+      25.1505,
+      33.1819
+    ]
+  },
+  {
+    "code": "LCA",
+    "name": "Saint Lucia",
+    "continent": "North America",
+    "subregion": "Caribbean",
+    "pop": 182790,
+    "center": [
+      -60.9801,
+      13.8924
+    ],
+    "bbox": [
+      -61.0731,
+      13.7176,
+      -60.8868,
+      14.0934
+    ]
+  },
+  {
+    "code": "LIE",
+    "name": "Liechtenstein",
+    "continent": "Europe",
+    "subregion": "Western Europe",
+    "pop": 38019,
+    "center": [
+      9.5594,
+      47.1114
+    ],
+    "bbox": [
+      9.4795,
+      47.0574,
+      9.6105,
+      47.2708
+    ]
+  },
+  {
+    "code": "LKA",
+    "name": "Sri Lanka",
+    "continent": "Asia",
+    "subregion": "Southern Asia",
+    "pop": 21803000,
+    "center": [
+      80.7048,
+      7.5811
+    ],
+    "bbox": [
+      79.7078,
+      5.9494,
+      81.877,
+      9.8127
+    ]
+  },
+  {
+    "code": "LSO",
+    "name": "Lesotho",
+    "continent": "Africa",
+    "subregion": "Southern Africa",
+    "pop": 2125268,
+    "center": [
+      28.2466,
+      -29.4802
+    ],
+    "bbox": [
+      27.0518,
+      -30.6423,
+      29.3907,
+      -28.5817
+    ]
+  },
+  {
+    "code": "LTU",
+    "name": "Lithuania",
+    "continent": "Europe",
+    "subregion": "Northern Europe",
+    "pop": 2786844,
+    "center": [
+      24.0899,
+      55.1037
+    ],
+    "bbox": [
+      20.8998,
+      53.893,
+      26.7757,
+      56.4112
+    ]
+  },
+  {
+    "code": "LUX",
+    "name": "Luxembourg",
+    "continent": "Europe",
+    "subregion": "Western Europe",
+    "pop": 619896,
+    "center": [
+      6.0776,
+      49.7337
+    ],
+    "bbox": [
+      5.725,
+      49.4455,
+      6.4938,
+      50.1672
+    ]
+  },
+  {
+    "code": "LVA",
+    "name": "Latvia",
+    "continent": "Europe",
+    "subregion": "Northern Europe",
+    "pop": 1912789,
+    "center": [
+      25.4587,
+      57.0669
+    ],
+    "bbox": [
+      21.0149,
+      55.6675,
+      28.2021,
+      58.0634
+    ]
+  },
+  {
+    "code": "MAC",
+    "name": "Macau",
+    "continent": "Asia",
+    "subregion": "Eastern Asia",
+    "pop": 640445,
+    "center": [
+      113.556,
+      22.1297
+    ],
+    "bbox": [
+      113.4789,
+      22.1956,
+      113.5481,
+      22.2459
+    ]
+  },
+  {
+    "code": "MAF",
+    "name": "Saint Martin",
+    "continent": "North America",
+    "subregion": "Caribbean",
+    "pop": 38002,
+    "center": [
+      -63.0494,
+      18.0813
+    ],
+    "bbox": [
+      -63.123,
+      18.0689,
+      -63.0094,
+      18.1153
+    ]
+  },
+  {
+    "code": "MAR",
+    "name": "Morocco",
+    "continent": "Africa",
+    "subregion": "Northern Africa",
+    "pop": 36471769,
+    "center": [
+      -7.1873,
+      31.6507
+    ],
+    "bbox": [
+      -17.0031,
+      21.4207,
+      -1.0655,
+      35.9299
+    ]
+  },
+  {
+    "code": "MCO",
+    "name": "Monaco",
+    "continent": "Europe",
+    "subregion": "Western Europe",
+    "pop": 38964,
+    "center": [
+      7.3983,
+      43.7397
+    ],
+    "bbox": [
+      7.3777,
+      43.7317,
+      7.4387,
+      43.7709
+    ]
+  },
+  {
+    "code": "MDA",
+    "name": "Moldova",
+    "continent": "Europe",
+    "subregion": "Eastern Europe",
+    "pop": 2657637,
+    "center": [
+      28.4879,
+      47.435
+    ],
+    "bbox": [
+      26.6189,
+      45.4504,
+      30.1311,
+      48.4777
+    ]
+  },
+  {
+    "code": "MDG",
+    "name": "Madagascar",
+    "continent": "Africa",
+    "subregion": "Eastern Africa",
+    "pop": 26969307,
+    "center": [
+      46.7042,
+      -18.6283
+    ],
+    "bbox": [
+      43.2571,
+      -25.5705,
+      50.4827,
+      -12.0796
+    ]
+  },
+  {
+    "code": "MDV",
+    "name": "Maldives",
+    "continent": "Seven seas (open ocean)",
+    "subregion": "Southern Asia",
+    "pop": 530953,
+    "center": [
+      73.5076,
+      4.1744
+    ],
+    "bbox": [
+      73.382,
+      3.2294,
+      73.5283,
+      4.2477
+    ]
+  },
+  {
+    "code": "MEX",
+    "name": "Mexico",
+    "continent": "North America",
+    "subregion": "Central America",
+    "pop": 127575529,
+    "center": [
+      -102.2894,
+      23.92
+    ],
+    "bbox": [
+      -118.4014,
+      14.5454,
+      -86.6963,
+      32.7153
+    ]
+  },
+  {
+    "code": "MHL",
+    "name": "Marshall Islands",
+    "continent": "Oceania",
+    "subregion": "Micronesia",
+    "pop": 58791,
+    "center": [
+      171.1936,
+      7.0826
+    ],
+    "bbox": [
+      166.8447,
+      5.7998,
+      171.7568,
+      11.1687
+    ]
+  },
+  {
+    "code": "MKD",
+    "name": "North Macedonia",
+    "continent": "Europe",
+    "subregion": "Southern Europe",
+    "pop": 2083459,
+    "center": [
+      21.5558,
+      41.5582
+    ],
+    "bbox": [
+      20.4486,
+      40.8499,
+      23.0057,
+      42.3582
+    ]
+  },
+  {
+    "code": "MLI",
+    "name": "Mali",
+    "continent": "Africa",
+    "subregion": "Western Africa",
+    "pop": 19658031,
+    "center": [
+      -2.0385,
+      18.6927
+    ],
+    "bbox": [
+      -12.2806,
+      10.1433,
+      4.2347,
+      24.9956
+    ]
+  },
+  {
+    "code": "MLT",
+    "name": "Malta",
+    "continent": "Europe",
+    "subregion": "Southern Europe",
+    "pop": 502653,
+    "center": [
+      14.433,
+      35.8929
+    ],
+    "bbox": [
+      14.1804,
+      35.8202,
+      14.5662,
+      36.0758
+    ]
+  },
+  {
+    "code": "MMR",
+    "name": "Myanmar",
+    "continent": "Asia",
+    "subregion": "South-Eastern Asia",
+    "pop": 54045420,
+    "center": [
+      95.8045,
+      21.5739
+    ],
+    "bbox": [
+      92.1796,
+      9.8754,
+      101.1473,
+      28.517
+    ]
+  },
+  {
+    "code": "MNE",
+    "name": "Montenegro",
+    "continent": "Europe",
+    "subregion": "Southern Europe",
+    "pop": 622137,
+    "center": [
+      19.1437,
+      42.8031
+    ],
+    "bbox": [
+      18.4363,
+      41.8691,
+      20.3477,
+      43.5423
+    ]
+  },
+  {
+    "code": "MNG",
+    "name": "Mongolia",
+    "continent": "Asia",
+    "subregion": "Eastern Asia",
+    "pop": 3225167,
+    "center": [
+      104.1504,
+      45.9975
+    ],
+    "bbox": [
+      87.7432,
+      41.5955,
+      119.8979,
+      52.1173
+    ]
+  },
+  {
+    "code": "MNP",
+    "name": "Northern Mariana Islands",
+    "continent": "Oceania",
+    "subregion": "Micronesia",
+    "pop": 57216,
+    "center": [
+      145.7344,
+      15.1882
+    ],
+    "bbox": [
+      145.1521,
+      14.1113,
+      145.8354,
+      18.8068
+    ]
+  },
+  {
+    "code": "MOZ",
+    "name": "Mozambique",
+    "continent": "Africa",
+    "subregion": "Eastern Africa",
+    "pop": 30366036,
+    "center": [
+      37.8379,
+      -13.9432
+    ],
+    "bbox": [
+      30.2218,
+      -26.8616,
+      40.8445,
+      -10.4644
+    ]
+  },
+  {
+    "code": "MRT",
+    "name": "Mauritania",
+    "continent": "Africa",
+    "subregion": "Western Africa",
+    "pop": 4525696,
+    "center": [
+      -9.7403,
+      19.5871
+    ],
+    "bbox": [
+      -17.064,
+      14.7454,
+      -4.8226,
+      27.2859
+    ]
+  },
+  {
+    "code": "MSR",
+    "name": "Montserrat",
+    "continent": "North America",
+    "subregion": "Caribbean",
+    "pop": 4649,
+    "center": [
+      -62.1883,
+      16.7372
+    ],
+    "bbox": [
+      -62.223,
+      16.6812,
+      -62.1484,
+      16.8096
+    ]
+  },
+  {
+    "code": "MUS",
+    "name": "Mauritius",
+    "continent": "Seven seas (open ocean)",
+    "subregion": "Eastern Africa",
+    "pop": 1265711,
+    "center": [
+      57.5658,
+      -20.2995
+    ],
+    "bbox": [
+      57.3177,
+      -20.5132,
+      57.792,
+      -19.9899
+    ]
+  },
+  {
+    "code": "MWI",
+    "name": "Malawi",
+    "continent": "Africa",
+    "subregion": "Eastern Africa",
+    "pop": 18628747,
+    "center": [
+      33.6081,
+      -13.3867
+    ],
+    "bbox": [
+      32.6704,
+      -17.1311,
+      35.8928,
+      -9.395
+    ]
+  },
+  {
+    "code": "MYS",
+    "name": "Malaysia",
+    "continent": "Asia",
+    "subregion": "South-Eastern Asia",
+    "pop": 31949777,
+    "center": [
+      113.8371,
+      2.5287
+    ],
+    "bbox": [
+      99.6463,
+      0.862,
+      119.2663,
+      7.3517
+    ]
+  },
+  {
+    "code": "NAM",
+    "name": "Namibia",
+    "continent": "Africa",
+    "subregion": "Southern Africa",
+    "pop": 2494530,
+    "center": [
+      17.1082,
+      -20.5753
+    ],
+    "bbox": [
+      11.7217,
+      -28.9388,
+      25.2588,
+      -16.9677
+    ]
+  },
+  {
+    "code": "NCL",
+    "name": "New Caledonia",
+    "continent": "Oceania",
+    "subregion": "Melanesia",
+    "pop": 287800,
+    "center": [
+      165.084,
+      -21.0647
+    ],
+    "bbox": [
+      159.9282,
+      -22.6611,
+      168.1391,
+      -19.1146
+    ]
+  },
+  {
+    "code": "NER",
+    "name": "Niger",
+    "continent": "Africa",
+    "subregion": "Western Africa",
+    "pop": 23310715,
+    "center": [
+      9.5044,
+      17.4462
+    ],
+    "bbox": [
+      0.1639,
+      11.6963,
+      15.9632,
+      23.5179
+    ]
+  },
+  {
+    "code": "NFK",
+    "name": "Norfolk Island",
+    "continent": "Oceania",
+    "subregion": "Australia and New Zealand",
+    "pop": 2169,
+    "center": [
+      167.9545,
+      -29.033
+    ],
+    "bbox": [
+      167.9062,
+      -29.0963,
+      167.9904,
+      -29.014
+    ]
+  },
+  {
+    "code": "NGA",
+    "name": "Nigeria",
+    "continent": "Africa",
+    "subregion": "Western Africa",
+    "pop": 200963599,
+    "center": [
+      7.5032,
+      9.4398
+    ],
+    "bbox": [
+      2.686,
+      4.2774,
+      14.6271,
+      13.8729
+    ]
+  },
+  {
+    "code": "NIC",
+    "name": "Nicaragua",
+    "continent": "North America",
+    "subregion": "Central America",
+    "pop": 6545502,
+    "center": [
+      -85.0693,
+      12.6707
+    ],
+    "bbox": [
+      -87.6702,
+      10.7354,
+      -83.1575,
+      15.0081
+    ]
+  },
+  {
+    "code": "NIU",
+    "name": "Niue",
+    "continent": "Oceania",
+    "subregion": "Polynesia",
+    "pop": 1620,
+    "center": [
+      -169.8626,
+      -19.046
+    ],
+    "bbox": [
+      -169.9483,
+      -19.1379,
+      -169.7934,
+      -18.966
+    ]
+  },
+  {
+    "code": "NLD",
+    "name": "Netherlands",
+    "continent": "Europe",
+    "subregion": "Western Europe",
+    "pop": 17332850,
+    "center": [
+      5.6114,
+      52.4222
+    ],
+    "bbox": [
+      -68.3711,
+      12.0321,
+      7.1973,
+      53.6255
+    ]
+  },
+  {
+    "code": "NOR",
+    "name": "Norway",
+    "continent": "Europe",
+    "subregion": "Northern Europe",
+    "pop": 5347896,
+    "center": [
+      9.68,
+      61.3571
+    ],
+    "bbox": [
+      -9.0989,
+      58.0209,
+      33.6293,
+      80.4778
+    ]
+  },
+  {
+    "code": "NPL",
+    "name": "Nepal",
+    "continent": "Asia",
+    "subregion": "Southern Asia",
+    "pop": 28608710,
+    "center": [
+      83.6399,
+      28.2979
+    ],
+    "bbox": [
+      80.0517,
+      26.3603,
+      88.1615,
+      30.3875
+    ]
+  },
+  {
+    "code": "NRU",
+    "name": "Nauru",
+    "continent": "Oceania",
+    "subregion": "Micronesia",
+    "pop": 12581,
+    "center": [
+      166.9326,
+      -0.5203
+    ],
+    "bbox": [
+      166.907,
+      -0.5508,
+      166.9584,
+      -0.4894
+    ]
+  },
+  {
+    "code": "NZL",
+    "name": "New Zealand",
+    "continent": "Oceania",
+    "subregion": "Australia and New Zealand",
+    "pop": 4917000,
+    "center": [
+      172.787,
+      -39.759
+    ],
+    "bbox": [
+      -176.8477,
+      -52.5703,
+      178.5362,
+      -8.5465
+    ]
+  },
+  {
+    "code": "OMN",
+    "name": "Oman",
+    "continent": "Asia",
+    "subregion": "Western Asia",
+    "pop": 4974986,
+    "center": [
+      57.3366,
+      22.1204
+    ],
+    "bbox": [
+      51.9776,
+      16.6484,
+      59.8375,
+      26.3563
+    ]
+  },
+  {
+    "code": "PAK",
+    "name": "Pakistan",
+    "continent": "Asia",
+    "subregion": "Southern Asia",
+    "pop": 216565318,
+    "center": [
+      68.5456,
+      29.3284
+    ],
+    "bbox": [
+      60.8434,
+      23.7534,
+      77.0486,
+      37.0367
+    ]
+  },
+  {
+    "code": "PAN",
+    "name": "Panama",
+    "continent": "North America",
+    "subregion": "Central America",
+    "pop": 4246439,
+    "center": [
+      -80.3521,
+      8.722
+    ],
+    "bbox": [
+      -83.0273,
+      7.2201,
+      -77.196,
+      9.5979
+    ]
+  },
+  {
+    "code": "PCN",
+    "name": "Pitcairn Islands",
+    "continent": "Oceania",
+    "subregion": "Polynesia",
+    "pop": 54,
+    "center": [
+      -128.3175,
+      -24.3646
+    ],
+    "bbox": [
+      -128.3502,
+      -24.4126,
+      -128.2901,
+      -24.3232
+    ]
+  },
+  {
+    "code": "PER",
+    "name": "Peru",
+    "continent": "South America",
+    "subregion": "South America",
+    "pop": 32510453,
+    "center": [
+      -72.9002,
+      -12.9767
+    ],
+    "bbox": [
+      -81.3366,
+      -18.3456,
+      -68.6853,
+      -0.0417
+    ]
+  },
+  {
+    "code": "PHL",
+    "name": "Philippines",
+    "continent": "Asia",
+    "subregion": "South-Eastern Asia",
+    "pop": 108116615,
+    "center": [
+      122.465,
+      11.198
+    ],
+    "bbox": [
+      116.9695,
+      5.0602,
+      126.5934,
+      20.8413
+    ]
+  },
+  {
+    "code": "PLW",
+    "name": "Palau",
+    "continent": "Oceania",
+    "subregion": "Micronesia",
+    "pop": 18008,
+    "center": [
+      134.5802,
+      7.5183
+    ],
+    "bbox": [
+      131.135,
+      3.0219,
+      134.6596,
+      7.7121
+    ]
+  },
+  {
+    "code": "PNG",
+    "name": "Papua New Guinea",
+    "continent": "Oceania",
+    "subregion": "Melanesia",
+    "pop": 8776109,
+    "center": [
+      143.9102,
+      -5.6953
+    ],
+    "bbox": [
+      140.8623,
+      -11.6306,
+      155.9576,
+      -1.3532
+    ]
+  },
+  {
+    "code": "POL",
+    "name": "Poland",
+    "continent": "Europe",
+    "subregion": "Eastern Europe",
+    "pop": 37970874,
+    "center": [
+      19.4905,
+      51.9903
+    ],
+    "bbox": [
+      14.1286,
+      49.0208,
+      24.1058,
+      54.8382
+    ]
+  },
+  {
+    "code": "PRI",
+    "name": "Puerto Rico",
+    "continent": "North America",
+    "subregion": "Caribbean",
+    "pop": 3193694,
+    "center": [
+      -66.4811,
+      18.2347
+    ],
+    "bbox": [
+      -67.9371,
+      17.9473,
+      -65.2949,
+      18.5222
+    ]
+  },
+  {
+    "code": "PRK",
+    "name": "North Korea",
+    "continent": "Asia",
+    "subregion": "Eastern Asia",
+    "pop": 25666161,
+    "center": [
+      126.4445,
+      39.8853
+    ],
+    "bbox": [
+      124.3486,
+      37.719,
+      130.6873,
+      42.9981
+    ]
+  },
+  {
+    "code": "PRT",
+    "name": "Portugal",
+    "continent": "Europe",
+    "subregion": "Southern Europe",
+    "pop": 10269417,
+    "center": [
+      -8.2718,
+      39.6067
+    ],
+    "bbox": [
+      -31.283,
+      32.6483,
+      -6.2125,
+      42.1374
+    ]
+  },
+  {
+    "code": "PRY",
+    "name": "Paraguay",
+    "continent": "South America",
+    "subregion": "South America",
+    "pop": 7044636,
+    "center": [
+      -60.1464,
+      -21.6745
+    ],
+    "bbox": [
+      -62.651,
+      -27.5538,
+      -54.2418,
+      -19.2862
+    ]
+  },
+  {
+    "code": "PSX",
+    "name": "Palestine",
+    "continent": "Asia",
+    "subregion": "Western Asia",
+    "pop": 4685306,
+    "center": [
+      35.2913,
+      32.0474
+    ],
+    "bbox": [
+      34.1981,
+      31.2083,
+      35.5721,
+      32.5344
+    ]
+  },
+  {
+    "code": "PYF",
+    "name": "French Polynesia",
+    "continent": "Oceania",
+    "subregion": "Polynesia",
+    "pop": 279287,
+    "center": [
+      -149.4616,
+      -17.6281
+    ],
+    "bbox": [
+      -151.5124,
+      -20.8759,
+      -136.2939,
+      -8.7815
+    ]
+  },
+  {
+    "code": "QAT",
+    "name": "Qatar",
+    "continent": "Asia",
+    "subregion": "Western Asia",
+    "pop": 2832067,
+    "center": [
+      51.1435,
+      25.2374
+    ],
+    "bbox": [
+      50.7546,
+      24.5646,
+      51.6089,
+      26.1533
+    ]
+  },
+  {
+    "code": "ROU",
+    "name": "Romania",
+    "continent": "Europe",
+    "subregion": "Eastern Europe",
+    "pop": 19356544,
+    "center": [
+      24.9726,
+      45.7332
+    ],
+    "bbox": [
+      20.2418,
+      43.6708,
+      29.7059,
+      48.2635
+    ]
+  },
+  {
+    "code": "RUS",
+    "name": "Russia",
+    "continent": "Europe",
+    "subregion": "Eastern Europe",
+    "pop": 144373535,
+    "center": [
+      44.6865,
+      58.2494
+    ],
+    "bbox": [
+      -180,
+      41.1993,
+      180,
+      81.8542
+    ]
+  },
+  {
+    "code": "RWA",
+    "name": "Rwanda",
+    "continent": "Africa",
+    "subregion": "Eastern Africa",
+    "pop": 12626950,
+    "center": [
+      30.1039,
+      -1.8972
+    ],
+    "bbox": [
+      28.8576,
+      -2.8086,
+      30.8766,
+      -1.0631
+    ]
+  },
+  {
+    "code": "SAH",
+    "name": "Western Sahara",
+    "continent": "Africa",
+    "subregion": "Northern Africa",
+    "pop": 603253,
+    "center": [
+      -12.6303,
+      23.9676
+    ],
+    "bbox": [
+      -17.0988,
+      20.8062,
+      -8.6821,
+      27.6564
+    ]
+  },
+  {
+    "code": "SAU",
+    "name": "Saudi Arabia",
+    "continent": "Asia",
+    "subregion": "Western Asia",
+    "pop": 34268528,
+    "center": [
+      44.6996,
+      23.8069
+    ],
+    "bbox": [
+      34.6162,
+      16.3718,
+      55.641,
+      32.1245
+    ]
+  },
+  {
+    "code": "SDN",
+    "name": "Sudan",
+    "continent": "Africa",
+    "subregion": "Northern Africa",
+    "pop": 42813238,
+    "center": [
+      29.2607,
+      16.3307
+    ],
+    "bbox": [
+      21.8253,
+      8.6656,
+      38.6095,
+      22.2024
+    ]
+  },
+  {
+    "code": "SDS",
+    "name": "South Sudan",
+    "continent": "Africa",
+    "subregion": "Eastern Africa",
+    "pop": 11062113,
+    "center": [
+      30.3902,
+      7.2305
+    ],
+    "bbox": [
+      24.1474,
+      3.4907,
+      35.2684,
+      12.2231
+    ]
+  },
+  {
+    "code": "SEN",
+    "name": "Senegal",
+    "continent": "Africa",
+    "subregion": "Western Africa",
+    "pop": 16296364,
+    "center": [
+      -14.7786,
+      15.1381
+    ],
+    "bbox": [
+      -17.5356,
+      12.328,
+      -11.3824,
+      16.6789
+    ]
+  },
+  {
+    "code": "SGP",
+    "name": "Singapore",
+    "continent": "Asia",
+    "subregion": "South-Eastern Asia",
+    "pop": 5703569,
+    "center": [
+      103.8169,
+      1.3666
+    ],
+    "bbox": [
+      103.6502,
+      1.2654,
+      103.9964,
+      1.4471
+    ]
+  },
+  {
+    "code": "SGS",
+    "name": "South Georgia and the South Sandwich Islands",
+    "continent": "Seven seas (open ocean)",
+    "subregion": "Seven seas (open ocean)",
+    "pop": 30,
+    "center": [
+      -31.0632,
+      -55.6834
+    ],
+    "bbox": [
+      -38.0174,
+      -58.4923,
+      -26.2599,
+      -53.9841
+    ]
+  },
+  {
+    "code": "SHN",
+    "name": "Saint Helena",
+    "continent": "Seven seas (open ocean)",
+    "subregion": "Western Africa",
+    "pop": 4534,
+    "center": [
+      -5.7126,
+      -15.9505
+    ],
+    "bbox": [
+      -14.4149,
+      -16.004,
+      -5.6597,
+      -7.8826
+    ]
+  },
+  {
+    "code": "SLB",
+    "name": "Solomon Islands",
+    "continent": "Oceania",
+    "subregion": "Melanesia",
+    "pop": 669823,
+    "center": [
+      159.1705,
+      -8.0295
+    ],
+    "bbox": [
+      155.6775,
+      -11.8322,
+      166.9292,
+      -6.6089
+    ]
+  },
+  {
+    "code": "SLE",
+    "name": "Sierra Leone",
+    "continent": "Africa",
+    "subregion": "Western Africa",
+    "pop": 7813215,
+    "center": [
+      -11.7637,
+      8.6174
+    ],
+    "bbox": [
+      -13.2927,
+      6.9065,
+      -10.2832,
+      9.9965
+    ]
+  },
+  {
+    "code": "SLV",
+    "name": "El Salvador",
+    "continent": "North America",
+    "subregion": "Central America",
+    "pop": 6453553,
+    "center": [
+      -88.8901,
+      13.6854
+    ],
+    "bbox": [
+      -90.1059,
+      13.164,
+      -87.7153,
+      14.4311
+    ]
+  },
+  {
+    "code": "SMR",
+    "name": "San Marino",
+    "continent": "Europe",
+    "subregion": "Southern Europe",
+    "pop": 33860,
+    "center": [
+      12.4412,
+      43.9339
+    ],
+    "bbox": [
+      12.3969,
+      43.8941,
+      12.5146,
+      43.9897
+    ]
+  },
+  {
+    "code": "SOL",
+    "name": "Somaliland",
+    "continent": "Africa",
+    "subregion": "Eastern Africa",
+    "pop": 5096159,
+    "center": [
+      46.7316,
+      9.4439
+    ],
+    "bbox": [
+      42.6564,
+      7.9971,
+      48.9386,
+      11.4998
+    ]
+  },
+  {
+    "code": "SOM",
+    "name": "Somalia",
+    "continent": "Africa",
+    "subregion": "Eastern Africa",
+    "pop": 10192317.3,
+    "center": [
+      45.1924,
+      3.5689
+    ],
+    "bbox": [
+      40.9645,
+      -1.6953,
+      51.3902,
+      11.9837
+    ]
+  },
+  {
+    "code": "SPM",
+    "name": "Saint Pierre and Miquelon",
+    "continent": "North America",
+    "subregion": "Northern America",
+    "pop": 5997,
+    "center": [
+      -56.3324,
+      47.0403
+    ],
+    "bbox": [
+      -56.3869,
+      46.7528,
+      -56.1374,
+      47.099
+    ]
+  },
+  {
+    "code": "SRB",
+    "name": "Serbia",
+    "continent": "Europe",
+    "subregion": "Southern Europe",
+    "pop": 6944975,
+    "center": [
+      20.788,
+      44.1899
+    ],
+    "bbox": [
+      18.8391,
+      42.2421,
+      22.9769,
+      46.1692
+    ]
+  },
+  {
+    "code": "STP",
+    "name": "São Tomé and Príncipe",
+    "continent": "Africa",
+    "subregion": "Middle Africa",
+    "pop": 215056,
+    "center": [
+      7.021,
+      0.9709
+    ],
+    "bbox": [
+      6.4682,
+      0.0474,
+      7.4523,
+      1.6991
+    ]
+  },
+  {
+    "code": "SUR",
+    "name": "Suriname",
+    "continent": "South America",
+    "subregion": "South America",
+    "pop": 581363,
+    "center": [
+      -55.9109,
+      4.144
+    ],
+    "bbox": [
+      -58.0545,
+      1.8422,
+      -53.9905,
+      5.9935
+    ]
+  },
+  {
+    "code": "SVK",
+    "name": "Slovakia",
+    "continent": "Europe",
+    "subregion": "Eastern Europe",
+    "pop": 5454073,
+    "center": [
+      19.0499,
+      48.734
+    ],
+    "bbox": [
+      16.8627,
+      47.7634,
+      22.5387,
+      49.5977
+    ]
+  },
+  {
+    "code": "SVN",
+    "name": "Slovenia",
+    "continent": "Europe",
+    "subregion": "Southern Europe",
+    "pop": 2087946,
+    "center": [
+      14.9153,
+      46.0608
+    ],
+    "bbox": [
+      13.3782,
+      45.4284,
+      16.5162,
+      46.8633
+    ]
+  },
+  {
+    "code": "SWE",
+    "name": "Sweden",
+    "continent": "Europe",
+    "subregion": "Northern Europe",
+    "pop": 10285453,
+    "center": [
+      19.0171,
+      65.8592
+    ],
+    "bbox": [
+      11.1472,
+      55.3464,
+      24.1555,
+      69.0369
+    ]
+  },
+  {
+    "code": "SWZ",
+    "name": "Eswatini",
+    "continent": "Africa",
+    "subregion": "Southern Africa",
+    "pop": 1148130,
+    "center": [
+      31.4673,
+      -26.5337
+    ],
+    "bbox": [
+      30.7875,
+      -27.31,
+      32.1129,
+      -25.743
+    ]
+  },
+  {
+    "code": "SXM",
+    "name": "Sint Maarten",
+    "continent": "North America",
+    "subregion": "Caribbean",
+    "pop": 40733,
+    "center": [
+      -63.0701,
+      18.0409
+    ],
+    "bbox": [
+      -63.1247,
+      18.0192,
+      -63.0112,
+      18.0689
+    ]
+  },
+  {
+    "code": "SYC",
+    "name": "Seychelles",
+    "continent": "Seven seas (open ocean)",
+    "subregion": "Eastern Africa",
+    "pop": 97625,
+    "center": [
+      55.4802,
+      -4.6767
+    ],
+    "bbox": [
+      55.3834,
+      -4.7855,
+      55.543,
+      -4.5588
+    ]
+  },
+  {
+    "code": "SYR",
+    "name": "Syria",
+    "continent": "Asia",
+    "subregion": "Western Asia",
+    "pop": 17070135,
+    "center": [
+      38.2778,
+      35.0066
+    ],
+    "bbox": [
+      35.7645,
+      32.3173,
+      42.3591,
+      37.2973
+    ]
+  },
+  {
+    "code": "TCA",
+    "name": "Turks and Caicos Islands",
+    "continent": "North America",
+    "subregion": "Caribbean",
+    "pop": 38191,
+    "center": [
+      -71.7527,
+      21.8166
+    ],
+    "bbox": [
+      -72.3424,
+      21.7517,
+      -71.6369,
+      21.9519
+    ]
+  },
+  {
+    "code": "TCD",
+    "name": "Chad",
+    "continent": "Africa",
+    "subregion": "Middle Africa",
+    "pop": 15946876,
+    "center": [
+      18.645,
+      15.143
+    ],
+    "bbox": [
+      13.4482,
+      7.4753,
+      23.9834,
+      23.4452
+    ]
+  },
+  {
+    "code": "TGO",
+    "name": "Togo",
+    "continent": "Africa",
+    "subregion": "Western Africa",
+    "pop": 8082366,
+    "center": [
+      1.0581,
+      8.8072
+    ],
+    "bbox": [
+      -0.0902,
+      6.0894,
+      1.7779,
+      11.1156
+    ]
+  },
+  {
+    "code": "THA",
+    "name": "Thailand",
+    "continent": "Asia",
+    "subregion": "South-Eastern Asia",
+    "pop": 69625582,
+    "center": [
+      101.0732,
+      15.4597
+    ],
+    "bbox": [
+      97.3739,
+      5.6368,
+      105.641,
+      20.4244
+    ]
+  },
+  {
+    "code": "TJK",
+    "name": "Tajikistan",
+    "continent": "Asia",
+    "subregion": "Central Asia",
+    "pop": 9321018,
+    "center": [
+      72.5873,
+      38.1998
+    ],
+    "bbox": [
+      67.3496,
+      36.684,
+      75.1188,
+      41.0351
+    ]
+  },
+  {
+    "code": "TKM",
+    "name": "Turkmenistan",
+    "continent": "Asia",
+    "subregion": "Central Asia",
+    "pop": 5942089,
+    "center": [
+      58.6766,
+      39.8552
+    ],
+    "bbox": [
+      52.4938,
+      35.1708,
+      66.6293,
+      42.7785
+    ]
+  },
+  {
+    "code": "TLS",
+    "name": "East Timor",
+    "continent": "Asia",
+    "subregion": "South-Eastern Asia",
+    "pop": 1293119,
+    "center": [
+      125.8547,
+      -8.8037
+    ],
+    "bbox": [
+      124.0363,
+      -9.5119,
+      127.2961,
+      -8.1399
+    ]
+  },
+  {
+    "code": "TON",
+    "name": "Tonga",
+    "continent": "Oceania",
+    "subregion": "Polynesia",
+    "pop": 104494,
+    "center": [
+      -175.163,
+      -21.21
+    ],
+    "bbox": [
+      -175.3624,
+      -21.4506,
+      -173.9219,
+      -18.5653
+    ]
+  },
+  {
+    "code": "TTO",
+    "name": "Trinidad and Tobago",
+    "continent": "North America",
+    "subregion": "Caribbean",
+    "pop": 1394973,
+    "center": [
+      -60.9184,
+      10.9989
+    ],
+    "bbox": [
+      -61.9061,
+      10.0646,
+      -60.5255,
+      11.3254
+    ]
+  },
+  {
+    "code": "TUN",
+    "name": "Tunisia",
+    "continent": "Africa",
+    "subregion": "Northern Africa",
+    "pop": 11694719,
+    "center": [
+      9.0079,
+      33.6873
+    ],
+    "bbox": [
+      7.4956,
+      30.2294,
+      11.5359,
+      37.3404
+    ]
+  },
+  {
+    "code": "TUR",
+    "name": "Turkey",
+    "continent": "Asia",
+    "subregion": "Western Asia",
+    "pop": 83429615,
+    "center": [
+      34.5083,
+      39.3454
+    ],
+    "bbox": [
+      25.6689,
+      35.8314,
+      44.8172,
+      42.0933
+    ]
+  },
+  {
+    "code": "TUV",
+    "name": "Tuvalu",
+    "continent": "Oceania",
+    "subregion": "Polynesia",
+    "pop": 11646,
+    "center": [
+      179.2096,
+      -8.5137
+    ],
+    "bbox": [
+      179.1957,
+      -8.535,
+      179.2166,
+      -8.4663
+    ]
+  },
+  {
+    "code": "TWN",
+    "name": "Taiwan",
+    "continent": "Asia",
+    "subregion": "Eastern Asia",
+    "pop": 23568378,
+    "center": [
+      120.8682,
+      23.6524
+    ],
+    "bbox": [
+      118.2873,
+      21.925,
+      121.929,
+      25.2769
+    ]
+  },
+  {
+    "code": "TZA",
+    "name": "Tanzania",
+    "continent": "Africa",
+    "subregion": "Eastern Africa",
+    "pop": 58005463,
+    "center": [
+      34.9592,
+      -6.0519
+    ],
+    "bbox": [
+      29.3234,
+      -11.7162,
+      40.4636,
+      -0.9949
+    ]
+  },
+  {
+    "code": "UGA",
+    "name": "Uganda",
+    "continent": "Africa",
+    "subregion": "Eastern Africa",
+    "pop": 44269594,
+    "center": [
+      32.9486,
+      1.9726
+    ],
+    "bbox": [
+      29.5619,
+      -1.4699,
+      34.9782,
+      4.2202
+    ]
+  },
+  {
+    "code": "UKR",
+    "name": "Ukraine",
+    "continent": "Europe",
+    "subregion": "Eastern Europe",
+    "pop": 44385155,
+    "center": [
+      32.1409,
+      49.7247
+    ],
+    "bbox": [
+      22.1318,
+      45.2341,
+      40.1283,
+      52.3536
+    ]
+  },
+  {
+    "code": "URY",
+    "name": "Uruguay",
+    "continent": "South America",
+    "subregion": "South America",
+    "pop": 3461734,
+    "center": [
+      -55.9669,
+      -32.9611
+    ],
+    "bbox": [
+      -58.4381,
+      -34.9328,
+      -53.1256,
+      -30.1011
+    ]
+  },
+  {
+    "code": "USA",
+    "name": "United States of America",
+    "continent": "North America",
+    "subregion": "Northern America",
+    "pop": 328239523,
+    "center": [
+      -97.4826,
+      39.5385
+    ],
+    "bbox": [
+      -178.1945,
+      18.9639,
+      179.78,
+      71.4077
+    ]
+  },
+  {
+    "code": "UZB",
+    "name": "Uzbekistan",
+    "continent": "Asia",
+    "subregion": "Central Asia",
+    "pop": 33580650,
+    "center": [
+      64.0054,
+      41.6936
+    ],
+    "bbox": [
+      55.9757,
+      37.1722,
+      73.1369,
+      45.5554
+    ]
+  },
+  {
+    "code": "VAT",
+    "name": "Vatican City",
+    "continent": "Europe",
+    "subregion": "Southern Europe",
+    "pop": 825,
+    "center": [
+      12.4534,
+      41.9033
+    ],
+    "bbox": [
+      12.4275,
+      41.8976,
+      12.4392,
+      41.9062
+    ]
+  },
+  {
+    "code": "VCT",
+    "name": "Saint Vincent and the Grenadines",
+    "continent": "North America",
+    "subregion": "Caribbean",
+    "pop": 110589,
+    "center": [
+      -61.3359,
+      13.0879
+    ],
+    "bbox": [
+      -61.3535,
+      12.6947,
+      -61.124,
+      13.3587
+    ]
+  },
+  {
+    "code": "VEN",
+    "name": "Venezuela",
+    "continent": "South America",
+    "subregion": "South America",
+    "pop": 28515829,
+    "center": [
+      -64.5994,
+      7.1825
+    ],
+    "bbox": [
+      -73.3662,
+      0.688,
+      -59.8289,
+      12.1779
+    ]
+  },
+  {
+    "code": "VGB",
+    "name": "British Virgin Islands",
+    "continent": "North America",
+    "subregion": "Caribbean",
+    "pop": 30030,
+    "center": [
+      -64.6366,
+      18.4266
+    ],
+    "bbox": [
+      -64.6951,
+      18.3991,
+      -64.2736,
+      18.7527
+    ]
+  },
+  {
+    "code": "VIR",
+    "name": "United States Virgin Islands",
+    "continent": "North America",
+    "subregion": "Caribbean",
+    "pop": 106631,
+    "center": [
+      -64.7792,
+      17.7467
+    ],
+    "bbox": [
+      -65.0236,
+      17.7017,
+      -64.5805,
+      18.3852
+    ]
+  },
+  {
+    "code": "VNM",
+    "name": "Vietnam",
+    "continent": "Asia",
+    "subregion": "South-Eastern Asia",
+    "pop": 96462106,
+    "center": [
+      105.3873,
+      21.7154
+    ],
+    "bbox": [
+      102.1274,
+      8.5833,
+      109.4449,
+      23.3452
+    ]
+  },
+  {
+    "code": "VUT",
+    "name": "Vanuatu",
+    "continent": "Oceania",
+    "subregion": "Melanesia",
+    "pop": 299882,
+    "center": [
+      166.9088,
+      -15.3715
+    ],
+    "bbox": [
+      166.5261,
+      -20.2418,
+      169.8963,
+      -13.7095
+    ]
+  },
+  {
+    "code": "WLF",
+    "name": "Wallis and Futuna",
+    "continent": "Oceania",
+    "subregion": "Polynesia",
+    "pop": 11558,
+    "center": [
+      -178.1374,
+      -14.2864
+    ],
+    "bbox": [
+      -178.1944,
+      -14.3249,
+      -176.1281,
+      -13.2217
+    ]
+  },
+  {
+    "code": "WSM",
+    "name": "Samoa",
+    "continent": "Oceania",
+    "subregion": "Polynesia",
+    "pop": 197097,
+    "center": [
+      -172.4382,
+      -13.6391
+    ],
+    "bbox": [
+      -172.7785,
+      -14.0473,
+      -171.4496,
+      -13.4652
+    ]
+  },
+  {
+    "code": "YEM",
+    "name": "Yemen",
+    "continent": "Asia",
+    "subregion": "Western Asia",
+    "pop": 29161922,
+    "center": [
+      45.8744,
+      15.3282
+    ],
+    "bbox": [
+      42.549,
+      12.319,
+      54.5111,
+      18.9961
+    ]
+  },
+  {
+    "code": "ZAF",
+    "name": "South Africa",
+    "continent": "Africa",
+    "subregion": "Southern Africa",
+    "pop": 58558270,
+    "center": [
+      23.6657,
+      -29.7088
+    ],
+    "bbox": [
+      16.4476,
+      -46.9629,
+      37.8877,
+      -22.1463
+    ]
+  },
+  {
+    "code": "ZMB",
+    "name": "Zambia",
+    "continent": "Africa",
+    "subregion": "Eastern Africa",
+    "pop": 17861030,
+    "center": [
+      26.3953,
+      -14.6608
+    ],
+    "bbox": [
+      21.9789,
+      -18.0415,
+      33.6615,
+      -8.1937
+    ]
+  },
+  {
+    "code": "ZWE",
+    "name": "Zimbabwe",
+    "continent": "Africa",
+    "subregion": "Eastern Africa",
+    "pop": 14645468,
+    "center": [
+      29.9254,
+      -18.9116
+    ],
+    "bbox": [
+      25.224,
+      -22.4021,
+      33.0067,
+      -15.6431
+    ]
+  }
+]

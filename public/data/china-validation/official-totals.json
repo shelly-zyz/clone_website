@@ -1,0 +1,44 @@
+{
+  "generatedBy": "scripts/build-china-map-data.py",
+  "policy": "Official NEA/NBS totals validate aggregate coverage only. They are not GIS sources and intentionally contain no coordinates.",
+  "year": 2024,
+  "installedCapacityMw": {
+    "source": "National Energy Administration, 2024 national power industry statistics",
+    "sourceUrl": "https://www.nea.gov.cn/20250121/097bfd7c1cd3498897639857d86d5dac/c.html",
+    "sourceUnit": "10,000 kW",
+    "convertedUnit": "MW",
+    "total": 3348620,
+    "hydro": 435950,
+    "thermal": 1444450,
+    "nuclear": 60830,
+    "wind": 520680,
+    "solar": 886660
+  },
+  "generationGwh": {
+    "source": "National Bureau of Statistics, 2024 Statistical Communique",
+    "sourceUrl": "https://www.stats.gov.cn/sj/zxfb/202502/t20250228_1958817.html",
+    "sourceUnit": "100 million kWh",
+    "convertedUnit": "GWh",
+    "total": 10086880,
+    "thermal": 6374260,
+    "hydro": 1425680,
+    "nuclear": 450850,
+    "wind": 997040,
+    "solar": 839040,
+    "cleanEnergy": 3712600
+  },
+  "investmentCnyBillion": {
+    "source": "National Energy Administration, 2024 national power industry statistics",
+    "sourceUrl": "https://www.nea.gov.cn/20250121/097bfd7c1cd3498897639857d86d5dac/c.html",
+    "sourceUnit": "100 million CNY",
+    "convertedUnit": "billion CNY",
+    "powerSourceProjects": 1168.7,
+    "gridProjects": 608.3
+  },
+  "reliabilityReport": {
+    "source": "National Energy Administration and China Electricity Council, 2024 National Power Reliability Annual Report",
+    "sourceFile": "supplement data/2024 National Power Reliability Annual Report.pdf",
+    "published": "2025-03",
+    "use": "Reliability and operating benchmark only; not a coordinate or asset source."
+  }
+}

@@ -1,0 +1,136 @@
+{
+  "generatedBy": "scripts/build-china-map-data.py",
+  "policy": "Coverage compares mapped asset capacity to official aggregate totals. Differences are QA signals, not coordinate corrections.",
+  "assetCapacityByTechnology": {
+    "coal": {
+      "count": 946,
+      "capacityMw": 955718.0
+    },
+    "gas": {
+      "count": 170,
+      "capacityMw": 59774.5
+    },
+    "geothermal": {
+      "count": 2,
+      "capacityMw": 26.1
+    },
+    "hydro": {
+      "count": 1032,
+      "capacityMw": 1060564.2
+    },
+    "nuclear": {
+      "count": 12,
+      "capacityMw": 33402.0
+    },
+    "offshore": {
+      "count": 245,
+      "capacityMw": 107237.1
+    },
+    "oil": {
+      "count": 5,
+      "capacityMw": 1329.0
+    },
+    "solar": {
+      "count": 3698,
+      "capacityMw": 1016861.8
+    },
+    "wind": {
+      "count": 3033,
+      "capacityMw": 757248.0
+    }
+  },
+  "installedCapacityCoverage": [
+    {
+      "label": "hydro",
+      "officialInstalledCapacityMw": 435950.0,
+      "mappedAssetCapacityMw": 1060564.2,
+      "coverageRatio": 2.4328,
+      "assetTechnologies": [
+        "hydro"
+      ]
+    },
+    {
+      "label": "wind",
+      "officialInstalledCapacityMw": 520680.0,
+      "mappedAssetCapacityMw": 864485.1,
+      "coverageRatio": 1.6603,
+      "assetTechnologies": [
+        "wind",
+        "offshore"
+      ]
+    },
+    {
+      "label": "solar",
+      "officialInstalledCapacityMw": 886660.0,
+      "mappedAssetCapacityMw": 1016861.8,
+      "coverageRatio": 1.1468,
+      "assetTechnologies": [
+        "solar"
+      ]
+    },
+    {
+      "label": "nuclear",
+      "officialInstalledCapacityMw": 60830.0,
+      "mappedAssetCapacityMw": 33402.0,
+      "coverageRatio": 0.5491,
+      "assetTechnologies": [
+        "nuclear"
+      ]
+    },
+    {
+      "label": "thermal",
+      "officialInstalledCapacityMw": 1444450.0,
+      "mappedAssetCapacityMw": 1016821.5,
+      "coverageRatio": 0.704,
+      "assetTechnologies": [
+        "coal",
+        "gas",
+        "oil",
+        "biomass",
+        "other"
+      ]
+    },
+    {
+      "label": "total",
+      "officialInstalledCapacityMw": 3348620.0,
+      "mappedAssetCapacityMw": 3992160.7,
+      "coverageRatio": 1.1922,
+      "assetTechnologies": [
+        "coal",
+        "gas",
+        "geothermal",
+        "hydro",
+        "nuclear",
+        "offshore",
+        "oil",
+        "solar",
+        "wind"
+      ]
+    }
+  ],
+  "officialGenerationGwh": {
+    "source": "National Bureau of Statistics, 2024 Statistical Communique",
+    "sourceUrl": "https://www.stats.gov.cn/sj/zxfb/202502/t20250228_1958817.html",
+    "sourceUnit": "100 million kWh",
+    "convertedUnit": "GWh",
+    "total": 10086880,
+    "thermal": 6374260,
+    "hydro": 1425680,
+    "nuclear": 450850,
+    "wind": 997040,
+    "solar": 839040,
+    "cleanEnergy": 3712600
+  },
+  "officialInvestmentCnyBillion": {
+    "source": "National Energy Administration, 2024 national power industry statistics",
+    "sourceUrl": "https://www.nea.gov.cn/20250121/097bfd7c1cd3498897639857d86d5dac/c.html",
+    "sourceUnit": "100 million CNY",
+    "convertedUnit": "billion CNY",
+    "powerSourceProjects": 1168.7,
+    "gridProjects": 608.3
+  },
+  "nonGisAssertion": {
+    "officialTotalsContainCoordinates": false,
+    "officialTotalsUsedAsGisSource": false
+  }
+}
