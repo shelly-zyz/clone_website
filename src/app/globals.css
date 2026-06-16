@@ -723,17 +723,17 @@ button.og-nav-drawer-primary {
 
 .og-weather-panel .og-panel-title-row span {
   color: #bae6fd;
-  background: rgba(14, 116, 144, 0.26);
-  border-color: rgba(103, 232, 249, 0.32);
+  background: rgba(14, 116, 144, 0.2);
+  border-color: rgba(103, 232, 249, 0.28);
 }
 
 .og-weather-current {
   display: grid;
   gap: 6px;
   margin-top: 12px;
-  padding: 10px;
-  background: rgba(15, 23, 42, 0.7);
-  border: 1px solid rgba(103, 232, 249, 0.18);
+  padding: 9px;
+  background: rgba(8, 14, 26, 0.56);
+  border: 1px solid rgba(103, 232, 249, 0.14);
   border-radius: 8px;
 }
 
@@ -753,9 +753,10 @@ button.og-nav-drawer-primary {
 }
 
 .og-weather-current div {
-  height: 8px;
+  height: 7px;
   border-radius: 999px;
-  box-shadow: 0 0 14px rgba(34, 211, 238, 0.14);
+  opacity: 0.9;
+  box-shadow: 0 0 12px rgba(34, 211, 238, 0.1);
 }
 
 .og-weather-data-grid {
@@ -768,8 +769,8 @@ button.og-nav-drawer-primary {
 .og-weather-data-grid div {
   min-width: 0;
   padding: 7px;
-  background: rgba(15, 23, 42, 0.66);
-  border: 1px solid rgba(51, 65, 85, 0.54);
+  background: rgba(8, 14, 26, 0.52);
+  border: 1px solid rgba(51, 65, 85, 0.44);
   border-radius: 6px;
 }
 
@@ -863,8 +864,8 @@ button.og-nav-drawer-primary {
   min-height: 44px;
   padding: 7px;
   color: #cbd5e1;
-  background: rgba(15, 23, 42, 0.62);
-  border: 1px solid rgba(51, 65, 85, 0.56);
+  background: rgba(8, 14, 26, 0.54);
+  border: 1px solid rgba(51, 65, 85, 0.48);
   border-radius: 7px;
   text-align: left;
 }
@@ -872,7 +873,7 @@ button.og-nav-drawer-primary {
 .og-weather-metric-row:hover,
 .og-weather-metric-row.is-active {
   color: #f8fafc;
-  background: rgba(8, 145, 178, 0.32);
+  background: rgba(8, 145, 178, 0.28);
   border-color: rgba(103, 232, 249, 0.48);
   transform: translateY(-1px);
 }
@@ -1990,8 +1991,8 @@ button.og-nav-drawer-primary {
   cursor: grab;
   touch-action: none;
   background:
-    radial-gradient(circle at 50% 48%, rgba(26, 55, 68, 0.22), transparent 38%),
-    radial-gradient(circle at 50% 50%, rgba(5, 13, 23, 0) 34%, rgba(1, 4, 10, 0.56) 72%),
+    radial-gradient(circle at 50% 48%, rgba(22, 44, 58, 0.16), transparent 36%),
+    radial-gradient(circle at 50% 50%, rgba(5, 13, 23, 0) 32%, rgba(1, 4, 10, 0.68) 74%),
     #02060d;
 }
 
@@ -2009,11 +2010,12 @@ button.og-nav-drawer-primary {
 
 .og-weather-earth-overlay {
   mix-blend-mode: screen;
-  opacity: 0.92;
+  opacity: 0.82;
 }
 
 .og-weather-earth-particles {
   mix-blend-mode: screen;
+  filter: drop-shadow(0 0 3px rgba(160, 238, 255, 0.16));
 }
 
 .og-weather-earth-readout {
@@ -2029,7 +2031,7 @@ button.og-nav-drawer-primary {
   border: 1px solid rgba(148, 214, 238, 0.16);
   border-radius: 999px;
   color: rgba(227, 246, 250, 0.74);
-  background: rgba(3, 8, 16, 0.42);
+  background: rgba(3, 8, 16, 0.34);
   font-size: 12px;
   line-height: 1;
   letter-spacing: 0;
@@ -2043,6 +2045,24 @@ button.og-nav-drawer-primary {
 
 .og-weather-earth-readout strong {
   font-weight: 600;
+}
+
+.og-weather-earth-readout em {
+  display: inline-flex;
+  align-items: center;
+  min-height: 16px;
+  padding: 0 6px;
+  border: 1px solid rgba(251, 191, 36, 0.28);
+  border-radius: 999px;
+  color: #fde68a;
+  background: rgba(120, 53, 15, 0.24);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.og-weather-earth.is-sample .og-weather-earth-readout {
+  border-color: rgba(251, 191, 36, 0.18);
 }
 
 @media (max-width: 700px) {

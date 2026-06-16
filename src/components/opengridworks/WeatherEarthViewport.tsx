@@ -45,6 +45,8 @@ type WeatherScreenField = {
   width: number;
   height: number;
   stride: number;
+  maxMagnitude: number;
+  intensityMax: number;
   cells: (WeatherScreenVector | null)[][];
   seeds: { x: number; y: number }[];
   valueAt: (x: number, y: number) => WeatherScreenVector | null;
@@ -76,6 +78,7 @@ const initialRotate: [number, number, number] = [-105, -22, 0];
 const minScaleMultiplier = 0.36;
 const maxScaleMultiplier = 2.25;
 const maxParticleAge = 108;
+const weatherParticleBuckets = 6;
 
 function formatWeatherTime(value: string | null | undefined) {
   if (!value) {
@@ -141,6 +144,35 @@ function colorForMetric(metric: WeatherMetricKey, value: number, alpha: number) 
   ] as const;
 }
 
+function fieldIntensity(field: WeatherField, metric: WeatherMetricKey, value: number) {
+  const meta = weatherMetricMeta(metric);
+  const [boundMin, boundMax] = meta.bounds;
+  const floor = metric === "wind" || metric === "cape" || metric === "precipitableWater"
+    ? Math.max(0, Math.min(field.stats.min, boundMax))
+    : Math.max(boundMin, Math.min(field.stats.min, boundMax));
+  const statsCeiling = Math.max(
+    floor + 0.001,
+    field.stats.mean * (metric === "wind" ? 2.9 : 1.55),
+    field.stats.max * (metric === "wind" ? 0.72 : 0.92),
+  );
+  const ceiling = metric === "wind"
+    ? clamp(statsCeiling, Math.max(10, field.stats.mean * 1.35), Math.max(12, Math.min(boundMax, field.stats.max)))
+    : clamp(statsCeiling, floor + 1, boundMax);
+
+  return clamp((value - floor) / Math.max(ceiling - floor, 0.001), 0, 1);
+}
+
+function overlayAlphaForMetric(field: WeatherField, metric: WeatherMetricKey, value: number) {
+  const intensity = fieldIntensity(field, metric, value);
+  if (metric === "wind") {
+    return 0.035 + Math.pow(intensity, 1.45) * 0.255;
+  }
+  if (metric === "cape" || metric === "mslp") {
+    return 0.1 + Math.pow(intensity, 1.1) * 0.34;
+  }
+  return 0.09 + Math.pow(intensity, 1.18) * 0.3;
+}
+
 function drawBaseMap(
   canvas: HTMLCanvasElement | null,
   width: number,
@@ -163,10 +195,10 @@ function drawBaseMap(
   const path = geoPath(projection, context);
   context.clearRect(0, 0, width, height);
 
-  const glow = context.createRadialGradient(width * 0.42, height * 0.38, radius * 0.12, width / 2, height / 2, radius);
-  glow.addColorStop(0, "#162331");
-  glow.addColorStop(0.66, "#09131e");
-  glow.addColorStop(0.92, "#04070d");
+  const glow = context.createRadialGradient(width * 0.4, height * 0.35, radius * 0.08, width / 2, height / 2, radius);
+  glow.addColorStop(0, "#101c26");
+  glow.addColorStop(0.58, "#07101a");
+  glow.addColorStop(0.9, "#02060d");
   glow.addColorStop(1, "#00030a");
 
   context.save();
@@ -174,9 +206,9 @@ function drawBaseMap(
   path({ type: "Sphere" });
   context.fillStyle = glow;
   context.fill();
-  context.shadowColor = "rgba(80, 220, 255, 0.24)";
-  context.shadowBlur = 18;
-  context.strokeStyle = "rgba(148, 214, 238, 0.28)";
+  context.shadowColor = "rgba(95, 210, 255, 0.3)";
+  context.shadowBlur = 22;
+  context.strokeStyle = "rgba(154, 221, 246, 0.34)";
   context.lineWidth = 1;
   context.stroke();
   context.restore();
@@ -186,22 +218,22 @@ function drawBaseMap(
 
   context.beginPath();
   path(geoGraticule10());
-  context.strokeStyle = "rgba(125, 166, 184, 0.13)";
-  context.lineWidth = 0.55;
+  context.strokeStyle = "rgba(125, 166, 184, 0.085)";
+  context.lineWidth = 0.5;
   context.stroke();
 
   if (land) {
     context.beginPath();
     path(land);
-    context.fillStyle = "rgba(30, 42, 48, 0.38)";
+    context.fillStyle = "rgba(35, 47, 52, 0.2)";
     context.fill();
   }
 
   if (boundaries) {
     context.beginPath();
     path(boundaries);
-    context.strokeStyle = "rgba(188, 211, 220, 0.28)";
-    context.lineWidth = 0.62;
+    context.strokeStyle = "rgba(188, 211, 220, 0.16)";
+    context.lineWidth = 0.54;
     context.stroke();
   }
 
@@ -235,7 +267,6 @@ function drawOverlay(
   const radius = sphereRadius(width, height, scale);
   const image = context.createImageData(width, height);
   const stride = highDefinition ? 1 : 2;
-  const alpha = metric === "wind" ? 0.2 : 0.34;
 
   for (let y = 0; y < height; y += stride) {
     for (let x = 0; x < width; x += stride) {
@@ -250,6 +281,7 @@ function drawOverlay(
       if (!sample) {
         continue;
       }
+      const alpha = overlayAlphaForMetric(field, metric, sample.value);
       const [r, g, b, a] = colorForMetric(metric, sample.value, alpha);
       for (let yy = y; yy < Math.min(height, y + stride); yy += 1) {
         for (let xx = x; xx < Math.min(width, x + stride); xx += 1) {
@@ -289,7 +321,7 @@ function distortedWindVector(
   const dydl = ((pLambda[1] - y) / hLambda) / cosLat;
   const dxdp = (pPhi[0] - x) / hPhi;
   const dydp = (pPhi[1] - y) / hPhi;
-  const velocityScale = 0.011;
+  const velocityScale = 0.0125;
   const rawDx = (u * dxdl + v * dxdp) * velocityScale;
   const rawDy = (u * dydl + v * dydp) * velocityScale;
   const rawLength = Math.hypot(rawDx, rawDy);
@@ -297,7 +329,7 @@ function distortedWindVector(
     return null;
   }
 
-  const cappedLength = clamp(rawLength, 0.24, 5.8);
+  const cappedLength = clamp(rawLength, 0.28, 7.2);
   const amount = cappedLength / rawLength;
   return {
     dx: rawDx * amount,
@@ -319,11 +351,14 @@ function createScreenField(
   }
 
   const radius = sphereRadius(width, height, scale);
-  const stride = highDefinition ? 4 : 6;
+  const stride = highDefinition ? 3 : 5;
   const columns = Math.ceil(width / stride);
   const rows = Math.ceil(height / stride);
   const cells: (WeatherScreenVector | null)[][] = Array.from({ length: columns }, () => Array(rows).fill(null));
   const seeds: { x: number; y: number }[] = [];
+  let maxMagnitude = 0;
+  let magnitudeSum = 0;
+  let magnitudeCount = 0;
 
   for (let column = 0; column < columns; column += 1) {
     const x = Math.min(width - 1, column * stride + stride / 2);
@@ -343,6 +378,9 @@ function createScreenField(
       const vector = distortedWindVector(projection, coord[0], coord[1], x, y, sample.u, sample.v);
       cells[column][row] = vector;
       if (vector) {
+        maxMagnitude = Math.max(maxMagnitude, vector.magnitude);
+        magnitudeSum += vector.magnitude;
+        magnitudeCount += 1;
         seeds.push({ x, y });
       }
     }
@@ -357,10 +395,15 @@ function createScreenField(
     return cells[column]?.[row] ?? null;
   };
 
+  const meanMagnitude = magnitudeSum / Math.max(magnitudeCount, 1);
+  const intensityMax = Math.max(6, Math.min(45, Math.max(maxMagnitude * 0.72, meanMagnitude * 2.8)));
+
   return {
     width,
     height,
     stride,
+    maxMagnitude,
+    intensityMax,
     cells,
     seeds,
     valueAt,
@@ -374,8 +417,8 @@ function createScreenField(
       }
 
       const seed = seeds[Math.floor(Math.random() * seeds.length)];
-      particle.x = clamp(seed.x + (Math.random() - 0.5) * stride * 2, 0, width - 1);
-      particle.y = clamp(seed.y + (Math.random() - 0.5) * stride * 2, 0, height - 1);
+      particle.x = clamp(seed.x + (Math.random() - 0.5) * stride * 2.6, 0, width - 1);
+      particle.y = clamp(seed.y + (Math.random() - 0.5) * stride * 2.6, 0, height - 1);
       particle.xt = undefined;
       particle.yt = undefined;
       particle.age = Math.floor(Math.random() * maxParticleAge);
@@ -407,11 +450,11 @@ function animateParticles(
 
   context.save();
   context.globalCompositeOperation = "destination-in";
-  context.fillStyle = "rgba(0, 0, 0, 0.91)";
+  context.fillStyle = "rgba(0, 0, 0, 0.965)";
   context.fillRect(0, 0, width, height);
   context.restore();
 
-  const buckets: WeatherParticle[][] = [[], [], [], [], []];
+  const buckets: WeatherParticle[][] = Array.from({ length: weatherParticleBuckets }, () => []);
   particles.forEach((particle) => {
     if (particle.age > maxParticleAge || !field.isDefined(particle.x, particle.y)) {
       field.randomize(particle).age = 0;
@@ -428,7 +471,8 @@ function animateParticles(
     if (field.isDefined(nextX, nextY)) {
       particle.xt = nextX;
       particle.yt = nextY;
-      buckets[clamp(Math.floor(vector.magnitude / 7.5), 0, buckets.length - 1)].push(particle);
+      const bucket = clamp(Math.floor((vector.magnitude / field.intensityMax) * buckets.length), 0, buckets.length - 1);
+      buckets[bucket].push(particle);
     } else {
       particle.x = nextX;
       particle.y = nextY;
@@ -437,17 +481,18 @@ function animateParticles(
   });
 
   const strokes = [
-    "rgba(154, 206, 214, 0.2)",
-    "rgba(177, 225, 229, 0.32)",
-    "rgba(207, 240, 242, 0.48)",
-    "rgba(235, 252, 252, 0.64)",
-    "rgba(255, 255, 255, 0.78)",
+    "rgba(93, 151, 184, 0.16)",
+    "rgba(124, 190, 210, 0.26)",
+    "rgba(159, 225, 231, 0.4)",
+    "rgba(205, 245, 245, 0.58)",
+    "rgba(245, 255, 255, 0.78)",
+    "rgba(255, 241, 200, 0.86)",
   ];
 
   context.save();
   drawSphereClip(context, width, height, sphereRadius(width, height, scale));
   context.globalCompositeOperation = "lighter";
-  context.lineWidth = 1;
+  context.lineWidth = width < 700 ? 0.82 : 0.95;
   context.lineCap = "round";
 
   buckets.forEach((bucket, index) => {
@@ -590,7 +635,10 @@ export function WeatherEarthViewport({
       return;
     }
 
-    const particleCount = Math.round(clamp((size.width * size.height) / (weatherHighDefinition ? 410 : 620), 900, 3800));
+    const minParticles = size.width < 700 ? 760 : 1800;
+    const maxParticles = size.width < 700 ? 2600 : 7200;
+    const particleBudget = (size.width * Math.min(size.width, size.height)) / (weatherHighDefinition ? 165 : 225);
+    const particleCount = Math.round(clamp(particleBudget, minParticles, maxParticles));
     const particles = buildParticles(screenField, particleCount);
     let stopped = false;
     let frame = 0;
@@ -751,10 +799,11 @@ export function WeatherEarthViewport({
   };
 
   const meta = weatherMetricMeta(weatherMetric);
+  const sampleFallback = weatherField?.source.toLowerCase().includes("sample") ?? false;
   return (
     <section
       ref={containerRef}
-      className="og-weather-earth"
+      className={`og-weather-earth ${sampleFallback ? "is-sample" : ""}`}
       aria-label="气象地球视图"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
@@ -769,6 +818,7 @@ export function WeatherEarthViewport({
       <div className="og-weather-earth-readout" aria-hidden="true">
         <span>{meta.shortLabel}</span>
         <strong>{formatWeatherTime(weatherField?.validTimeUtc)}</strong>
+        {sampleFallback ? <em>演示场</em> : null}
       </div>
     </section>
   );

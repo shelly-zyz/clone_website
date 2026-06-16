@@ -102,7 +102,7 @@ async function readStatus(): Promise<WeatherStatus> {
   const wgrib2 = spawnSync("wgrib2", ["-version"], { encoding: "utf8", windowsHide: true });
   const wgrib2Available = !wgrib2.error && wgrib2.status === 0;
   const message = manifest?.message
-    ?? (!wgrib2Available ? "wgrib2 is not installed or not available; showing the built-in sample weather field." : undefined);
+    ?? (!wgrib2Available ? "未检测到 wgrib2，当前显示内置演示气象场。" : undefined);
 
   return {
     wgrib2Available,

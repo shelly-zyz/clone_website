@@ -420,6 +420,19 @@ function weatherStatusLabel(manifest: WeatherManifest | null, loading: boolean) 
   return "异常";
 }
 
+function localizeWeatherStatusNote(note: string | null) {
+  if (!note) {
+    return null;
+  }
+  if (note.toLowerCase().includes("wgrib2 is not installed")) {
+    return "未检测到 wgrib2，当前显示内置演示气象场。";
+  }
+  if (note.toLowerCase().includes("built-in sample weather field")) {
+    return "当前显示内置演示气象场。";
+  }
+  return note;
+}
+
 function generationTechnologyName(technology: GenerationTechnology) {
   return generationTechnologyLabels[technology];
 }
@@ -4284,11 +4297,12 @@ function WeatherLegendPanel({
   const activeMeta = weatherMetricMeta(activeMetric);
   const validTime = manifest?.validTimeUtc ?? field?.validTimeUtc;
   const fieldFilesReady = statusDetails ? Object.values(statusDetails.fieldFilesPresent).some(Boolean) : true;
-  const statusNote = error
+  const statusBadge = manifest?.refreshStatus === "sample-fallback" ? "演示" : manifest?.stale ? "缓存" : "实时";
+  const statusNote = localizeWeatherStatusNote(error
     ?? statusDetails?.lastRefreshError
     ?? statusDetails?.message
     ?? manifest?.message
-    ?? (!fieldFilesReady ? "实时字段文件暂不可用，当前显示内置演示场。" : null);
+    ?? (!fieldFilesReady ? "实时字段文件暂不可用，当前显示内置演示场。" : null));
 
   return (
     <aside className="og-legend-panel og-weather-panel" aria-label="气象项目图例">
@@ -4297,7 +4311,7 @@ function WeatherLegendPanel({
           <h1>气象项目</h1>
           <p>{formatWeatherTime(validTime)} | {status} | GFS</p>
         </div>
-        <span>{manifest?.stale ? "缓存" : "实时"}</span>
+        <span>{statusBadge}</span>
       </div>
 
       <div className="og-weather-current">
@@ -5735,11 +5749,11 @@ function MobileWeatherSheet({
 
   const activeMeta = weatherMetricMeta(activeMetric);
   const fieldFilesReady = statusDetails ? Object.values(statusDetails.fieldFilesPresent).some(Boolean) : true;
-  const statusNote = error
+  const statusNote = localizeWeatherStatusNote(error
     ?? statusDetails?.lastRefreshError
     ?? statusDetails?.message
     ?? manifest?.message
-    ?? (!fieldFilesReady ? "实时字段文件暂不可用，当前显示内置演示场。" : null);
+    ?? (!fieldFilesReady ? "实时字段文件暂不可用，当前显示内置演示场。" : null));
 
   return (
     <aside className="og-mobile-generation-sheet og-mobile-weather-sheet" aria-label="气象项目移动控制">

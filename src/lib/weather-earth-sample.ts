@@ -1,6 +1,7 @@
 import {
   WEATHER_METRICS,
   type WeatherField,
+  type WeatherEncoding,
   type WeatherGridHeader,
   type WeatherManifest,
   type WeatherMetricKey,
@@ -23,11 +24,13 @@ const sampleHeader: WeatherGridHeader = {
   forecastTime: sampleForecastHour,
 };
 
-const sampleEncoding = {
-  kind: "linear" as const,
-  offset: 0,
-  scale: 0.1,
-  missingValue: 65535,
+const sampleEncodings: Record<WeatherMetricKey, WeatherEncoding> = {
+  wind: { kind: "linear", offset: -80, scale: 0.1, missingValue: 65535 },
+  temperature: { kind: "linear", offset: -80, scale: 0.1, missingValue: 65535 },
+  relativeHumidity: { kind: "linear", offset: 0, scale: 0.1, missingValue: 65535 },
+  cape: { kind: "linear", offset: 0, scale: 0.1, missingValue: 65535 },
+  mslp: { kind: "linear", offset: 900, scale: 0.1, missingValue: 65535 },
+  precipitableWater: { kind: "linear", offset: 0, scale: 0.1, missingValue: 65535 },
 };
 
 const nativeLevelLabels: Record<WeatherMetricKey, string> = {
@@ -59,6 +62,7 @@ export function sampleWeatherManifest(message = "使用内置演示气象场；�
 }
 
 export function sampleWeatherField(metricKey: WeatherMetricKey): WeatherField {
+  const encoding = sampleEncodings[metricKey];
   const values: number[] = [];
   const u: number[] = [];
   const v: number[] = [];
@@ -70,15 +74,12 @@ export function sampleWeatherField(metricKey: WeatherMetricKey): WeatherField {
       const lng = sampleHeader.lo1 + i * sampleHeader.dx;
       const sample = syntheticWeatherValue(metricKey, lng, lat);
       if (metricKey === "wind") {
-        const radians = ((lng + lat * 0.72) * Math.PI) / 180;
-        const wave = Math.sin((lat * Math.PI) / 180);
-        const eastward = sample * (0.58 + 0.42 * Math.cos(radians));
-        const northward = sample * 0.34 * wave;
-        u.push(encode(eastward));
-        v.push(encode(northward));
-        statsValues.push(Math.hypot(eastward, northward));
+        const wind = syntheticWindVector(lng, lat);
+        u.push(encode(wind.u, encoding));
+        v.push(encode(wind.v, encoding));
+        statsValues.push(Math.hypot(wind.u, wind.v));
       } else {
-        values.push(encode(sample));
+        values.push(encode(sample, encoding));
         statsValues.push(sample);
       }
     }
@@ -90,7 +91,7 @@ export function sampleWeatherField(metricKey: WeatherMetricKey): WeatherField {
     validTimeUtc: sampleValidTimeUtc,
     source: "GFS sample fallback",
     header: sampleHeader,
-    encoding: sampleEncoding,
+    encoding,
     stats: summarize(statsValues),
   };
 
@@ -118,7 +119,7 @@ function syntheticWeatherValue(metricKey: WeatherMetricKey, lng: number, lat: nu
 
   switch (metricKey) {
     case "wind":
-      return clamp(5 + 10 * polar + 7 * storm + 2.4 * Math.max(lonWave, 0), 0, 42);
+      return clamp(Math.hypot(syntheticWindVector(lng, lat).u, syntheticWindVector(lng, lat).v), 0, 42);
     case "temperature":
       return clamp(31 - 55 * polar + 5 * lonWave + 3 * latWave, -42, 42);
     case "relativeHumidity":
@@ -132,14 +133,59 @@ function syntheticWeatherValue(metricKey: WeatherMetricKey, lng: number, lat: nu
   }
 }
 
+function syntheticWindVector(lng: number, lat: number) {
+  const normalizedLng = normalizeLongitude(lng);
+  const latRad = (lat * Math.PI) / 180;
+  const lonRad = (normalizedLng * Math.PI) / 180;
+  const polar = Math.abs(lat) / 90;
+  const jetNorth = gaussian(normalizedLng, lat, 146, 42, 78, 12);
+  const jetSouth = gaussian(normalizedLng, lat, -42, -45, 92, 14);
+  const subtropicalJet = Math.exp(-((Math.abs(lat) - 31) ** 2) / (2 * 10 * 10));
+  const trades = -3.6 * Math.cos(latRad) * Math.max(0, 1 - polar * 1.35);
+  let u = 3.2 + trades + 12.5 * subtropicalJet + 8.5 * jetNorth + 7.8 * jetSouth;
+  let v = 2.1 * Math.sin(lonRad * 1.35) * Math.cos(latRad) + 1.4 * Math.sin((normalizedLng + lat * 1.8) * Math.PI / 70);
+
+  const vortices = [
+    { lng: 126, lat: 24, scale: 19, strength: 17 },
+    { lng: -88, lat: 31, scale: 24, strength: -14 },
+    { lng: 32, lat: -38, scale: 28, strength: 12 },
+    { lng: -164, lat: 48, scale: 32, strength: -10 },
+  ];
+
+  vortices.forEach((vortex) => {
+    const contribution = vortexWind(normalizedLng, lat, vortex.lng, vortex.lat, vortex.scale, vortex.strength);
+    u += contribution.u;
+    v += contribution.v;
+  });
+
+  return { u, v };
+}
+
+function vortexWind(lng: number, lat: number, centerLng: number, centerLat: number, scale: number, strength: number) {
+  const dx = shortestLongitudeDelta(lng, centerLng) / Math.max(Math.cos((centerLat * Math.PI) / 180), 0.28);
+  const dy = lat - centerLat;
+  const distance = Math.hypot(dx, dy);
+  if (distance < 0.001) {
+    return { u: 0, v: 0 };
+  }
+
+  const falloff = Math.exp(-(distance * distance) / (2 * scale * scale));
+  const spiral = 0.24 * strength * falloff;
+  const tangent = strength * falloff;
+  return {
+    u: (-dy / distance) * tangent + (dx / distance) * spiral,
+    v: (dx / distance) * tangent + (dy / distance) * spiral,
+  };
+}
+
 function gaussian(lng: number, lat: number, centerLng: number, centerLat: number, lngScale: number, latScale: number) {
-  const dlng = Math.min(Math.abs(lng - centerLng), 360 - Math.abs(lng - centerLng));
+  const dlng = Math.abs(shortestLongitudeDelta(normalizeLongitude(lng), centerLng));
   const dlat = lat - centerLat;
   return Math.exp(-((dlng * dlng) / (2 * lngScale * lngScale) + (dlat * dlat) / (2 * latScale * latScale)));
 }
 
-function encode(value: number) {
-  return Math.max(0, Math.min(65534, Math.round((value - sampleEncoding.offset) / sampleEncoding.scale)));
+function encode(value: number, encoding: WeatherEncoding) {
+  return Math.max(0, Math.min(65534, Math.round((value - encoding.offset) / encoding.scale)));
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -155,4 +201,13 @@ function summarize(values: number[]) {
     max: Number(max.toFixed(3)),
     mean: Number(mean.toFixed(3)),
   };
+}
+
+function normalizeLongitude(lng: number) {
+  return ((((lng + 180) % 360) + 360) % 360) - 180;
+}
+
+function shortestLongitudeDelta(lng: number, centerLng: number) {
+  const delta = normalizeLongitude(lng) - normalizeLongitude(centerLng);
+  return ((((delta + 180) % 360) + 360) % 360) - 180;
 }
