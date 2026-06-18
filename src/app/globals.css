@@ -219,11 +219,6 @@
   box-shadow: inset -1px 0 rgba(0, 229, 255, 0.04);
 }
 
-.og-nav-rail.is-open,
-.og-nav-rail:focus-within {
-  box-shadow: 24px 0 54px rgba(0, 0, 0, 0.48), inset -1px 0 rgba(0, 229, 255, 0.06);
-}
-
 .og-logo-link {
   position: absolute;
   top: 16px;
@@ -241,22 +236,7 @@
   object-fit: contain;
 }
 
-.og-nav-collapse {
-  position: absolute;
-  top: 28px;
-  left: 61px;
-  display: grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  color: #94a3b8;
-  background: rgba(10, 15, 26, 0.92);
-  border: 1px solid rgba(148, 163, 184, 0.08);
-  border-radius: 6px;
-}
-
-.og-nav-item,
-.og-nav-signin {
+.og-nav-item {
   position: absolute;
   left: 10px;
   display: grid;
@@ -279,104 +259,12 @@
   color: #f8fafc;
 }
 
-.og-nav-signin {
-  bottom: 32px;
-  color: #94a3b8;
-  background: transparent;
-}
-
-.og-nav-drawer {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 64px;
-  width: 250px;
-  padding: 18px 18px 28px;
-  pointer-events: none;
-  opacity: 0;
-  transform: translateX(-14px);
-  color: #dbe4f0;
-  background: rgba(7, 12, 22, 0.95);
-  border-right: 1px solid rgba(51, 65, 85, 0.7);
-  transition: opacity 160ms ease, transform 160ms ease;
-  backdrop-filter: blur(18px);
-}
-
-.og-nav-rail.is-open .og-nav-drawer,
-.og-nav-rail:focus-within .og-nav-drawer {
-  pointer-events: auto;
-  opacity: 1;
-  transform: translateX(0);
-}
-
-.og-nav-brand {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  color: #f8fafc;
-  font-size: 18px;
-  font-weight: 900;
-}
-
-.og-nav-brand img {
-  width: 48px;
-  height: 48px;
-}
-
-.og-nav-brand span {
-  color: #00e5ff;
-}
-
-.og-nav-drawer-primary {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  height: 54px;
-  margin-top: 48px;
-  padding: 0 24px;
-  color: #f8fafc;
-  background: rgba(148, 163, 184, 0.12);
-  font-size: 17px;
-  font-weight: 800;
-}
-
-.og-nav-drawer-links {
-  position: absolute;
-  right: 18px;
-  bottom: 26px;
-  left: 18px;
-  display: grid;
-  justify-items: center;
-  gap: 13px;
-}
-
-.og-nav-drawer-links a {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  color: #aeb8c8;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.og-nav-drawer-links a:hover,
-.og-nav-drawer-primary:hover {
-  color: #f8fafc;
-}
-
-.og-nav-item,
-.og-nav-drawer-primary {
+.og-nav-item {
   font: inherit;
 }
 
-button.og-nav-item,
-button.og-nav-drawer-primary {
+button.og-nav-item {
   cursor: pointer;
-}
-
-.og-nav-drawer-primary.is-active {
-  color: #f8fafc;
-  background: rgba(30, 41, 59, 0.78);
 }
 
 .og-legend-panel {
@@ -578,10 +466,6 @@ button.og-nav-drawer-primary {
   border-radius: 6px;
   font-size: 11px;
   font-weight: 800;
-}
-
-.og-nav-drawer-primary + .og-nav-drawer-primary {
-  margin-top: 10px;
 }
 
 .og-generation-inline-toggle {

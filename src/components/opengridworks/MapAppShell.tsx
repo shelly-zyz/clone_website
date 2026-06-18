@@ -41,7 +41,6 @@ import {
   Share2,
   SlidersHorizontal,
   Type,
-  UserCircle,
   X,
   Zap,
 } from "lucide-react";
@@ -3889,36 +3888,17 @@ function TogglePill({ enabled }: { enabled: boolean }) {
 }
 
 function NavRail({
-  open,
   activeProject,
-  onOpenChange,
   onProjectChange,
 }: {
-  open: boolean;
   activeProject: ProjectMode;
-  onOpenChange: (open: boolean) => void;
   onProjectChange: (project: ProjectMode) => void;
 }) {
   return (
-    <nav
-      className={`og-nav-rail ${open ? "is-open" : ""}`}
-      aria-label="主导航"
-      onMouseEnter={() => onOpenChange(true)}
-      onMouseLeave={() => onOpenChange(false)}
-      onFocusCapture={() => onOpenChange(true)}
-      onBlurCapture={(event) => {
-        const nextTarget = event.relatedTarget;
-        if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) {
-          onOpenChange(false);
-        }
-      }}
-    >
+    <nav className="og-nav-rail" aria-label="主导航">
       <a className="og-logo-link" href="#" aria-label="OpenGridWorks 首页">
         <Image src="/images/opengridworks/logo-dark.webp" alt="" width={48} height={48} priority />
       </a>
-      <button className="og-nav-collapse" type="button" aria-label="展开导航" onClick={() => onOpenChange(!open)}>
-        <Menu size={14} />
-      </button>
       <button
         className={`og-nav-item og-nav-item-power ${activeProject === "power" ? "og-nav-item-active" : ""}`}
         type="button"
@@ -3937,38 +3917,6 @@ function NavRail({
       >
         <CloudSun size={18} />
       </button>
-      <a className="og-nav-signin" href="#" aria-label="登录">
-        <UserCircle size={20} />
-      </a>
-      <div className="og-nav-drawer" aria-hidden={!open}>
-        <div className="og-nav-brand">
-          <Image src="/images/opengridworks/logo-dark.webp" alt="" width={48} height={48} />
-          <strong><span>Open</span>GridWorks</strong>
-        </div>
-        <button
-          className={`og-nav-drawer-primary ${activeProject === "power" ? "is-active" : ""}`}
-          type="button"
-          onClick={() => onProjectChange("power")}
-        >
-          <Zap size={17} />
-          电源项目
-        </button>
-        <button
-          className={`og-nav-drawer-primary ${activeProject === "weather" ? "is-active" : ""}`}
-          type="button"
-          onClick={() => onProjectChange("weather")}
-        >
-          <CloudSun size={17} />
-          气象项目
-        </button>
-        <div className="og-nav-drawer-links">
-          <a href="#"><UserCircle size={17} />登录</a>
-          <a href="#">关于</a>
-          <a href="#">隐私</a>
-          <a href="#">条款</a>
-          <a href="#">数据来源</a>
-        </div>
-      </div>
     </nav>
   );
 }
@@ -5850,7 +5798,6 @@ export function MapAppShell() {
   const [screenshotRequest, setScreenshotRequest] = useState(0);
   const [cinematic, setCinematic] = useState(false);
   const [cardsOpen, setCardsOpen] = useState(false);
-  const [navOpen, setNavOpen] = useState(false);
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [toast, setToast] = useState<string | null>(null);
@@ -6240,7 +6187,7 @@ export function MapAppShell() {
           onWeatherSevere={() => selectWeatherMetric(weatherMetric === "cape" ? "mslp" : "cape")}
         />
       ) : null}
-      <NavRail open={navOpen} activeProject={activeProject} onOpenChange={setNavOpen} onProjectChange={switchProject} />
+      <NavRail activeProject={activeProject} onProjectChange={switchProject} />
       {activeProject === "weather" ? null : (
         <PowerLegendPanel
           activeRegion={activeRegion}
