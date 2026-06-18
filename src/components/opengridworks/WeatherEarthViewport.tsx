@@ -39,6 +39,7 @@ type WeatherScreenVector = {
   dx: number;
   dy: number;
   magnitude: number;
+  styleIntensity: number;
 };
 
 type WeatherScreenField = {
@@ -171,6 +172,17 @@ function overlayAlphaForMetric(field: WeatherField, metric: WeatherMetricKey, va
     return 0.1 + Math.pow(intensity, 1.1) * 0.34;
   }
   return 0.09 + Math.pow(intensity, 1.18) * 0.3;
+}
+
+function particleStrokePalette(metric: WeatherMetricKey) {
+  const meta = weatherMetricMeta(metric);
+  const [min, max] = meta.bounds;
+  const alphas = [0.18, 0.3, 0.44, 0.6, 0.78, 0.9];
+  return alphas.map((alpha, index) => {
+    const amount = index / Math.max(alphas.length - 1, 1);
+    const value = min + (max - min) * amount;
+    return weatherColor(metric, value, alpha);
+  });
 }
 
 function drawBaseMap(
@@ -306,6 +318,7 @@ function distortedWindVector(
   y: number,
   u: number,
   v: number,
+  styleIntensity: number,
 ): WeatherScreenVector | null {
   const h = 0.0001;
   const pLambda = projection([lng + (lng < 0 ? h : -h), lat]);
@@ -335,6 +348,7 @@ function distortedWindVector(
     dx: rawDx * amount,
     dy: rawDy * amount,
     magnitude: Math.hypot(u, v),
+    styleIntensity,
   };
 }
 
@@ -344,6 +358,8 @@ function createScreenField(
   projection: GeoProjection,
   scale: number,
   field: WeatherField | null,
+  styleField: WeatherField | null,
+  styleMetric: WeatherMetricKey,
   highDefinition: boolean,
 ): WeatherScreenField | null {
   if (!field || field.kind !== "vector") {
@@ -371,11 +387,15 @@ function createScreenField(
       if (!coord || Math.abs(coord[1]) > 88) {
         continue;
       }
-      const sample = sampleWeatherField(field, coord[0], coord[1]) as { u?: number; v?: number } | null;
+      const sample = sampleWeatherField(field, coord[0], coord[1]) as { value: number; u?: number; v?: number } | null;
       if (typeof sample?.u !== "number" || typeof sample.v !== "number") {
         continue;
       }
-      const vector = distortedWindVector(projection, coord[0], coord[1], x, y, sample.u, sample.v);
+      const styleSample = styleField ? sampleWeatherField(styleField, coord[0], coord[1]) : sample;
+      const styleIntensity = styleField && styleSample
+        ? fieldIntensity(styleField, styleMetric, styleSample.value)
+        : clamp(sample.value / 45, 0, 1);
+      const vector = distortedWindVector(projection, coord[0], coord[1], x, y, sample.u, sample.v, styleIntensity);
       cells[column][row] = vector;
       if (vector) {
         maxMagnitude = Math.max(maxMagnitude, vector.magnitude);
@@ -442,6 +462,7 @@ function animateParticles(
   scale: number,
   particles: WeatherParticle[],
   field: WeatherScreenField,
+  metric: WeatherMetricKey,
 ) {
   const context = prepareCanvas(canvas, width, height);
   if (!context || field.width !== width || field.height !== height || field.seeds.length === 0) {
@@ -471,7 +492,8 @@ function animateParticles(
     if (field.isDefined(nextX, nextY)) {
       particle.xt = nextX;
       particle.yt = nextY;
-      const bucket = clamp(Math.floor((vector.magnitude / field.intensityMax) * buckets.length), 0, buckets.length - 1);
+      const styleAmount = metric === "wind" ? vector.magnitude / field.intensityMax : vector.styleIntensity;
+      const bucket = clamp(Math.floor(styleAmount * buckets.length), 0, buckets.length - 1);
       buckets[bucket].push(particle);
     } else {
       particle.x = nextX;
@@ -480,14 +502,7 @@ function animateParticles(
     particle.age += 1;
   });
 
-  const strokes = [
-    "rgba(93, 151, 184, 0.16)",
-    "rgba(124, 190, 210, 0.26)",
-    "rgba(159, 225, 231, 0.4)",
-    "rgba(205, 245, 245, 0.58)",
-    "rgba(245, 255, 255, 0.78)",
-    "rgba(255, 241, 200, 0.86)",
-  ];
+  const strokes = particleStrokePalette(metric);
 
   context.save();
   drawSphereClip(context, width, height, sphereRadius(width, height, scale));
@@ -629,7 +644,16 @@ export function WeatherEarthViewport({
       return;
     }
 
-    const screenField = createScreenField(size.width, size.height, projection, viewState.scale, weatherWindField, weatherHighDefinition);
+    const screenField = createScreenField(
+      size.width,
+      size.height,
+      projection,
+      viewState.scale,
+      weatherWindField,
+      weatherField,
+      weatherMetric,
+      weatherHighDefinition,
+    );
     if (!screenField) {
       clearCanvas(canvas, size.width, size.height);
       return;
@@ -647,7 +671,7 @@ export function WeatherEarthViewport({
       if (stopped) {
         return;
       }
-      animateParticles(canvas, size.width, size.height, viewState.scale, particles, screenField);
+      animateParticles(canvas, size.width, size.height, viewState.scale, particles, screenField, weatherMetric);
       frame = window.requestAnimationFrame(draw);
     };
 
@@ -659,7 +683,7 @@ export function WeatherEarthViewport({
       window.cancelAnimationFrame(frame);
       clearCanvas(canvas, size.width, size.height);
     };
-  }, [projection, size.height, size.width, viewState.scale, weatherHighDefinition, weatherParticlesEnabled, weatherWindField]);
+  }, [projection, size.height, size.width, viewState.scale, weatherField, weatherHighDefinition, weatherMetric, weatherParticlesEnabled, weatherWindField]);
 
   useEffect(() => {
     if (screenshotRequest === 0 || screenshotRequest === latestScreenshotRef.current) {
@@ -816,7 +840,8 @@ export function WeatherEarthViewport({
       <canvas ref={overlayCanvasRef} className="og-weather-earth-layer og-weather-earth-overlay" />
       <canvas ref={particlesCanvasRef} className="og-weather-earth-layer og-weather-earth-particles" />
       <div className="og-weather-earth-readout" aria-hidden="true">
-        <span>{meta.shortLabel}</span>
+        <span>覆盖 {meta.shortLabel}</span>
+        <span>动画 风场</span>
         <strong>{formatWeatherTime(weatherField?.validTimeUtc)}</strong>
         {sampleFallback ? <em>演示场</em> : null}
       </div>

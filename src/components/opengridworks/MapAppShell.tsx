@@ -66,9 +66,6 @@ import {
   WEATHER_METRIC_GROUPS,
   defaultWeatherMetric,
   formatWeatherValue,
-  loadWeatherField,
-  loadWeatherManifest,
-  loadWeatherStatus,
   sampleWeatherField as sampleWeatherGrid,
   weatherColor,
   weatherGradientStyle,
@@ -78,7 +75,6 @@ import {
   type WeatherMetricKey,
   type WeatherStatus,
 } from "@/lib/weather-earth";
-import { WeatherEarthViewport } from "@/components/opengridworks/WeatherEarthViewport";
 import countryCenters from "@/lib/country-centers.generated.json";
 import type {
   Coordinates,
@@ -2926,6 +2922,19 @@ function animateWeatherParticles(
   context.restore();
 }
 
+function EarthProjectViewport() {
+  return (
+    <section className="og-earth-project" aria-label="earth 原版气象项目">
+      <iframe
+        title="earth 原版气象可视化"
+        src="/earth/index.html"
+        className="og-earth-project-frame"
+        loading="eager"
+      />
+    </section>
+  );
+}
+
 function MapViewport({
   activeProject,
   visibleTechnologies,
@@ -4315,7 +4324,7 @@ function WeatherLegendPanel({
       </div>
 
       <div className="og-weather-current">
-        <span>当前覆盖</span>
+        <span>当前覆盖 · 粒子按此指标着色</span>
         <strong>{activeMeta.label}</strong>
         <div style={{ background: weatherGradientStyle(activeMetric) }} />
       </div>
@@ -4338,7 +4347,7 @@ function WeatherLegendPanel({
           </button>
           <button type="button" aria-pressed={particlesEnabled} onClick={() => onParticles(!particlesEnabled)}>
             {particlesEnabled ? <Pause size={14} /> : <Play size={14} />}
-            动画
+            风场
           </button>
           <button type="button" aria-pressed={highDefinition} onClick={() => onHighDefinition(!highDefinition)}>
             <Gauge size={14} />
@@ -4358,7 +4367,7 @@ function WeatherLegendPanel({
       <LegendSection title="动画" settings={false} enabled={particlesEnabled} onToggle={() => onParticles(!particlesEnabled)} open={openSections.animation} onOpenToggle={() => onToggleSection("animation")}>
         <button className="og-weather-locked-row is-active" type="button">
           <Activity size={15} />
-          风
+          风场流线 · 按覆盖指标着色
           <Check size={14} />
         </button>
       </LegendSection>
@@ -5765,7 +5774,7 @@ function MobileWeatherSheet({
         </div>
         <div className="og-weather-actions">
           <button type="button" onClick={onRefresh} disabled={loading}><RotateCcw size={14} />现在</button>
-          <button type="button" aria-pressed={particlesEnabled} onClick={() => onParticles(!particlesEnabled)}><Activity size={14} />动画</button>
+          <button type="button" aria-pressed={particlesEnabled} onClick={() => onParticles(!particlesEnabled)}><Activity size={14} />风场</button>
           <button type="button" aria-pressed={highDefinition} onClick={() => onHighDefinition(!highDefinition)}><Gauge size={14} />{highDefinition ? "高清" : "标准"}</button>
         </div>
         <div className="og-weather-mobile-grid">
@@ -5907,47 +5916,16 @@ export function MapAppShell() {
       return;
     }
 
-    let active = true;
-    const activeMetricFieldPromise = loadWeatherField(weatherMetric);
-    const windFieldPromise = weatherMetric === "wind" ? activeMetricFieldPromise : loadWeatherField("wind");
-
-    void Promise.all([
-      loadWeatherManifest(),
-      loadWeatherStatus(),
-      activeMetricFieldPromise,
-      windFieldPromise,
-    ]).then(([manifest, status, field, windField]) => {
-      if (!active) {
-        return;
-      }
-      setWeatherStatus(status);
-      if (manifest) {
-        setWeatherManifest(manifest);
-      } else {
-        setWeatherError("气象 manifest 暂不可用，正在使用演示兜底场。");
-      }
-      if (field) {
-        setWeatherFields((state) => ({
-          ...state,
-          [weatherMetric]: field,
-          ...(windField ? { wind: windField } : {}),
-        }));
-      } else {
-        setWeatherError("气象覆盖数据暂不可用。");
-      }
+    const frame = window.requestAnimationFrame(() => {
       setWeatherLoading(false);
-    }).catch((error: unknown) => {
-      if (!active) {
-        return;
-      }
-      setWeatherError(error instanceof Error ? error.message : "气象数据加载失败。");
-      setWeatherLoading(false);
+      setWeatherError(null);
+      setWeatherManifest(null);
+      setWeatherStatus(null);
+      setWeatherFields({});
     });
 
-    return () => {
-      active = false;
-    };
-  }, [activeProject, weatherMetric, weatherRefreshNonce]);
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeProject, weatherRefreshNonce]);
 
   const togglePanel = useCallback((panel: NonNullable<ToolbarPanel>) => {
     setActivePanel((currentPanel) => currentPanel === panel ? null : panel);
@@ -6017,11 +5995,10 @@ export function MapAppShell() {
       setActiveRegion(defaultRegion);
       setActiveMapTheme("goes");
       setWeatherParticlesEnabled(true);
-      setWeatherLoading(true);
+      setWeatherLoading(false);
       setWeatherError(null);
       requestFocus(defaultRegion.center, defaultRegion.zoom, 0, 0);
-      setWeatherRefreshNonce((nonce) => nonce + 1);
-      showToast("已切换到气象项目：大气模式、地表高度、风场覆盖。");
+      showToast("已切换到 earth 原版气象项目。");
       return;
     }
 
@@ -6206,21 +6183,11 @@ export function MapAppShell() {
     .some((item) => visibleTechnologies[item.key]);
   const activeGas = visibleTechnologies.gas || visibleLayers.gasPipelines;
   const activePlanned = visibleLayers.plannedUpgrades;
+  const legacyWeatherControlsEnabled = false;
   return (
-    <main className={`og-app-shell ${cinematic ? "is-cinematic" : ""}`}>
+    <main className={`og-app-shell ${cinematic ? "is-cinematic" : ""} ${activeProject === "weather" ? "is-earth-project" : ""}`}>
       {activeProject === "weather" ? (
-        <WeatherEarthViewport
-          weatherMetric={weatherMetric}
-          weatherField={activeWeatherField}
-          weatherWindField={activeWeatherWindField}
-          weatherParticlesEnabled={weatherParticlesEnabled}
-          weatherHighDefinition={weatherHighDefinition}
-          screenshotRequest={screenshotRequest}
-          onSelectFeature={setSelectedFeature}
-          onHoverTooltip={setHoverTooltip}
-          onCameraChange={setMapCamera}
-          onScreenshotComplete={showToast}
-        />
+        <EarthProjectViewport />
       ) : (
         <MapViewport
           activeProject={activeProject}
@@ -6253,43 +6220,28 @@ export function MapAppShell() {
           onScreenshotComplete={showToast}
         />
       )}
-      <MobileControls
-        activeProject={activeProject}
-        activeGeneration={generationHeatmapEnabled}
-        activeCleanEnergy={activeCleanEnergy}
-        activeGas={activeGas}
-        activePlanned={activePlanned}
-        activeWeatherMetric={weatherMetric}
-        onSearch={() => setActivePanel("search")}
-        onGeneration={openGenerationView}
-        onCleanEnergy={applyCleanEnergyPreset}
-        onGas={() => {
-          setVisibleTechnologies((state) => ({ ...state, gas: !state.gas }));
-          setVisibleLayers((state) => ({ ...state, gasPipelines: !state.gasPipelines }));
-        }}
-        onPlanned={() => toggleLayer("plannedUpgrades")}
-        onWeatherMetric={selectWeatherMetric}
-        onWeatherSevere={() => selectWeatherMetric(weatherMetric === "cape" ? "mslp" : "cape")}
-      />
-      <NavRail open={navOpen} activeProject={activeProject} onOpenChange={setNavOpen} onProjectChange={switchProject} />
-      {activeProject === "weather" ? (
-        <WeatherLegendPanel
-          manifest={weatherManifest}
-          statusDetails={weatherStatus}
-          activeMetric={weatherMetric}
-          field={activeWeatherField}
-          loading={weatherLoading}
-          error={weatherError}
-          particlesEnabled={weatherParticlesEnabled}
-          highDefinition={weatherHighDefinition}
-          openSections={openWeatherSections}
-          onToggleSection={(key) => setOpenWeatherSections((state) => ({ ...state, [key]: !state[key] }))}
-          onMetric={selectWeatherMetric}
-          onRefresh={refreshWeatherData}
-          onParticles={setWeatherParticlesEnabled}
-          onHighDefinition={setWeatherHighDefinition}
+      {activeProject === "power" ? (
+        <MobileControls
+          activeProject={activeProject}
+          activeGeneration={generationHeatmapEnabled}
+          activeCleanEnergy={activeCleanEnergy}
+          activeGas={activeGas}
+          activePlanned={activePlanned}
+          activeWeatherMetric={weatherMetric}
+          onSearch={() => setActivePanel("search")}
+          onGeneration={openGenerationView}
+          onCleanEnergy={applyCleanEnergyPreset}
+          onGas={() => {
+            setVisibleTechnologies((state) => ({ ...state, gas: !state.gas }));
+            setVisibleLayers((state) => ({ ...state, gasPipelines: !state.gasPipelines }));
+          }}
+          onPlanned={() => toggleLayer("plannedUpgrades")}
+          onWeatherMetric={selectWeatherMetric}
+          onWeatherSevere={() => selectWeatherMetric(weatherMetric === "cape" ? "mslp" : "cape")}
         />
-      ) : (
+      ) : null}
+      <NavRail open={navOpen} activeProject={activeProject} onOpenChange={setNavOpen} onProjectChange={switchProject} />
+      {activeProject === "weather" ? null : (
         <PowerLegendPanel
           activeRegion={activeRegion}
           regionStats={regionStats}
@@ -6322,20 +6274,40 @@ export function MapAppShell() {
           onHover={setHoveredLegend}
         />
       )}
+      {legacyWeatherControlsEnabled ? (
+        <WeatherLegendPanel
+          manifest={weatherManifest}
+          statusDetails={weatherStatus}
+          activeMetric={weatherMetric}
+          field={activeWeatherField}
+          loading={weatherLoading}
+          error={weatherError}
+          particlesEnabled={weatherParticlesEnabled}
+          highDefinition={weatherHighDefinition}
+          openSections={openWeatherSections}
+          onToggleSection={(key) => setOpenWeatherSections((state) => ({ ...state, [key]: !state[key] }))}
+          onMetric={selectWeatherMetric}
+          onRefresh={refreshWeatherData}
+          onParticles={setWeatherParticlesEnabled}
+          onHighDefinition={setWeatherHighDefinition}
+        />
+      ) : null}
       {activeProject === "power" ? (
         <MapTools activePanel={activePanel} onOpenSearch={() => setActivePanel(activePanel === "search" ? null : "search")} />
       ) : null}
-      <TopToolbar
-        activeProject={activeProject}
-        activePanel={activePanel}
-        cinematic={cinematic}
-        onOpenPanel={togglePanel}
-        onReset={resetAll}
-        onCinematic={() => setCinematic((state) => !state)}
-        onShare={shareMap}
-        onScreenshot={() => setScreenshotRequest((request) => request + 1)}
-        onCards={() => setCardsOpen((state) => !state)}
-      />
+      {activeProject === "power" ? (
+        <TopToolbar
+          activeProject={activeProject}
+          activePanel={activePanel}
+          cinematic={cinematic}
+          onOpenPanel={togglePanel}
+          onReset={resetAll}
+          onCinematic={() => setCinematic((state) => !state)}
+          onShare={shareMap}
+          onScreenshot={() => setScreenshotRequest((request) => request + 1)}
+          onCards={() => setCardsOpen((state) => !state)}
+        />
+      ) : null}
       {activePanel === "labels" ? (
         <LabelSettingsPanel settings={labelSettings} onChange={setLabelSettings} onClose={() => setActivePanel(null)} />
       ) : null}

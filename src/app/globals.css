@@ -1960,6 +1960,28 @@ button.og-nav-drawer-primary {
   height: 100%;
 }
 
+.og-earth-project {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  background: #000;
+}
+
+.og-earth-project-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #000;
+}
+
+.og-app-shell.is-earth-project .og-nav-rail {
+  background: rgba(0, 0, 0, 0.62);
+  border-color: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(10px);
+}
+
 .og-weather-canvas {
   position: absolute;
   inset: 0;
