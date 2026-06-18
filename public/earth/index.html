@@ -55,33 +55,33 @@
         </div>
 
         <p id="earth">
-            <span id="show-menu" class="text-button" title="menu">earth</span>
+            <span id="show-menu" class="text-button" title="展开或收起气象指标栏">气象项目</span>
             <span id="progress" class="invisible"></span>
         </p>
 
-        <div id="menu" class="invisible">
-            <p>Date | <span
+        <div id="menu">
+            <p>数据时间 | <span
                 id="data-date" class="local"></span> <span
                 id="toggle-zone" class="text-button"></span>
             </p>
-            <p>Data | <span id="data-layer"></span></p>
-            <p><span id="scale-label">Scale | </span><canvas id="scale"></canvas></p>
-            <p>Source | <span id="data-center"></span></p>
-            <p>Control | <span
-                class="text-button" id="nav-now" title="Current Conditions">Now</span><span
+            <p>数据层 | <span id="data-layer"></span></p>
+            <p><span id="scale-label">色标 | </span><canvas id="scale"></canvas></p>
+            <p>来源 | <span id="data-center"></span></p>
+            <p>时间控制 | <span
+                class="text-button" id="nav-now" title="当前条件">当前</span><span
                 class="text-button" id="nav-backward-more"> « </span> – <span
                 class="text-button" id="nav-backward"> ‹ </span> – <span
                 class="text-button" id="nav-forward"> › </span> – <span
                 class="text-button" id="nav-forward-more"> » </span><span
-                class="text-button" id="show-location" title="Current Position">〖◯〗</span><span
-                class="text-button" id="option-show-grid" title="Toggle Grid">Grid</span>
+                class="text-button" id="show-location" title="当前位置">〖◯〗</span><span
+                class="text-button" id="option-show-grid" title="显示或隐藏网格点">网格</span>
             </p>
-            <p>Mode | <span
-                class="text-button" id="wind-mode-enable">Air</span> – <span
-                class="text-button" id="ocean-mode-enable">Ocean</span>
+            <p>模式 | <span
+                class="text-button" id="wind-mode-enable">大气</span> – <span
+                class="text-button" id="ocean-mode-enable">海洋</span>
             </p>
-            <p class="wind-mode">Height | <span
-                class="surface text-button" id="surface-level" title="Surface">Sfc</span> – <span
+            <p class="wind-mode">高度 | <span
+                class="surface text-button" id="surface-level" title="地表">地表</span> – <span
                 class="surface text-button" id="isobaric-1000hPa">1000</span> – <span
                 class="surface text-button" id="isobaric-850hPa">850</span> – <span
                 class="surface text-button" id="isobaric-700hPa">700</span> – <span
@@ -90,41 +90,41 @@
                 class="surface text-button" id="isobaric-70hPa">70</span> – <span
                 class="surface text-button" id="isobaric-10hPa">10</span> hPa
             </p>
-            <p class="wind-mode">Overlay | <span
-                class="text-button" id="overlay-off">None</span> – <span
-                class="text-button" id="overlay-wind" title="Wind Speed">Wind</span> – <span
-                class="text-button" id="overlay-temp" title="Temperature">Temp</span> – <span
-                class="text-button" id="overlay-relative_humidity" title="Relative Humidity">RH</span> – <span
-                class="text-button" id="overlay-air_density" title="Air Density">AD</span> – <span
-                class="text-button" id="overlay-wind_power_density" title="Wind Power Density">WPD</span>
+            <p class="wind-mode">覆盖指标 | <span
+                class="text-button" id="overlay-off">无</span> – <span
+                class="text-button" id="overlay-wind" title="风速">风速</span> – <span
+                class="text-button" id="overlay-temp" title="温度">温度</span> – <span
+                class="text-button" id="overlay-relative_humidity" title="相对湿度">湿度</span> – <span
+                class="text-button" id="overlay-air_density" title="空气密度">空气密度</span> – <span
+                class="text-button" id="overlay-wind_power_density" title="风能密度">风能密度</span>
             </p>
-            <p class="wind-mode"><span style="visibility:hidden">Overlay</span> | <span
-                class="text-button" id="overlay-total_precipitable_water" title="Total Precipitable Water">TPW</span> – <span
-                class="text-button" id="overlay-total_cloud_water" title="Total Cloud Water">TCW</span> – <span
-                class="text-button" id="overlay-mean_sea_level_pressure" title="Mean Sea Level Pressure">MSLP</span>
+            <p class="wind-mode"><span style="visibility:hidden">覆盖指标</span> | <span
+                class="text-button" id="overlay-total_precipitable_water" title="可降水量">可降水量</span> – <span
+                class="text-button" id="overlay-total_cloud_water" title="云水量">云水量</span> – <span
+                class="text-button" id="overlay-mean_sea_level_pressure" title="海平面气压">海平面气压</span>
             </p>
-            <p class="ocean-mode invisible">Animate | <span
-                class="text-button" id="animate-currents" title="Currents">Currents</span>
+            <p class="ocean-mode invisible">动画 | <span
+                class="text-button" id="animate-currents" title="海流">海流</span>
             </p>
-            <p class="ocean-mode invisible">Overlay | <span
-                class="text-button" id="overlay-ocean-off">None</span> – <span
-                class="text-button" id="overlay-currents" title="Currents">Currents</span>
+            <p class="ocean-mode invisible">覆盖指标 | <span
+                class="text-button" id="overlay-ocean-off">无</span> – <span
+                class="text-button" id="overlay-currents" title="海流">海流</span>
             </p>
-            <p class="ocean-mode invisible"><span style="visibility:hidden">Overlay</span> |</p>
-            <p>Projection | <span
-                class="proj text-button" id="atlantis" title="Atlantis">A</span> – <span
-                class="proj text-button" id="azimuthal_equidistant" title="Azimuthal Equidistant">AE</span> – <span
-                class="proj text-button" id="conic_equidistant" title="Conic Equidistant">CE</span> – <span
-                class="proj text-button" id="equirectangular" title="Equirectangular">E</span> – <span
-                class="proj text-button" id="orthographic" title="Orthographic">O</span> – <span
-                class="proj text-button" id="stereographic" title="Stereographic">S</span> – <span
-                class="proj text-button" id="waterman" title="Waterman Butterfly">WB</span> – <span
-                class="proj text-button" id="winkel3" title="Winkel Tripel">W3</span>
+            <p class="ocean-mode invisible"><span style="visibility:hidden">覆盖指标</span> |</p>
+            <p>投影 | <span
+                class="proj text-button" id="atlantis" title="亚特兰蒂斯投影">A</span> – <span
+                class="proj text-button" id="azimuthal_equidistant" title="方位等距投影">AE</span> – <span
+                class="proj text-button" id="conic_equidistant" title="圆锥等距投影">CE</span> – <span
+                class="proj text-button" id="equirectangular" title="等距圆柱投影">E</span> – <span
+                class="proj text-button" id="orthographic" title="正射投影">O</span> – <span
+                class="proj text-button" id="stereographic" title="球极平面投影">S</span> – <span
+                class="proj text-button" id="waterman" title="Waterman 蝴蝶投影">WB</span> – <span
+                class="proj text-button" id="winkel3" title="Winkel Tripel 投影">W3</span>
             </p>
             <!--<p>免責事項 | 正確な情報を提供するためのものではありません</p>-->
             <p id="lang"><a href="/earth/jp" class="internal-link">日本語</a></p>
             <p>
-                <a href="about.html" class="internal-link">about</a>
+                <a href="about.html" class="internal-link">关于</a>
                 <a href="https://www.facebook.com/EarthWindMap" class="social-icon" title="Facebook">&#xe027;</a>
                 <a href="https://twitter.com/cambecc" class="social-icon" title="Twitter">&#xe086;</a>
             </p>
