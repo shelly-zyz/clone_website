@@ -45,6 +45,7 @@ import {
   Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { DeepAgentChat } from "@/components/opengridworks/DeepAgentChat";
 import {
   capacityFactorPercent,
   generationLabel,
@@ -6333,6 +6334,7 @@ export function MapAppShell() {
         </>
       ) : null}
       <HoverBubble tooltip={hoverTooltip} />
+      <DeepAgentChat />
       <Toast message={toast} />
       {cinematic ? (
         <div className="og-cinematic-banner">
