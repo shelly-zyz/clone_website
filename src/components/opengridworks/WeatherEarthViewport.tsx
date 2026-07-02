@@ -587,8 +587,8 @@ export function WeatherEarthViewport({
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      fetch("/data/natural-earth/ne_50m_admin_0_countries.geojson").then((response) => response.json() as Promise<FeatureCollection>),
-      fetch("/data/natural-earth/ne_50m_admin_0_boundary_lines_land.geojson").then((response) => response.json() as Promise<FeatureCollection>),
+      fetch("/api/data/geojson?path=/data/natural-earth/ne_50m_admin_0_countries.geojson").then((response) => response.json() as Promise<FeatureCollection>),
+      fetch("/api/data/geojson?path=/data/natural-earth/ne_50m_admin_0_boundary_lines_land.geojson").then((response) => response.json() as Promise<FeatureCollection>),
     ]).then(([landData, boundaryData]) => {
       if (!cancelled) {
         setLand(landData as unknown as GeoPermissibleObjects);

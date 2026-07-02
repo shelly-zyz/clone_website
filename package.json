@@ -33,8 +33,11 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "build:china-transmission-preview": "node scripts/build-china-transmission-preview.mjs",
+    "data:import": "node --max-old-space-size=4096 scripts/import-data-to-postgres.mjs",
     "validate:china-data": "node scripts/validate-china-data.mjs",
     "weather:update": "node scripts/update-weather-earth-data.mjs",
+    "carbon:sync": "python scripts/sync-carbon-graced.py",
+    "carbon:import": "node scripts/import-carbon-graced.mjs",
     "agent:climate-vre": "python scripts/build-climate-vre-data.py --input \"../data/VRE_gfdl-esm4_ssp126_2021_2060.mat\"",
     "check": "npm run lint && npm run typecheck && npm run build"
   },
@@ -47,6 +50,7 @@
     "lucide-react": "^1.6.0",
     "maplibre-gl": "^5.24.0",
     "next": "16.2.1",
+    "pg": "^8.22.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "shadcn": "^4.1.0",
@@ -56,6 +60,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^24",
+    "@types/pg": "^8.20.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
