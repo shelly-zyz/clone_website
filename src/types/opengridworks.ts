@@ -304,6 +304,7 @@ export type SelectedFeatureKind =
   | "pipeline"
   | "submarine-cable"
   | "landing-point"
+  | "carbon"
   | "weather";
 
 export type SelectedFeature = {

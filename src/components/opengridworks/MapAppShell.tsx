@@ -19,6 +19,7 @@ import {
   Activity,
   Bookmark,
   Camera,
+  CalendarDays,
   Check,
   Circle,
   CloudSun,
@@ -28,6 +29,7 @@ import {
   Grid2X2,
   ImageIcon,
   Info,
+  Leaf,
   Layers,
   Map as MapIcon,
   Menu,
@@ -46,6 +48,18 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { DeepAgentChat } from "@/components/opengridworks/DeepAgentChat";
+import {
+  buildCarbonHeatCollection,
+  carbonColor,
+  carbonSectorLabels,
+  formatCarbonTotal,
+  formatCarbonValue,
+  loadCarbonFrame,
+  loadCarbonManifest,
+  sampleCarbonFrame,
+  type CarbonFrame,
+  type CarbonManifest,
+} from "@/lib/carbon-earth";
 import {
   capacityFactorPercent,
   generationLabel,
@@ -79,6 +93,8 @@ import countryCenters from "@/lib/country-centers.generated.json";
 import type {
   Coordinates,
   CustomLayerKey,
+  DataCenterAsset,
+  EnergyAsset,
   LabelPreset,
   LabelSettings,
   LayerKey,
@@ -99,7 +115,7 @@ import type {
 
 type BooleanRecord<T extends string> = Record<T, boolean>;
 
-type ProjectMode = "power" | "weather";
+type ProjectMode = "power" | "weather" | "carbon";
 type MapProperties = Record<string, string | number | boolean>;
 type PointCollection = FeatureCollection<Point, MapProperties>;
 type LineCollection = FeatureCollection<LineString, MapProperties>;
@@ -175,6 +191,11 @@ type GenerationHeatmapData = {
   nationalGwh: number;
   topRegion: GenerationHeatmapEntry | null;
   lowestNonZeroRegion: GenerationHeatmapEntry | null;
+};
+
+type DatabaseMapAssets = {
+  energyAssets: EnergyAsset[];
+  dataCenters: DataCenterAsset[];
 };
 
 const mapDataset = getMockMapDataset();
@@ -849,15 +870,15 @@ const baseMapStyle: StyleSpecification = {
 };
 
 const openInfraPowerSourceId = "openinframap-power";
-const openInfraPowerTileTemplate = "/data/osm-power/tiles/china-260517-osm-z3-5-20260519-plants-generators/{z}/{x}/{y}.pbf";
+const openInfraPowerTileTemplate = "/api/data/vector-tiles/china-260517-osm-z3-5-20260519-plants-generators/{z}/{x}/{y}.pbf";
 const openInfraBasemapSourceId = "openinframap-basemap";
 const openInfraBasemapTileTemplate = "https://openinframap.org/20250311/{z}/{x}/{y}.mvt";
 const cartoBasemapSourceId = "carto-basemap";
 const cartoBasemapTileJsonUrl = "https://tiles.basemaps.cartocdn.com/vector/carto.streets/v1/tiles.json";
 const chinaTransmissionPreviewSourceId = "china-transmission-preview";
-const chinaTransmissionPreviewUrl = "/data/osm-power/china-transmission-preview.geojson";
+const chinaTransmissionPreviewUrl = "/api/data/geojson?path=/data/osm-power/china-transmission-preview.geojson";
 const chinaTransmissionDetailSourceId = "china-transmission-detail-preview";
-const chinaTransmissionDetailUrl = "/data/osm-power/china-transmission-detail-preview.geojson";
+const chinaTransmissionDetailUrl = "/api/data/geojson?path=/data/osm-power/china-transmission-detail-preview.geojson";
 const chinaTransmissionDetailMinZoom = 3;
 const chinaTransmissionPreviewLayerIds = ["china-transmission-preview-glow", "china-transmission-preview-main"];
 const chinaTransmissionDetailLayerIds = ["china-transmission-detail-glow", "china-transmission-detail-main"];
@@ -878,10 +899,10 @@ const initiallyHiddenBusinessLayerIds = [
 const openInfraAttribution = "OpenStreetMap contributors";
 const naturalEarthAttribution = "Natural Earth";
 const naturalEarthSources = {
-  countries: "/data/natural-earth/ne_50m_admin_0_countries.geojson",
-  countryLines: "/data/natural-earth/ne_50m_admin_0_boundary_lines_land.geojson",
-  admin1Polygons: "/data/natural-earth/ne_50m_admin_1_states_provinces.geojson",
-  admin1Lines: "/data/natural-earth/ne_50m_admin_1_states_provinces_lines.geojson",
+  countries: "/api/data/geojson?path=/data/natural-earth/ne_50m_admin_0_countries.geojson",
+  countryLines: "/api/data/geojson?path=/data/natural-earth/ne_50m_admin_0_boundary_lines_land.geojson",
+  admin1Polygons: "/api/data/geojson?path=/data/natural-earth/ne_50m_admin_1_states_provinces.geojson",
+  admin1Lines: "/api/data/geojson?path=/data/natural-earth/ne_50m_admin_1_states_provinces_lines.geojson",
 };
 
 function localPowerTileUrl() {
@@ -1722,6 +1743,7 @@ function addDiamondImage(map: Map, id: string, fill: string, frame: string, glow
 
 function addInteractiveLayers(map: Map) {
   map.addSource("energy-assets", { type: "geojson", data: emptyPointCollection() });
+  map.addSource("carbon-emissions", { type: "geojson", data: emptyPointCollection() });
   map.addSource("data-centers", { type: "geojson", data: emptyPointCollection() });
   map.addSource("grid-lines", { type: "geojson", data: emptyLineCollection() });
   map.addSource(chinaTransmissionPreviewSourceId, {
@@ -2024,6 +2046,80 @@ function addInteractiveLayers(map: Map) {
       ],
       "fill-opacity": ["interpolate", ["linear"], ["zoom"], 1, 0.32, 2.4, 0.38, 5.5, 0.22],
       "fill-outline-color": "rgba(255, 255, 255, 0.12)",
+    },
+  });
+
+  map.addLayer({
+    id: "carbon-emissions-heatmap",
+    type: "heatmap",
+    source: "carbon-emissions",
+    paint: {
+      "heatmap-weight": [
+        "interpolate",
+        ["linear"],
+        ["get", "weight"],
+        0,
+        0,
+        1,
+        1,
+      ],
+      "heatmap-intensity": [
+        "interpolate",
+        ["linear"],
+        ["zoom"],
+        0,
+        0.72,
+        3,
+        1.1,
+        7,
+        1.55,
+      ],
+      "heatmap-radius": [
+        "interpolate",
+        ["linear"],
+        ["zoom"],
+        0,
+        5,
+        2,
+        9,
+        5,
+        17,
+        8,
+        26,
+      ],
+      "heatmap-color": [
+        "interpolate",
+        ["linear"],
+        ["heatmap-density"],
+        0,
+        "rgba(9, 92, 82, 0)",
+        0.12,
+        "rgba(13, 148, 136, 0.2)",
+        0.3,
+        "rgba(16, 185, 129, 0.55)",
+        0.5,
+        "rgba(163, 230, 53, 0.72)",
+        0.7,
+        "rgba(250, 204, 21, 0.84)",
+        0.86,
+        "rgba(249, 115, 22, 0.92)",
+        1,
+        "rgba(248, 250, 252, 0.98)",
+      ],
+      "heatmap-opacity": [
+        "interpolate",
+        ["linear"],
+        ["zoom"],
+        0,
+        0.88,
+        6,
+        0.94,
+        10,
+        0.82,
+      ],
+    },
+    layout: {
+      visibility: "none",
     },
   });
 
@@ -2716,6 +2812,11 @@ function drawWeatherOverlayCanvas(
   context.restore();
 }
 
+function carbonCanvasColor(value: number, scaleMax: number) {
+  const [red, green, blue, alpha] = carbonColor(value, scaleMax, 0.82);
+  return `rgba(${red}, ${green}, ${blue}, ${alpha / 255})`;
+}
+
 function createWeatherScreenField(
   map: Map,
   width: number,
@@ -2944,6 +3045,7 @@ function MapViewport({
   visibleVoltageClasses,
   visibleSubstationClasses,
   activeSizeMin,
+  dataVersion,
   activeMapTheme,
   bubbleScale: currentBubbleScale,
   hoveredLegend,
@@ -2956,6 +3058,7 @@ function MapViewport({
   weatherWindField,
   weatherParticlesEnabled,
   weatherHighDefinition,
+  carbonFrame,
   focusRequest,
   screenshotRequest,
   cinematic,
@@ -2973,6 +3076,7 @@ function MapViewport({
   visibleVoltageClasses: BooleanRecord<VoltageClass>;
   visibleSubstationClasses: BooleanRecord<VoltageClass>;
   activeSizeMin: number | null;
+  dataVersion: number;
   activeMapTheme: MapThemeKey;
   bubbleScale: number;
   hoveredLegend: LegendHover | null;
@@ -2985,6 +3089,7 @@ function MapViewport({
   weatherWindField: WeatherField | null;
   weatherParticlesEnabled: boolean;
   weatherHighDefinition: boolean;
+  carbonFrame: CarbonFrame | null;
   focusRequest: FocusRequest | null;
   screenshotRequest: number;
   cinematic: boolean;
@@ -3010,6 +3115,7 @@ function MapViewport({
   const activeProjectRef = useRef(activeProject);
   const weatherMetricRef = useRef(weatherMetric);
   const weatherFieldRef = useRef(weatherField);
+  const carbonFrameRef = useRef(carbonFrame);
   const chinaTransmissionPreviewLoadedRef = useRef(false);
   const chinaTransmissionDetailLoadedRef = useRef(false);
   const [ready, setReady] = useState(false);
@@ -3028,7 +3134,8 @@ function MapViewport({
     activeProjectRef.current = activeProject;
     weatherMetricRef.current = weatherMetric;
     weatherFieldRef.current = weatherField;
-  }, [activeProject, generationFrame, generationHeatmapActive, generationHeatmapData, onCameraChange, onHoverTooltip, onRegionHover, onScreenshotComplete, onSelectFeature, weatherField, weatherMetric]);
+    carbonFrameRef.current = carbonFrame;
+  }, [activeProject, carbonFrame, generationFrame, generationHeatmapActive, generationHeatmapData, onCameraChange, onHoverTooltip, onRegionHover, onScreenshotComplete, onSelectFeature, weatherField, weatherMetric]);
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) {
@@ -3099,6 +3206,26 @@ function MapViewport({
 
     const handleMouseMove = (event: MapMouseEvent) => {
       regionHoverRef.current(getRegionForCoordinates(event.lngLat.lng, event.lngLat.lat).id);
+      if (activeProjectRef.current === "carbon") {
+        const activeCarbonFrame = carbonFrameRef.current;
+        const value = activeCarbonFrame
+          ? sampleCarbonFrame(activeCarbonFrame, event.lngLat.lng, event.lngLat.lat)
+          : 0;
+        if (activeCarbonFrame && value > 0) {
+          map.getCanvas().style.cursor = "crosshair";
+          hoverRef.current({
+            x: event.point.x,
+            y: event.point.y,
+            title: `${carbonSectorLabels[activeCarbonFrame.sector] ?? activeCarbonFrame.sector}排放`,
+            subtitle: `${formatCarbonValue(value)} · ${activeCarbonFrame.date}`,
+            color: carbonCanvasColor(value, Math.max(activeCarbonFrame.stats.p99, 1)),
+          });
+        } else {
+          map.getCanvas().style.cursor = "";
+          hoverRef.current(null);
+        }
+        return;
+      }
       if (activeProjectRef.current === "weather") {
         const field = weatherFieldRef.current;
         const metric = weatherMetricRef.current;
@@ -3174,6 +3301,31 @@ function MapViewport({
     };
 
     const handleClick = (event: MapMouseEvent) => {
+      if (activeProjectRef.current === "carbon") {
+        const activeCarbonFrame = carbonFrameRef.current;
+        const value = activeCarbonFrame
+          ? sampleCarbonFrame(activeCarbonFrame, event.lngLat.lng, event.lngLat.lat)
+          : 0;
+        if (activeCarbonFrame && value > 0) {
+          selectRef.current({
+            id: `carbon-${activeCarbonFrame.sector}-${activeCarbonFrame.date}-${event.lngLat.lng.toFixed(2)}-${event.lngLat.lat.toFixed(2)}`,
+            kind: "carbon",
+            title: `${carbonSectorLabels[activeCarbonFrame.sector] ?? activeCarbonFrame.sector}排放`,
+            subtitle: `${formatCarbonValue(value)} · ${activeCarbonFrame.date}`,
+            coordinates: [event.lngLat.lng, event.lngLat.lat],
+            color: carbonCanvasColor(value, Math.max(activeCarbonFrame.stats.p99, 1)),
+            rows: [
+              { label: "日期", value: activeCarbonFrame.date },
+              { label: "部门", value: carbonSectorLabels[activeCarbonFrame.sector] ?? activeCarbonFrame.sector },
+              { label: "网格排放", value: formatCarbonValue(value) },
+              { label: "经纬度", value: `${event.lngLat.lat.toFixed(2)}°, ${event.lngLat.lng.toFixed(2)}°` },
+              { label: "空间分辨率", value: "0.1° × 0.1°" },
+            ],
+            source: "GRACED / Carbon Monitor",
+          });
+        }
+        return;
+      }
       if (activeProjectRef.current === "weather") {
         const field = weatherFieldRef.current;
         const metric = weatherMetricRef.current;
@@ -3290,6 +3442,7 @@ function MapViewport({
     getGeoJsonSource(map, "landing-points")?.setData(buildLandingPointCollection(visibleLayers));
   }, [
     activeSizeMin,
+    dataVersion,
     ready,
     visibleCustomLayers,
     visibleLayers,
@@ -3298,6 +3451,19 @@ function MapViewport({
     visibleTechnologies,
     visibleVoltageClasses,
   ]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) {
+      return;
+    }
+
+    const heatmapVisible = activeProject === "carbon" && Boolean(carbonFrame);
+    getGeoJsonSource(map, "carbon-emissions")?.setData(
+      carbonFrame ? buildCarbonHeatCollection(carbonFrame) : emptyPointCollection(),
+    );
+    setLayerVisibility(map, "carbon-emissions-heatmap", heatmapVisible);
+  }, [activeProject, carbonFrame, ready]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -3805,7 +3971,7 @@ function MapViewport({
   }, [cinematic, ready]);
 
   return (
-    <div className="og-map-viewport" aria-label="交互式电源项目地图">
+    <div className="og-map-viewport" aria-label={activeProject === "carbon" ? "交互式碳排放地球" : "交互式电源项目地图"}>
       <div className="og-starfield" aria-hidden="true" />
       <div ref={mapContainerRef} className="og-maplibre-container" />
       <canvas
@@ -3819,7 +3985,7 @@ function MapViewport({
         aria-hidden="true"
       />
       <div className="og-orbit-beacons" aria-label="轨道观测点">
-        {orbitBeacons.map((beacon) => {
+        {activeProject === "carbon" ? null : orbitBeacons.map((beacon) => {
           const position = orbitPositions[beacon.id] ?? { left: -999, top: -999, visible: false, cardSide: "right" as const };
 
           return (
@@ -3917,6 +4083,15 @@ function NavRail({
         onClick={() => onProjectChange("weather")}
       >
         <CloudSun size={18} />
+      </button>
+      <button
+        className={`og-nav-item og-nav-item-carbon ${activeProject === "carbon" ? "og-nav-item-active" : ""}`}
+        type="button"
+        aria-label="碳排放地球"
+        aria-pressed={activeProject === "carbon"}
+        onClick={() => onProjectChange("carbon")}
+      >
+        <Leaf size={18} />
       </button>
     </nav>
   );
@@ -4348,6 +4523,184 @@ function WeatherLegendPanel({
   );
 }
 
+function CarbonLegendPanel({
+  manifest,
+  activeDate,
+  activeSector,
+  frame,
+  loading,
+  error,
+  playing,
+  onDateChange,
+  onSectorChange,
+  onPlayingChange,
+}: {
+  manifest: CarbonManifest | null;
+  activeDate: string;
+  activeSector: string;
+  frame: CarbonFrame | null;
+  loading: boolean;
+  error: string | null;
+  playing: boolean;
+  onDateChange: (date: string) => void;
+  onSectorChange: (sector: string) => void;
+  onPlayingChange: (playing: boolean) => void;
+}) {
+  const [openSections, setOpenSections] = useState({
+    time: true,
+    sectors: true,
+    intensity: true,
+    source: false,
+  });
+  const availableFrames = manifest?.frames.filter((item) => item.sector === activeSector) ?? [];
+  const activeIndex = Math.max(0, availableFrames.findIndex((item) => item.date === activeDate));
+  const toggleSection = (section: keyof typeof openSections) => {
+    setOpenSections((current) => ({ ...current, [section]: !current[section] }));
+  };
+
+  return (
+    <aside className="og-legend-panel og-carbon-power-panel" aria-label="碳排放项目图例">
+      <div className="og-panel-title-row">
+        <div>
+          <h1>碳排放项目</h1>
+          <p>{activeDate || "等待数据"} | 全球 0.1° 网格</p>
+        </div>
+        <span>GRACED</span>
+      </div>
+
+      <button className="og-operating-row" type="button">
+        <span>全球网格化逐日 CO₂ 排放</span>
+        <span className="og-operating-icons">
+          <Grid2X2 size={14} />
+          <SlidersHorizontal size={14} />
+        </span>
+      </button>
+
+      <LegendSection
+        title="时间"
+        settings={false}
+        open={openSections.time}
+        onOpenToggle={() => toggleSection("time")}
+      >
+        <div className="og-generation-panel og-carbon-control-panel">
+          <div className="og-generation-hero">
+            <span><CalendarDays size={14} /> GRACED 日排放</span>
+            <strong>{activeDate || "等待可用日期"}</strong>
+            <p>数据库按日期读取压缩全球栅格帧。</p>
+          </div>
+          <button
+            className="og-generation-play"
+            type="button"
+            aria-pressed={playing}
+            disabled={availableFrames.length < 2}
+            onClick={() => onPlayingChange(!playing)}
+          >
+            {playing ? <Pause size={14} /> : <Play size={14} />}
+            {playing ? "暂停播放" : "播放日期"}
+          </button>
+          <label className="og-generation-slider">
+            <span>日期</span>
+            <input
+              type="range"
+              min={0}
+              max={Math.max(0, availableFrames.length - 1)}
+              value={activeIndex}
+              onChange={(event) => {
+                const selected = availableFrames[Number(event.currentTarget.value)];
+                if (selected) {
+                  onPlayingChange(false);
+                  onDateChange(selected.date);
+                }
+              }}
+            />
+          </label>
+          <div className="og-carbon-date-range">
+            <span>{availableFrames[0]?.date ?? "—"}</span>
+            <span>{availableFrames.at(-1)?.date ?? "—"}</span>
+          </div>
+        </div>
+      </LegendSection>
+
+      <LegendSection
+        title="排放部门"
+        settings={false}
+        open={openSections.sectors}
+        onOpenToggle={() => toggleSection("sectors")}
+      >
+        <ul className="og-legend-list og-carbon-sector-list">
+          {manifest?.sectors.map((sector) => {
+            const sectorFrame = manifest.frames.find((item) => item.sector === sector && item.date === activeDate)
+              ?? manifest.frames.filter((item) => item.sector === sector).at(-1);
+            return (
+              <li key={sector}>
+                <button
+                  className={`og-legend-row og-clickable-row ${sector === activeSector ? "" : "is-muted"}`}
+                  type="button"
+                  aria-pressed={sector === activeSector}
+                  onClick={() => {
+                    onPlayingChange(false);
+                    onSectorChange(sector);
+                  }}
+                >
+                  <span className="og-dot og-carbon-dot" aria-hidden="true" />
+                  <span>{carbonSectorLabels[sector] ?? sector}</span>
+                  <strong>{sectorFrame ? formatCarbonTotal(sectorFrame.stats.sumKgCPerHour) : "—"}</strong>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </LegendSection>
+
+      <LegendSection
+        title="排放强度（kgC/h）"
+        settings={false}
+        open={openSections.intensity}
+        onOpenToggle={() => toggleSection("intensity")}
+      >
+        <div className="og-generation-panel og-carbon-stats-panel">
+          <div className="og-generation-summary">
+            {loading ? (
+              <span>正在读取碳排放栅格...</span>
+            ) : error ? (
+              <span>{error}</span>
+            ) : frame ? (
+              <>
+                <strong>{formatCarbonTotal(frame.stats.sumKgCPerHour)}</strong>
+                <span>最高网格 {formatCarbonValue(frame.stats.max)}</span>
+                <span>有效网格 {frame.stats.nonzeroCount.toLocaleString()} 个</span>
+              </>
+            ) : (
+              <span>暂无当前日期数据</span>
+            )}
+          </div>
+          <div className="og-generation-scale og-carbon-emission-scale">
+            <span />
+            <div>
+              <small>低</small>
+              <small>对数色阶 · P99</small>
+              <small>高</small>
+            </div>
+          </div>
+        </div>
+      </LegendSection>
+
+      <LegendSection
+        title="数据来源"
+        settings={false}
+        open={openSections.source}
+        onOpenToggle={() => toggleSection("source")}
+      >
+        <div className="og-carbon-source-copy">
+          <strong>GRACED / Carbon Monitor</strong>
+          <span>单位：每个 0.1° 网格 kgC/h</span>
+          <span>{manifest?.sources.find((source) => source.sector === activeSector)?.fileName ?? "等待来源信息"}</span>
+        </div>
+      </LegendSection>
+    </aside>
+  );
+}
+
 function PowerLegendPanel({
   activeRegion,
   regionStats,
@@ -4731,19 +5084,20 @@ function TopToolbar({
   onCards: () => void;
 }) {
   const weatherMode = activeProject === "weather";
+  const carbonMode = activeProject === "carbon";
 
   return (
     <div className="og-top-toolbar" aria-label="地图工具栏">
       <div className="og-live-users">
         <span />
         <strong>525</strong>
-        <span>{weatherMode ? "人正在查看气象覆盖" : "人正在查看电网图层"}</span>
+        <span>{weatherMode ? "人正在查看气象覆盖" : carbonMode ? "人正在查看碳排放图层" : "人正在查看电网图层"}</span>
       </div>
       <div className="og-toolbar-buttons">
         <IconButton label="已保存视图（仅管理员）" icon={Bookmark} disabled />
         <IconButton label="重置全部筛选" icon={RotateCcw} onClick={onReset} />
         <IconButton label="沉浸视图" icon={ImageIcon} active={cinematic} onClick={onCinematic} />
-        {weatherMode ? null : (
+        {weatherMode || carbonMode ? null : (
           <IconButton label="预设视图" icon={Grid2X2} active={activePanel === "presets"} onClick={() => onOpenPanel("presets")} />
         )}
         <IconButton label="标注设置" icon={Type} active={activePanel === "labels"} onClick={() => onOpenPanel("labels")} />
@@ -4751,7 +5105,7 @@ function TopToolbar({
         <IconButton label="登录后启用中继模式" icon={RadioTower} disabled />
         <IconButton label="导出地图 PNG" icon={Camera} onClick={onScreenshot} />
         <IconButton label="分享地图链接" icon={Share2} onClick={onShare} />
-        {weatherMode ? null : <IconButton label="打开卡片面板" icon={Database} onClick={onCards} />}
+        {weatherMode || carbonMode ? null : <IconButton label="打开卡片面板" icon={Database} onClick={onCards} />}
       </div>
     </div>
   );
@@ -5783,6 +6137,14 @@ export function MapAppShell() {
   const [weatherParticlesEnabled, setWeatherParticlesEnabled] = useState(true);
   const [weatherHighDefinition, setWeatherHighDefinition] = useState(false);
   const [weatherRefreshNonce, setWeatherRefreshNonce] = useState(0);
+  const [carbonManifest, setCarbonManifest] = useState<CarbonManifest | null>(null);
+  const [carbonDate, setCarbonDate] = useState("");
+  const [carbonSector, setCarbonSector] = useState("Power");
+  const [carbonFrame, setCarbonFrame] = useState<CarbonFrame | null>(null);
+  const [carbonLoading, setCarbonLoading] = useState(false);
+  const [carbonError, setCarbonError] = useState<string | null>(null);
+  const [carbonPlaying, setCarbonPlaying] = useState(false);
+  const [databaseMapVersion, setDatabaseMapVersion] = useState(0);
   const [hoveredLegend, setHoveredLegend] = useState<LegendHover | null>(null);
   const [labelSettings, setLabelSettings] = useState<LabelSettings>(initialLabelSettings);
   const [activePanel, setActivePanel] = useState<ToolbarPanel>(null);
@@ -5807,6 +6169,33 @@ export function MapAppShell() {
   const showToast = useCallback((message: string) => {
     setToast(message);
     window.setTimeout(() => setToast(null), 2600);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    void fetch("/api/data/map-assets", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`Map asset request failed with ${response.status}.`);
+        }
+        return response.json() as Promise<DatabaseMapAssets>;
+      })
+      .then((databaseAssets) => {
+        if (!active || !Array.isArray(databaseAssets.energyAssets) || !Array.isArray(databaseAssets.dataCenters)) {
+          return;
+        }
+        energyAssets.splice(0, energyAssets.length, ...databaseAssets.energyAssets);
+        dataCenters.splice(0, dataCenters.length, ...databaseAssets.dataCenters);
+        setDatabaseMapVersion((version) => version + 1);
+      })
+      .catch((error: unknown) => {
+        console.warn("Using bundled map assets because the database request failed.", error);
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -5858,6 +6247,88 @@ export function MapAppShell() {
 
     return () => window.clearInterval(timer);
   }, [generationFrame.mode, generationHeatmapEnabled, generationManifest?.years, generationPlaying]);
+
+  useEffect(() => {
+    if (activeProject !== "carbon" || carbonManifest) {
+      return;
+    }
+
+    let active = true;
+    void loadCarbonManifest()
+      .then((manifest) => {
+        if (!active) {
+          return;
+        }
+        const initialSector = manifest.sectors.includes("Power")
+          ? "Power"
+          : manifest.sectors[0] ?? "total";
+        const initialFrame = manifest.frames.filter((item) => item.sector === initialSector).at(-1);
+        setCarbonManifest(manifest);
+        setCarbonSector(initialSector);
+        setCarbonDate(initialFrame?.date ?? manifest.latestDate ?? "");
+        setCarbonLoading(Boolean(initialFrame));
+        setCarbonError(null);
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setCarbonError(error instanceof Error ? error.message : "碳排放目录加载失败。");
+          setCarbonLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [activeProject, carbonManifest]);
+
+  const activeCarbonMeta = useMemo(
+    () => carbonManifest?.frames.find((item) => item.date === carbonDate && item.sector === carbonSector) ?? null,
+    [carbonDate, carbonManifest, carbonSector],
+  );
+
+  useEffect(() => {
+    if (activeProject !== "carbon" || !activeCarbonMeta) {
+      return;
+    }
+
+    let active = true;
+    void loadCarbonFrame(activeCarbonMeta)
+      .then((frame) => {
+        if (active) {
+          setCarbonFrame(frame);
+          setCarbonError(null);
+          setCarbonLoading(false);
+        }
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setCarbonError(error instanceof Error ? error.message : "碳排放帧加载失败。");
+          setCarbonLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [activeCarbonMeta, activeProject]);
+
+  useEffect(() => {
+    if (!carbonPlaying || activeProject !== "carbon" || !carbonManifest) {
+      return;
+    }
+    const frames = carbonManifest.frames.filter((item) => item.sector === carbonSector);
+    if (frames.length < 2) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setCarbonDate((currentDate) => {
+        const index = frames.findIndex((item) => item.date === currentDate);
+        return frames[(index + 1) % frames.length]?.date ?? currentDate;
+      });
+      setCarbonLoading(true);
+    }, 1100);
+    return () => window.clearInterval(timer);
+  }, [activeProject, carbonManifest, carbonPlaying, carbonSector]);
 
   useEffect(() => {
     if (activeProject !== "weather") {
@@ -5933,6 +6404,22 @@ export function MapAppShell() {
     setCardsOpen(false);
     setActivePanel(null);
 
+    if (project === "carbon") {
+      setVisibleTechnologies(hiddenTechnologyState());
+      setVisibleLayers(hiddenLayerState());
+      setVisibleVoltageClasses(hiddenVoltageState());
+      setVisibleSubstationClasses(hiddenVoltageState());
+      setGenerationPlaying(false);
+      setGenerationHeatmapEnabled(false);
+      setCarbonPlaying(false);
+      setCarbonLoading(!carbonFrame);
+      setActiveRegion(defaultRegion);
+      setActiveMapTheme("nasa");
+      requestFocus(defaultRegion.center, defaultRegion.zoom, defaultRegion.pitch, defaultRegion.bearing);
+      showToast("已切换到碳排放地球。");
+      return;
+    }
+
     if (project === "weather") {
       setVisibleTechnologies(hiddenTechnologyState());
       setVisibleLayers(hiddenLayerState());
@@ -5953,11 +6440,12 @@ export function MapAppShell() {
     setActiveMapTheme("nasa");
     requestFocus(defaultRegion.center, defaultRegion.zoom, defaultRegion.pitch, defaultRegion.bearing);
     showToast("已切换回电源项目。");
-  }, [requestFocus, showToast]);
+  }, [carbonFrame, requestFocus, showToast]);
 
-  const regionStats = useMemo(() => (
-    getRegionStats(mapDataset, activeRegion.id, visibleTechnologies, activeSizeMin)
-  ), [activeRegion.id, activeSizeMin, visibleTechnologies]);
+  const regionStats = useMemo(() => {
+    void databaseMapVersion;
+    return getRegionStats(mapDataset, activeRegion.id, visibleTechnologies, activeSizeMin);
+  }, [activeRegion.id, activeSizeMin, databaseMapVersion, visibleTechnologies]);
 
   const generationHeatmapData = useMemo(
     () => buildGenerationHeatmapData(generationSummary, generationFrame),
@@ -6133,7 +6621,7 @@ export function MapAppShell() {
   const activePlanned = visibleLayers.plannedUpgrades;
   const legacyWeatherControlsEnabled = false;
   return (
-    <main className={`og-app-shell ${cinematic ? "is-cinematic" : ""} ${activeProject === "weather" ? "is-earth-project" : ""}`}>
+    <main className={`og-app-shell ${cinematic ? "is-cinematic" : ""} ${activeProject === "weather" ? "is-earth-project" : ""} ${activeProject === "carbon" ? "is-carbon-project" : ""}`}>
       {activeProject === "weather" ? (
         <EarthProjectViewport />
       ) : (
@@ -6146,6 +6634,7 @@ export function MapAppShell() {
           visibleVoltageClasses={visibleVoltageClasses}
           visibleSubstationClasses={visibleSubstationClasses}
           activeSizeMin={activeSizeMin}
+          dataVersion={databaseMapVersion}
           activeMapTheme={activeMapTheme}
           bubbleScale={bubbleScale}
           hoveredLegend={hoveredLegend}
@@ -6158,6 +6647,7 @@ export function MapAppShell() {
           weatherWindField={activeWeatherWindField}
           weatherParticlesEnabled={weatherParticlesEnabled}
           weatherHighDefinition={weatherHighDefinition}
+          carbonFrame={carbonFrame}
           focusRequest={focusRequest}
           screenshotRequest={screenshotRequest}
           cinematic={cinematic}
@@ -6189,7 +6679,7 @@ export function MapAppShell() {
         />
       ) : null}
       <NavRail activeProject={activeProject} onProjectChange={switchProject} />
-      {activeProject === "weather" ? null : (
+      {activeProject === "power" ? (
         <PowerLegendPanel
           activeRegion={activeRegion}
           regionStats={regionStats}
@@ -6221,7 +6711,29 @@ export function MapAppShell() {
           onSizeFilter={setActiveSizeMin}
           onHover={setHoveredLegend}
         />
-      )}
+      ) : null}
+      {activeProject === "carbon" ? (
+        <CarbonLegendPanel
+          manifest={carbonManifest}
+          activeDate={carbonDate}
+          activeSector={carbonSector}
+          frame={carbonFrame}
+          loading={carbonLoading}
+          error={carbonError}
+          playing={carbonPlaying}
+          onDateChange={(date) => {
+            setCarbonLoading(true);
+            setCarbonDate(date);
+          }}
+          onSectorChange={(sector) => {
+            const nextFrame = carbonManifest?.frames.filter((item) => item.sector === sector).at(-1);
+            setCarbonLoading(Boolean(nextFrame));
+            setCarbonSector(sector);
+            setCarbonDate(nextFrame?.date ?? "");
+          }}
+          onPlayingChange={setCarbonPlaying}
+        />
+      ) : null}
       {legacyWeatherControlsEnabled ? (
         <WeatherLegendPanel
           manifest={weatherManifest}
@@ -6240,10 +6752,19 @@ export function MapAppShell() {
           onHighDefinition={setWeatherHighDefinition}
         />
       ) : null}
-      {activeProject === "power" ? (
-        <MapTools activePanel={activePanel} onOpenSearch={() => setActivePanel(activePanel === "search" ? null : "search")} />
+      {activeProject !== "weather" ? (
+        <MapTools
+          activePanel={activePanel}
+          onOpenSearch={() => {
+            if (activeProject === "power") {
+              setActivePanel(activePanel === "search" ? null : "search");
+              return;
+            }
+            showToast("碳排放项目请使用左侧时间与部门筛选");
+          }}
+        />
       ) : null}
-      {activeProject === "power" ? (
+      {activeProject !== "weather" ? (
         <TopToolbar
           activeProject={activeProject}
           activePanel={activePanel}
@@ -6316,20 +6837,22 @@ export function MapAppShell() {
         <SourcesPanel onClose={() => setActivePanel(null)} />
       ) : null}
       <FeaturePopup feature={selectedFeature} onClose={() => setSelectedFeature(null)} />
-      {activeProject === "power" ? (
+      {activeProject !== "weather" ? (
         <LayerCards
           activePanel={activePanel}
           activeMapTheme={activeMapTheme}
           onOpenPanel={togglePanel}
         />
       ) : null}
+      {activeProject !== "weather" ? (
+        <MiniMap
+          selectedFeature={selectedFeature}
+          camera={mapCamera}
+          onMove={(center) => requestFocus(center, mapCamera.zoom, mapCamera.pitch, mapCamera.bearing)}
+        />
+      ) : null}
       {activeProject === "power" ? (
         <>
-          <MiniMap
-            selectedFeature={selectedFeature}
-            camera={mapCamera}
-            onMove={(center) => requestFocus(center, mapCamera.zoom, mapCamera.pitch, mapCamera.bearing)}
-          />
           <CardsDrawer open={cardsOpen} onClose={() => setCardsOpen(false)} onSelect={selectFeature} />
         </>
       ) : null}
@@ -6342,7 +6865,7 @@ export function MapAppShell() {
           <button type="button" onClick={() => setCinematic(false)}>退出</button>
         </div>
       ) : null}
-      {activeProject === "power" ? (
+      {activeProject !== "weather" ? (
         <div className="og-scale">
           <span>20mi</span>
           <span>50km</span>
@@ -6380,7 +6903,7 @@ export function MapAppShell() {
             onFrameChange={setGenerationFrame}
           />
         </>
-      ) : (
+      ) : activeProject === "weather" ? (
         <MobileWeatherSheet
           open
           manifest={weatherManifest}
@@ -6396,7 +6919,7 @@ export function MapAppShell() {
           onParticles={setWeatherParticlesEnabled}
           onHighDefinition={setWeatherHighDefinition}
         />
-      )}
+      ) : null}
     </main>
   );
 }

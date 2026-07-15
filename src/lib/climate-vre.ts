@@ -103,18 +103,17 @@ async function fetchJson<T>(path: string): Promise<T | null> {
 }
 
 export function loadClimateVreManifest() {
-  return fetchJson<ClimateVreManifest>("/data/climate-vre/manifest.json");
+  return fetchJson<ClimateVreManifest>("/api/data/climate-vre?request=manifest");
 }
 
-export function loadClimateVreSummary(path: string) {
-  return fetchJson<ClimateVreSummary>(path);
+export function loadClimateVreSummary(_path: string) {
+  void _path;
+  return fetchJson<ClimateVreSummary>("/api/data/climate-vre?request=summary");
 }
 
-export function loadClimateVreHourly(template: string, regionId: string, year: number, technology: VreTechnology) {
-  const path = template
-    .replace("{regionId}", encodeURIComponent(regionId))
-    .replace("{year}", String(year))
-    .replace("{technology}", technology);
+export function loadClimateVreHourly(_template: string, regionId: string, year: number, technology: VreTechnology) {
+  void _template;
+  const path = `/api/data/climate-vre?request=hourly&regionId=${encodeURIComponent(regionId)}&year=${year}&technology=${technology}`;
   return fetchJson<ClimateVreHourly>(path);
 }
 

@@ -144,6 +144,29 @@ npm run weather:update
 
 If `wgrib2` is missing or NOMADS cannot be reached, `/api/weather-earth?request=status` reports the problem and the UI falls back to the built-in demonstration field instead of presenting it as live data.
 
+## GRACED Carbon Data
+
+The carbon-emission globe reads daily GRACED frames from PostgreSQL. Download and
+prepare one month with the Python environment that provides `xarray`, `netCDF4`,
+and `numpy`:
+
+```powershell
+& "C:\Users\53472\anaconda3\python.exe" scripts/sync-carbon-graced.py --sector Power --month 2026-04
+```
+
+Import the generated manifest and compressed daily frames:
+
+```powershell
+npm run carbon:import -- --manifest "../data/carbon-graced/processed/Power/2026-04/manifest.json"
+```
+
+The importer stores one gzip-compressed Float32 grid per date and sector in
+`website_data.carbon_emission_frames`. It is idempotent and updates matching
+`(observed_on, sector)` rows instead of creating duplicates. Use a different
+official sector code (`total`, `Industry`, `Residential`,
+`GroundTransportation`, `DomesticAviation`, `InternationalAviation`, or
+`InternationalShipping`) to add another layer.
+
 ### If using docker
 
 ```bash
