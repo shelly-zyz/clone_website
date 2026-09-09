@@ -2,6 +2,15 @@
 
 本文件保存主站每轮讨论形成的**最终结论**，不是原始聊天全文。新的结论追加在最上方；如果推翻旧结论，需要保留旧记录并标记“已被替代”。
 
+## 2026-09-09：Unit 0 GitHub安全基线完成
+
+- 已按路线图先执行Unit 0，没有启动子智能体，没有删除文件，也没有开始中国大屏生产代码。
+- 当前脏工作区完成分类审计并写入`docs/project-management/GIT_BASELINE_AUDIT_2026-09-09.md`：纳入源码、脚本、项目文档和路线图；排除`output/`大型生成导出、根目录PID/progress/log运行痕迹、`carbon-psql-env.ps1`敏感连接 helper、`carbon-psql-direct-last.sql`临时SQL helper。
+- 发现`carbon-psql-env.ps1`含硬编码数据库密码；该值未写入文档，文件未提交，并由`.gitignore`排除。候选源码/脚本/文档的高置信凭据扫描未命中，未跟踪私钥类文件名扫描未命中。
+- 新建私有远端备份分支`origin/codex/github-safety-baseline-20260909`，基线提交为`448608e75bd873c892833116186820f38b16e8f4`。远端`git ls-remote`返回同一commit，且为普通push、无force覆盖。
+- 验证结果：staged路径95个，排除项0个，超过50MiB的staged文件0个；`npm run lint`通过但有1个未使用变量warning，`npm run typecheck`通过；`git diff --cached --check`只报历史Markdown硬换行/生成文本的行尾空格，未在本轮大面积改写。
+- 下一步按路线图创建Unit 3新任务：只做中国大屏正式规格与HTML预览，继续禁止未获用户当次批准的子智能体，生产Next.js集成等待预览确认。
+
 ## 2026-09-09：中国大屏与后续开发任务拆分路线图
 
 - 用户确认将原先第3步至第10步拆成独立大步骤推进，并要求每完成一个大步骤后开启新的Codex任务，避免长上下文影响后续开发。任务间交接必须先写入项目文档，再创建下一任务。

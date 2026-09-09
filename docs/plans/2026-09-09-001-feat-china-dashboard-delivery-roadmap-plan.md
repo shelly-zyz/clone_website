@@ -122,7 +122,7 @@ The expanded China dashboard should be designed around the power-earth data that
 
 ### Resolved During Planning
 
-- Which big step runs next: Unit 0 GitHub safety backup, because the project protocol requires a clean baseline before formal code changes.
+- Which big step runs next: Unit 3 China dashboard formal specification and standalone HTML preview, because Unit 0 GitHub safety backup is complete.
 - Whether Step 7 is included now: no, it is explicitly deferred.
 - Whether China dashboard implementation starts immediately: no, first create a standalone HTML preview for approval.
 - Whether prediction can be enabled now: no, required observed power labels and historical NWP are missing.
@@ -233,7 +233,7 @@ Power Earth globe
 
 ## Implementation Units
 
-- [ ] **Unit 0: GitHub Safety Baseline**
+- [x] **Unit 0: GitHub Safety Baseline**
 
 **Goal:** Back up the current repository state to GitHub before formal product changes.
 
@@ -724,11 +724,11 @@ After each major unit completes:
 - Include in the new task prompt: objective, scope, non-goals, relevant docs, changed files, verification evidence, blockers, and the no-subagent rule.
 - Do not start multiple future tasks in parallel.
 
-The next task after this plan should be:
+The next task after Unit 0 should be:
 
 ```text
-Unit 0: GitHub Safety Baseline
-Objective: audit the dirty worktree, protect secrets, create a clear GitHub backup commit/branch, and document what was backed up.
+Unit 3: China Dashboard Formal Spec and HTML Preview
+Objective: convert the China dashboard MVP into a formal specification and a standalone HTML preview for user review before production implementation.
 ```
 
 ## Success Metrics

@@ -82,4 +82,24 @@ Completed before the initial baseline commit:
 
 ## Remote Verification
 
-Pending until the baseline commit is pushed to GitHub. This section will be updated by the follow-up completion documentation commit.
+Completed.
+
+| Item | Evidence |
+|---|---|
+| Initial baseline commit | `448608e75bd873c892833116186820f38b16e8f4` |
+| Remote branch | `origin/codex/github-safety-baseline-20260909` |
+| Remote verification command | `git ls-remote origin refs/heads/codex/github-safety-baseline-20260909` |
+| Remote verification result | `448608e75bd873c892833116186820f38b16e8f4` |
+| Push behavior | Normal push with upstream tracking; no force push |
+
+After the push, the local branch tracked `origin/codex/github-safety-baseline-20260909` and `git status --short --untracked-files=all` returned no unignored changes.
+
+## Unit 0 Completion
+
+Unit 0 is complete as of this audit update:
+
+- GitHub backup branch exists and contains the baseline commit.
+- Audit scope and exclusions are documented.
+- Sensitive and transient files are ignored and were not committed.
+- No files were deleted.
+- No production China dashboard code was started in this Unit 0 task.
