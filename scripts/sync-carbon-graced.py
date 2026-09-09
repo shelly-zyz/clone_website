@@ -7,10 +7,12 @@ import argparse
 import gzip
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
 import tarfile
+import time
 import urllib.request
 from datetime import date
 from pathlib import Path, PurePosixPath
@@ -54,22 +56,65 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--force-download", action="store_true")
     parser.add_argument(
+        "--scratch-output",
+        action="store_true",
+        help=(
+            "Reuse fixed per-sector output paths for bulk database backfills. "
+            "This keeps only one archive, one NetCDF, and up to 31 frame files per sector."
+        ),
+    )
+    parser.add_argument(
+        "--single-scratch-slot",
+        action="store_true",
+        help=(
+            "When used with --scratch-output, reuse one global scratch slot across all sectors. "
+            "This minimizes local disk usage during long database backfills."
+        ),
+    )
+    parser.add_argument(
         "--metadata-only",
         action="store_true",
         help="Fetch and print archive metadata without downloading it.",
+    )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress progress output for background database backfills.",
+    )
+    parser.add_argument(
+        "--target-resolution",
+        type=float,
+        default=0.1,
+        help=(
+            "Output grid resolution in degrees. Keep 0.1 for source visualization; "
+            "aggregate separately when building prediction features."
+        ),
     )
     return parser.parse_args()
 
 
 def request_json(url: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
-    data = None
-    headers = {"Accept": "application/json", "User-Agent": USER_AGENT}
-    if payload is not None:
-        data = json.dumps(payload).encode("utf-8")
-        headers["Content-Type"] = "application/json"
-    request = urllib.request.Request(url, data=data, headers=headers, method="POST" if data else "GET")
-    with urllib.request.urlopen(request, timeout=60) as response:
-        return json.load(response)
+    last_error: Exception | None = None
+    for attempt in range(1, 5):
+        data = None
+        headers = {"Accept": "application/json", "User-Agent": USER_AGENT}
+        if payload is not None:
+            data = json.dumps(payload).encode("utf-8")
+            headers["Content-Type"] = "application/json"
+        request = urllib.request.Request(
+            url,
+            data=data,
+            headers=headers,
+            method="POST" if data else "GET",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                return json.load(response)
+        except Exception as error:
+            last_error = error
+            if attempt < 4:
+                time.sleep(attempt * 3)
+    raise RuntimeError(f"GRACED API request failed after 4 attempts: {last_error}")
 
 
 def archive_metadata(sector: str, month: str | None) -> dict[str, Any]:
@@ -92,9 +137,10 @@ def archive_metadata(sector: str, month: str | None) -> dict[str, Any]:
     return candidates[-1]
 
 
-def download_file(url: str, target: Path, force: bool) -> None:
+def download_file(url: str, target: Path, force: bool, quiet: bool = False) -> None:
     if target.exists() and not force:
-        print(f"Using cached archive: {target}")
+        if not quiet:
+            print(f"Using cached archive: {target}")
         return
 
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -109,9 +155,10 @@ def download_file(url: str, target: Path, force: bool) -> None:
                 break
             output.write(chunk)
             copied += len(chunk)
-            if expected:
+            if expected and not quiet:
                 print(f"\rDownloaded {copied / 1024 / 1024:.1f}/{expected / 1024 / 1024:.1f} MiB", end="")
-    print()
+    if not quiet:
+        print()
     if expected and partial.stat().st_size != expected:
         raise RuntimeError(f"Incomplete download: expected {expected} bytes, got {partial.stat().st_size}.")
     os.replace(partial, target)
@@ -128,13 +175,20 @@ def safe_netcdf_member(archive: tarfile.TarFile) -> tarfile.TarInfo:
     return member
 
 
-def extract_netcdf(archive_path: Path, work_dir: Path) -> Path:
+def extract_netcdf(
+    archive_path: Path,
+    work_dir: Path,
+    target_name: str | None = None,
+    reuse_existing: bool = True,
+    quiet: bool = False,
+) -> Path:
     work_dir.mkdir(parents=True, exist_ok=True)
     with tarfile.open(archive_path, "r:gz") as archive:
         member = safe_netcdf_member(archive)
-        target = work_dir / Path(member.name).name
-        if target.exists() and target.stat().st_size == member.size:
-            print(f"Using extracted NetCDF: {target}")
+        target = work_dir / (target_name or Path(member.name).name)
+        if reuse_existing and target.exists() and target.stat().st_size == member.size:
+            if not quiet:
+                print(f"Using extracted NetCDF: {target}")
             return target
         source = archive.extractfile(member)
         if source is None:
@@ -163,6 +217,9 @@ def convert_frames(
     output_dir: Path,
     source: dict[str, Any],
     workspace_root: Path,
+    scratch_output: bool = False,
+    target_resolution: float = 0.1,
+    quiet: bool = False,
 ) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     frames: list[dict[str, Any]] = []
@@ -181,13 +238,35 @@ def convert_frames(
         if latitudes.size < 2 or longitudes.size < 2:
             raise RuntimeError("GRACED coordinate arrays are incomplete.")
 
+        source_dx = float(longitudes[1] - longitudes[0])
+        source_dy = float(abs(latitudes[1] - latitudes[0]))
+        aggregation_factor = int(round(target_resolution / source_dx))
+        if (
+            not math.isclose(source_dx, source_dy, rel_tol=0, abs_tol=1e-8)
+            or aggregation_factor < 1
+            or not math.isclose(
+                source_dx * aggregation_factor,
+                target_resolution,
+                rel_tol=0,
+                abs_tol=1e-8,
+            )
+            or longitudes.size % aggregation_factor != 0
+            or latitudes.size % aggregation_factor != 0
+        ):
+            raise RuntimeError(
+                f"Cannot aggregate {source_dx}° source grid to {target_resolution}°.",
+            )
+
         grid = {
-            "width": int(longitudes.size),
-            "height": int(latitudes.size),
+            "width": int(longitudes.size // aggregation_factor),
+            "height": int(latitudes.size // aggregation_factor),
             "longitudeMin": json_number(longitudes[0]),
             "latitudeMax": json_number(latitudes[0]),
-            "dx": json_number(longitudes[1] - longitudes[0]),
-            "dy": json_number(abs(latitudes[1] - latitudes[0])),
+            "dx": json_number(target_resolution),
+            "dy": json_number(target_resolution),
+            "sourceResolutionDeg": json_number(source_dx),
+            "aggregationFactor": aggregation_factor,
+            "aggregationMethod": "sum",
         }
 
         for index, timestamp in enumerate(timestamps):
@@ -195,6 +274,13 @@ def convert_frames(
             values = np.asarray(emission.isel(nday=index).values, dtype="<f4")
             values = np.nan_to_num(values, nan=0.0, posinf=0.0, neginf=0.0)
             values[values < 0] = 0
+            if aggregation_factor > 1:
+                values = values.reshape(
+                    grid["height"],
+                    aggregation_factor,
+                    grid["width"],
+                    aggregation_factor,
+                ).sum(axis=(1, 3), dtype=np.float64)
             values = np.ascontiguousarray(values, dtype="<f4")
             positive = values[values > 0]
             quantiles = (
@@ -216,7 +302,12 @@ def convert_frames(
                 "p999": json_number(quantiles[4]),
             }
             compressed = gzip.compress(values.tobytes(order="C"), compresslevel=6, mtime=0)
-            frame_path = output_dir / f"{frame_date}.f32.gz"
+            frame_file_name = (
+                f"{int(frame_date[-2:]):02d}.f32.gz"
+                if scratch_output
+                else f"{frame_date}.f32.gz"
+            )
+            frame_path = output_dir / frame_file_name
             partial = frame_path.with_name(f"{frame_path.name}.part")
             partial.write_bytes(compressed)
             os.replace(partial, frame_path)
@@ -230,10 +321,11 @@ def convert_frames(
                     "stats": stats,
                 }
             )
-            print(
-                f"Prepared {frame_date}: {len(compressed) / 1024:.1f} KiB, "
-                f"{positive.size:,} non-zero cells",
-            )
+            if not quiet:
+                print(
+                    f"Prepared {frame_date}: {len(compressed) / 1024:.1f} KiB, "
+                    f"{positive.size:,} non-zero cells",
+                )
 
         attributes = {
             key: str(value)
@@ -281,27 +373,53 @@ def main() -> None:
         key: metadata.get(key)
         for key in ("id", "dataTime", "department", "fileName", "fileSize", "apiUpdateTime")
     }
-    print(json.dumps(public_metadata, ensure_ascii=False, indent=2))
+    if not args.quiet:
+        print(json.dumps(public_metadata, ensure_ascii=False, indent=2))
     if args.metadata_only:
         return
 
-    archive_path = output_root / "raw" / args.sector / metadata["fileName"]
-    download_file(metadata["ossAddress"], archive_path, args.force_download)
+    if args.scratch_output:
+        scratch_key = "_current" if args.single_scratch_slot else args.sector
+        archive_path = output_root / "scratch" / scratch_key / "archive.nc.tar.gz"
+        work_dir = output_root / "scratch" / scratch_key / "work"
+        processed_dir = output_root / "scratch" / scratch_key / "processed"
+    else:
+        archive_path = output_root / "raw" / args.sector / metadata["fileName"]
+        work_dir = output_root / "work" / args.sector / metadata["dataTime"]
+        processed_dir = output_root / "processed" / args.sector / metadata["dataTime"]
+
+    download_file(
+        metadata["ossAddress"],
+        archive_path,
+        args.force_download or args.scratch_output,
+        quiet=args.quiet,
+    )
     netcdf_path = extract_netcdf(
         archive_path,
-        output_root / "work" / args.sector / metadata["dataTime"],
+        work_dir,
+        "emission.nc" if args.scratch_output else None,
+        reuse_existing=not args.scratch_output,
+        quiet=args.quiet,
     )
     metadata["archiveSha256"] = sha256_file(archive_path)
     metadata["localArchivePath"] = archive_path.relative_to(workspace_root).as_posix()
     metadata["localNetcdfPath"] = netcdf_path.relative_to(workspace_root).as_posix()
 
-    processed_dir = output_root / "processed" / args.sector / metadata["dataTime"]
-    manifest = convert_frames(netcdf_path, processed_dir, metadata, workspace_root)
+    manifest = convert_frames(
+        netcdf_path,
+        processed_dir,
+        metadata,
+        workspace_root,
+        scratch_output=args.scratch_output,
+        target_resolution=args.target_resolution,
+        quiet=args.quiet,
+    )
     manifest_path = processed_dir / "manifest.json"
     partial = manifest_path.with_name(f"{manifest_path.name}.part")
     partial.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     os.replace(partial, manifest_path)
-    print(f"Manifest: {manifest_path}")
+    if not args.quiet:
+        print(f"Manifest: {manifest_path}")
 
 
 if __name__ == "__main__":

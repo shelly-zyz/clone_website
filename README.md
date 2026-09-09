@@ -133,16 +133,48 @@ The weather view uses GFS fields from NOAA NOMADS and renders them with an earth
 
 ```bash
 npm run weather:update
+npm run weather:import
 ```
 
-The updater requires `wgrib2` to be installed and available on `PATH` for the same shell that starts Next.js. On Windows, install `wgrib2`, then run:
+The updater uses `wgrib2` when it is installed. On Windows it can also use the
+Python `eccodes` decoder from `requirements-data.txt`, so a separate `wgrib2`
+installation is optional:
 
 ```powershell
-wgrib2 -version
+python -m pip install -r requirements-data.txt
 npm run weather:update
 ```
 
-If `wgrib2` is missing or NOMADS cannot be reached, `/api/weather-earth?request=status` reports the problem and the UI falls back to the built-in demonstration field instead of presenting it as live data.
+If neither decoder is available or NOMADS cannot be reached,
+`/api/weather-earth?request=status` reports the problem and the UI falls back to
+the built-in demonstration field instead of presenting it as live data.
+`weather:import` persists the decoded run in
+`website_data.weather_forecast_fields`. The live field set includes 10 m and
+100 m wind, gust, temperature, relative and specific humidity, CAPE, mean-sea
+and surface pressure, precipitable water, precipitation, snow depth, and
+surface short-wave radiation.
+
+## Zenodo Climate Projection Data
+
+Install the data-processing dependencies once:
+
+```powershell
+python -m pip install -r requirements-data.txt
+```
+
+Import exactly one GFDL-ESM4/SSP1-2.6 NetCDF file from Zenodo into PostgreSQL:
+
+```powershell
+npm run climate:sync-metadata
+npm run climate:import -- --record-id 20501729 --file gfdl-esm4_ssp126_rsds_2021_2030.nc
+```
+
+The importer resumes a partial download, verifies the Zenodo MD5, stores the
+3,848-point coordinate list once, and writes one gzip-compressed
+`hour × location` Float32 block per day. After a successful import it removes
+that one NetCDF scratch file. Run the command separately for each additional
+variable and decade so the full 27 GB record is never staged on local disk at
+the same time.
 
 ## GRACED Carbon Data
 
@@ -166,6 +198,31 @@ The importer stores one gzip-compressed Float32 grid per date and sector in
 official sector code (`total`, `Industry`, `Residential`,
 `GroundTransportation`, `DomesticAviation`, `InternationalAviation`, or
 `InternationalShipping`) to add another layer.
+
+GRACED source and visualization frames remain at their native 0.1-degree
+resolution. Prediction pipelines should aggregate a copy to 0.5 degrees or to
+administrative regions when constructing model features; they must not replace
+the 0.1-degree source frame.
+
+## Data Catalog and Renewable Potential
+
+The database catalog groups acquired and missing datasets by Power Earth,
+Weather Earth, Carbon Earth, and Installation-potential/Dispatch Earth:
+
+```powershell
+npm run catalog:sync
+```
+
+Public GISPO renewable-resource CSVs can be streamed directly to PostgreSQL
+without keeping local copies:
+
+```powershell
+npm run potential:import
+```
+
+This import preserves the source assumptions (ERA5 2019, 0.25-degree cells,
+capacity potential in GW) and creates a separate 0.5-degree project view in
+`website_data.renewable_resource_potential`.
 
 ### If using docker
 

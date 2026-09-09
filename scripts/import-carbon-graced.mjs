@@ -1,4 +1,5 @@
 import { promises as fs } from "node:fs";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
@@ -20,6 +21,11 @@ const manifestArgument = argumentValue("--manifest");
 const manifestPath = manifestArgument
   ? path.resolve(repoRoot, manifestArgument)
   : await latestManifest();
+const maxNewFramesArgument = argumentValue("--max-new-frames");
+const maxNewFrames = maxNewFramesArgument ? Number.parseInt(maxNewFramesArgument, 10) : 0;
+if (!Number.isInteger(maxNewFrames) || maxNewFrames < 0) {
+  throw new Error(`Invalid --max-new-frames value: ${maxNewFramesArgument}`);
+}
 console.log(`Reading carbon manifest: ${manifestPath}`);
 const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
 validateManifest(manifest);
@@ -28,10 +34,13 @@ const pool = new Pool({
   connectionString,
   connectionTimeoutMillis: 30_000,
   idleTimeoutMillis: 30_000,
-  max: 2,
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 10_000,
+  max: 1,
+  query_timeout: 300_000,
+  statement_timeout: 300_000,
   ssl: process.env.DATABASE_SSL === "true" ? { rejectUnauthorized: false } : false,
 });
-const client = await pool.connect();
 
 try {
   const fullSchema = await fs.readFile(schemaPath, "utf8");
@@ -43,34 +52,38 @@ try {
   }
   console.log("Applying carbon database schema...");
   for (const statement of fullSchema.slice(carbonSchemaStart).split(";").map((item) => item.trim()).filter(Boolean)) {
-    await client.query(statement);
+    await pool.query(statement);
   }
-  console.log("Starting carbon frame transaction...");
-  await client.query("BEGIN");
+  console.log("Importing carbon archive and frames with per-statement commits...");
   await importArchive(manifest);
   console.log(`Imported archive metadata for ${manifest.sector} / ${manifest.month}`);
+  let importedFrames = 0;
   for (const frame of manifest.frames) {
-    await importFrame(manifest, frame);
+    const imported = await importFrame(manifest, frame);
+    if (imported) {
+      importedFrames += 1;
+      if (maxNewFrames > 0 && importedFrames >= maxNewFrames) {
+        break;
+      }
+    }
   }
-  await client.query("COMMIT");
   console.log(JSON.stringify({
     ok: true,
     manifest: path.relative(workspaceRoot, manifestPath).split(path.sep).join("/"),
     sector: manifest.sector,
     month: manifest.month,
     frames: manifest.frames.length,
+    importedFrames,
   }, null, 2));
 } catch (error) {
-  await client.query("ROLLBACK").catch(() => undefined);
   throw error;
 } finally {
-  client.release();
   await pool.end();
 }
 
 async function importArchive(payload) {
   const source = payload.source;
-  await client.query(
+  await pool.query(
     `INSERT INTO website_data.carbon_source_archives (
        official_id, sector, data_month, file_name, file_size_label, source_url,
        api_updated_at, archive_sha256, local_archive_path, local_netcdf_path,
@@ -105,16 +118,24 @@ async function importArchive(payload) {
 }
 
 async function importFrame(payload, frame) {
+  if (await frameAlreadyImported(payload.sector, frame)) {
+    console.log(`Skipping existing ${payload.sector} / ${frame.date}`);
+    return false;
+  }
+
   const framePath = path.resolve(workspaceRoot, frame.path);
   assertWithinWorkspace(framePath);
   const frameData = await fs.readFile(framePath);
   if (frameData.length !== frame.sizeBytes) {
     throw new Error(`Frame size mismatch for ${frame.path}.`);
   }
+  if (createHash("sha256").update(frameData).digest("hex") !== frame.sha256) {
+    throw new Error(`Frame SHA-256 mismatch for ${frame.path}.`);
+  }
 
   const { grid, encoding } = payload;
   const stats = frame.stats;
-  await client.query(
+  await pool.query(
     `INSERT INTO website_data.carbon_emission_frames (
        observed_on, sector, source_archive_id, unit, width, height,
        longitude_min, latitude_max, dx, dy, data_type, byte_order,
@@ -169,6 +190,22 @@ async function importFrame(payload, frame) {
     ],
   );
   console.log(`Imported ${payload.sector} / ${frame.date} (${(frameData.length / 1024).toFixed(1)} KiB)`);
+  return true;
+}
+
+async function frameAlreadyImported(sector, frame) {
+  const result = await pool.query(
+    `SELECT frame_sha256, octet_length(frame_data) AS bytes
+       FROM website_data.carbon_emission_frames
+      WHERE sector = $1
+        AND observed_on = $2
+      LIMIT 1`,
+    [sector, frame.date],
+  );
+  if (result.rowCount > 0 && (result.rows[0].frame_sha256 !== frame.sha256 || Number(result.rows[0].bytes) !== frame.sizeBytes)) {
+    throw new Error(`Existing frame differs from source: ${sector}/${frame.date}; refusing overwrite.`);
+  }
+  return result.rowCount > 0;
 }
 
 function validateManifest(payload) {

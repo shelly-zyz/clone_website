@@ -11,7 +11,7 @@ import {
 import type { FeatureCollection } from "geojson";
 import {
   formatWeatherValue,
-  sampleWeatherField,
+  readWeatherFieldAt,
   weatherColor,
   weatherMetricMeta,
   type WeatherField,
@@ -289,7 +289,7 @@ function drawOverlay(
       if (!coord || !Number.isFinite(coord[0]) || !Number.isFinite(coord[1])) {
         continue;
       }
-      const sample = sampleWeatherField(field, coord[0], coord[1]);
+      const sample = readWeatherFieldAt(field, coord[0], coord[1]);
       if (!sample) {
         continue;
       }
@@ -387,11 +387,11 @@ function createScreenField(
       if (!coord || Math.abs(coord[1]) > 88) {
         continue;
       }
-      const sample = sampleWeatherField(field, coord[0], coord[1]) as { value: number; u?: number; v?: number } | null;
+      const sample = readWeatherFieldAt(field, coord[0], coord[1]) as { value: number; u?: number; v?: number } | null;
       if (typeof sample?.u !== "number" || typeof sample.v !== "number") {
         continue;
       }
-      const styleSample = styleField ? sampleWeatherField(styleField, coord[0], coord[1]) : sample;
+      const styleSample = styleField ? readWeatherFieldAt(styleField, coord[0], coord[1]) : sample;
       const styleIntensity = styleField && styleSample
         ? fieldIntensity(styleField, styleMetric, styleSample.value)
         : clamp(sample.value / 45, 0, 1);
@@ -732,7 +732,7 @@ export function WeatherEarthViewport({
     if (!coord) {
       return null;
     }
-    const sample = sampleWeatherField(weatherField, coord[0], coord[1]);
+    const sample = readWeatherFieldAt(weatherField, coord[0], coord[1]);
     if (!sample) {
       return null;
     }
@@ -823,11 +823,10 @@ export function WeatherEarthViewport({
   };
 
   const meta = weatherMetricMeta(weatherMetric);
-  const sampleFallback = weatherField?.source.toLowerCase().includes("sample") ?? false;
   return (
     <section
       ref={containerRef}
-      className={`og-weather-earth ${sampleFallback ? "is-sample" : ""}`}
+      className="og-weather-earth"
       aria-label="气象地球视图"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
@@ -843,7 +842,6 @@ export function WeatherEarthViewport({
         <span>覆盖 {meta.shortLabel}</span>
         <span>动画 风场</span>
         <strong>{formatWeatherTime(weatherField?.validTimeUtc)}</strong>
-        {sampleFallback ? <em>演示场</em> : null}
       </div>
     </section>
   );

@@ -998,6 +998,225 @@ button.og-nav-item {
   gap: 18px;
 }
 
+.og-import-progress {
+  position: absolute;
+  z-index: 54;
+  top: 64px;
+  right: 16px;
+  width: min(348px, calc(100vw - 96px));
+  overflow: hidden;
+  color: #dbe6f3;
+  background: rgba(6, 11, 20, 0.94);
+  border: 1px solid rgba(0, 229, 255, 0.24);
+  border-radius: 12px;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.36);
+  backdrop-filter: blur(18px);
+}
+
+.og-import-progress-summary {
+  display: grid;
+  grid-template-columns: 9px 1fr auto 16px;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  padding: 10px 11px 9px;
+  text-align: left;
+}
+
+.og-import-progress-summary > svg {
+  color: #6f8299;
+  transition: transform 180ms ease;
+}
+
+.og-import-progress.is-expanded .og-import-progress-summary > svg {
+  transform: rotate(180deg);
+}
+
+.og-import-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #39ff14;
+  box-shadow: 0 0 0 3px rgba(57, 255, 20, 0.12), 0 0 12px rgba(57, 255, 20, 0.72);
+  animation: og-import-pulse 1.8s ease-in-out infinite;
+}
+
+.og-import-status-dot.is-complete {
+  background: #00e5ff;
+  box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.12), 0 0 12px rgba(0, 229, 255, 0.68);
+  animation: none;
+}
+
+.og-import-summary-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.og-import-summary-copy strong {
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+.og-import-summary-copy small {
+  overflow: hidden;
+  color: #8fa0b5;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.og-import-summary-percent {
+  color: #67e8f9;
+  font-family: var(--font-ibm-plex-mono, "IBM Plex Mono"), Consolas, monospace;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.og-import-overall-track,
+.og-import-queue-track {
+  height: 2px;
+  overflow: hidden;
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.og-import-overall-track > span,
+.og-import-queue-track > span {
+  display: block;
+  height: 100%;
+  background: #00e5ff;
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.72);
+  transition: width 600ms ease;
+}
+
+.og-import-progress-detail {
+  padding: 10px 11px 11px;
+  animation: og-import-reveal 180ms ease-out;
+}
+
+.og-import-progress-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  color: #91a2b7;
+  font-size: 10px;
+}
+
+.og-import-progress-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.og-import-queue-list {
+  display: grid;
+  gap: 11px;
+}
+
+.og-import-queue {
+  display: grid;
+  gap: 6px;
+}
+
+.og-import-queue header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.og-import-queue header strong {
+  color: #dfe8f3;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.og-import-queue header span {
+  color: #67e8f9;
+  font-family: var(--font-ibm-plex-mono, "IBM Plex Mono"), Consolas, monospace;
+  font-size: 9px;
+}
+
+.og-import-queue-track {
+  height: 4px;
+  border-radius: 999px;
+}
+
+.og-import-queue-track > span {
+  border-radius: inherit;
+}
+
+.og-import-queue p {
+  color: #8495aa;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.og-import-progress-detail footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 11px;
+  padding-top: 9px;
+  color: #708198;
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+  font-size: 9px;
+}
+
+.og-import-progress-detail footer button,
+.og-import-retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #9eb0c5;
+}
+
+.og-import-progress-detail footer button:hover,
+.og-import-retry:hover {
+  color: #67e8f9;
+}
+
+.og-import-retry {
+  width: 100%;
+  justify-content: center;
+  padding: 8px;
+  font-size: 10px;
+}
+
+@keyframes og-import-pulse {
+  0%,
+  100% {
+    opacity: 0.65;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes og-import-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 760px) {
+  .og-import-progress {
+    top: 70px;
+    right: 12px;
+    width: min(332px, calc(100vw - 88px));
+  }
+}
+
 .og-live-users {
   display: flex;
   align-items: center;

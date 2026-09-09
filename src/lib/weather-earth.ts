@@ -78,13 +78,15 @@ export type WeatherManifest = {
   forecastHour: number;
   validTimeUtc: string;
   stale: boolean;
-  refreshStatus: "live" | "cached" | "sample-fallback" | "error";
+  refreshStatus: "live" | "cached" | "error";
   message?: string;
   metrics: WeatherManifestMetric[];
 };
 
 export type WeatherStatus = {
   wgrib2Available: boolean;
+  decoderAvailable: boolean;
+  decoderName: "wgrib2" | "python-eccodes" | null;
   cacheFresh: boolean;
   refreshStatus: WeatherManifest["refreshStatus"];
   generatedAt: string | null;
@@ -268,7 +270,7 @@ export function weatherValueAtIndex(field: WeatherField, index: number) {
   return decodeWeatherValue(field.values[index], field.encoding);
 }
 
-export function sampleWeatherField(field: WeatherField, lng: number, lat: number) {
+export function readWeatherFieldAt(field: WeatherField, lng: number, lat: number) {
   const { header } = field;
   const y = (header.la1 - lat) / header.dy;
   if (y < 0 || y > header.ny - 1) {

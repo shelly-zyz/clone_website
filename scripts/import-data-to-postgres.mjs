@@ -56,7 +56,9 @@ async function main() {
   await loadExistingCatalog();
 
   try {
-    await catalogDirectory(rawDataRoot, "raw-source");
+    if (process.env.DATA_IMPORT_SKIP_RAW_CATALOG !== "true") {
+      await catalogDirectory(rawDataRoot, "raw-source");
+    }
     await catalogDirectory(publicDataRoot, "website-public-data");
     await catalogFile(generatedMapPath, "generated-map", "generated");
     await importGeneratedMapData();
@@ -64,6 +66,10 @@ async function main() {
     await importGeoJsonFiles();
     await importVectorTiles();
     await importClimateHourly();
+
+    if (counters.errors > 0) {
+      throw new Error(`Import contains ${counters.errors} failed files; successful batches are retained for verification.`);
+    }
 
     await queryWithRetry(
       `UPDATE website_data.import_runs
@@ -566,7 +572,8 @@ function tileCoordinates(relativePath) {
 }
 
 function isWebsiteGeoJson(relativePath) {
-  return relativePath.includes("/public/data/natural-earth/")
+  return process.env.DATA_IMPORT_INCLUDE_FULL_GEOJSON === "true"
+    || relativePath.includes("/public/data/natural-earth/")
     || relativePath.endsWith("/osm-power/china-transmission-preview.geojson")
     || relativePath.endsWith("/osm-power/china-transmission-detail-preview.geojson");
 }

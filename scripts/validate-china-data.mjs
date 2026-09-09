@@ -78,8 +78,8 @@ function hasForbiddenPvCapacityField(value) {
 }
 
 const mapShell = readText("src/components/opengridworks/MapAppShell.tsx");
-const mockMapData = readText("src/lib/mock-map-data.ts");
-const normalizedMockMapData = mockMapData.replace(/\r\n/g, "\n");
+const mapData = readText("src/lib/map-data.ts");
+const normalizedMapData = mapData.replace(/\r\n/g, "\n");
 checkIncludes(mapShell, "/data/osm-power/tiles/china-260517-osm-z3-5-20260519-plants-generators/{z}/{x}/{y}.pbf", "local China OSM power tile URL");
 checkIncludes(mapShell, "/data/osm-power/china-transmission-preview.geojson", "local China transmission preview GeoJSON URL");
 checkIncludes(mapShell, "/data/osm-power/china-transmission-detail-preview.geojson", "local China transmission detail GeoJSON URL");
@@ -107,7 +107,7 @@ check(
   "Transmission line-width expressions must keep zoom as the top-level interpolate expression"
 );
 check(
-  normalizedMockMapData.includes("export const gridLines: GridLine[] = [\n  ...chinaGridLines,\n];"),
+  normalizedMapData.includes("export const gridLines: GridLine[] = [\n  ...chinaGridLines,\n];"),
   "Default GeoJSON gridLines should only include real China grid lines"
 );
 for (const forbiddenLineToken of [
@@ -116,7 +116,7 @@ for (const forbiddenLineToken of [
   "global-interconnector-",
   "...globalMockInfrastructure.gridLines",
 ]) {
-  check(!mockMapData.includes(forbiddenLineToken), `Mock transmission token should not be present: ${forbiddenLineToken}`);
+  check(!mapData.includes(forbiddenLineToken), `Mock transmission token should not be present: ${forbiddenLineToken}`);
 }
 
 const generated = readJson("src/lib/china-map-data.generated.json");

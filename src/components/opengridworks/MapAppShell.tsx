@@ -71,15 +71,15 @@ import {
 } from "@/lib/climate-vre";
 import {
   capacityToRadius,
-  getMockMapDataset,
+  getMapDataset,
   getRegionForCoordinates,
   getRegionStats,
-} from "@/lib/mock-map-data";
+} from "@/lib/map-data";
 import {
   WEATHER_METRIC_GROUPS,
   defaultWeatherMetric,
   formatWeatherValue,
-  sampleWeatherField as sampleWeatherGrid,
+  readWeatherFieldAt,
   weatherColor,
   weatherGradientStyle,
   weatherMetricMeta,
@@ -111,6 +111,7 @@ import type {
   ToolbarPanel,
   VoltageClass,
 } from "@/types/opengridworks";
+import { ImportProgressIndicator } from "@/components/opengridworks/ImportProgressIndicator";
 
 type BooleanRecord<T extends string> = Record<T, boolean>;
 
@@ -197,7 +198,7 @@ type DatabaseMapAssets = {
   dataCenters: DataCenterAsset[];
 };
 
-const mapDataset = getMockMapDataset();
+const mapDataset = getMapDataset();
 const {
   dataCenters,
   energyAssets,
@@ -430,9 +431,6 @@ function weatherStatusLabel(manifest: WeatherManifest | null, loading: boolean) 
   if (manifest.refreshStatus === "cached") {
     return "缓存";
   }
-  if (manifest.refreshStatus === "sample-fallback") {
-    return "演示兜底";
-  }
   return "异常";
 }
 
@@ -441,10 +439,10 @@ function localizeWeatherStatusNote(note: string | null) {
     return null;
   }
   if (note.toLowerCase().includes("wgrib2 is not installed")) {
-    return "未检测到 wgrib2，当前显示内置演示气象场。";
+    return "未检测到 wgrib2，无法刷新真实GFS气象数据。";
   }
   if (note.toLowerCase().includes("built-in sample weather field")) {
-    return "当前显示内置演示气象场。";
+    return "真实GFS气象数据暂不可用。";
   }
   return note;
 }
@@ -1351,48 +1349,9 @@ function buildGridLineCollection(
   } satisfies LineCollection;
 }
 
-function buildCustomLayerCollection(visibleCustomLayers: BooleanRecord<CustomLayerKey>) {
-  const features: Feature<LineString, MapProperties>[] = [];
-
-  if (visibleCustomLayers.customCorridor) {
-    features.push({
-      type: "Feature",
-      geometry: {
-        type: "LineString",
-        coordinates: [[-124.4, 37.7], [-112.2, 39.7], [-96.4, 41.1], [-77.5, 39.2], [-5.2, 48.4], [2.3, 48.9]],
-      },
-      properties: {
-        id: "custom-ai-load-corridor",
-        kind: "upgrade",
-        name: "Custom AI Load Corridor",
-        stage: "早期测试",
-        countryCode: "Demo",
-        source: "自定义图层演示",
-        color: "#ff00c8",
-      },
-    });
-  }
-
-  if (visibleCustomLayers.customHeatmap) {
-    features.push({
-      type: "Feature",
-      geometry: {
-        type: "LineString",
-        coordinates: [[101.2, 36.4], [108.6, 34.2], [116.4, 39.9], [139.8, 35.7]],
-      },
-      properties: {
-        id: "custom-asia-demand-band",
-        kind: "upgrade",
-        name: "Asia Demand Band",
-        stage: "早期测试",
-        countryCode: "Demo",
-        source: "自定义图层演示",
-        color: "#00ffbf",
-      },
-    });
-  }
-
-  return { type: "FeatureCollection", features } satisfies LineCollection;
+function buildCustomLayerCollection(_visibleCustomLayers: BooleanRecord<CustomLayerKey>) {
+  void _visibleCustomLayers;
+  return { type: "FeatureCollection", features: [] } satisfies LineCollection;
 }
 
 function buildSubstationCollection(
@@ -2800,7 +2759,7 @@ function drawWeatherOverlayCanvas(
   for (let y = 0; y < height; y += step) {
     for (let x = 0; x < width; x += step) {
       const lngLat = map.unproject([x + step / 2, y + step / 2]);
-      const sample = sampleWeatherGrid(field, lngLat.lng, lngLat.lat);
+      const sample = readWeatherFieldAt(field, lngLat.lng, lngLat.lat);
       if (!sample) {
         continue;
       }
@@ -2897,7 +2856,7 @@ function projectWeatherWindVector(
     return null;
   }
 
-  const sample = sampleWeatherGrid(field, lngLat.lng, lngLat.lat);
+  const sample = readWeatherFieldAt(field, lngLat.lng, lngLat.lat);
   const vectorSample = sample as { value?: number; u?: number; v?: number } | null;
   if (!vectorSample || typeof vectorSample.u !== "number" || typeof vectorSample.v !== "number") {
     return null;
@@ -3228,7 +3187,7 @@ function MapViewport({
       if (activeProjectRef.current === "weather") {
         const field = weatherFieldRef.current;
         const metric = weatherMetricRef.current;
-        const sample = field ? sampleWeatherGrid(field, event.lngLat.lng, event.lngLat.lat) : null;
+        const sample = field ? readWeatherFieldAt(field, event.lngLat.lng, event.lngLat.lat) : null;
         if (sample && field) {
           const meta = weatherMetricMeta(metric);
           map.getCanvas().style.cursor = "crosshair";
@@ -3328,7 +3287,7 @@ function MapViewport({
       if (activeProjectRef.current === "weather") {
         const field = weatherFieldRef.current;
         const metric = weatherMetricRef.current;
-        const sample = field ? sampleWeatherGrid(field, event.lngLat.lng, event.lngLat.lat) : null;
+        const sample = field ? readWeatherFieldAt(field, event.lngLat.lng, event.lngLat.lat) : null;
         if (sample && field) {
           const meta = weatherMetricMeta(metric);
           selectRef.current({
@@ -4429,12 +4388,12 @@ function WeatherLegendPanel({
   const activeMeta = weatherMetricMeta(activeMetric);
   const validTime = manifest?.validTimeUtc ?? field?.validTimeUtc;
   const fieldFilesReady = statusDetails ? Object.values(statusDetails.fieldFilesPresent).some(Boolean) : true;
-  const statusBadge = manifest?.refreshStatus === "sample-fallback" ? "演示" : manifest?.stale ? "缓存" : "实时";
+  const statusBadge = manifest?.refreshStatus === "error" ? "不可用" : manifest?.stale ? "缓存" : "实时";
   const statusNote = localizeWeatherStatusNote(error
     ?? statusDetails?.lastRefreshError
     ?? statusDetails?.message
     ?? manifest?.message
-    ?? (!fieldFilesReady ? "实时字段文件暂不可用，当前显示内置演示场。" : null));
+    ?? (!fieldFilesReady ? "真实GFS字段文件暂不可用。" : null));
 
   return (
     <aside className="og-legend-panel og-weather-panel" aria-label="气象项目图例">
@@ -5553,10 +5512,7 @@ function CustomLayersPanel({
   onToggleCustomLayer: (key: CustomLayerKey) => void;
   onClose: () => void;
 }) {
-  const rows: { key: CustomLayerKey; label: string; description: string }[] = [
-    { key: "customCorridor", label: "AI 负荷走廊", description: "早期测试 GeoJSON 叠加层" },
-    { key: "customHeatmap", label: "亚洲需求带", description: "未来自定义图层示例" },
-  ];
+  const rows: { key: CustomLayerKey; label: string; description: string }[] = [];
 
   return (
     <section className="og-floating-panel og-custom-panel" aria-label="自定义图层面板">
@@ -6064,7 +6020,7 @@ function MobileWeatherSheet({
     ?? statusDetails?.lastRefreshError
     ?? statusDetails?.message
     ?? manifest?.message
-    ?? (!fieldFilesReady ? "实时字段文件暂不可用，当前显示内置演示场。" : null));
+    ?? (!fieldFilesReady ? "真实GFS字段文件暂不可用。" : null));
 
   return (
     <aside className="og-mobile-generation-sheet og-mobile-weather-sheet" aria-label="气象项目移动控制">
@@ -6621,6 +6577,7 @@ export function MapAppShell() {
   const legacyWeatherControlsEnabled = false;
   return (
     <main className={`og-app-shell ${cinematic ? "is-cinematic" : ""} ${activeProject === "weather" ? "is-earth-project" : ""} ${activeProject === "carbon" ? "is-carbon-project" : ""}`}>
+      <ImportProgressIndicator />
       {activeProject === "weather" ? (
         <EarthProjectViewport />
       ) : (

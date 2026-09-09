@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { promises as fs } from "node:fs";
+import { existsSync, promises as fs } from "node:fs";
 import path from "node:path";
 import { NextResponse } from "next/server";
 import {
@@ -10,12 +10,20 @@ import {
   type WeatherStatus,
   weatherMetricEndpoint,
 } from "@/lib/weather-earth";
-import { sampleWeatherField, sampleWeatherManifest } from "@/lib/weather-earth-sample";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const cacheDir = path.join(process.cwd(), ".weather-cache");
+const projectWeatherPython = path.resolve(
+  process.cwd(),
+  "..",
+  "outputs",
+  "20260904-pg-migration",
+  "venv",
+  "Scripts",
+  "python.exe",
+);
 const cacheMaxAgeMs = 75 * 60 * 1000;
 const refreshTimeoutMs = 120 * 1000;
 let refreshPromise: Promise<void> | null = null;
@@ -29,7 +37,10 @@ export async function GET(request: Request) {
 
   if (requestType === "manifest") {
     await ensureFreshCache();
-    return NextResponse.json(await readManifest());
+    const manifest = await readManifest();
+    return manifest
+      ? NextResponse.json(manifest)
+      : NextResponse.json({ error: "Real GFS weather data is unavailable." }, { status: 503 });
   }
 
   if (requestType === "status") {
@@ -42,7 +53,10 @@ export async function GET(request: Request) {
     }
 
     await ensureFreshCache();
-    return NextResponse.json(await readField(metric));
+    const field = await readField(metric);
+    return field
+      ? NextResponse.json(field)
+      : NextResponse.json({ error: "Real GFS weather field is unavailable." }, { status: 503 });
   }
 
   return NextResponse.json({ error: "Expected request=manifest or a metric parameter." }, { status: 400 });
@@ -64,24 +78,20 @@ async function ensureFreshCache() {
   try {
     await refreshPromise;
   } catch {
-    // The response readers below fall back to cached or sample data.
+    // Readers below may still use an existing real-data cache.
   }
 }
 
-async function readManifest(): Promise<WeatherManifest> {
-  const manifest = await readCachedManifest();
-  if (manifest) {
-    return manifest;
-  }
-  return sampleWeatherManifest("自动实时气象缓存尚不可用，当前显示内置演示场。");
+async function readManifest(): Promise<WeatherManifest | null> {
+  return readCachedManifest();
 }
 
-async function readField(metric: WeatherMetricKey): Promise<WeatherField> {
+async function readField(metric: WeatherMetricKey): Promise<WeatherField | null> {
   try {
     const raw = await fs.readFile(path.join(cacheDir, `${metric}.json`), "utf8");
     return JSON.parse(raw) as WeatherField;
   } catch {
-    return sampleWeatherField(metric);
+    return null;
   }
 }
 
@@ -101,18 +111,25 @@ async function readStatus(): Promise<WeatherStatus> {
   const fieldFilesPresent = await metricPresence();
   const wgrib2 = spawnSync("wgrib2", ["-version"], { encoding: "utf8", windowsHide: true });
   const wgrib2Available = !wgrib2.error && wgrib2.status === 0;
+  const pythonCommand = process.env.WEATHER_PYTHON
+    || (existsSync(projectWeatherPython) ? projectWeatherPython : "python");
+  const eccodes = spawnSync(pythonCommand, ["-c", "import eccodes"], { encoding: "utf8", windowsHide: true });
+  const eccodesAvailable = !eccodes.error && eccodes.status === 0;
+  const decoderAvailable = wgrib2Available || eccodesAvailable;
   const message = manifest?.message
-    ?? (!wgrib2Available ? "未检测到 wgrib2，当前显示内置演示气象场。" : undefined);
+    ?? (!decoderAvailable ? "未检测到wgrib2或ecCodes，无法刷新真实GFS气象数据。" : undefined);
 
   return {
     wgrib2Available,
+    decoderAvailable,
+    decoderName: wgrib2Available ? "wgrib2" : (eccodesAvailable ? "python-eccodes" : null),
     cacheFresh,
     refreshStatus: manifest?.refreshStatus ?? "error",
     generatedAt: manifest?.generatedAt ?? null,
     validTimeUtc: manifest?.validTimeUtc ?? null,
     fieldFilesPresent,
     message,
-    lastRefreshError: manifest?.refreshStatus === "error" || manifest?.refreshStatus === "sample-fallback" ? message : undefined,
+    lastRefreshError: manifest?.refreshStatus === "error" ? message : undefined,
   };
 }
 
@@ -133,6 +150,7 @@ function normalizeManifest(manifest: WeatherManifest): WeatherManifest {
   const metricMap = new Map(manifest.metrics.map((metric) => [metric.key, metric]));
   return {
     ...manifest,
+    refreshStatus: manifest.refreshStatus === "live" || manifest.refreshStatus === "cached" ? manifest.refreshStatus : "error",
     metrics: WEATHER_METRICS.map((metric) => ({
       ...metric,
       kind: metric.key === "wind" ? "vector" : "scalar",

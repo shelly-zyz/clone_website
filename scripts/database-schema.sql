@@ -122,6 +122,203 @@ CREATE TABLE IF NOT EXISTS website_data.climate_vre_hourly (
 CREATE INDEX IF NOT EXISTS climate_vre_hourly_year_technology_idx
   ON website_data.climate_vre_hourly (year, technology);
 
+CREATE TABLE IF NOT EXISTS website_data.dataset_catalog (
+  dataset_key text PRIMARY KEY,
+  earth_layer text NOT NULL,
+  name text NOT NULL,
+  provider text NOT NULL,
+  source_url text NOT NULL,
+  data_type text NOT NULL,
+  spatial_scope text NOT NULL,
+  source_resolution_deg double precision,
+  project_resolution_deg double precision,
+  temporal_resolution text,
+  coverage_start date,
+  coverage_end date,
+  access_method text NOT NULL,
+  auth_required boolean NOT NULL DEFAULT false,
+  license text,
+  acquisition_status text NOT NULL,
+  database_status text NOT NULL,
+  database_relation text,
+  priority text NOT NULL DEFAULT 'medium',
+  notes text,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS dataset_catalog_earth_status_idx
+  ON website_data.dataset_catalog (earth_layer, acquisition_status, database_status);
+
+CREATE TABLE IF NOT EXISTS website_data.renewable_resource_potential (
+  source_key text NOT NULL,
+  technology text NOT NULL,
+  longitude double precision NOT NULL,
+  latitude double precision NOT NULL,
+  region text NOT NULL,
+  grid text NOT NULL,
+  source_year smallint NOT NULL,
+  source_resolution_deg double precision NOT NULL,
+  project_resolution_deg double precision NOT NULL,
+  annual_capacity_factor double precision NOT NULL,
+  capacity_potential_gw double precision NOT NULL,
+  max_capacity_factor double precision NOT NULL,
+  source_cell_count integer NOT NULL,
+  assumptions jsonb NOT NULL DEFAULT '{}'::jsonb,
+  imported_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (source_key, technology, longitude, latitude, region, grid)
+);
+
+CREATE INDEX IF NOT EXISTS renewable_resource_potential_region_technology_idx
+  ON website_data.renewable_resource_potential (region, technology);
+CREATE INDEX IF NOT EXISTS renewable_resource_potential_coordinates_idx
+  ON website_data.renewable_resource_potential (longitude, latitude);
+
+CREATE TABLE IF NOT EXISTS website_data.weather_forecast_fields (
+  source text NOT NULL,
+  run_time_utc timestamptz NOT NULL,
+  forecast_hour smallint NOT NULL,
+  valid_time_utc timestamptz NOT NULL,
+  metric text NOT NULL,
+  unit text NOT NULL,
+  field_kind text NOT NULL,
+  width smallint NOT NULL,
+  height smallint NOT NULL,
+  longitude_min double precision NOT NULL,
+  latitude_max double precision NOT NULL,
+  dx double precision NOT NULL,
+  dy double precision NOT NULL,
+  compression text NOT NULL CHECK (compression = 'gzip'),
+  payload_json_gzip bytea NOT NULL,
+  payload_sha256 text NOT NULL,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  imported_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (source, run_time_utc, forecast_hour, metric)
+);
+
+CREATE INDEX IF NOT EXISTS weather_forecast_fields_valid_metric_idx
+  ON website_data.weather_forecast_fields (valid_time_utc DESC, metric);
+
+CREATE TABLE IF NOT EXISTS website_data.climate_projection_sources (
+  id bigserial PRIMARY KEY,
+  zenodo_record_id bigint NOT NULL,
+  file_name text NOT NULL UNIQUE,
+  gcm text NOT NULL,
+  scenario text NOT NULL,
+  variable text NOT NULL,
+  period_start date NOT NULL,
+  period_end date NOT NULL,
+  spatial_resolution_deg double precision NOT NULL,
+  source_url text NOT NULL,
+  expected_size_bytes bigint NOT NULL,
+  md5 text NOT NULL,
+  license text NOT NULL,
+  download_status text NOT NULL DEFAULT 'pending',
+  import_status text NOT NULL DEFAULT 'pending',
+  imported_days integer NOT NULL DEFAULT 0,
+  grid_id bigint,
+  source_attributes jsonb NOT NULL DEFAULT '{}'::jsonb,
+  error text,
+  imported_at timestamptz,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS climate_projection_sources_model_scenario_idx
+  ON website_data.climate_projection_sources (gcm, scenario, variable);
+
+CREATE TABLE IF NOT EXISTS website_data.climate_projection_grids (
+  id bigserial PRIMARY KEY,
+  grid_hash text NOT NULL UNIQUE,
+  grid_type text NOT NULL CHECK (grid_type = 'point-list'),
+  point_count integer NOT NULL CHECK (point_count > 0),
+  spatial_resolution_deg double precision NOT NULL,
+  longitude_min double precision NOT NULL,
+  longitude_max double precision NOT NULL,
+  latitude_min double precision NOT NULL,
+  latitude_max double precision NOT NULL,
+  data_type text NOT NULL CHECK (data_type = 'float32'),
+  byte_order text NOT NULL CHECK (byte_order = 'little-endian'),
+  coordinate_order text NOT NULL CHECK (coordinate_order = 'location,(longitude,latitude)'),
+  compression text NOT NULL CHECK (compression = 'gzip'),
+  coordinate_data bytea NOT NULL,
+  coordinate_sha256 text NOT NULL,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  imported_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE website_data.climate_projection_sources
+  ADD COLUMN IF NOT EXISTS grid_id bigint;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'climate_projection_sources_grid_id_fkey'
+  ) THEN
+    ALTER TABLE website_data.climate_projection_sources
+      ADD CONSTRAINT climate_projection_sources_grid_id_fkey
+      FOREIGN KEY (grid_id)
+      REFERENCES website_data.climate_projection_grids(id)
+      ON DELETE RESTRICT;
+  END IF;
+END
+$$;
+
+CREATE TABLE IF NOT EXISTS website_data.climate_projection_daily (
+  source_id bigint NOT NULL
+    REFERENCES website_data.climate_projection_sources(id) ON DELETE RESTRICT,
+  grid_id bigint NOT NULL
+    REFERENCES website_data.climate_projection_grids(id) ON DELETE RESTRICT,
+  valid_date date NOT NULL,
+  variable text NOT NULL,
+  unit text NOT NULL,
+  hours smallint NOT NULL CHECK (hours > 0),
+  point_count integer NOT NULL CHECK (point_count > 0),
+  width smallint,
+  height smallint,
+  longitude_min double precision,
+  latitude_max double precision,
+  dx double precision,
+  dy double precision,
+  data_type text NOT NULL CHECK (data_type = 'float32'),
+  byte_order text NOT NULL CHECK (byte_order = 'little-endian'),
+  dimension_order text NOT NULL CHECK (dimension_order = 'hour,location'),
+  compression text NOT NULL CHECK (compression = 'gzip'),
+  frame_data bytea NOT NULL,
+  frame_sha256 text NOT NULL,
+  min_value double precision,
+  max_value double precision,
+  mean_value double precision,
+  missing_count integer NOT NULL,
+  statistics jsonb NOT NULL DEFAULT '{}'::jsonb,
+  imported_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (source_id, valid_date)
+);
+
+CREATE INDEX IF NOT EXISTS climate_projection_daily_variable_date_idx
+  ON website_data.climate_projection_daily (variable, valid_date);
+
+ALTER TABLE website_data.climate_projection_daily
+  ADD COLUMN IF NOT EXISTS grid_id bigint
+    REFERENCES website_data.climate_projection_grids(id) ON DELETE RESTRICT,
+  ADD COLUMN IF NOT EXISTS point_count integer;
+
+ALTER TABLE website_data.climate_projection_daily
+  ALTER COLUMN width DROP NOT NULL,
+  ALTER COLUMN height DROP NOT NULL,
+  ALTER COLUMN longitude_min DROP NOT NULL,
+  ALTER COLUMN latitude_max DROP NOT NULL,
+  ALTER COLUMN dx DROP NOT NULL,
+  ALTER COLUMN dy DROP NOT NULL;
+
+ALTER TABLE website_data.climate_projection_daily
+  DROP CONSTRAINT IF EXISTS climate_projection_daily_dimension_order_check;
+
+ALTER TABLE website_data.climate_projection_daily
+  ADD CONSTRAINT climate_projection_daily_dimension_order_check
+  CHECK (dimension_order IN ('hour,location', 'hour,latitude,longitude'));
+
 CREATE TABLE IF NOT EXISTS website_data.carbon_source_archives (
   official_id bigint PRIMARY KEY,
   sector text NOT NULL,
@@ -170,3 +367,12 @@ CREATE TABLE IF NOT EXISTS website_data.carbon_emission_frames (
 
 CREATE INDEX IF NOT EXISTS carbon_emission_frames_sector_date_idx
   ON website_data.carbon_emission_frames (sector, observed_on DESC);
+
+CREATE TABLE IF NOT EXISTS website_data.carbon_emission_frame_chunks (
+  observed_on date NOT NULL,
+  sector text NOT NULL,
+  chunk_index integer NOT NULL CHECK (chunk_index >= 0),
+  chunk_data bytea NOT NULL,
+  imported_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (observed_on, sector, chunk_index)
+);

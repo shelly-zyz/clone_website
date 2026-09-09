@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { createWriteStream } from "node:fs";
+import { createWriteStream, existsSync } from "node:fs";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
@@ -9,9 +9,21 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 const quiet = process.argv.includes("--quiet");
+const projectWeatherPython = path.resolve(
+  process.cwd(),
+  "..",
+  "outputs",
+  "20260904-pg-migration",
+  "venv",
+  "Scripts",
+  "python.exe",
+);
+const pythonCommand = process.env.WEATHER_PYTHON
+  || (existsSync(projectWeatherPython) ? projectWeatherPython : "python");
 const outputDir = path.resolve(process.cwd(), ".weather-cache");
 const gribPath = path.join(outputDir, "gfs-surface-latest.grib2");
 const csvPath = path.join(outputDir, "gfs-surface-latest.csv");
+const decodedPath = path.join(outputDir, "gfs-surface-latest.decoded.json");
 const generatedAt = new Date().toISOString();
 const forecastHour = 3;
 const missingValue = 65535;
@@ -83,31 +95,129 @@ const metricDefinitions = {
     scale: 0.1,
     transform: (value) => value,
   },
+  wind100m: {
+    key: "wind100m",
+    kind: "vector",
+    variables: ["UGRD100", "VGRD100"],
+    nomadsVariables: ["UGRD", "VGRD"],
+    levelParams: ["lev_100_m_above_ground"],
+    nativeLevelLabel: "100 m above ground",
+    unit: "m/s",
+    precision: 1,
+    scale: 0.1,
+    transform: (value) => value,
+  },
+  windGust: {
+    key: "windGust",
+    kind: "scalar",
+    variables: ["GUST"],
+    levelParams: ["lev_surface"],
+    nativeLevelLabel: "surface",
+    unit: "m/s",
+    precision: 1,
+    scale: 0.1,
+    transform: (value) => value,
+  },
+  precipitation: {
+    key: "precipitation",
+    kind: "scalar",
+    variables: ["APCP"],
+    levelParams: ["lev_surface"],
+    nativeLevelLabel: "surface accumulation",
+    unit: "mm",
+    precision: 1,
+    scale: 0.1,
+    transform: (value) => value,
+  },
+  snowDepth: {
+    key: "snowDepth",
+    kind: "scalar",
+    variables: ["SNOD"],
+    levelParams: ["lev_surface"],
+    nativeLevelLabel: "surface",
+    unit: "m",
+    precision: 3,
+    scale: 0.001,
+    transform: (value) => value,
+  },
+  surfacePressure: {
+    key: "surfacePressure",
+    kind: "scalar",
+    variables: ["PRES"],
+    levelParams: ["lev_surface"],
+    nativeLevelLabel: "surface",
+    unit: "hPa",
+    precision: 0,
+    scale: 0.1,
+    transform: (value) => value / 100,
+  },
+  surfaceSolarRadiation: {
+    key: "surfaceSolarRadiation",
+    kind: "scalar",
+    variables: ["DSWRF"],
+    levelParams: ["lev_surface"],
+    nativeLevelLabel: "surface",
+    unit: "W/m2",
+    precision: 0,
+    scale: 1,
+    transform: (value) => value,
+  },
+  specificHumidity: {
+    key: "specificHumidity",
+    kind: "scalar",
+    variables: ["SPFH"],
+    levelParams: ["lev_2_m_above_ground"],
+    nativeLevelLabel: "2 m above ground",
+    unit: "kg/kg",
+    precision: 4,
+    scale: 0.0001,
+    transform: (value) => value,
+  },
 };
 
 async function main() {
   await mkdir(outputDir, { recursive: true });
 
-  const wgrib2 = spawnSync("wgrib2", ["-version"], { encoding: "utf8", windowsHide: true });
-  if (wgrib2.error || wgrib2.status !== 0) {
-    await writeFallbackManifest("wgrib2 is not installed or not available; showing the built-in sample weather field.");
+  const decoder = availableDecoder();
+  if (!decoder) {
+    await writeErrorManifest(
+      "Neither wgrib2 nor the Python eccodes decoder is available; real GFS weather data cannot be refreshed.",
+    );
+    process.exitCode = 1;
     return;
   }
 
   try {
     const cycle = await downloadLatestAvailableGfs();
-    runWgrib2Csv();
-    const parsed = await parseCsvGrid();
+    const parsed = decoder === "wgrib2"
+      ? await decodeWithWgrib2()
+      : await decodeWithPython();
     await writeWeatherFields(cycle, parsed);
     if (!quiet) {
       console.log(JSON.stringify({ ok: true, outputDir, cycle: cycle.runTimeUtc, forecastHour }, null, 2));
     }
   } catch (error) {
-    await writeFallbackManifest(`GFS refresh failed: ${error instanceof Error ? error.message : String(error)}.`);
+    await writeErrorManifest(`GFS refresh failed: ${error instanceof Error ? error.message : String(error)}.`);
+    process.exitCode = 1;
     if (!quiet) {
       console.error(error);
     }
   }
+}
+
+function availableDecoder() {
+  const wgrib2 = spawnSync("wgrib2", ["-version"], {
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  if (!wgrib2.error && wgrib2.status === 0) {
+    return "wgrib2";
+  }
+  const python = spawnSync(pythonCommand, ["-c", "import eccodes"], {
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  return !python.error && python.status === 0 ? "python-eccodes" : null;
 }
 
 async function downloadLatestAvailableGfs() {
@@ -157,7 +267,7 @@ function buildNomadsUrl(runTime) {
 
   params.set("file", `gfs.t${cycle}z.pgrb2full.0p50.f${String(forecastHour).padStart(3, "0")}`);
   for (const metric of Object.values(metricDefinitions)) {
-    for (const variable of metric.variables) {
+    for (const variable of metric.nomadsVariables ?? metric.variables) {
       params.set(`var_${variable}`, "on");
     }
     for (const level of metric.levelParams) {
@@ -169,7 +279,7 @@ function buildNomadsUrl(runTime) {
   return `https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p50.pl?${params.toString()}`;
 }
 
-function runWgrib2Csv() {
+async function decodeWithWgrib2() {
   const result = spawnSync("wgrib2", [gribPath, "-csv", csvPath], {
     encoding: "utf8",
     maxBuffer: 4 * 1024 * 1024,
@@ -179,6 +289,29 @@ function runWgrib2Csv() {
   if (result.error || result.status !== 0) {
     throw result.error ?? new Error(result.stderr || `wgrib2 exited with ${result.status}`);
   }
+  return parseCsvGrid();
+}
+
+async function decodeWithPython() {
+  const decoderPath = path.resolve(process.cwd(), "scripts", "decode-gfs-grib.py");
+  const result = spawnSync(pythonCommand, [decoderPath, gribPath, decodedPath], {
+    encoding: "utf8",
+    maxBuffer: 4 * 1024 * 1024,
+    windowsHide: true,
+  });
+  if (result.error || result.status !== 0) {
+    throw result.error ?? new Error(result.stderr || `Python GRIB decoder exited with ${result.status}`);
+  }
+  const payload = JSON.parse(await readFile(decodedPath, "utf8"));
+  if (
+    !payload?.header
+    || !Array.isArray(payload.lons)
+    || !Array.isArray(payload.lats)
+    || !payload.values
+  ) {
+    throw new Error("Python GRIB decoder returned an invalid grid.");
+  }
+  return payload;
 }
 
 async function parseCsvGrid() {
@@ -193,6 +326,14 @@ async function parseCsvGrid() {
     CAPE: new Map(),
     PRMSL: new Map(),
     PWAT: new Map(),
+    UGRD100: new Map(),
+    VGRD100: new Map(),
+    GUST: new Map(),
+    APCP: new Map(),
+    SNOD: new Map(),
+    PRES: new Map(),
+    DSWRF: new Map(),
+    SPFH: new Map(),
   };
 
   for (const line of csv.split(/\r?\n/)) {
@@ -260,8 +401,8 @@ async function writeWeatherFields(cycle, parsed) {
     });
 
     if (metric.kind === "vector") {
-      const u = gridValues(parsed, "UGRD", metric.transform);
-      const v = gridValues(parsed, "VGRD", metric.transform);
+      const u = gridValues(parsed, metric.variables[0], metric.transform);
+      const v = gridValues(parsed, metric.variables[1], metric.transform);
       const stats = statsFor(u.map((value, index) => (
         Number.isFinite(value) && Number.isFinite(v[index]) ? Math.hypot(value, v[index]) : null
       )));
@@ -311,7 +452,7 @@ async function writeField(metric, field) {
   await writeFile(path.join(outputDir, `${metric}.json`), `${JSON.stringify(field)}\n`, "utf8");
 }
 
-async function writeFallbackManifest(message) {
+async function writeErrorManifest(message) {
   const runTime = latestGfsRunTimes()[0];
   const validTimeUtc = new Date(runTime.getTime() + forecastHour * 60 * 60 * 1000).toISOString();
   await writeFile(path.join(outputDir, "manifest.json"), `${JSON.stringify({
@@ -321,7 +462,7 @@ async function writeFallbackManifest(message) {
     forecastHour,
     validTimeUtc,
     stale: true,
-    refreshStatus: "sample-fallback",
+    refreshStatus: "error",
     message,
     metrics: Object.values(metricDefinitions).map((metric) => ({
       key: metric.key,
@@ -334,12 +475,17 @@ async function writeFallbackManifest(message) {
   })}\n`, "utf8");
 
   if (!quiet) {
-    console.log(JSON.stringify({ ok: true, outputDir, message }, null, 2));
+    console.log(JSON.stringify({ ok: false, outputDir, message }, null, 2));
   }
 }
 
 function gridValues(parsed, variable, transform) {
   const source = parsed.values[variable];
+  if (Array.isArray(source)) {
+    return source.map((value) => (
+      Number.isFinite(value) ? transform(value) : null
+    ));
+  }
   const values = [];
   for (const lat of parsed.lats) {
     for (const lon of parsed.lons) {

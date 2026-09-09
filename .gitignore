@@ -51,7 +51,15 @@ next-env.d.ts
 # Local temp files
 temp/
 .weather-cache/
+.scratch/
 .playwright-mcp/
+*.pid
+*.log.previous-*
+/carbon-*-progress.json
+/carbon-*-progress.txt
+/carbon-psql-env.ps1
+/carbon-psql-direct-last.sql
+/output/
 
 # Python cache
 __pycache__/

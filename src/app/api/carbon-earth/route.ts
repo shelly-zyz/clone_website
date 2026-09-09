@@ -46,6 +46,10 @@ type CarbonFrameRow = {
   frame_data: Buffer;
 };
 
+type CarbonFrameChunkRow = {
+  chunk_data: Buffer;
+};
+
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
 const sectorPattern = /^[A-Za-z]+$/;
 
@@ -97,8 +101,16 @@ async function readManifest() {
          sum_kgc_per_hour,
          nonzero_count,
          statistics,
-         octet_length(frame_data) AS frame_size_bytes
-       FROM website_data.carbon_emission_frames
+         CASE
+           WHEN octet_length(frame_data) > 0 THEN octet_length(frame_data)
+           ELSE COALESCE(chunks.frame_size_bytes, 0)
+         END AS frame_size_bytes
+       FROM website_data.carbon_emission_frames frames
+       LEFT JOIN (
+         SELECT observed_on, sector, sum(octet_length(chunk_data))::integer AS frame_size_bytes
+         FROM website_data.carbon_emission_frame_chunks
+         GROUP BY observed_on, sector
+       ) chunks USING (observed_on, sector)
        ORDER BY observed_on, sector`,
     );
   const sourcesResult = await queryDatabase<CarbonSourceRow>(
@@ -179,7 +191,10 @@ async function readFrame(observedOn: string, sector: string, raw: boolean) {
     return Response.json({ error: "Carbon frame not found." }, { status: 404 });
   }
 
-  const payload = raw ? gunzipSync(frame.frame_data) : frame.frame_data;
+  const storedFrameData = frame.frame_data.length > 0
+    ? frame.frame_data
+    : await readChunkedFrameData(observedOn, sector);
+  const payload = raw ? gunzipSync(storedFrameData) : storedFrameData;
   return new Response(new Uint8Array(payload), {
     headers: {
       "Content-Type": raw ? "application/octet-stream" : "application/gzip",
@@ -197,4 +212,18 @@ async function readFrame(observedOn: string, sector: string, raw: boolean) {
       "X-Carbon-Compression": raw ? "none" : "gzip",
     },
   });
+}
+
+async function readChunkedFrameData(observedOn: string, sector: string) {
+  const chunksResult = await queryDatabase<CarbonFrameChunkRow>(
+    `SELECT chunk_data
+     FROM website_data.carbon_emission_frame_chunks
+     WHERE observed_on = $1::date AND sector = $2
+     ORDER BY chunk_index`,
+    [observedOn, sector],
+  );
+  if (chunksResult.rows.length === 0) {
+    throw new Error(`Carbon frame ${sector}/${observedOn} has no inline data or chunks.`);
+  }
+  return Buffer.concat(chunksResult.rows.map((row) => row.chunk_data));
 }
