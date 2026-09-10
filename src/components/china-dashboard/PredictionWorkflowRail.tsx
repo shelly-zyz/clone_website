@@ -1,6 +1,7 @@
 import styles from "./china-dashboard.module.css";
 import type { PredictionModelRegistry, PredictionStatus } from "@/lib/prediction/contracts";
 import { derivePredictionWorkflow } from "@/lib/prediction/workflow";
+import { PredictionResultPanel } from "./PredictionResultPanel";
 
 function WorkProduct({ kind }: { kind: string }) {
   if (kind === "matrix") return <svg className={styles.workProduct} viewBox="0 0 180 38" preserveAspectRatio="none" aria-label="彩色质量编码矩阵结构示意"><g>{Array.from({ length: 24 }, (_, index) => <rect key={index} x={5 + (index % 8) * 21} y={4 + Math.floor(index / 8) * 10} width="19" height="8" fill={["#1b5f8c", "#20bfa9", "#f2c94c", "#ff6b8a", "#7c5cff", "#4ade80"][index % 6]} opacity={0.72 + (index % 3) * 0.12} />)}</g></svg>;
@@ -56,6 +57,7 @@ export function PredictionWorkflowRail({ currentStep, scope, status, registry, c
           );
         })}
       </div>
+      <PredictionResultPanel status={status} registry={registry} />
       <div className={styles.factoryNote}><span><b>{scope} · 状态接口驱动</b> 锁定工位停止作业</span><span>{realData ? "真实SCADA · 历史NWP · 研究回测" : evidence ? "真实SCADA · 历史留出回测" : "等待预测状态"}</span></div>
     </aside>
   );
