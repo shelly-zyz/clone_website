@@ -269,24 +269,80 @@ async function loadRows(filePath) {
   throw new Error("Supported input formats are CSV, JSON, NDJSON, and JSONL.");
 }
 
+export async function auditForecastWorkspace(root = process.cwd()) {
+  const sourceManifestPath = path.join(root, "docs/project-management/forecast-sources/hill-of-towie.json");
+  const nwpManifestPath = path.join(root, "docs/project-management/forecast-sources/noaa-gfs-historical.json");
+  const acquisitionStatusPath = path.join(root, ".forecast-data/hill-of-towie/acquisition-status.json");
+  const nwpAcquisitionStatusPath = path.join(root, ".forecast-data/noaa-gfs/hill-of-towie-2025/acquisition-status.json");
+  const nwpPointFilePath = path.join(root, ".forecast-data/noaa-gfs/hill-of-towie-2025/hill-of-towie-2025-gfs-100m.ndjson");
+  const pairingAuditPath = path.join(root, ".forecast-data/noaa-gfs/hill-of-towie-2025/pairing-audit.json");
+  const pairedTrainingFilePath = path.join(root, ".forecast-data/noaa-gfs/hill-of-towie-2025/hill-of-towie-2025-training-pairs.ndjson");
+  const sourceManifest = await fs.readFile(sourceManifestPath, "utf8").then(JSON.parse).catch(() => null);
+  const nwpManifest = await fs.readFile(nwpManifestPath, "utf8").then(JSON.parse).catch(() => null);
+  const acquisitionStatus = await fs.readFile(acquisitionStatusPath, "utf8").then(JSON.parse).catch(() => null);
+  const nwpAcquisitionStatus = await fs.readFile(nwpAcquisitionStatusPath, "utf8").then(JSON.parse).catch(() => null);
+  const pairingAudit = await fs.readFile(pairingAuditPath, "utf8").then(JSON.parse).catch(() => null);
+  const acquiredFiles = acquisitionStatus?.acquisition?.files ?? [];
+  const annualScadaVerified = acquiredFiles.some((file) => file.name?.match(/^20\d{2}\.zip$/) && file.status?.includes("verified"));
+  const nwpPointFileFound = await fs.stat(nwpPointFilePath).then(() => true).catch(() => false);
+  const pairedTrainingFileFound = await fs.stat(pairedTrainingFilePath).then(() => true).catch(() => false);
+  const historicalNwpVerified = nwpPointFileFound && nwpAcquisitionStatus?.acquisition?.status === "point-values-verified";
+  const invalidPowerHours = Number(pairingAudit?.counts?.excludedInvalidPowerHours ?? 0);
+  const completeHourlyCandidates = Number(pairingAudit?.counts?.completeHourlyCandidates ?? 0);
+  const trainingPairRows = Number(pairingAudit?.counts?.trainingPairRows ?? 0);
+  const pairingCompleteness = completeHourlyCandidates > 0 ? trainingPairRows / completeHourlyCandidates : 0;
+  const qualityBlocked = invalidPowerHours > 0 || (pairedTrainingFileFound && pairingCompleteness < 0.95);
+
+  let status = "blocked-source-download-pending";
+  if (annualScadaVerified && !historicalNwpVerified) status = "blocked-historical-nwp-pending";
+  if (annualScadaVerified && historicalNwpVerified && !pairedTrainingFileFound) status = "blocked-pairing-pending";
+  if (annualScadaVerified && historicalNwpVerified && pairedTrainingFileFound && qualityBlocked) status = "blocked-training-data-quality";
+  if (annualScadaVerified && historicalNwpVerified && pairedTrainingFileFound && !qualityBlocked) status = "blocked-curtailment-unknown";
+
+  return {
+    checkedAt: new Date().toISOString(),
+    predictionUnlocked: false,
+    status,
+    found: {
+      currentGfsForecast: true,
+      historicalNwpArchive: historicalNwpVerified,
+      observedWindSolarPower: annualScadaVerified,
+      pairedTrainingFile: pairedTrainingFileFound,
+    },
+    sourceCandidates: [...(sourceManifest ? [{
+      id: sourceManifest.id,
+      name: sourceManifest.name,
+      doi: sourceManifest.doi,
+      license: sourceManifest.license,
+      manifestPinned: true,
+      localAcquisitionStatus: acquisitionStatus?.acquisition?.status ?? "download-pending",
+      nativeResolutionMinutes: sourceManifest.sourceResolutionMinutes,
+    }] : []), ...(nwpManifest ? [{
+      id: nwpManifest.id,
+      name: nwpManifest.name,
+      datasetId: nwpManifest.datasetId,
+      manifestPinned: true,
+      localAcquisitionStatus: nwpManifest.localStatus,
+      localPointFileStatus: historicalNwpVerified ? "point-values-verified" : "download-pending",
+      localPairingStatus: pairingAudit?.status ?? "pairing-pending",
+      identity: nwpManifest.dataIdentity,
+    }] : [])],
+    blockers: [
+      ...(annualScadaVerified ? [] : ["The selected official wind-farm source is pinned, but no annual SCADA archive has been acquired and verified locally."]),
+      ...(historicalNwpVerified ? [] : ["No source-backed historical NWP point file has completed local verification."]),
+      ...(pairedTrainingFileFound ? [] : ["No local training pair file built from issue_time and valid_time is present."]),
+      ...(invalidPowerHours ? [`${invalidPowerHours} complete hourly windows contain negative or invalid generation labels and were excluded; source-quality remediation is required.`] : []),
+      ...(pairedTrainingFileFound && pairingCompleteness < 0.95 ? [`The local 60-minute pair file retains ${trainingPairRows} of ${completeHourlyCandidates} complete hourly candidates (${(pairingCompleteness * 100).toFixed(1)}%), below the 95% temporal completeness gate.`] : []),
+      "Curtailment remains unknown and cannot be inferred from shutdown duration alone.",
+      ...(pairedTrainingFileFound ? [] : ["No validated 60-minute training pair is present; native 10-minute data does not unlock the 15-minute gate."]),
+    ],
+  };
+}
+
 async function main() {
   const args = process.argv.slice(2);
   if (args.includes("--audit-workspace")) {
-    console.log(JSON.stringify({
-      checkedAt: new Date().toISOString(),
-      predictionUnlocked: false,
-      status: "blocked-no-training-pair",
-      found: {
-        currentGfsForecast: true,
-        historicalNwpArchive: false,
-        observedWindSolarPower: false,
-        pairedTrainingFile: false,
-      },
-      blockers: [
-        "No authorized observed wind/solar power time series is present.",
-        "No historical NWP archive paired by issue_time and valid_time is present.",
-      ],
-    }, null, 2));
+    console.log(JSON.stringify(await auditForecastWorkspace(), null, 2));
     return;
   }
 

@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "id": "hill-of-towie-v2",
+  "name": "Hill of Towie Wind Farm Open Data",
+  "publisher": "RES on behalf of The Renewables Infrastructure Group",
+  "recordUrl": "https://zenodo.org/records/20204946",
+  "doi": "10.5281/zenodo.20204946",
+  "license": "CC-BY-4.0",
+  "technology": "wind",
+  "country": "GB",
+  "timezone": "UTC",
+  "sourceResolutionMinutes": 10,
+  "files": [
+    {
+      "id": "readme",
+      "kind": "metadata",
+      "name": "README.md",
+      "md5": "8ed39a082ac77a698e591b1bc9863e1c",
+      "maxBytes": 1048576
+    },
+    {
+      "id": "turbine-metadata",
+      "kind": "metadata",
+      "name": "Hill_of_Towie_turbine_metadata.csv",
+      "md5": "bb9673e7adb522b7e15a62f3e7ada6c8",
+      "maxBytes": 1048576
+    },
+    {
+      "id": "turbine-fields",
+      "kind": "metadata",
+      "name": "Hill_of_Towie_turbine_fields_description.csv",
+      "md5": "d77de82c0b094f0788d4ed9b54ddfdfa",
+      "maxBytes": 1048576
+    },
+    {
+      "id": "grid-fields",
+      "kind": "metadata",
+      "name": "Hill_of_Towie_grid_fields_description.csv",
+      "md5": "beb450d696fa4aca3572ccf35cf74d7b",
+      "maxBytes": 1048576
+    },
+    {
+      "id": "table-descriptions",
+      "kind": "metadata",
+      "name": "Hill_of_Towie_tables_description.csv",
+      "md5": "e138e6caaec5aed652bc8eda727f322b",
+      "maxBytes": 1048576
+    },
+    {
+      "id": "alarm-descriptions",
+      "kind": "metadata",
+      "name": "Hill_of_Towie_alarms_description.csv",
+      "md5": "65117a1d5740da6af2653147be471692",
+      "maxBytes": 1048576
+    },
+    {
+      "id": "shutdown-duration",
+      "kind": "shutdown",
+      "name": "Hill_of_Towie_ShutdownDuration.zip",
+      "md5": "089be3c24d6fa80f2d652f244b51e470",
+      "maxBytes": 26214400
+    },
+    {
+      "id": "scada-2024",
+      "kind": "scada",
+      "year": 2024,
+      "name": "2024.zip",
+      "md5": "89783562792fd71fc7a8543faf93ab18",
+      "maxBytes": 1900000000
+    },
+    {
+      "id": "scada-2025",
+      "kind": "scada",
+      "year": 2025,
+      "name": "2025.zip",
+      "md5": "d3cd7edb535a45ffca1c7028b397f035",
+      "maxBytes": 1900000000,
+      "recommended": true,
+      "selectionReason": "complete year within the current NCEI online forecast window and outside the documented 2024 TuneUp and 2026 Dynamic Yaw campaigns"
+    },
+    {
+      "id": "scada-2026",
+      "kind": "scada",
+      "year": 2026,
+      "name": "2026.zip",
+      "md5": "42a2264187912ca63214bacfbc8d4905",
+      "maxBytes": 700000000
+    }
+  ],
+  "gateMapping": {
+    "observedPower": "available after an explicitly selected annual SCADA archive is acquired and parsed",
+    "absoluteLocation": "available in turbine metadata",
+    "installedCapacity": "available from turbine rated-power metadata",
+    "outage": "shutdown duration and alarm logs are available; classification still requires a documented rule",
+    "curtailment": "not explicitly identified by the source and must remain unknown",
+    "historicalNwp": "not included; must be paired from a separate issue-time-preserving forecast archive"
+  }
+}

@@ -1,8 +1,8 @@
 # 通用能源数据与分析平台：项目驾驶舱
 
-> 最后更新：2026-09-09  
+> 最后更新：2026-09-10
 > 当前阶段：Unit 0、Unit 3、Unit 4A、Unit 4B与Unit 4C已完成；中国大屏进入真实预测数据准备阶段
-> 实操状态：`/china`生产页及Unit 4已落地；Unit 5已接入SDWPF真实风场SCADA，Unit 6三折滚动验证确认LightGBM各时效均未稳定胜过持久性基线，生产预测继续锁定
+> 实操状态：`/china`生产页及Unit 4已落地；Unit 5已将Hill of Towie 2025真实SCADA结构化导入服务器PG，NOAA GFS 2025历史风场点值2,921/2,921核验并完成本地小时配对审计；6,605/8,760小时保留，因负标签完整率75.4%及限电未知，PG配对导入和生产预测继续锁定
 > 使用方法：以后开始讨论或开发前，先阅读本页；结束后同步更新本页和讨论记录。
 
 ## 状态标记
@@ -33,9 +33,9 @@
 | 预测体系 | ✅ 方法与流程已确认 | 物理模型＋机器学习修正＋概率区间＋误差回流 |
 | 当前状态复核 | 🟡 核心数据库已复查 | 当前库核心表和气候批次已实测；三个地球页面、最新分支及服务运行状态仍需另行复核 |
 | 中国大屏 | ✅ Unit 4A/4B/4C已实现 | `/china`已接入主地图入口；使用指定省级青绿/黄褐地貌素材、全高左栏、六工位十二名像素小人和彩色逐步产物；OSM线路/变电站/电厂/发电单元以z3–5瓦片有界加载并支持电压筛选；预测/调度/储能/实时碳强度继续锁定 |
-| 预测训练数据 | 🟡 Unit 5真实回测已接入 | 官方SDWPF共4,727,520行、134台风机、245天、10分钟粒度；已完成质量隔离与D215–245留出回测，10分钟持久性MAE 3.942 MW。因仅有匿名日序和相对坐标、无历史NWP，生产预测继续锁定 |
+| 预测训练数据 | 🔴 来源已配对但质量门禁未过 | Hill of Towie官方包1,596,220,683字节且MD5通过；PG已有21台机组、52,561条场站功率和1,059,488条机组信号。本机2025 GFS 2,921个点值全部核验，小时候选8,760个、保留6,605个（75.4%）；2,155个窗口含负发电标签，限电仍未知，服务器NWP配对表待5432恢复 |
 | Git基线保存 | ✅ GitHub安全基线完成 | 远端私有分支`origin/codex/github-safety-baseline-20260909`含基线提交`448608e75bd873c892833116186820f38b16e8f4`；审计见`docs/project-management/GIT_BASELINE_AUDIT_2026-09-09.md`；敏感、临时和大输出文件已排除 |
-| AI助手 | ⏳ 后期 | EnergyIR/GeoIR受控调用；Wren仅作对照和长尾查询 |
+| AI助手 | ✅ 方向和首版切片已确定，⏳ 尚未实操 | 首版面向能源数据分析师/项目分析人员；先做设施来源、数据质量、GFS/GRACED/VRE/OSM可用性问数 |
 | 全双工语音 | ⏳ 后期 | 语音可开关，聊天框常驻，支持插话打断和流式播报 |
 
 ## 思路树：我们已经讨论到哪里
@@ -95,9 +95,14 @@ flowchart TD
     ROOT --> API_AI["✅ 统一指标与AI架构"]
     API_AI --> CUBE["✅ Cube作为指标真相层和多接口服务；数据稳定后接入"]
     API_AI --> FASTAPI["✅ FastAPI提供气象、预测、调度和碳计算服务"]
-    API_AI --> IR["✅ EnergyIR/GeoIR限制AI可调用工具和参数"]
+    API_AI --> SEMANTIC["✅ 语义资产：字段、指标、单位、来源、数据身份和版本"]
+    SEMANTIC --> ONBOARDING["✅ AI提出候选解释；人工/规则审核后发布"]
+    API_AI --> IR["✅ EnergyIR/GeoIR生成结构化分析计划"]
     IR --> GROUNDING["✅ Grounding优先：语言实体绑定到真实地区、指标、设施和时间"]
+    IR --> AI_ROUTER["✅ 路由到指标API、空间查询、天气/碳/预测工具"]
     IR --> COMPILER["✅ JSON Schema校验＋确定性编译＋只读查询＋结果验证"]
+    API_AI --> RECIPES["✅ 审核后的分析配方可复用并版本化"]
+    API_AI --> FIRST_SLICE["✅ 首版：设施来源 / 数据质量 / 图层可用性"]
     API_AI --> WREN["✅ Wren仅作只读长尾查询和对照实验"]
     API_AI --> TRINO["✅ Trino等多数据源明显增加后再引入"]
 
@@ -193,17 +198,17 @@ flowchart TD
     LATER --> DASHBOARD_IMPL["中国大屏和通用国家分析页面"]
     LATER --> FORECAST_IMPL["日前风光/负荷预测与概率区间"]
     LATER --> DISPATCH_IMPL["跨区调度和碳排放联动"]
-    LATER --> AI_IMPL["Cube、EnergyIR/GeoIR和Wren评估"]
+    LATER --> AI_IMPL["数据理解、EnergyIR/GeoIR、可信问数和分析配方"]
     LATER --> VOICE_IMPL["全双工语音接入和低时延调优"]
 ```
 
 ## 当前最重要的下一步
 
-Unit 4A/4B/4C已经完成并留存浏览器与构建证据；Unit 5真实SCADA旁路及Unit 6首轮基线比较已完成。下一步是补齐带绝对场址/时刻的历史NWP—功率配对，再做滚动验证和概率校准；预测链仍保持生产锁定。
+Unit 4A/4B/4C已经完成并留存浏览器与构建证据；Unit 5已完成Hill of Towie 2025官方包下载、MD5/CRC核验、服务器PG结构化导入，以及同期NOAA GFS历史业务风场点值提取和本地小时配对审计。当前服务器5432仍不可达，且配对完整率只有75.4%；预测链保持生产锁定。
 
-1. **补齐生产训练配对**：获取带实体ID、绝对场址/时刻、真实功率、NWP起报/有效时间、装机/可用容量、停机、限电、时区和质量码的数据。
+1. **完成历史NWP入库**：服务器恢复可达后重试`npm run forecast:import:nwp`，将本机已核验的2,921个GFS点值写入`forecast_nwp_points`，并与本地6,605条研究配对结果做数量和样例比对。
 2. **保留预测门禁**：当前只允许展示SDWPF历史回测；`/api/prediction/status`返回锁定状态，`/api/prediction/models`登记3/3折滚动证据，`/api/prediction/forecast`返回503且预测输出为空。10分钟LightGBM只在2/3折胜出，平均提升0.66%、最差一折-1.05%，因此与30/60分钟一起拒绝；实时预测和P10/P50/P90继续禁用。
-3. **数据运维仍是并行阻塞项**：原始文件异机归档、当前约23GB新库备份、PostGIS、省级负荷、真实风光出力、历史NWP、调度和储能数据仍未完成，不能被界面动画伪装成已具备。
+3. **处理训练质量缺口**：负发电标签不能静默改成0；需要确认场站方的净功率口径或获得修正/质量标记，再把完整率提升到95%。同时核验60分钟聚合、相邻3小时NWP向量插值、起报时间不泄漏和限电未知标记；限电未知必须保持未知，不能从停机时长推断。原始文件异机归档、约23GB新库备份、PostGIS、省级负荷、调度和储能仍是并行阻塞项。
 
 ## 2026-09-01工作区提醒
 
@@ -306,6 +311,7 @@ Unit 4A/4B/4C已经完成并留存浏览器与构建证据；Unit 5真实SCADA�
 - 数据资产、缺口、恢复和真实来源：`docs/project-management/DATA_ASSET_CATALOG.md`
 - 中国电力大屏通用MVP、原型和验收：`docs/project-management/CHINA_DASHBOARD_MVP.md`
 - 两篇论文的代码与复现边界：`docs/project-management/PAPER_REPRODUCTION_ASSESSMENT.md`
+- 能源数据智能体需求：`docs/brainstorms/2026-09-10-energy-data-agent-requirements.md`
 - PostgreSQL失联后的本地备份与迁移核验：`docs/project-management/DATA_MIGRATION_AUDIT_2026-09-01.md`
 - 全网站历史数据、字段、来源链接、文件位置与停用项：`docs/project-management/WEBSITE_DATA_SOURCE_INVENTORY.md`
 - 新库转存预检、核验与回退方案：`docs/project-management/PG_TRANSFER_RUNBOOK.md`

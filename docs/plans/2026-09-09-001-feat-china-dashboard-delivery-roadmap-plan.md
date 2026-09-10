@@ -38,7 +38,7 @@ The project already has a strong data-governance position in `docs/project-manag
 - R11. Prediction center starts with persistence, previous-day same-time, and LightGBM-style baselines before advanced GADF/CNN/dynamic matching/online Seq2Seq.
 - R12. Every enabled model must show training window, model version, P10/P50/P90, generation time, horizon, and historical error.
 - R13. Step 7 cross-region dispatch and carbon calculation remains deferred.
-- R14. EnergyIR/GeoIR must restrict AI to structured IR, schema validation, grounding, deterministic compilation, read-only APIs/DB queries, and refusal or clarification for unsupported questions.
+- R14. The energy analysis agent must understand the approved data catalog, restrict AI to structured EnergyIR/GeoIR plans, validate schema and grounding, route to deterministic read-only tools, return source-aware results, reuse reviewed analysis recipes, and refuse or clarify unsupported questions.
 - R15. Voice is a later input/output layer only, after text AI query behavior is stable.
 - R16. Operations must cover data updates, backups, restore drills, alerts, permissions, logs, browser tests, performance tests, Git hygiene, and deployment.
 - R17. Do not spawn subagents unless the user explicitly approves it in the active task.
@@ -197,7 +197,7 @@ flowchart TB
     U4C["Unit 4C: Dense layers + performance"]
     U5["Unit 5: Real forecast data acquisition"]
     U6["Unit 6: Prediction center baselines"]
-    U8["Unit 8: EnergyIR/GeoIR"]
+    U8["Unit 8: Energy Data Understanding + Trusted Analysis"]
     U9["Unit 9: Voice layer"]
     U10["Unit 10: Operations + deployment"]
     U7["Unit 7: Dispatch + carbon calculation deferred"]
@@ -501,7 +501,7 @@ Power Earth globe
 - The validation gate defines the minimum fields for unlocking prediction work.
 - Dashboard and project docs still mark prediction as disabled until real data passes.
 
-**Actual status (2026-09-09):** In progress with a real-SCADA bypass pilot completed, while the production NWP gate remains blocked. The acquisition plan and executable validation gate have twelve tests. The official Baidu KDD Cup 2022 SDWPF release was downloaded to a Git-ignored local cache and processed with five additional quality-rule tests: 4,727,520 rows, 134 turbines, 245 anonymous days, and 10-minute sampling. A D215–245 persistence holdout gives 10-minute MAE/RMSE of 3.942/5.860 MW, now exposed in `/china` as a historical backtest. The release lacks absolute coordinates, calendar timestamps, historical NWP issue/valid times, and an explicit redistribution license, so it does not unlock production forecasting or justify publishing raw data. Completion still requires a legally obtained plant/province power series with absolute location/time and matching historical NWP.
+**Actual status (2026-09-10):** In progress with the formal observed-power source imported. Hill of Towie v2 2025 was downloaded from Zenodo and verified at 1,596,220,683 bytes with official MD5 `d3cd7edb535a45ffca1c7028b397f035`; all 156 CSV entries passed ZIP CRC. The forecast subset was imported idempotently into four isolated `website_data.forecast_scada_*` tables on the connected PostgreSQL server. Independent queries returned 21 turbines/48.3 MW, 52,561 farm observations, and 1,059,488 turbine signal rows from 2025-01-01 through 2026-01-01 UTC, with zero duplicate keys and zero fabricated curtailment labels. September coverage is materially lower and T02/T05/T08 fall below the 95% per-entity threshold. Historical issue-time-preserving NWP, hourly aggregation, and explicit curtailment labels are still absent, so production forecasting remains locked.
 
 - [ ] **Unit 6: Prediction Center Baselines**
 
@@ -548,19 +548,26 @@ Power Earth globe
 
 **Actual status (2026-09-09):** In progress. The local SDWPF pilot compares persistence, autoregressive ridge, and LightGBM with three expanding rolling-origin splits: D1–121/122–152/153–183, D1–152/153–183/184–214, and D1–183/184–214/215–245. LightGBM 4.7.0 wins the 10-minute comparison in only two of three folds (mean improvement +0.66%, worst fold -1.05%); 30 and 60 minutes win zero folds with mean improvements of -7.16% and -13.87%. The conservative gate requires every fold to beat persistence, so every LightGBM horizon is rejected and persistence remains the baseline. `/api/prediction/status` exposes locked data gates, `/api/prediction/models` records 3/3 folds with `rollingValidationPassed: false`, and `/api/prediction/forecast` returns HTTP 503 with null output and timestamps. The dashboard shows “未获稳定滚动增益” and the 2/3-fold result. Eight TypeScript contract/workflow/registry tests and four Python split/gate tests cover the path. No calibrated P10/P50/P90 or live forecast is exposed, and production remains locked pending historical NWP plus absolute site/time metadata.
 
-- [ ] **Unit 8: EnergyIR/GeoIR Controlled AI**
+- [ ] **Unit 8: Energy Data Understanding and Trusted Analysis Agent**
 
-**Goal:** Add the first controlled AI query layer using 30-50 standard questions, structured IR, grounding, deterministic read-only compilation, and refusal/clarification for unsupported requests.
+**Goal:** Add a controlled energy analysis agent that understands the approved data catalog before answering questions, converts user intent into structured EnergyIR/GeoIR plans, routes requests to the correct read-only tool, validates results, and saves approved analyses as reusable versioned recipes. Text-to-SQL is only one constrained tool, not the product center.
+
+**First slice:** Serve energy data analysts and project analysts with three question groups: mapped energy assets and sources; dataset time range, update time, and missingness; GFS/GRACED/VRE/OSM layer availability and coverage. Prediction, dispatch, and free SQL remain outside the first slice.
 
 **Requirements:** R14, R17
 
-**Dependencies:** Unit 4A stable read-only dashboard APIs; Unit 6 status if prediction questions are included
+**Dependencies:** Unit 4A stable read-only dashboard APIs and source/quality contracts; Unit 6 status is optional for prediction questions and must not block non-prediction queries
 
 **Files:**
 - Create: `docs/project-management/ENERGY_IR_GEO_IR_SPEC.md`
+- Create: `docs/brainstorms/2026-09-10-energy-data-agent-requirements.md`
 - Create: `src/lib/energy-ir/schema.ts`
 - Create: `src/lib/energy-ir/grounding.ts`
+- Create: `src/lib/energy-ir/semantic-catalog.ts`
+- Create: `src/lib/energy-ir/router.ts`
 - Create: `src/lib/energy-ir/compiler.ts`
+- Create: `src/lib/energy-ir/recipes.ts`
+- Create: `src/lib/energy-ir/validation.ts`
 - Create: `src/lib/energy-ir/fixtures.zh.json`
 - Create: `src/lib/energy-ir/schema.test.ts`
 - Create: `src/lib/energy-ir/compiler.test.ts`
@@ -568,9 +575,12 @@ Power Earth globe
 - Create: `src/components/china-dashboard/AskEnergyPanel.tsx`
 
 **Approach:**
-- Define 30-50 Chinese gold questions covering province, facility, technology, layer, source, time, forecast readiness, and data quality.
-- LLM output is limited to JSON IR. The app validates schema, grounds entities, checks availability/permission, compiles to read-only API/DB queries, verifies result units and ranges, then lets the LLM explain only the returned facts.
-- Out-of-template questions must be refused or clarified. No free SQL, no write operations, no arbitrary code execution.
+- Build a semantic onboarding step from the database structure, current data catalog, field statistics, source metadata, and existing read-only APIs. AI may propose meanings and relations, but only reviewed or rule-confirmed definitions enter the versioned semantic catalog.
+- Define 30-50 Chinese gold questions covering province, facility, technology, layer, source, time, forecast readiness, data quality, unavailable data, ambiguity, and refusal cases.
+- LLM output is limited to JSON IR and an analysis plan. The app validates schema, grounds entities, checks availability/permission, routes to a metric API, spatial query, weather/carbon/VRE service, prediction service, or a constrained SQL candidate, then verifies result units and ranges.
+- First release does not execute free AI-generated SQL. High-frequency questions use deterministic templates and read-only APIs; any later analyst-mode SQL must remain separately gated and audited.
+- Return source, identity, time range, unit, freshness and limitation metadata with every result; let the LLM explain only validated facts.
+- Save approved questions as versioned analysis recipes whose province, technology, time and chart parameters can be replaced without changing the business definition.
 - Use current dashboard state as context: selected province, selected layer, time mode, and selected facility.
 
 **Patterns to follow:**
@@ -580,16 +590,22 @@ Power Earth globe
 **Test scenarios:**
 - Happy path: "广东有多少已映射光伏设施" grounds Guangdong and solar, compiles to an allowed read-only query, and returns source-labeled sample results.
 - Happy path: "当前GFS数据是什么时间的" compiles to a weather status query and returns issue/valid time.
+- Happy path: an analyst asks for an energy facility's source and mapped-asset identity and receives source-labeled fields.
+- Happy path: an analyst asks for a dataset's time range, update time, and missingness and receives a quality response without treating an empty result as zero.
+- Happy path: an analyst asks whether GFS, GRACED, VRE, or OSM is available for a selected province/layer and receives coverage and limitation metadata.
 - Edge case: "全国风电真实15分钟预测是多少" returns unavailable or clarification until Unit 6 gates pass.
+- Happy path: a reviewed analysis recipe runs for another province without changing metric definition, source identity, or chart semantics.
+- Error path: an AI-proposed field meaning or table relation that has not been reviewed cannot enter the production semantic catalog.
 - Error path: a generated IR with unknown metric is rejected by schema validation.
 - Error path: a generated IR attempting write/delete/update is rejected before compilation.
 - Error path: a vague time phrase that cannot be grounded asks for clarification.
 - Integration: query result includes source identity and unit before the explanation layer runs.
 
 **Verification:**
-- Gold question suite covers allowed, unavailable, ambiguous, and refused cases.
-- No AI-generated SQL reaches the database.
-- The UI explanation can be traced back to deterministic query results.
+- Semantic catalog entries have source, unit, identity, version and review status.
+- Gold question suite covers allowed, unavailable, ambiguous, refused and recipe-reuse cases.
+- No free AI-generated SQL reaches the production database in the first release.
+- Every displayed value and explanation can be traced back to a deterministic tool result and its source metadata.
 
 - [ ] **Unit 9: Full-Duplex Voice Layer**
 
@@ -724,7 +740,7 @@ flowchart TB
 | Safety and planning | Unit 0, Unit 3 | Protect current work and agree on visual/spec direction | GitHub backup exists; user approves HTML preview |
 | China dashboard MVP | Unit 4A, Unit 4B, Unit 4C | Build real-data dashboard with bounded dense layers | MVP passes data validation, browser checks, and performance targets |
 | Prediction data and models | Unit 5, Unit 6 | Acquire real labels and build auditable baselines | Real data passes validation; baselines show version/error/interval metadata |
-| Controlled AI | Unit 8 | Natural-language queries without free SQL | 30-50 gold questions pass allowed/refuse/clarify cases |
+| Controlled AI | Unit 8 | Data understanding, trusted natural-language analysis, and reusable recipes without free SQL | Semantic catalog and 30-50 gold questions pass allowed/refuse/clarify/recipe-reuse cases |
 | Later interfaces and operations | Unit 9, Unit 10 | Voice and production running discipline | Voice reuses text AI; deployment gates and backups are documented and verified |
 
 ## Task Handoff Protocol
@@ -753,7 +769,7 @@ Objective: convert the China dashboard MVP into a formal specification and a sta
 - The production MVP displays only real or clearly labeled source-backed data.
 - OSM dense layers do not load million-scale features as one giant client payload.
 - Prediction stays disabled until real labels and historical NWP are validated.
-- EnergyIR/GeoIR answers only supported questions through deterministic read-only execution.
+- The energy analysis agent answers only supported questions through deterministic read-only execution and reviewed semantic assets.
 - Each new task starts with compact context and ends with durable docs, avoiding hidden decisions in chat history.
 
 ## Documentation / Operational Notes

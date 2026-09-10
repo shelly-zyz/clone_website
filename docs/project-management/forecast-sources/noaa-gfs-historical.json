@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "id": "noaa-ncei-gfs-forecast-grid004",
+  "name": "NOAA NCEI Global Forecast System Forecast Archive",
+  "publisher": "NOAA National Centers for Environmental Information",
+  "datasetId": "NCEI DSI 6182",
+  "productUrl": "https://www.ncei.noaa.gov/products/weather-climate-models/global-forecast",
+  "metadataUrl": "https://www.ncei.noaa.gov/metadata/geoportal/rest/metadata/item/gov.noaa.ncdc%3AC00634/html",
+  "dataIdentity": "historical-issued-forecast",
+  "grid": "004",
+  "resolutionDegrees": 0.5,
+  "periodOfRecord": "2006-10-10/present",
+  "onlineWindow": "approximately the most recent two years on NCEI; the 2025 object set was verified in NOAA's public noaa-gfs-bdp-pds archive",
+  "cyclesUtc": [0, 6, 12, 18],
+  "forecastStepHours": 3,
+  "forecastHours": { "minimum": 0, "maximum": 192 },
+  "requiredWindFields": [
+    "UGRD:10 m above ground",
+    "VGRD:10 m above ground",
+    "UGRD:100 m above ground",
+    "VGRD:100 m above ground",
+    "TMP:2 m above ground",
+    "RH:2 m above ground",
+    "PRES:surface"
+  ],
+  "verifiedArchiveAccess": {
+    "provider": "NOAA Big Data Program AWS Open Data",
+    "bucket": "noaa-gfs-bdp-pds",
+    "objectPattern": "gfs.YYYYMMDD/HH/atmos/gfs.tHHz.pgrb2.0p50.fFFF",
+    "indexSuffix": ".idx",
+    "rangeRequests": true,
+    "verifiedYear": 2025,
+    "verifiedFieldsForPilot": [
+      "UGRD:100 m above ground",
+      "VGRD:100 m above ground"
+    ],
+    "pointSelection": "nearest 0.5-degree grid point to the verified site centroid"
+  },
+  "pairingResolutionPolicy": {
+    "nativeForecastHours": 3,
+    "targetResolutionMinutes": 60,
+    "resampling": "linear interpolation of U/V components between adjacent valid times; issue time remains the latest issue used and must precede the target"
+  },
+  "pairingRules": [
+    "Preserve the model cycle as nwp_issue_time.",
+    "Derive nwp_valid_time from model cycle plus forecast hour.",
+    "Use only cycles available before the target observation time.",
+    "Use byte-range extraction for the selected GRIB messages and decode the nearest verified wind-farm grid point.",
+    "Do not substitute GFS analysis, ERA5, or WFDE5 for historical issued forecasts."
+  ],
+  "localStatus": "historical-wind-point-values-verified"
+}

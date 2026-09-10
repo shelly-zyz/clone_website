@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { parseCsv, validateForecastTrainingRows } from "./validate-forecast-training-data.mjs";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+
+import { auditForecastWorkspace, parseCsv, validateForecastTrainingRows } from "./validate-forecast-training-data.mjs";
 
 function row(overrides = {}) {
   return {
@@ -115,4 +119,49 @@ test("coordinates outside geographic bounds are rejected", () => {
   const result = validateForecastTrainingRows([row({ entity_latitude: "91" })], { minimumCoverageDays: 0 });
   assert.equal(result.valid, false);
   assert.match(result.errors.join("\n"), /entity_latitude/);
+});
+
+test("workspace audit reports a pinned source without pretending it was acquired", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "forecast-audit-"));
+  const manifestDirectory = path.join(root, "docs/project-management/forecast-sources");
+  await mkdir(manifestDirectory, { recursive: true });
+  await writeFile(path.join(manifestDirectory, "hill-of-towie.json"), JSON.stringify({
+    id: "hill-of-towie-v2", name: "Hill of Towie", doi: "10.5281/zenodo.20204946", license: "CC-BY-4.0", sourceResolutionMinutes: 10,
+  }));
+  const audit = await auditForecastWorkspace(root);
+  assert.equal(audit.status, "blocked-source-download-pending");
+  assert.equal(audit.found.observedWindSolarPower, false);
+  assert.equal(audit.sourceCandidates[0].manifestPinned, true);
+  assert.match(audit.blockers.join("\n"), /no annual SCADA archive/i);
+});
+
+test("workspace audit reports verified local NWP and preserves the training-quality lock", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "forecast-audit-ready-"));
+  const manifestDirectory = path.join(root, "docs/project-management/forecast-sources");
+  const scadaDirectory = path.join(root, ".forecast-data/hill-of-towie");
+  const nwpDirectory = path.join(root, ".forecast-data/noaa-gfs/hill-of-towie-2025");
+  await mkdir(manifestDirectory, { recursive: true });
+  await mkdir(scadaDirectory, { recursive: true });
+  await mkdir(nwpDirectory, { recursive: true });
+  await writeFile(path.join(manifestDirectory, "hill-of-towie.json"), JSON.stringify({
+    id: "hill-of-towie-v2", name: "Hill of Towie", doi: "10.5281/zenodo.20204946", license: "CC-BY-4.0", sourceResolutionMinutes: 10,
+  }));
+  await writeFile(path.join(manifestDirectory, "noaa-gfs-historical.json"), JSON.stringify({
+    id: "noaa-gfs", name: "NOAA GFS", datasetId: "DSI 6182", localStatus: "historical-wind-point-values-verified", dataIdentity: "historical-issued-forecast",
+  }));
+  await writeFile(path.join(scadaDirectory, "acquisition-status.json"), JSON.stringify({ acquisition: { status: "verified", files: [{ name: "2025.zip", status: "verified-md5" }] } }));
+  await writeFile(path.join(nwpDirectory, "acquisition-status.json"), JSON.stringify({ acquisition: { status: "point-values-verified" } }));
+  await writeFile(path.join(nwpDirectory, "hill-of-towie-2025-gfs-100m.ndjson"), "{}\n");
+  await writeFile(path.join(nwpDirectory, "hill-of-towie-2025-training-pairs.ndjson"), "{}\n");
+  await writeFile(path.join(nwpDirectory, "pairing-audit.json"), JSON.stringify({
+    status: "blocked-observation-quality",
+    counts: { excludedInvalidPowerHours: 2155, completeHourlyCandidates: 8760, trainingPairRows: 6605 },
+  }));
+
+  const audit = await auditForecastWorkspace(root);
+  assert.equal(audit.status, "blocked-training-data-quality");
+  assert.equal(audit.found.historicalNwpArchive, true);
+  assert.equal(audit.found.pairedTrainingFile, true);
+  assert.match(audit.blockers.join("\n"), /negative or invalid generation labels/i);
+  assert.match(audit.blockers.join("\n"), /95% temporal completeness/i);
 });
