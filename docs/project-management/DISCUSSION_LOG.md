@@ -7,6 +7,7 @@
 - 目标PG恢复后，按500行小批次、按月提交幂等重跑`npm run forecast:import:hill-of-towie`成功：处理原始月度行1,059,716条，数据库独立核验为21台机组、52,561条唯一场站观测和1,059,488条唯一机组信号；来源状态为`imported`，源包1,596,220,683字节且MD5`d3cd7edb535a45ffca1c7028b397f035`一致。
 - 新增源证据字段已完成回填并反查：`power_reduced_flag=true`为37,299行，`power_reduced_seconds`非空为66,219行，累计22,360,804秒；`claimed_curtailment_rows=0`。这些字段继续与`curtailment_flag`分离，不被解释为权威电网限电标签。
 - `npm run forecast:verify:hill-of-towie`、`npm run forecast:verify:nwp`和`npm run validate:forecast-data`均通过。NWP保持2,921点值、6,605条小时配对；起报未来泄漏0、有效时刻不匹配0、容量溢出0，生产门禁仍为锁定。
+- 新增`npm run forecast:profile:clean-windows`完成不写库画像：6,605条合格小时分成350个连续区间，最长252小时；最佳90天窗口为1,854/2,160小时（85.83%），达到95%门槛的窗口为0。不能通过删点或插值把当前源升级为正式训练集。
 - 当前剩余阻塞没有改变：2,155个小时窗口含负/无效发电标签，保留率75.4%低于95%门槛；权威电网限电标签缺失。因此下一步是源质量处置和标签语义补证，不是开放正式预测。
 
 ## 2026-09-10：Unit 5源功率质量审计与降功率证据入模

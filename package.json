@@ -44,6 +44,7 @@
     "forecast:import:hill-of-towie": "..\\outputs\\20260904-pg-migration\\venv\\Scripts\\python.exe -m unittest scripts/test_import_hill_of_towie_to_postgres.py && ..\\outputs\\20260904-pg-migration\\venv\\Scripts\\python.exe scripts/import_hill_of_towie_to_postgres.py",
     "forecast:verify:hill-of-towie": "node --env-file=.env.local scripts/verify-hill-of-towie-postgres.mjs",
     "forecast:build:pairs": "..\\outputs\\20260904-pg-migration\\venv\\Scripts\\python.exe -m unittest scripts/test_build_hill_of_towie_training_pairs.py scripts/test_import_hill_of_towie_nwp_to_postgres.py && ..\\outputs\\20260904-pg-migration\\venv\\Scripts\\python.exe scripts/build_hill_of_towie_training_pairs.py",
+    "forecast:profile:clean-windows": "node --test scripts/profile-hill-of-towie-clean-windows.test.mjs && node scripts/profile-hill-of-towie-clean-windows.mjs",
     "forecast:validate:pairs": "node scripts/validate-forecast-training-data.mjs .forecast-data\\noaa-gfs\\hill-of-towie-2025\\hill-of-towie-2025-training-pairs.ndjson --minimum-days 90",
     "forecast:import:nwp": "..\\outputs\\20260904-pg-migration\\venv\\Scripts\\python.exe -m unittest scripts/test_import_hill_of_towie_nwp_to_postgres.py && ..\\outputs\\20260904-pg-migration\\venv\\Scripts\\python.exe scripts/import_hill_of_towie_nwp_to_postgres.py",
     "forecast:verify:nwp": "node --env-file=.env.local scripts/verify-hill-of-towie-nwp-postgres.mjs",
