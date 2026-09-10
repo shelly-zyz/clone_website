@@ -3,6 +3,7 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import maplibregl, {
   type ExpressionSpecification,
@@ -14,6 +15,8 @@ import maplibregl, {
   type StyleSpecification,
 } from "maplibre-gl";
 import type { Feature, FeatureCollection, LineString, Point } from "geojson";
+import { geoContains } from "d3-geo";
+import type { MultiPolygon, Polygon } from "geojson";
 import {
   ArrowUpDown,
   Activity,
@@ -112,6 +115,7 @@ import type {
   VoltageClass,
 } from "@/types/opengridworks";
 import { ImportProgressIndicator } from "@/components/opengridworks/ImportProgressIndicator";
+import type { PredictionStatus } from "@/lib/prediction/contracts";
 
 type BooleanRecord<T extends string> = Record<T, boolean>;
 
@@ -119,6 +123,7 @@ type ProjectMode = "power" | "weather" | "carbon";
 type MapProperties = Record<string, string | number | boolean>;
 type PointCollection = FeatureCollection<Point, MapProperties>;
 type LineCollection = FeatureCollection<LineString, MapProperties>;
+type CountryBoundaryFeature = Feature<Polygon | MultiPolygon, MapProperties>;
 
 type CountryLabelCenter = {
   code: string;
@@ -896,10 +901,10 @@ const initiallyHiddenBusinessLayerIds = [
 const openInfraAttribution = "OpenStreetMap contributors";
 const naturalEarthAttribution = "Natural Earth";
 const naturalEarthSources = {
-  countries: "/api/data/geojson?path=/data/natural-earth/ne_50m_admin_0_countries.geojson",
-  countryLines: "/api/data/geojson?path=/data/natural-earth/ne_50m_admin_0_boundary_lines_land.geojson",
-  admin1Polygons: "/api/data/geojson?path=/data/natural-earth/ne_50m_admin_1_states_provinces.geojson",
-  admin1Lines: "/api/data/geojson?path=/data/natural-earth/ne_50m_admin_1_states_provinces_lines.geojson",
+  countries: "/data/natural-earth/ne_50m_admin_0_countries.geojson",
+  countryLines: "/data/natural-earth/ne_50m_admin_0_boundary_lines_land.geojson",
+  admin1Polygons: "/data/natural-earth/ne_50m_admin_1_states_provinces.geojson",
+  admin1Lines: "/data/natural-earth/ne_50m_admin_1_states_provinces_lines.geojson",
 };
 
 function localPowerTileUrl() {
@@ -1428,6 +1433,30 @@ function readNumber(properties: Record<string, unknown>, key: string) {
   }
 
   return Number(value) || 0;
+}
+
+function countryFeatureToSelected(feature: { properties: Record<string, unknown> | null }, coordinates: Coordinates): SelectedFeature {
+  const properties = feature.properties ?? {};
+  const countryCode = readFirstString(properties, ["ADM0_A3", "ISO_A3", "SOV_A3"]);
+  const title = readFirstString(properties, ["NAME_ZH", "ADMIN", "NAME_EN", "NAME"]) || "未命名国家/地区";
+  const continent = readFirstString(properties, ["CONTINENT", "REGION_UN"]);
+  const population = readNumber(properties, "POP_EST");
+
+  return {
+    id: `country-${countryCode || title}`,
+    kind: "country",
+    title,
+    subtitle: "国家电力预测摘要",
+    coordinates,
+    color: countryCode === "CHN" ? "#2ee9ff" : "#f4c95d",
+    countryCode,
+    source: "Natural Earth · 国家边界",
+    rows: [
+      { label: "国家代码", value: countryCode || "未列明" },
+      { label: "所属区域", value: continent || "未列明" },
+      { label: "参考人口", value: population > 0 ? population.toLocaleString("zh-CN") : "未列明" },
+    ],
+  };
 }
 
 function readVoltageKv(properties: Record<string, unknown>) {
@@ -2651,6 +2680,23 @@ function queryInteractiveFeatures(
   }
 }
 
+function findCountryFeature(
+  map: Map,
+  point: MapMouseEvent["point"],
+  coordinates: Coordinates,
+  boundaries: CountryBoundaryFeature[],
+) {
+  try {
+    const rendered = map.queryRenderedFeatures(point, { layers: ["ne-country-fill"] })[0];
+    if (rendered) {
+      return rendered;
+    }
+  } catch {
+    // The globe can still identify countries from local boundaries while new tiles load.
+  }
+  return boundaries.find((feature) => geoContains(feature, coordinates)) ?? null;
+}
+
 type WeatherParticle = {
   x: number;
   y: number;
@@ -3067,6 +3113,7 @@ function MapViewport({
   const cameraRef = useRef(onCameraChange);
   const screenshotRef = useRef(onScreenshotComplete);
   const basemapFallbackRef = useRef(false);
+  const countryBoundariesRef = useRef<CountryBoundaryFeature[]>([]);
   const generationActiveRef = useRef(generationHeatmapActive);
   const generationDataRef = useRef(generationHeatmapData);
   const generationFrameRef = useRef(generationFrame);
@@ -3114,6 +3161,10 @@ function MapViewport({
     });
 
     mapRef.current = map;
+    void fetch(naturalEarthSources.countries, { cache: "force-cache" })
+      .then(async (response) => response.ok ? response.json() as Promise<FeatureCollection<Polygon | MultiPolygon, MapProperties>> : null)
+      .then((collection) => { countryBoundariesRef.current = collection?.features ?? []; })
+      .catch(() => { countryBoundariesRef.current = []; });
     map.addControl(new maplibregl.NavigationControl({ showCompass: true, showZoom: true }), "bottom-right");
 
     const applyViewportPadding = () => {
@@ -3233,8 +3284,22 @@ function MapViewport({
       const queryableLayers = getQueryableLayers(map, interactiveLayerIds);
 
       if (queryableLayers.length === 0) {
-        map.getCanvas().style.cursor = "";
-        hoverRef.current(null);
+        const coordinates: Coordinates = [event.lngLat.lng, event.lngLat.lat];
+        const countryFeature = findCountryFeature(map, event.point, coordinates, countryBoundariesRef.current);
+        if (countryFeature) {
+          const country = countryFeatureToSelected(countryFeature, coordinates);
+          map.getCanvas().style.cursor = "pointer";
+          hoverRef.current({
+            x: event.point.x,
+            y: event.point.y,
+            title: country.title,
+            subtitle: "点击查看国家电力预测摘要",
+            color: country.color,
+          });
+        } else {
+          map.getCanvas().style.cursor = "";
+          hoverRef.current(null);
+        }
         return;
       }
 
@@ -3242,8 +3307,22 @@ function MapViewport({
       const feature = features[0];
 
       if (!feature) {
-        map.getCanvas().style.cursor = "";
-        hoverRef.current(null);
+        const coordinates: Coordinates = [event.lngLat.lng, event.lngLat.lat];
+        const countryFeature = findCountryFeature(map, event.point, coordinates, countryBoundariesRef.current);
+        if (countryFeature) {
+          const country = countryFeatureToSelected(countryFeature, coordinates);
+          map.getCanvas().style.cursor = "pointer";
+          hoverRef.current({
+            x: event.point.x,
+            y: event.point.y,
+            title: country.title,
+            subtitle: "点击查看国家电力预测摘要",
+            color: country.color,
+          });
+        } else {
+          map.getCanvas().style.cursor = "";
+          hoverRef.current(null);
+        }
         return;
       }
 
@@ -3326,6 +3405,12 @@ function MapViewport({
       const queryableLayers = getQueryableLayers(map, interactiveLayerIds);
 
       if (queryableLayers.length === 0) {
+        const coordinates: Coordinates = [event.lngLat.lng, event.lngLat.lat];
+        const countryFeature = findCountryFeature(map, event.point, coordinates, countryBoundariesRef.current);
+        if (countryFeature) {
+          hoverRef.current(null);
+          selectRef.current(countryFeatureToSelected(countryFeature, coordinates));
+        }
         return;
       }
 
@@ -3334,6 +3419,40 @@ function MapViewport({
 
       if (feature) {
         selectRef.current(featureToSelected(feature, [event.lngLat.lng, event.lngLat.lat]));
+        return;
+      }
+
+      const coordinates: Coordinates = [event.lngLat.lng, event.lngLat.lat];
+      const countryFeature = findCountryFeature(map, event.point, coordinates, countryBoundariesRef.current);
+      if (countryFeature) {
+        hoverRef.current(null);
+        selectRef.current(countryFeatureToSelected(countryFeature, coordinates));
+      }
+    };
+
+    const handleCountryClick = (event: MapMouseEvent & { features?: MapGeoJSONFeature[] }) => {
+      if (activeProjectRef.current !== "power" || generationActiveRef.current) {
+        return;
+      }
+      const countryFeature = event.features?.[0];
+      if (countryFeature) {
+        hoverRef.current(null);
+        selectRef.current(countryFeatureToSelected(countryFeature, [event.lngLat.lng, event.lngLat.lat]));
+      }
+    };
+
+    const handleCanvasCountryClick = (event: MouseEvent) => {
+      if (activeProjectRef.current !== "power" || generationActiveRef.current) {
+        return;
+      }
+      const bounds = map.getCanvas().getBoundingClientRect();
+      const point = new maplibregl.Point(event.clientX - bounds.left, event.clientY - bounds.top);
+      const lngLat = map.unproject(point);
+      const coordinates: Coordinates = [lngLat.lng, lngLat.lat];
+      const countryFeature = findCountryFeature(map, point, coordinates, countryBoundariesRef.current);
+      if (countryFeature) {
+        hoverRef.current(null);
+        selectRef.current(countryFeatureToSelected(countryFeature, coordinates));
       }
     };
 
@@ -3362,6 +3481,8 @@ function MapViewport({
     };
 
     map.on("mousemove", handleMouseMove);
+    map.getCanvas().addEventListener("click", handleCanvasCountryClick, true);
+    map.on("click", "ne-country-fill", handleCountryClick);
     map.on("click", handleClick);
     map.on("moveend", handleMoveEnd);
     map.on("error", handleMapError);
@@ -3376,7 +3497,9 @@ function MapViewport({
 
     return () => {
       window.removeEventListener("resize", applyViewportPadding);
+      map.getCanvas().removeEventListener("click", handleCanvasCountryClick, true);
       map.off("error", handleMapError);
+      map.off("click", "ne-country-fill", handleCountryClick);
       map.remove();
       mapRef.current = null;
     };
@@ -3700,12 +3823,18 @@ function MapViewport({
 
     const pauseForPointer = () => {
       pointerIsDown = true;
+      window.clearTimeout(wheelResumeTimer);
+      wheelResumeTimer = 0;
       map.stop();
     };
 
     const resumeAfterPointer = () => {
       pointerIsDown = false;
-      spinGlobe();
+      window.clearTimeout(wheelResumeTimer);
+      wheelResumeTimer = window.setTimeout(() => {
+        wheelResumeTimer = 0;
+        spinGlobe();
+      }, globeSpinStepDurationMs);
     };
 
     const pauseForWheel = () => {
@@ -5052,6 +5181,11 @@ function TopToolbar({
         <span>{weatherMode ? "人正在查看气象覆盖" : carbonMode ? "人正在查看碳排放图层" : "人正在查看电网图层"}</span>
       </div>
       <div className="og-toolbar-buttons">
+        {weatherMode || carbonMode ? null : (
+          <Link className="og-icon-button" href="/china" aria-label="打开中国电力运行研究台" title="中国电力运行研究台">
+            <MapIcon aria-hidden="true" size={16} strokeWidth={1.8} />
+          </Link>
+        )}
         <IconButton label="已保存视图（仅管理员）" icon={Bookmark} disabled />
         <IconButton label="重置全部筛选" icon={RotateCcw} onClick={onReset} />
         <IconButton label="沉浸视图" icon={ImageIcon} active={cinematic} onClick={onCinematic} />
@@ -5359,15 +5493,136 @@ function numericOrNull(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+type CountryForecastProductKind = "weather" | "alignment" | "backtest" | "forecast";
+
+function CountryForecastProduct({ kind }: { kind: CountryForecastProductKind }) {
+  if (kind === "weather") {
+    return (
+      <svg viewBox="0 0 112 38" role="img" aria-label="气象风速场结构示意">
+        <path d="M4 26C19 26 18 10 34 10S48 28 63 24 76 8 108 13" fill="none" stroke="#2ee9ff" strokeWidth="2" />
+        <path d="M4 31C23 31 22 20 39 21s20 10 34 5 17-10 35-8" fill="none" stroke="#8df56b" strokeWidth="1.5" opacity=".85" />
+        <g fill="#ffd166">{[18, 46, 74, 102].map((x, index) => <circle key={x} cx={x} cy={index % 2 ? 19 : 13} r="2.5" />)}</g>
+      </svg>
+    );
+  }
+  if (kind === "alignment") {
+    return (
+      <svg viewBox="0 0 112 38" role="img" aria-label="历史数据时间对齐结构示意">
+        <g fill="#ffb703">{[6, 22, 38, 54, 70, 86].map((x) => <rect key={`a-${x}`} x={x} y="6" width="11" height="7" />)}</g>
+        <g fill="#9b8cff">{[12, 28, 44, 60, 76, 92].map((x) => <rect key={`b-${x}`} x={x} y="25" width="11" height="7" />)}</g>
+        <g stroke="#50e3ff" strokeWidth="1" opacity=".72">{[11, 27, 43, 59, 75, 91].map((x) => <path key={x} d={`M${x} 14L${x + 6} 24`} />)}</g>
+      </svg>
+    );
+  }
+  if (kind === "backtest") {
+    return (
+      <svg viewBox="0 0 112 38" role="img" aria-label="滚动回测误差矩阵结构示意">
+        <g>{Array.from({ length: 18 }, (_, index) => <rect key={index} x={4 + (index % 9) * 11.5} y={4 + Math.floor(index / 9) * 11} width="9" height="8" fill={["#2356a8", "#20bfa9", "#f2c94c", "#ff6b8a", "#7c5cff", "#4ade80"][index % 6]} />)}</g>
+        <path d="M4 34L20 29L34 31L50 22L67 27L82 18L108 21" fill="none" stroke="#ffffff" strokeWidth="1.6" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 112 38" role="img" aria-label="超短期预测扇形图结构示意">
+      <path d="M3 29L20 23L38 26L56 12L74 17L91 8L109 13V27L91 20L74 27L56 21L38 33L20 29L3 35Z" fill="#ff5ea8" opacity=".3" />
+      <path d="M3 31L20 26L38 29L56 18L74 22L91 15L109 18" fill="none" stroke="#2ee9ff" strokeWidth="2" />
+      <path d="M3 27L20 22L38 25L56 14L74 19L91 11L109 14" fill="none" stroke="#ffd166" strokeWidth="1.4" />
+    </svg>
+  );
+}
+
 function FeaturePopup({
   feature,
+  predictionStatus,
   onClose,
 }: {
   feature: SelectedFeature | null;
+  predictionStatus: PredictionStatus | null;
   onClose: () => void;
 }) {
   if (!feature) {
     return null;
+  }
+
+  if (feature.kind === "country") {
+    const isChina = feature.countryCode === "CHN";
+    const statusLoaded = predictionStatus?.country.code === feature.countryCode;
+    const evidence = predictionStatus && predictionStatus.country.code === feature.countryCode && isChina
+      ? predictionStatus.researchEvidence
+      : null;
+    const stages: Array<{
+      index: string;
+      label: string;
+      status: string;
+      product: string;
+      kind: CountryForecastProductKind;
+      state: "complete" | "busy" | "locked";
+    }> = isChina
+      ? [
+          { index: "01", label: "气象输入", status: "当前场就绪", product: "风速场切片", kind: "weather", state: "complete" },
+          { index: "02", label: "历史对齐", status: "接入作业中", product: "issue / valid 对齐", kind: "alignment", state: "busy" },
+          { index: "03", label: "滚动回测", status: evidence ? "3折已完成" : "状态读取中", product: "误差矩阵", kind: "backtest", state: evidence ? "complete" : "busy" },
+          { index: "04", label: "预测输出", status: "生产锁定", product: "P10 / P50 / P90", kind: "forecast", state: "locked" },
+        ]
+      : [
+          { index: "01", label: "数据握手", status: statusLoaded ? "等待国家数据" : "读取状态中", product: "数据源探测", kind: "weather", state: "busy" },
+          { index: "02", label: "历史对齐", status: "等待上游", product: "时序样本库", kind: "alignment", state: "locked" },
+          { index: "03", label: "滚动回测", status: "尚未验证", product: "误差矩阵", kind: "backtest", state: "locked" },
+          { index: "04", label: "预测输出", status: "生产锁定", product: "P10 / P50 / P90", kind: "forecast", state: "locked" },
+        ];
+    const horizons = [10, 30, 60].map((horizonMinutes) => {
+      const metric = evidence?.metrics.find((item) => item.horizonMinutes === horizonMinutes);
+      return {
+        horizonMinutes,
+        value: metric?.meanRollingImprovementPct == null
+          ? "待接入"
+          : `${metric.meanRollingImprovementPct >= 0 ? "+" : ""}${metric.meanRollingImprovementPct.toFixed(2)}%`,
+        passed: metric?.passesRollingGate ?? false,
+      };
+    });
+
+    return (
+      <article className="og-feature-popup og-country-forecast" aria-label={`${feature.title}电力预测摘要`}>
+        <button className="og-popup-close" type="button" aria-label="关闭" onClick={onClose}>
+          <X size={18} />
+        </button>
+        <div className="og-country-kicker">COUNTRY FORECAST NODE · {feature.countryCode || "N/A"}</div>
+        <h2>{feature.title}</h2>
+        <p>{statusLoaded
+          ? isChina
+            ? "真实历史回测已登记，生产预测仍受门禁控制。"
+            : "预测能力已部署，等待该国历史功率与同期 NWP 数据。"
+          : "正在读取该国预测状态…"}</p>
+        <div className="og-country-forecast-chain" aria-label="国家超短期预测链">
+          {stages.map((stage) => (
+            <article className={`og-country-forecast-step is-${stage.state}`} data-state={stage.state} key={stage.index}>
+              <header><span>{stage.index}</span><strong>{stage.label}</strong><small>{stage.status}</small></header>
+              <div className="og-country-workcell" aria-label={`${stage.label}像素工位：${stage.status}`}>
+                <span className="og-country-worker worker-a"><i /><b /><em /></span>
+                <span className="og-country-worker worker-b"><i /><b /><em /></span>
+                <span className="og-country-machine" />
+                <span className="og-country-data-pulse" />
+              </div>
+              <div className="og-country-product">
+                <CountryForecastProduct kind={stage.kind} />
+                <small>{stage.product}</small>
+              </div>
+            </article>
+          ))}
+        </div>
+        <div className="og-country-horizons">
+          {horizons.map((horizon) => (
+            <div className={horizon.passed ? "is-passed" : ""} key={horizon.horizonMinutes}>
+              <span>{horizon.horizonMinutes} MIN</span><strong>{horizon.value}</strong>
+            </div>
+          ))}
+        </div>
+        <div className="og-country-forecast-footer">
+          <span><i />{isChina ? "滚动门禁未通过" : "国家数据未接入"}</span>
+          {isChina ? <Link href="/china">进入中国详细大屏 <ArrowUpDown size={13} /></Link> : <small>暂不生成虚构预测</small>}
+        </div>
+      </article>
+    );
   }
 
   return (
@@ -6104,6 +6359,7 @@ export function MapAppShell() {
   const [labelSettings, setLabelSettings] = useState<LabelSettings>(initialLabelSettings);
   const [activePanel, setActivePanel] = useState<ToolbarPanel>(null);
   const [selectedFeature, setSelectedFeature] = useState<SelectedFeature | null>(null);
+  const [predictionStatuses, setPredictionStatuses] = useState<Record<string, PredictionStatus>>({});
   const [hoverTooltip, setHoverTooltip] = useState<HoverTooltip>(null);
   const [focusRequest, setFocusRequest] = useState<FocusRequest | null>({
     nonce: 1,
@@ -6120,6 +6376,24 @@ export function MapAppShell() {
   const [searchQuery, setSearchQuery] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const generationLoadStartedRef = useRef(false);
+
+  const selectedCountryCode = selectedFeature?.kind === "country" ? selectedFeature.countryCode : null;
+
+  useEffect(() => {
+    if (!selectedCountryCode || predictionStatuses[selectedCountryCode]) {
+      return;
+    }
+    let active = true;
+    void fetch(`/api/prediction/status?country=${encodeURIComponent(selectedCountryCode)}`, { cache: "no-store" })
+      .then(async (response) => response.ok ? response.json() as Promise<PredictionStatus> : null)
+      .then((status) => {
+        if (active && status?.country.code === selectedCountryCode) {
+          setPredictionStatuses((current) => ({ ...current, [selectedCountryCode]: status }));
+        }
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [predictionStatuses, selectedCountryCode]);
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -6792,7 +7066,11 @@ export function MapAppShell() {
       {activePanel === "sources" ? (
         <SourcesPanel onClose={() => setActivePanel(null)} />
       ) : null}
-      <FeaturePopup feature={selectedFeature} onClose={() => setSelectedFeature(null)} />
+      <FeaturePopup
+        feature={selectedFeature}
+        predictionStatus={selectedCountryCode ? predictionStatuses[selectedCountryCode] ?? null : null}
+        onClose={() => setSelectedFeature(null)}
+      />
       {activeProject !== "weather" ? (
         <LayerCards
           activePanel={activePanel}

@@ -3759,6 +3759,133 @@ button.og-nav-item {
   font-weight: 700;
 }
 
+.og-country-forecast {
+  top: 43%;
+  width: min(560px, calc(100vw - 32px));
+  padding: 19px 18px 16px;
+  border-color: rgba(46, 233, 255, 0.24);
+  border-left-color: #2ee9ff;
+  background: linear-gradient(145deg, rgba(5, 15, 25, 0.97), rgba(7, 22, 32, 0.93));
+  animation: og-country-forecast-in 260ms cubic-bezier(.2,.8,.2,1) both;
+}
+
+.og-country-kicker {
+  margin-bottom: 7px;
+  color: #2ee9ff;
+  font: 700 9px/1.2 Consolas, monospace;
+  letter-spacing: .12em;
+}
+
+.og-country-forecast-chain {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+  margin: 13px 0 10px;
+}
+
+.og-country-forecast-step {
+  --stage: #2ee9ff;
+  --secondary: #ffd166;
+  position: relative;
+  display: grid;
+  grid-template-rows: auto 34px 50px;
+  gap: 5px;
+  min-width: 0;
+  padding: 8px 7px 7px;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: linear-gradient(155deg, color-mix(in srgb, var(--stage) 11%, #09141d), #071018 68%);
+}
+
+.og-country-forecast-step:nth-child(2) { --stage: #ffb703; --secondary: #59d8ff; }
+.og-country-forecast-step:nth-child(3) { --stage: #ff5ea8; --secondary: #8df56b; }
+.og-country-forecast-step:nth-child(4) { --stage: #9b8cff; --secondary: #ff8c5a; }
+
+.og-country-forecast-step:not(:last-child)::after {
+  position: absolute;
+  z-index: 2;
+  top: 46px;
+  right: -9px;
+  width: 10px;
+  height: 2px;
+  content: "";
+  background: var(--secondary);
+  box-shadow: 0 0 6px var(--secondary);
+}
+
+.og-country-forecast-step header { display: grid; grid-template-columns: 20px 1fr; gap: 2px 5px; min-width: 0; }
+.og-country-forecast-step header > span { grid-row: 1 / 3; align-self: center; color: var(--secondary); font: 800 8px/1 Consolas, monospace; }
+.og-country-forecast-step header strong { overflow: hidden; color: #e8f7fa; font-size: 9px; white-space: nowrap; }
+.og-country-forecast-step header small { overflow: hidden; color: #8397a3; font: 7px/1.2 Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.og-country-forecast-step.is-complete { border-color: color-mix(in srgb, var(--stage) 48%, transparent); box-shadow: inset 0 -2px var(--stage); }
+.og-country-forecast-step.is-busy { border-color: color-mix(in srgb, var(--stage) 62%, transparent); box-shadow: inset 0 -2px var(--stage), 0 0 12px color-mix(in srgb, var(--stage) 15%, transparent); }
+.og-country-forecast-step.is-locked { filter: saturate(.55); }
+.og-country-forecast-step.is-locked header small { color: #65747d; }
+
+.og-country-workcell { position: relative; height: 34px; overflow: hidden; border-bottom: 2px solid rgba(148,163,184,.28); image-rendering: pixelated; }
+.og-country-worker { position: absolute; bottom: 3px; width: 13px; height: 24px; transform-origin: 50% 100%; }
+.og-country-worker.worker-a { left: 3px; }
+.og-country-worker.worker-b { left: 27px; }
+.og-country-worker::before { position: absolute; top: 0; left: 3px; width: 7px; height: 6px; content: ""; background: #ffd08a; box-shadow: 0 -2px #173b49, 2px 0 #173b49; }
+.og-country-worker::after { position: absolute; top: 7px; left: 2px; width: 9px; height: 9px; content: ""; background: var(--stage); box-shadow: 0 3px color-mix(in srgb, var(--stage) 55%, #00151a); }
+.og-country-worker i, .og-country-worker b { position: absolute; top: 17px; width: 3px; height: 7px; background: #c6f9ff; }
+.og-country-worker i { left: 2px; }
+.og-country-worker b { right: 2px; }
+.og-country-worker em { position: absolute; z-index: 2; top: 11px; left: 10px; width: 9px; height: 3px; background: var(--secondary); transform-origin: left; }
+.og-country-machine { position: absolute; right: 2px; bottom: 3px; width: 48px; height: 24px; border: 1px solid color-mix(in srgb, var(--stage) 48%, transparent); background: #061018; }
+.og-country-machine::before { position: absolute; top: 5px; left: 5px; width: 34px; height: 8px; content: ""; background: repeating-linear-gradient(90deg, var(--stage) 0 4px, #0b3b48 4px 7px); box-shadow: 0 0 7px color-mix(in srgb, var(--stage) 42%, transparent); }
+.og-country-machine::after { position: absolute; right: 4px; bottom: 3px; width: 4px; height: 4px; content: ""; background: var(--secondary); box-shadow: -9px 0 var(--stage); }
+.og-country-data-pulse { position: absolute; z-index: 3; right: 43px; bottom: 8px; width: 5px; height: 3px; opacity: 0; background: white; box-shadow: 0 0 7px var(--stage); }
+.og-country-forecast-step.is-busy .worker-a { animation: og-pixel-work .52s steps(2,end) infinite; }
+.og-country-forecast-step.is-busy .worker-b { animation: og-pixel-work-alt .68s steps(2,end) infinite; }
+.og-country-forecast-step.is-busy .og-country-worker em { animation: og-pixel-tool .42s steps(2,end) infinite; }
+.og-country-forecast-step.is-busy .og-country-machine::before { animation: og-machine-run .55s steps(4,end) infinite; }
+.og-country-forecast-step.is-busy .og-country-data-pulse { animation: og-data-pulse 1s steps(5,end) infinite; }
+.og-country-forecast-step.is-locked .og-country-workcell { opacity: .28; filter: grayscale(.8); }
+
+.og-country-product { position: relative; display: grid; grid-template-rows: 34px auto; align-items: end; overflow: hidden; border: 1px solid color-mix(in srgb, var(--stage) 35%, transparent); background: #050d15; opacity: .38; }
+.og-country-product::after { position: absolute; inset: 0; content: ""; background: linear-gradient(110deg, transparent 35%, color-mix(in srgb, var(--stage) 20%, transparent) 50%, transparent 65%); transform: translateX(-130%); }
+.og-country-product svg { width: 100%; height: 34px; filter: drop-shadow(0 0 3px color-mix(in srgb, var(--stage) 35%, transparent)); }
+.og-country-product small { padding: 2px 4px 3px; overflow: hidden; color: #9fb0b9; font: 7px/1 Consolas, monospace; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+.og-country-forecast-step.is-complete .og-country-product, .og-country-forecast-step.is-busy .og-country-product { opacity: 1; }
+.og-country-forecast-step.is-busy .og-country-product::after { animation: og-product-scan 1.4s ease-in-out infinite; }
+
+.og-country-horizons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.og-country-horizons > div { display: flex; align-items: center; justify-content: space-between; padding: 7px 8px; background: rgba(22, 36, 47, 0.72); border-bottom: 2px solid #e56969; }
+.og-country-horizons span { color: #8aa0ac; font: 8px/1 Consolas, monospace; }
+.og-country-horizons strong { color: #f3cf79; font: 800 10px/1 Consolas, monospace; }
+.og-country-horizons > div.is-passed { border-bottom-color: #65f0cf; }
+
+.og-country-forecast-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(148, 163, 184, 0.15); }
+.og-country-forecast-footer > span { display: inline-flex; align-items: center; gap: 6px; color: #e7bd69; font-size: 9px; }
+.og-country-forecast-footer i { width: 6px; height: 6px; border-radius: 50%; background: #e56969; box-shadow: 0 0 8px rgba(229, 105, 105, .7); }
+.og-country-forecast-footer a { display: inline-flex; align-items: center; gap: 5px; color: #2ee9ff; font-size: 10px; font-weight: 800; }
+.og-country-forecast-footer small { color: #718590; font-size: 9px; }
+
+@keyframes og-country-forecast-in {
+  from { opacity: 0; transform: translate(-30%, -7%) scale(.96); }
+  to { opacity: 1; transform: translate(-30%, -12%) scale(1); }
+}
+
+@keyframes og-pixel-work { 50% { transform: translateY(-2px) rotate(-2deg); } }
+@keyframes og-pixel-work-alt { 50% { transform: translateY(-1px) rotate(3deg); } }
+@keyframes og-pixel-tool { 50% { transform: rotate(-34deg); } }
+@keyframes og-machine-run { to { background-position: 14px 0; } }
+@keyframes og-data-pulse { 0% { right: 50px; opacity: 0; } 25%, 75% { opacity: 1; } 100% { right: 7px; opacity: 0; } }
+@keyframes og-product-scan { to { transform: translateX(130%); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .og-country-forecast,
+  .og-country-forecast-step.is-busy .worker-a,
+  .og-country-forecast-step.is-busy .worker-b,
+  .og-country-forecast-step.is-busy .og-country-worker em,
+  .og-country-forecast-step.is-busy .og-country-machine::before,
+  .og-country-forecast-step.is-busy .og-country-data-pulse,
+  .og-country-forecast-step.is-busy .og-country-product::after {
+    animation: none;
+  }
+}
+
 .og-hover-bubble {
   position: absolute;
   z-index: 38;
@@ -3927,6 +4054,17 @@ button.og-nav-item {
     transform: none;
   }
 
+  .og-country-forecast {
+    bottom: 146px;
+    max-height: calc(100svh - 238px);
+    overflow-y: auto;
+    animation-name: og-country-forecast-in-mobile;
+  }
+
+  .og-country-forecast-chain {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .og-cards-drawer {
     top: 86px;
     right: 12px;
@@ -3997,4 +4135,9 @@ button.og-nav-item {
     border-radius: 0;
     background: transparent;
   }
+}
+
+@keyframes og-country-forecast-in-mobile {
+  from { opacity: 0; transform: translateY(10px) scale(.98); }
+  to { opacity: 1; transform: none; }
 }

@@ -12,6 +12,7 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "public/earth/**",
+    ".forecast-data/**",
     "next-env.d.ts",
   ]),
 ]);

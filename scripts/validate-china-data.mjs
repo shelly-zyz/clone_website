@@ -229,6 +229,14 @@ check(
 const riskCandidate = readJson("public/data/china-validation/coastal-risk-candidate.json");
 check(riskCandidate.renderByDefault === false, "Coastal risk candidate must not render by default");
 
+const chinaDashboardContract = readText("src/lib/china-dashboard.ts");
+checkIncludes(chinaDashboardContract, 'identity: "official-statistic"', "China dashboard official-statistic identity");
+checkIncludes(chinaDashboardContract, 'identity: "mapped-asset-sample"', "China dashboard mapped-sample identity");
+checkIncludes(chinaDashboardContract, 'identity: "interface-only"', "China dashboard prediction identity");
+checkIncludes(chinaDashboardContract, "不生成预测数值", "China dashboard prediction unavailable disclosure");
+check(fs.existsSync(absolutePath("public/data/china-dashboard/provinces.geojson")), "China dashboard province geometry should exist");
+check(fs.existsSync(absolutePath("public/data/china-dashboard/terrain.jpg")), "China dashboard terrain texture should exist");
+
 if (failures.length > 0) {
   console.error("China data validation failed:");
   for (const failure of failures) {

@@ -295,6 +295,7 @@ export type LegendHover =
   | { kind: "size"; minMw: number };
 
 export type SelectedFeatureKind =
+  | "country"
   | "energy"
   | "data-center"
   | "internet-exchange"
@@ -319,6 +320,7 @@ export type SelectedFeature = {
     value: string;
   }[];
   source?: string;
+  countryCode?: string;
 };
 
 export type LayerPanelKey = "layers" | "customLayers" | "mapType";

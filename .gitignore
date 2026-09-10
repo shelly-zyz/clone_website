@@ -51,8 +51,10 @@ next-env.d.ts
 # Local temp files
 temp/
 .weather-cache/
+.forecast-data/
 .scratch/
 .playwright-mcp/
+.playwright-cli/
 *.pid
 *.log.previous-*
 /carbon-*-progress.json
