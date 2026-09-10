@@ -84,6 +84,8 @@ duplicate_or_capacity_overflow_rows: 0
 curtailment_known_rows: 0
 ```
 
+NWP来源元数据已同步记录`curtailmentStatus=unknown-no-authoritative-grid-label`及`PowerRed`末值、持续时间和`PowerRef`三项源证据字段；这只是语义留痕，不会把`curtailment_known`改为`true`。
+
 独立核验确认数据库中21台机组、52,561条唯一场站观测和1,059,488条唯一机组信号均已保留；配对导入没有删除或重建SCADA。当前服务器数据库端独立核验命令为：
 
 ```powershell
