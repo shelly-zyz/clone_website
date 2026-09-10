@@ -1,7 +1,7 @@
 # Hill of Towie 2025历史GFS配对报告
 
 > 生成日期：2026-09-10  
-> 当前结论：本地点值和小时配对已写入服务器PG并完成独立核验；源数据质量门禁未通过，仍为研究级数据
+> 当前结论：本地点值和小时配对已写入服务器PG并完成独立核验；源数据质量门禁未通过，仍为研究级数据。另已发现并准备保留PowerRed/PowerRef源证据，但不把它们升级为电网限电标签。
 
 ## 1. 来源与范围
 
@@ -29,6 +29,7 @@ NOAA官方产品页说明GFS提供0.5°全球预报、每日四次起报和3小�
 | NWP原生3小时 | 2,201 |
 | NWP线性U/V插值 | 4,404 |
 | 限电标签 | 未知，`curtailment_known=false` |
+| 降功率源证据 | `PowerRed`/`PowerRef`已在原始2025 ZIP中发现，含义和限电原因仍需分离 |
 
 月度SCADA文件在月界面重复包含次月00:00；构建脚本按已导入PG的主键语义去重11个重复边界。负发电标签没有场站口径证据允许直接截断为0，因此保留在原始SCADA语义中、训练配对中排除，并将未来重导的派生质量码标为 `suspect`。
 
@@ -46,6 +47,17 @@ npm run forecast:validate:pairs
 ```
 
 其中 `forecast:validate:pairs` 的预期结果是结构有效但退出码为1，因为75.4%低于95%完整率门禁；这是锁定行为，不是脚本异常。
+
+## 2.1 源功率质量与限电候选字段审计
+
+对同一份已核验的2025 ZIP做只读流式扫描后，得到：
+
+- `tblDailySummary`的`CurtailmentEnergy*`、`CurtailmentExternal*`、`CurtailmentOver*`和`CurtailmentTurbine*`在2025年为空；`CurtailmentHours`及多项`EnergyLoss*`虽有数值行但全部为0；
+- `tblSCTurDigiIn.wtc_PowerRed_endvalue`为0/1，原始月度行中37,322条为1，`wtc_PowerRed_timeon>0`有66,249条；
+- 在`PowerRed`末值或持续时间证据中，62,357条同时有正的实际功率，3,903条为零或缺失；但27,066条的`PowerRef`仍处于额定值，不能把该信号直接命名为电网限电；
+- `tblSCTurbine.wtc_PowerRef_endvalue`低于2,300 kW额定值的行有77,724条；它是设定值证据，不是限电原因标签。
+
+详细审计见`HILL_OF_TOWIE_2025_POWER_QUALITY_AUDIT.md`。SCADA表新增的四个源证据列与`curtailment_flag`分离；本次第二轮追加导入在目标PG服务主动断开后中止，待服务恢复后以较小批次重跑并完成字段计数，历史NWP配对无需重新下载。
 
 ## 3. PostgreSQL状态
 

@@ -131,7 +131,7 @@ export async function acquire(options, dependencies = {}) {
       blockers: [
         ...(acquiredKinds.has("scada") ? [] : ["No annual SCADA archive has been explicitly selected and acquired."]),
         "Historical NWP with issue time and valid time has not been paired to observations.",
-        "Curtailment is not explicitly identified by this source and must not be inferred from shutdown duration alone.",
+        "The 2025 archive exposes PowerRed/PowerRef reduction evidence, but no authoritative grid-curtailment label; do not infer curtailment from it or shutdown duration alone.",
         "The native 10-minute observations must be aggregated and validated before entering the current 60-minute training contract."
       ]
     }

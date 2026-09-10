@@ -17,7 +17,9 @@
 - `website_data.forecast_scada_sources`：来源、许可、年度、原文件大小和MD5、导入状态及场站画像。
 - `website_data.forecast_scada_turbines`：21台机组的Station ID、坐标、2.3MW额定功率、机型、轮毂高度和叶轮直径。
 - `website_data.forecast_scada_observations`：场站10分钟有功功率与电量。
-- `website_data.forecast_scada_turbine_signals`：机组10分钟功率、风速、运行/待机/故障秒数、故障停机证据和质量码。
+- `website_data.forecast_scada_turbine_signals`：机组10分钟功率、风速、运行/待机/故障秒数、故障停机证据、源数据降功率证据和质量码。
+
+追加的源字段保持和限电语义分离：`power_reference_kw`、`power_reduced_flag`、`power_reduced_seconds`、`power_reduced_count`分别对应`wtc_PowerRef_endvalue`和`wtc_PowerRed_*`。它们用于质量审计，不自动填充`curtailment_flag`。
 
 ## 独立反查结果
 
@@ -38,10 +40,10 @@
 
 ## 仍未解锁的条件
 
-1. 历史NWP尚未下载和配对，缺少`nwp_issue_time`与`nwp_valid_time`；
-2. 原生10分钟数据尚未按六个连续时刻聚合成60分钟训练合同；
+1. 历史NWP与小时配对已入PG，但仅为研究级配对，仍缺少生产质量门禁；
+2. 2,155个完整小时窗口含负或无效发电标签，当前仅保留6,605条小时配对；
 3. `fault_outage_flag`只表示明确的故障秒数证据，不等于所有停机原因；
-4. 数据源没有明确限电标签，`curtailment_flag`全部保持`NULL`；
+4. `PowerRed`/`PowerRef`已发现并准备以独立字段保留，但它们不是权威电网限电标签，`curtailment_flag`仍保持`NULL`；
 5. T02、T05、T08需要隔离或另选连续覆盖窗口。
 
-因此当前数据可进入历史NWP配对与小时基线准备，但不能生成正式预测或P10/P50/P90。
+完整的候选字段审计见`HILL_OF_TOWIE_2025_POWER_QUALITY_AUDIT.md`。该审计还发现日汇总中的`Curtailment*`字段在2025年为空或全为0，不能用于小时训练标签。因此当前数据只能进入历史回测/小时基线研究，不能生成正式预测或P10/P50/P90。

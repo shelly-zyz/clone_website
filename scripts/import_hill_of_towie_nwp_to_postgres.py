@@ -165,8 +165,9 @@ def build_training_row(
         "installed_capacity_mw": float(entity["installedCapacityMw"]),
         "available_capacity_mw": min(float(entity["installedCapacityMw"]), max(0.0, float(available_capacity_mw))),
         "outage_flag": bool(outage_flag),
-        # The source has no explicit curtailment signal. False is a required
-        # schema placeholder, while curtailment_known=false prevents promotion.
+        # The source has reduction evidence, but no authoritative grid-
+        # curtailment label. False is a required schema placeholder, while
+        # curtailment_known=false prevents promotion.
         "curtailment_flag": False,
         "curtailment_known": False,
         "timezone": entity["timezone"],
@@ -178,7 +179,7 @@ def build_training_row(
         "resolution_minutes": 60,
         "audit_status": "research-only",
         "metadata": {
-            "curtailmentStatus": "unknown-not-in-source",
+            "curtailmentStatus": "unknown-no-authoritative-grid-label",
             "availableCapacityMethod": "mean rated capacity excluding rows with explicit fault_outage_flag",
             "nwpNativeResolutionHours": 3,
         },
@@ -262,6 +263,11 @@ def main() -> int:
                 "nativeForecastResolutionHours": 3,
                 "pairingResolutionMinutes": 60,
                 "curtailmentKnown": False,
+                "sourceReductionEvidence": [
+                    "wtc_PowerRed_endvalue",
+                    "wtc_PowerRed_timeon",
+                    "wtc_PowerRef_endvalue",
+                ],
                 "pointRows": len(records),
             }
             cursor.execute(
@@ -368,7 +374,7 @@ def main() -> int:
             """, training_values(training_rows), page_size=500)
             cursor.execute(
                 "UPDATE website_data.forecast_nwp_sources SET import_status=%s,imported_at=now(),updated_at=now(),metadata=metadata || %s::jsonb WHERE source_id=%s",
-                ("paired-research-only" if training_rows else "nwp-points-only", Json({"pairRows": len(training_rows), "curtailmentKnown": False}), NWP_SOURCE_ID),
+                ("paired-research-only" if training_rows else "nwp-points-only", Json({"pairRows": len(training_rows), "curtailmentKnown": False, "curtailmentStatus": "unknown-no-authoritative-grid-label"}), NWP_SOURCE_ID),
             )
         connection.commit()
         print(json.dumps({"sourceId": NWP_SOURCE_ID, "nwpPointRows": len(records), "hourlyObservationRows": len(hourly_observations), "trainingPairRows": len(training_rows), "status": "paired-research-only" if training_rows else "nwp-points-only"}, default=str, indent=2))

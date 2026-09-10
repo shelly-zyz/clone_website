@@ -309,7 +309,7 @@ export async function acquire(options, dependencies = {}) {
     target: { entityId: "hill-of-towie", ...target, selection: "nearest grid point to verified site centroid" },
     selection: { start: options.start, end: options.end, forecastHours: options.forecastHours ?? DEFAULT_FORECAST_HOURS, interpolation: "linear vector interpolation between 3-hour valid points during pairing" },
     acquisition: { status: "running", outputPath, ...stats },
-    productionGate: { unlocked: false, blockers: ["Only the historical issued NWP point extraction is complete; hourly pairing and source-quality audit are still required.", "Hill of Towie does not explicitly identify curtailment.", "Model metrics must still beat the persistence baseline before the UI may display a formal forecast."] },
+    productionGate: { unlocked: false, blockers: ["Historical issued NWP point extraction and local hourly pairing are complete, but the 6,605-row pair set remains research-only until the source-quality gate passes.", "Hill of Towie exposes source-reported PowerRed/PowerRef reduction evidence but no authoritative grid-curtailment label.", "Model metrics must still beat the persistence baseline before the UI may display a formal forecast."] },
   };
   await writeStatus(statusPath, statusBase);
   let cursor = 0;

@@ -333,7 +333,7 @@ export async function auditForecastWorkspace(root = process.cwd()) {
       ...(pairedTrainingFileFound ? [] : ["No local training pair file built from issue_time and valid_time is present."]),
       ...(invalidPowerHours ? [`${invalidPowerHours} complete hourly windows contain negative or invalid generation labels and were excluded; source-quality remediation is required.`] : []),
       ...(pairedTrainingFileFound && pairingCompleteness < 0.95 ? [`The local 60-minute pair file retains ${trainingPairRows} of ${completeHourlyCandidates} complete hourly candidates (${(pairingCompleteness * 100).toFixed(1)}%), below the 95% temporal completeness gate.`] : []),
-      "Curtailment remains unknown and cannot be inferred from shutdown duration alone.",
+      "Grid curtailment remains unknown; source-reported PowerRed/PowerRef reduction evidence and shutdown duration cannot be promoted to a curtailment label without an authoritative mapping.",
       ...(pairedTrainingFileFound ? [] : ["No validated 60-minute training pair is present; native 10-minute data does not unlock the 15-minute gate."]),
     ],
   };

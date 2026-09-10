@@ -221,7 +221,7 @@ def build_pairs(repo_root: Path) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         "interpolationMethods": dict(methods),
         "curtailment": {
             "known": False,
-            "status": "unknown-not-in-source",
+            "status": "unknown-no-authoritative-grid-label",
             "promotionBlocked": True,
         },
         "monthlyStats": monthly_stats,

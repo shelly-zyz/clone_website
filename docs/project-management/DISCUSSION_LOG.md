@@ -2,6 +2,13 @@
 
 本文件保存主站每轮讨论形成的**最终结论**，不是原始聊天全文。新的结论追加在最上方；如果推翻旧结论，需要保留旧记录并标记“已被替代”。
 
+## 2026-09-10：Unit 5源功率质量审计与降功率证据入模
+
+- 对已核验的Hill of Towie 2025 ZIP做全年只读流式扫描：`tblDailySummary`中的`Curtailment*`字段为空或全为0；`wtc_PowerRed_endvalue`为0/1且有37,322条原始月度行末值为1，`wtc_PowerRed_timeon>0`有66,249条；`wtc_PowerRef_endvalue`低于2,300 kW额定值的行有77,724条。
+- `PowerRed`末值或持续时间证据中，62,357条同时有正的实际功率、3,903条为零或缺失；其中27,066条的`PowerRef`仍为额定值。结论是：这些是源数据降功率证据，不是可以直接标记为电网限电的权威标签；`curtailment_known=false`保持不变。
+- 新增`HILL_OF_TOWIE_2025_POWER_QUALITY_AUDIT.md`与只读画像脚本；SCADA机组信号表增加四个独立可空字段保存`PowerRed/PowerRef`源字段，不填充`curtailment_flag`。发现CSV布尔值有`1`/`1.0`两种格式，已修正解析器并补测试。
+- 修正后的第二轮幂等回填在2025年2月写入时被目标PG服务主动断开；随后`pg_isready`返回`no response`，两个验证命令均被服务状态阻断。已将写入批次从5,000调为500，并保留按月提交；PG恢复后再重跑和核验，不能把中止的回填报告成完成。原已成功的NWP 2,921点值和6,605条研究配对不需要重新下载。
+
 ## 2026-09-10：Unit 5历史NWP恢复入库并完成服务器核验
 
 - 用户确认服务器恢复后，幂等运行`npm run forecast:import:nwp`成功：`forecast_nwp_points`写入2,921条，`forecast_training_pairs`写入6,605条，来源状态为`paired-research-only`。
@@ -15,7 +22,7 @@
 - 在服务器5432仍不可达、不能创建NWP表的情况下，新增数据库无关的本地配对脚本，复用正式导入器的时间聚合和NWP插值规则，避免把“下载完成”误报成“训练数据完成”。
 - 月度SCADA文件每月包含次月00:00边界；本地脚本按已导入PG的主键语义去重11个重复边界，得到52,561条唯一场站观测、8,760个完整小时候选。
 - 源场站功率中有2,155个小时窗口含负发电标签；没有场站口径证据授权把负值截断为0，因此这些窗口被排除，保留6,605条（75.4%），`npm run forecast:validate:pairs`返回结构有效但低于95%覆盖门禁。
-- 原始负值仍保留在SCADA原始表/归档语义中；未来重导会将负场站功率标为`suspect`，训练配对不会将其伪装成有效标签。当前配对文件状态为`blocked-observation-quality`，限电仍为`unknown-not-in-source`。
+- 原始负值仍保留在SCADA原始表/归档语义中；未来重导会将负场站功率标为`suspect`，训练配对不会将其伪装成有效标签。当前配对文件状态为`blocked-observation-quality`，限电仍未知；“`unknown-not-in-source`”是本次候选字段审计前的旧表述，已由“`unknown-no-authoritative-grid-label`”细化。
 - 工作区审计现可区分“历史NWP点值已验证”“本地配对文件已生成”和“训练质量门禁未通过”。服务器恢复后执行`npm run forecast:import:nwp`、`npm run forecast:verify:nwp`，再比对本地审计数量；生产预测、P10/P50/P90继续锁定。
 
 ## 2026-09-10：Unit 5历史GFS点值提取完成，等待PG恢复可达

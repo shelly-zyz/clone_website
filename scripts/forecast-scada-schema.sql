@@ -65,6 +65,24 @@ CREATE TABLE IF NOT EXISTS website_data.forecast_scada_turbine_signals (
     REFERENCES website_data.forecast_scada_turbines(source_id, turbine_id)
 );
 
+-- These are source-reported reduction signals, kept separate from
+-- curtailment_flag because a reduced-power indication is not proof of grid
+-- curtailment.  ADD COLUMN keeps the migration additive for the imported DB.
+ALTER TABLE website_data.forecast_scada_turbine_signals
+  ADD COLUMN IF NOT EXISTS power_reference_kw real,
+  ADD COLUMN IF NOT EXISTS power_reduced_flag boolean,
+  ADD COLUMN IF NOT EXISTS power_reduced_seconds real,
+  ADD COLUMN IF NOT EXISTS power_reduced_count integer;
+
+COMMENT ON COLUMN website_data.forecast_scada_turbine_signals.power_reference_kw
+  IS 'Source field wtc_PowerRef_endvalue; active power setpoint in kW.';
+COMMENT ON COLUMN website_data.forecast_scada_turbine_signals.power_reduced_flag
+  IS 'Source field wtc_PowerRed_endvalue; reduced-power indication, not a curtailment label.';
+COMMENT ON COLUMN website_data.forecast_scada_turbine_signals.power_reduced_seconds
+  IS 'Source field wtc_PowerRed_timeon; seconds with the reduced-power input active in the 10-minute period.';
+COMMENT ON COLUMN website_data.forecast_scada_turbine_signals.power_reduced_count
+  IS 'Source field wtc_PowerRed_counts; input transition/event count in the 10-minute period.';
+
 CREATE INDEX IF NOT EXISTS forecast_scada_turbine_signals_time_idx
   ON website_data.forecast_scada_turbine_signals (observed_at);
 

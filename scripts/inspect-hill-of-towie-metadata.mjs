@@ -75,7 +75,7 @@ export function buildSiteProfile(turbines, turbineFields, gridFields) {
       readySecondsField: fieldByDescription.get("Time ready to operate in period")["Manufacturer Name"],
       errorSecondsField: fieldByDescription.get("Time turbine error active in period")["Manufacturer Name"],
       curtailmentField: null,
-      warning: "Availability fields support auditable outage classification, but the source does not provide an explicit curtailment label."
+      warning: "Availability fields support auditable outage classification; the 2025 archive also exposes source-reported PowerRed/PowerRef evidence, but no authoritative grid-curtailment label."
     },
     recommendedWindow: {
       year: 2025,
@@ -85,7 +85,7 @@ export function buildSiteProfile(turbines, turbineFields, gridFields) {
     reviewFlags: [
       "Inspect the annual archive schema before mapping active power because the README and field dictionary name different source tables for wtc_ActPower_mean.",
       "Aggregate six contiguous 10-minute periods to the 60-minute training contract; do not label the result as 15-minute ultra-short-term data.",
-      "Keep curtailment unknown unless an independent authoritative label is obtained."
+      "Keep grid curtailment unknown unless an independent authoritative label is obtained; retain PowerRed/PowerRef as separate source evidence."
     ]
   };
 }

@@ -1,7 +1,7 @@
 # 真实风光预测训练数据获取与门禁计划
 
 > 建立日期：2026-09-09  
-> 当前状态：Hill of Towie 实测功率与 NOAA GFS 历史风场点值已完成服务器PG配对入库；8,760个小时候选中保留6,605个，因负发电标签完整率仅75.4%，配对保持研究级锁定
+> 当前状态：Hill of Towie 实测功率与 NOAA GFS 历史风场点值已完成服务器PG配对入库；8,760个小时候选中保留6,605个，因负发电标签完整率仅75.4%且没有权威电网限电标签，配对保持研究级锁定
 > 适用范围：风电/光伏小时基线与15分钟超短期预测
 
 ## 1. 当前结论
@@ -108,7 +108,7 @@ historical NWP archive: locally verified point values
 observed wind/solar power: locally verified and in PostgreSQL
 paired training file: locally built, 6605/8760 rows retained
 pair completeness: 75.4%, below 95% gate
-curtailment: unknown-not-in-source
+curtailment: unknown-no-authoritative-grid-label; PowerRed/PowerRef retained as source reduction evidence
 prediction unlocked: false
 ```
 
@@ -157,7 +157,7 @@ Zenodo文件端点恢复后，六个元数据文件与2025年度SCADA均已下�
 1. ✅ 已将本机已核验的历史NWP点值幂等写入服务器PG并完成服务器端独立核验；
 2. 处理2,155个含负发电标签的小时窗口，当前只保留质量合格窗口；10分钟重采样不能冒充15分钟超短期数据；
 3. 从告警和停机时长建立可审计的停机分类规则；
-4. 限电状态仍为未知，不能把停机时长直接当作`curtailment_flag`。
+4. 2025 ZIP存在`PowerRed`/`PowerRef`源数据降功率证据，但限电原因仍未知，不能把它们或停机时长直接当作`curtailment_flag`。
 
 因此该候选源可以推进真实小时基线，但当前仍不能解锁生产预测、LightGBM正式训练或P10/P50/P90。
 
@@ -171,4 +171,6 @@ Zenodo文件端点恢复后，六个元数据文件与2025年度SCADA均已下�
 - 配套脚本为`scripts/acquire-hill-of-towie-gfs.mjs`、`scripts/decode-gfs-point.py`和`scripts/verify-hill-of-towie-gfs-local.mjs`。小时配对脚本使用6个十分钟SCADA观测做端点小时平均，对相邻3小时U/V向量做线性插值，并保留实际使用的NWP起报时间；
 - 新增`scripts/build_hill_of_towie_training_pairs.py`，已生成本地`hill-of-towie-2025-training-pairs.ndjson`和`pairing-audit.json`：8,760个完整小时候选、2,155个含负或无效发电标签的窗口排除、6,605个配对保留、NWP缺失0；`npm run forecast:validate:pairs`明确返回75.4%完整率，未通过95%门禁；
 - 服务器恢复后已于2026-09-10完成幂等导入：`forecast_nwp_points`为2,921行，`forecast_training_pairs`为6,605行；数据库端核验起报未来泄漏0、有效时刻不匹配0、重复键0、容量溢出0；
-- 即使入库成功，`forecast_training_pairs`仍标记为`research-only`，`curtailment_known=false`。本源没有明确限电标签，不能把`curtailment_flag=false`解释成已证明无弃风，也不能据此解锁生产预测。
+- 即使入库成功，`forecast_training_pairs`仍标记为`research-only`，`curtailment_known=false`。本源有降功率证据但没有权威电网限电标签，不能把`curtailment_flag=false`解释成已证明无弃风，也不能据此解锁生产预测。
+
+新增候选字段的全年审计见`HILL_OF_TOWIE_2025_POWER_QUALITY_AUDIT.md`；目标PG恢复后还需完成四个源证据列的全量幂等回填和服务器端计数复核。

@@ -44,6 +44,15 @@ def optional_bool(value: str | None) -> bool | None:
         return True
     if normalized in {"0", "false", "f", "no"}:
         return False
+    # CSV exports may serialize boolean-like fields as 1.0/0.0.
+    try:
+        numeric_value = float(normalized)
+    except ValueError:
+        return None
+    if numeric_value == 1:
+        return True
+    if numeric_value == 0:
+        return False
     return None
 
 
@@ -87,6 +96,8 @@ def build_month_rows(
     suffix = f"{year}_{month:02d}.csv"
     power: dict[tuple[str, str], float | None] = {}
     wind: dict[tuple[str, str], float | None] = {}
+    power_reference: dict[tuple[str, str], float | None] = {}
+    power_reduction: dict[tuple[str, str], tuple[int | None, bool | None, float | None]] = {}
     availability: dict[tuple[str, str], tuple[float | None, float | None, float | None]] = {}
 
     for row in read_rows(archive, f"tblSCTurGrid_{suffix}"):
@@ -95,6 +106,14 @@ def build_month_rows(
     for row in read_rows(archive, f"tblSCTurbine_{suffix}"):
         key = (utc_timestamp(row["TimeStamp"]), row["StationId"])
         wind[key] = optional_float(row.get("wtc_AcWindSp_mean"))
+        power_reference[key] = optional_float(row.get("wtc_PowerRef_endvalue"))
+    for row in read_rows(archive, f"tblSCTurDigiIn_{suffix}"):
+        key = (utc_timestamp(row["TimeStamp"]), row["StationId"])
+        power_reduction[key] = (
+            optional_int(row.get("wtc_PowerRed_counts")),
+            optional_bool(row.get("wtc_PowerRed_endvalue")),
+            optional_float(row.get("wtc_PowerRed_timeon")),
+        )
     for row in read_rows(archive, f"tblSCTurFlag_{suffix}"):
         key = (utc_timestamp(row["TimeStamp"]), row["StationId"])
         availability[key] = (
@@ -110,11 +129,16 @@ def build_month_rows(
             raise RuntimeError(f"Unknown station ID {station_id}")
         power_kw = power.get((timestamp, station_id))
         wind_speed = wind.get((timestamp, station_id))
+        power_reference_kw = power_reference.get((timestamp, station_id))
+        power_reduced_count, power_reduced_flag, power_reduced_seconds = power_reduction.get(
+            (timestamp, station_id), (None, None, None)
+        )
         running, ready, error = availability.get((timestamp, station_id), (None, None, None))
         fault_outage = None if error is None else error > 0
         signal_rows.append((
             SOURCE_ID, timestamp, turbine_id, power_kw, wind_speed,
             running, ready, error, fault_outage, None, signal_quality(power_kw, wind_speed),
+            power_reference_kw, power_reduced_flag, power_reduced_seconds, power_reduced_count,
         ))
 
     observation_rows: list[tuple[Any, ...]] = []
@@ -229,14 +253,19 @@ def main() -> int:
                         INSERT INTO website_data.forecast_scada_turbine_signals (
                           source_id,observed_at,turbine_id,active_power_kw,wind_speed_mps,
                           running_seconds,ready_seconds,error_seconds,fault_outage_flag,
-                          curtailment_flag,quality_code
+                          curtailment_flag,quality_code,power_reference_kw,power_reduced_flag,
+                          power_reduced_seconds,power_reduced_count
                         ) VALUES %s
                         ON CONFLICT (source_id,observed_at,turbine_id) DO UPDATE SET
                           active_power_kw=EXCLUDED.active_power_kw,wind_speed_mps=EXCLUDED.wind_speed_mps,
                           running_seconds=EXCLUDED.running_seconds,ready_seconds=EXCLUDED.ready_seconds,
                           error_seconds=EXCLUDED.error_seconds,fault_outage_flag=EXCLUDED.fault_outage_flag,
-                          curtailment_flag=EXCLUDED.curtailment_flag,quality_code=EXCLUDED.quality_code
-                    """, signal_rows, page_size=5_000)
+                          curtailment_flag=EXCLUDED.curtailment_flag,quality_code=EXCLUDED.quality_code,
+                          power_reference_kw=EXCLUDED.power_reference_kw,
+                          power_reduced_flag=EXCLUDED.power_reduced_flag,
+                          power_reduced_seconds=EXCLUDED.power_reduced_seconds,
+                          power_reduced_count=EXCLUDED.power_reduced_count
+                    """, signal_rows, page_size=500)
                     execute_values(cursor, """
                         INSERT INTO website_data.forecast_scada_observations (
                           source_id,observed_at,active_power_mw,active_energy_mwh,
@@ -246,7 +275,7 @@ def main() -> int:
                           active_power_mw=EXCLUDED.active_power_mw,active_energy_mwh=EXCLUDED.active_energy_mwh,
                           source_status=EXCLUDED.source_status,source_data_ok=EXCLUDED.source_data_ok,
                           quality_code=EXCLUDED.quality_code
-                    """, observation_rows, page_size=5_000)
+                    """, observation_rows, page_size=500)
                 connection.commit()
                 imported_signals += len(signal_rows)
                 imported_observations += len(observation_rows)
@@ -267,13 +296,15 @@ def main() -> int:
         }, indent=2), flush=True)
         return 0
     except Exception:
-        connection.rollback()
-        try:
-            with connection.cursor() as cursor:
-                cursor.execute("UPDATE website_data.forecast_scada_sources SET import_status='failed',updated_at=now() WHERE source_id=%s", (SOURCE_ID,))
-            connection.commit()
-        except Exception:
+        if not connection.closed:
             connection.rollback()
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("UPDATE website_data.forecast_scada_sources SET import_status='failed',updated_at=now() WHERE source_id=%s", (SOURCE_ID,))
+                connection.commit()
+            except Exception:
+                if not connection.closed:
+                    connection.rollback()
         raise
     finally:
         connection.close()
