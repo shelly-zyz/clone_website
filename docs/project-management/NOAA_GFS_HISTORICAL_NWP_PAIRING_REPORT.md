@@ -1,7 +1,7 @@
 # Hill of Towie 2025历史GFS配对报告
 
 > 生成日期：2026-09-10  
-> 当前结论：本地点值和小时配对已写入服务器PG并完成独立核验；源数据质量门禁未通过，仍为研究级数据。另已发现并准备保留PowerRed/PowerRef源证据，但不把它们升级为电网限电标签。
+> 当前结论：本地点值、小时配对和PowerRed/PowerRef源证据均已写入服务器PG并完成独立核验；源数据质量门禁未通过，仍为研究级数据，不把源降功率证据升级为电网限电标签。
 
 ## 1. 来源与范围
 
@@ -57,14 +57,19 @@ npm run forecast:validate:pairs
 - 在`PowerRed`末值或持续时间证据中，62,357条同时有正的实际功率，3,903条为零或缺失；但27,066条的`PowerRef`仍处于额定值，不能把该信号直接命名为电网限电；
 - `tblSCTurbine.wtc_PowerRef_endvalue`低于2,300 kW额定值的行有77,724条；它是设定值证据，不是限电原因标签。
 
-详细审计见`HILL_OF_TOWIE_2025_POWER_QUALITY_AUDIT.md`。SCADA表新增的四个源证据列与`curtailment_flag`分离；本次第二轮追加导入在目标PG服务主动断开后中止，待服务恢复后以较小批次重跑并完成字段计数，历史NWP配对无需重新下载。
+详细审计见`HILL_OF_TOWIE_2025_POWER_QUALITY_AUDIT.md`。SCADA表新增的四个源证据列与`curtailment_flag`分离；服务器恢复后已按500行小批次、按月提交完成幂等回填并完成字段计数，历史NWP配对无需重新下载。
 
 ## 3. PostgreSQL状态
 
-首次尝试连接 `218.197.118.49:5432/zyz` 时，在执行任何SQL之前连接超时。服务器恢复后重试成功，幂等导入结果为：
+服务器恢复后，幂等SCADA回填按月提交成功；导入器报告处理原始月度行1,059,716条，按数据库主键去重后落库1,059,488条机组信号和52,572条场站观测（其中2026-01边界行保留用于主键去重核验）。独立反查结果为：
 
 ```text
-connection to server at "218.197.118.49", port 5432 failed: timeout expired
+forecast_scada_sources: imported
+forecast_scada_turbine_signals: 1,059,488
+power_reduced_flag=true: 37,299
+power_reduced_seconds IS NOT NULL: 66,219
+power_reduced_seconds SUM: 22,360,804
+claimed_curtailment_rows: 0
 ```
 
 ```text
@@ -77,7 +82,7 @@ duplicate_or_capacity_overflow_rows: 0
 curtailment_known_rows: 0
 ```
 
-既有SCADA复核仍为21台机组、52,561条场站观测和1,059,488条机组信号；配对导入没有删除或重建SCADA。当前服务器数据库端独立核验命令为：
+独立核验确认数据库中21台机组、52,561条唯一场站观测和1,059,488条唯一机组信号均已保留；配对导入没有删除或重建SCADA。当前服务器数据库端独立核验命令为：
 
 ```powershell
 npm run forecast:import:nwp

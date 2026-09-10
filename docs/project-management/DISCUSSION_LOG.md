@@ -2,6 +2,13 @@
 
 本文件保存主站每轮讨论形成的**最终结论**，不是原始聊天全文。新的结论追加在最上方；如果推翻旧结论，需要保留旧记录并标记“已被替代”。
 
+## 2026-09-11：Unit 5源证据回填与预测门禁复核完成
+
+- 目标PG恢复后，按500行小批次、按月提交幂等重跑`npm run forecast:import:hill-of-towie`成功：处理原始月度行1,059,716条，数据库独立核验为21台机组、52,561条唯一场站观测和1,059,488条唯一机组信号；来源状态为`imported`，源包1,596,220,683字节且MD5`d3cd7edb535a45ffca1c7028b397f035`一致。
+- 新增源证据字段已完成回填并反查：`power_reduced_flag=true`为37,299行，`power_reduced_seconds`非空为66,219行，累计22,360,804秒；`claimed_curtailment_rows=0`。这些字段继续与`curtailment_flag`分离，不被解释为权威电网限电标签。
+- `npm run forecast:verify:hill-of-towie`、`npm run forecast:verify:nwp`和`npm run validate:forecast-data`均通过。NWP保持2,921点值、6,605条小时配对；起报未来泄漏0、有效时刻不匹配0、容量溢出0，生产门禁仍为锁定。
+- 当前剩余阻塞没有改变：2,155个小时窗口含负/无效发电标签，保留率75.4%低于95%门槛；权威电网限电标签缺失。因此下一步是源质量处置和标签语义补证，不是开放正式预测。
+
 ## 2026-09-10：Unit 5源功率质量审计与降功率证据入模
 
 - 对已核验的Hill of Towie 2025 ZIP做全年只读流式扫描：`tblDailySummary`中的`Curtailment*`字段为空或全为0；`wtc_PowerRed_endvalue`为0/1且有37,322条原始月度行末值为1，`wtc_PowerRed_timeon>0`有66,249条；`wtc_PowerRef_endvalue`低于2,300 kW额定值的行有77,724条。

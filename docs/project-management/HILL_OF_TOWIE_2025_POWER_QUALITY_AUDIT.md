@@ -64,7 +64,7 @@ RES官方分析仓库仍有“find simple way to filter out grid curtailment”�
 - `power_reduced_seconds` ← `wtc_PowerRed_timeon`
 - `power_reduced_count` ← `wtc_PowerRed_counts`
 
-这四列与`curtailment_flag`严格分离；`curtailment_flag`和配对表的`curtailment_known`仍保持未知。追加导入在2025年2月写入时因目标PG服务主动断开而中止，已写入事务按月提交，最终全量字段计数必须等PG恢复后重新幂等导入并验证；不把中止状态报告成完成。
+这四列与`curtailment_flag`严格分离；`curtailment_flag`和配对表的`curtailment_known`仍保持未知。服务器恢复后已按500行小批次、按月提交完成幂等回填，并在数据库端核验得到：`power_reduced_flag=true`为37,299行、`power_reduced_seconds`非空为66,219行、持续时间合计22,360,804秒；`claimed_curtailment_rows`仍为0。
 
 ## 6. 当前门禁结论
 
@@ -72,4 +72,4 @@ RES官方分析仓库仍有“find simple way to filter out grid curtailment”�
 - 限电标签：`unknown-no-authoritative-grid-label`。
 - 生产预测：锁定。
 - 研究回测：可以使用已核验的6,605条配对，但必须保留质量和来源说明。
-- 下一次数据库动作：目标PG恢复后，以较小批次重跑 `npm run forecast:import:hill-of-towie`，再运行 `npm run forecast:verify:hill-of-towie` 和 `npm run forecast:verify:nwp`；不需要重新下载1.6GB源文件，也不需要重建6,605条NWP配对。
+- 数据库动作已完成：不需要重新下载1.6GB源文件，也不需要重建6,605条NWP配对。下一步应针对2,155个负/无效小时窗口做源质量处置，并继续寻找能把源降功率证据映射到电网限电原因的权威标签；在此之前生产预测保持锁定。
