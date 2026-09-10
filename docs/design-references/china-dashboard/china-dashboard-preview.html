@@ -1,0 +1,624 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>中国电力大屏｜Unit 3 规格预览</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%23060b14'/%3E%3Cpath d='M18 3 8 18h7l-2 11 11-16h-7z' fill='%2300e5ff'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #10171d;
+      --surface: #151d24;
+      --deep: #060b14;
+      --ink: #e2e8f0;
+      --muted: #8c9aac;
+      --faint: #526171;
+      --cyan: #00e5ff;
+      --cyan-soft: #67e8f9;
+      --amber: #fbbf24;
+      --amber-soft: #fde68a;
+      --red: #fb7185;
+      --line: rgba(148, 163, 184, .18);
+      --font: Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
+      --mono: "IBM Plex Mono", Consolas, "Microsoft YaHei", monospace;
+    }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: var(--bg); }
+    body { color: var(--ink); font-family: var(--font); }
+    button { color: inherit; font: inherit; }
+    button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+    .screen {
+      position: relative;
+      display: grid;
+      grid-template-rows: 64px minmax(0, 1fr) 132px;
+      width: 100vw;
+      height: 100vh;
+      min-width: 1180px;
+      min-height: 720px;
+      isolation: isolate;
+      background:
+        radial-gradient(circle at 52% 46%, rgba(0, 229, 255, .075), transparent 24%),
+        radial-gradient(circle at 92% 3%, rgba(251, 191, 36, .045), transparent 18%),
+        linear-gradient(180deg, #182129 0%, #121a21 52%, #0b1118 100%);
+    }
+    .screen::before {
+      position: absolute; inset: 0; z-index: -1; content: ""; pointer-events: none;
+      background-image: linear-gradient(rgba(255,255,255,.015) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.012) 1px, transparent 1px);
+      background-size: 72px 72px; mask-image: linear-gradient(to bottom, black, transparent 88%);
+    }
+    .topbar {
+      display: grid; grid-template-columns: minmax(410px, 1fr) auto minmax(410px, 1fr);
+      align-items: center; gap: 18px; padding: 0 22px;
+      border-bottom: 1px solid var(--line); background: rgba(6, 11, 20, .72); backdrop-filter: blur(18px);
+    }
+    .brand, .top-status, .health, .scope-line, .legend-line, .source-line { display: flex; align-items: center; }
+    .brand { gap: 14px; min-width: 0; }
+    .back {
+      border: 0; border-right: 1px solid var(--line); padding: 6px 15px 6px 0; background: transparent;
+      color: var(--muted); cursor: pointer; font-size: 12px; letter-spacing: .05em;
+    }
+    .back:hover { color: var(--cyan-soft); }
+    .bolt { display: grid; width: 30px; height: 30px; place-items: center; color: var(--cyan); border: 1px solid rgba(0,229,255,.45); transform: skewX(-9deg); box-shadow: inset 0 0 18px rgba(0,229,255,.11); }
+    .brand h1 { margin: 0; font-size: 16px; line-height: 1; letter-spacing: .08em; }
+    .brand p { margin: 5px 0 0; color: var(--muted); font: 10px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; }
+    .preview-badge { justify-self: center; padding: 7px 12px; color: var(--amber-soft); border: 1px solid rgba(251,191,36,.45); background: rgba(120,74,8,.18); font: 700 10px/1 var(--mono); letter-spacing: .16em; }
+    .top-status { justify-content: flex-end; gap: 14px; }
+    .clock { text-align: right; }
+    .clock strong { display: block; font: 700 12px/1.2 var(--mono); }
+    .clock span { color: var(--muted); font: 9px/1 var(--mono); letter-spacing: .08em; }
+    .health { gap: 7px; padding-left: 14px; border-left: 1px solid var(--line); color: var(--muted); font-size: 10px; }
+    .health i { width: 7px; height: 7px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 12px rgba(251,191,36,.7); }
+    .workspace { display: grid; grid-template-columns: clamp(286px, 20vw, 350px) minmax(500px, 1fr) clamp(390px, 28vw, 470px); min-height: 0; }
+    .rail { min-height: 0; padding: 18px 20px 12px; overflow: hidden auto; scrollbar-width: thin; scrollbar-color: rgba(100,116,139,.55) transparent; }
+    .rail-left { display: flex; flex-direction: column; border-right: 1px solid var(--line); background: linear-gradient(90deg, rgba(6,11,20,.74), rgba(6,11,20,.22)); }
+    .rail-left > .band { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; }
+    .rail-right { display: flex; flex-direction: column; border-left: 1px solid var(--line); background: linear-gradient(270deg, rgba(6,11,20,.82), rgba(6,11,20,.24)); overflow: hidden; }
+    .rail-right .band { flex: 1; min-height: 0; padding-bottom: 0; }
+    .eyebrow { margin: 0 0 6px; color: var(--cyan-soft); font: 700 9px/1 var(--mono); letter-spacing: .18em; text-transform: uppercase; }
+    .section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; margin-bottom: 11px; }
+    .section-head h2 { margin: 0; font-size: 15px; letter-spacing: .03em; }
+    .section-head span { color: var(--muted); font: 9px/1 var(--mono); }
+    .band { padding: 15px 0; border-top: 1px solid var(--line); }
+    .band:first-of-type { padding-top: 7px; border-top: 0; }
+    .identity { display: inline-flex; align-items: center; min-height: 17px; padding: 0 6px; border: 1px solid rgba(0,229,255,.26); color: var(--cyan-soft); font: 700 8px/1 var(--mono); letter-spacing: .05em; }
+    .identity.amber { color: var(--amber-soft); border-color: rgba(251,191,36,.35); }
+    .identity.gray { color: #a8b3c7; border-color: rgba(148,163,184,.25); }
+    .identity.red { color: #fecdd3; border-color: rgba(251,113,133,.42); background: rgba(127,29,29,.12); }
+    .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 13px; margin-top: 13px; }
+    .kpi strong { display: block; font: 700 clamp(19px,1.42vw,27px)/1 var(--mono); color: #f4f8fb; letter-spacing: -.06em; }
+    .kpi small { display: block; margin-top: 7px; color: var(--muted); font-size: 9px; line-height: 1.35; }
+    .micro-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; margin-top: 12px; color: var(--muted); font-size: 10px; }
+    .micro-row b { color: var(--ink); font: 700 11px/1 var(--mono); }
+    .sample-lead { display: flex; align-items: baseline; gap: 10px; margin-top: 10px; }
+    .sample-lead strong { color: var(--cyan-soft); font: 700 32px/1 var(--mono); letter-spacing: -.06em; }
+    .sample-lead span { color: var(--muted); font-size: 10px; }
+    .warning { margin: 10px 0 0; padding-left: 10px; border-left: 2px solid var(--amber); color: #c6b991; font-size: 9px; line-height: 1.55; }
+    .osm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; margin-top: 12px; background: var(--line); }
+    .osm-item { padding: 9px; background: rgba(8,12,24,.64); }
+    .osm-item b { display: block; font: 700 12px/1 var(--mono); }
+    .osm-item span { color: var(--muted); font-size: 8px; }
+    .scenario-chart { position: relative; height: 82px; margin-top: 9px; border-bottom: 1px solid rgba(148,163,184,.16); }
+    .scenario-chart svg { width: 100%; height: 100%; overflow: visible; }
+    .trend-marker { transition: transform .45s ease; }
+    .chart-labels { display: flex; justify-content: space-between; margin-top: 5px; color: var(--faint); font: 8px/1 var(--mono); }
+    .map-stage { position: relative; min-width: 0; overflow: hidden; }
+    .map-stage::after { position: absolute; inset: 0; content: ""; pointer-events: none; box-shadow: inset 0 0 110px rgba(2,6,23,.6); }
+    .map-meta { position: absolute; z-index: 12; top: 18px; left: 22px; right: 22px; display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; }
+    .map-title h2 { margin: 0; font-size: 18px; letter-spacing: .08em; }
+    .scope-line { gap: 7px; margin-top: 7px; color: var(--muted); font: 9px/1.4 var(--mono); }
+    .scope-line b { color: var(--cyan-soft); }
+    .map-note { max-width: 235px; text-align: right; color: var(--muted); font-size: 8px; line-height: 1.5; }
+    .map-note strong { display: block; color: var(--amber-soft); font: 700 8px/1.3 var(--mono); }
+    .map-perspective { position: absolute; inset: 11% 2% 14%; display: grid; place-items: center; perspective: 1000px; }
+    .map-plane { position: relative; width: min(94%, 920px); aspect-ratio: 1.7; transform: rotateX(49deg) rotateZ(-4deg) translateY(-2%); transform-style: preserve-3d; filter: drop-shadow(0 28px 24px rgba(0,0,0,.45)); }
+    .map-plane svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+    .map-plane > svg:first-of-type { display: none; }
+    .coastal-province-map { display: block; }
+    .coastal-province-map .province-depth { fill: #07130f; stroke: rgba(0,229,255,.2); stroke-width: 2.4; vector-effect: non-scaling-stroke; }
+    .coastal-province-map .province-face { fill: url(#coastalTerrain); stroke: rgba(212,244,218,.64); stroke-width: .72; vector-effect: non-scaling-stroke; filter: saturate(.9) contrast(1.13) brightness(.82); }
+    .coastal-province-map .province-outline { fill: none; stroke: rgba(224,247,226,.46); stroke-width: .5; vector-effect: non-scaling-stroke; pointer-events: none; }
+    .coastal-province-map .relief-overlay { opacity: .3; mix-blend-mode: multiply; filter: contrast(1.18); pointer-events: none; }
+    .coastal-province-map .source-grid { fill: none; stroke: rgba(0,229,255,.13); stroke-width: .7; stroke-dasharray: 3 10; vector-effect: non-scaling-stroke; }
+    .coastal-province-map .ui-flow { fill: none; stroke: rgba(0,229,255,.75); stroke-width: 1.25; stroke-dasharray: 7 14; vector-effect: non-scaling-stroke; animation: flow 3.6s linear infinite; }
+    .coastal-province-map .ui-flow.amber { stroke: rgba(251,191,36,.65); animation-duration: 5s; }
+    .coastal-province-map .ui-dot { fill: var(--cyan); filter: url(#coastalGlow); animation: dotPulse 2.4s ease-in-out infinite; }
+    .china-depth { transform: translateY(15px); fill: #071019; stroke: rgba(0,229,255,.2); stroke-width: 3; }
+    .china-main { fill: url(#terrain); stroke: rgba(103,232,249,.88); stroke-width: 1.6; vector-effect: non-scaling-stroke; }
+    .province-lines { fill: none; stroke: rgba(178,223,231,.19); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+    .flow { fill: none; stroke: rgba(0,229,255,.84); stroke-width: 1.6; stroke-dasharray: 7 14; vector-effect: non-scaling-stroke; animation: flow 3.6s linear infinite; }
+    .flow.amber { stroke: rgba(251,191,36,.68); animation-duration: 5s; }
+    .glow-dot { fill: var(--cyan); filter: url(#glow); animation: dotPulse 2.4s ease-in-out infinite; }
+    .map-hotspots { position: absolute; inset: 0; z-index: 7; pointer-events: none; }
+    .hotspot { position: absolute; width: 12px; height: 12px; padding: 0; border: 2px solid rgba(226,232,240,.75); border-radius: 50%; background: #0d2b36; box-shadow: 0 0 0 4px rgba(0,229,255,.10), 0 0 18px rgba(0,229,255,.6); cursor: pointer; pointer-events: auto; transition: .2s ease; }
+    .hotspot::after { position: absolute; left: 15px; top: -5px; content: attr(aria-label); white-space: nowrap; color: #cbd5e1; font: 8px/1 var(--mono); text-shadow: 0 2px 4px #020617; }
+    .hotspot:hover, .hotspot.is-active { transform: scale(1.35); background: var(--amber); border-color: #fff7d6; box-shadow: 0 0 0 5px rgba(251,191,36,.14), 0 0 22px rgba(251,191,36,.7); }
+    .hotspot[data-province="xinjiang"] { left: 18%; top: 44%; }
+    .hotspot[data-province="inner-mongolia"] { left: 49%; top: 34%; }
+    .hotspot[data-province="sichuan"] { left: 45%; top: 61%; }
+    .hotspot[data-province="shandong"] { left: 70%; top: 50%; }
+    .hotspot[data-province="guangdong"] { left: 64%; top: 75%; }
+    .map-pulse { position: absolute; z-index: 4; left: 50%; top: 52%; width: 120px; height: 120px; margin: -60px; border: 1px solid rgba(0,229,255,.18); border-radius: 50%; animation: radar 3s ease-out infinite; pointer-events: none; }
+    .layer-strip { position: absolute; z-index: 14; left: 20px; bottom: 54px; display: flex; flex-wrap: wrap; gap: 6px; max-width: calc(100% - 40px); }
+    .layer-btn, .province-btn, .timeline-btn, .ledger-toggle {
+      border: 1px solid var(--line); background: rgba(6,11,20,.78); color: var(--muted); cursor: pointer; backdrop-filter: blur(10px); transition: .18s ease;
+    }
+    .layer-btn { padding: 9px 12px; font: 700 10px/1 var(--mono); }
+    .layer-btn:hover, .layer-btn.is-active { color: var(--cyan-soft); border-color: rgba(0,229,255,.48); background: rgba(8,46,58,.76); }
+    .layer-btn.is-locked { color: #a99772; border-color: rgba(251,191,36,.24); }
+    .province-shortcuts { position: absolute; z-index: 14; left: 20px; right: 20px; bottom: 12px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .province-btn { padding: 8px 12px; font-size: 10px; }
+    .province-btn:hover, .province-btn.is-active { color: #fff; border-color: rgba(0,229,255,.42); }
+    .toast { position: absolute; z-index: 20; top: 78px; left: 50%; width: min(440px, calc(100% - 42px)); padding: 10px 13px; transform: translate(-50%, -12px); opacity: 0; pointer-events: none; border-left: 2px solid var(--amber); background: rgba(6,11,20,.94); color: #d7cda9; font-size: 9px; line-height: 1.45; transition: .25s ease; }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    .forecast-factory { position: relative; display: grid; grid-template-rows: repeat(6, minmax(80px, 1fr)); height: calc(100% - 31px); min-height: 500px; margin-top: 5px; border-top: 1px solid rgba(0,229,255,.2); }
+    .forecast-factory::before { position: absolute; z-index: 0; left: 16px; top: 18px; bottom: 18px; width: 2px; content: ""; background: repeating-linear-gradient(180deg, var(--cyan) 0 5px, rgba(0,229,255,.16) 5px 11px); }
+    .factory-stage { --stage-color: #2ee9ff; --stage-secondary: #ffd166; position: relative; z-index: 1; display: grid; grid-template-columns: 36px minmax(0,1fr) 104px; grid-template-rows: 30px minmax(44px,1fr); column-gap: 9px; align-items: center; min-height: 0; padding: 4px 0; border-bottom: 1px solid rgba(148,163,184,.16); background: linear-gradient(90deg, rgba(9,22,31,.72), rgba(6,13,21,.24)); overflow: hidden; transition: background .24s ease, border-color .24s ease; }
+    .factory-stage:nth-child(2) { --stage-color: #ffb703; --stage-secondary: #59d8ff; }
+    .factory-stage:nth-child(3) { --stage-color: #ff5ea8; --stage-secondary: #43e8ff; }
+    .factory-stage:nth-child(4) { --stage-color: #a7f542; --stage-secondary: #ffd43b; }
+    .factory-stage:nth-child(5) { --stage-color: #9b8cff; --stage-secondary: #35e6c3; }
+    .factory-stage:nth-child(6) { --stage-color: #ff6b57; --stage-secondary: #50e3ff; }
+    .factory-stage::after { position: absolute; left: 37px; right: 0; bottom: 0; height: 1px; content: ""; background: linear-gradient(90deg, transparent, var(--cyan), transparent); transform: translateX(-110%); }
+    .factory-stage.is-current { border-color: rgba(0,229,255,.55); background: linear-gradient(90deg, rgba(6,54,64,.76), rgba(7,18,27,.45)); }
+    .factory-stage.is-current::after { animation: factoryScan 1.15s linear infinite; }
+    .stage-index { grid-row: 1 / 3; align-self: center; display: grid; width: 32px; height: 32px; place-items: center; clip-path: polygon(5px 0,100% 0,100% calc(100% - 5px),calc(100% - 5px) 100%,0 100%,0 5px); border: 1px solid rgba(251,191,36,.52); background: #071018; color: var(--amber-soft); font: 800 9px/1 var(--mono); }
+    .factory-stage:first-child .stage-index { color: var(--cyan); border-color: rgba(0,229,255,.68); }
+    .factory-stage.is-current .stage-index { background: rgba(0,229,255,.13); box-shadow: 0 0 15px rgba(0,229,255,.36); }
+    .stage-copy { grid-column: 2; min-width: 0; }
+    .stage-copy b { display: block; color: #f1f7fa; font-size: 11px; line-height: 1.2; }
+    .stage-copy span { display: block; margin-top: 3px; color: #9fb1bd; font-size: 8.5px; line-height: 1.25; }
+    .workcell { grid-column: 3; position: relative; width: 104px; height: 28px; border-bottom: 2px solid rgba(148,163,184,.28); image-rendering: pixelated; }
+    .pixel-worker { position: absolute; bottom: 3px; width: 15px; height: 22px; transform-origin: 50% 100%; image-rendering: pixelated; }
+    .worker-a { left: 1px; }
+    .worker-b { left: 27px; }
+    .pixel-worker::before { position: absolute; left: 4px; top: 0; width: 7px; height: 6px; content: ""; background: #ffd08a; box-shadow: 0 -2px #173b49, 2px 0 #173b49; }
+    .pixel-worker::after { position: absolute; left: 3px; top: 7px; width: 9px; height: 8px; content: ""; background: var(--cyan); box-shadow: 0 3px #008ea3; }
+    .pixel-worker i, .pixel-worker b { position: absolute; top: 15px; width: 3px; height: 7px; background: #a9f5ff; }
+    .pixel-worker i { left: 3px; }
+    .pixel-worker b { right: 3px; }
+    .pixel-worker em { position: absolute; z-index: 2; left: 12px; top: 10px; width: 8px; height: 3px; background: var(--amber); transform-origin: left; }
+    .workbench { position: absolute; right: 1px; bottom: 3px; width: 51px; height: 22px; border: 1px solid rgba(132,224,237,.38); background: #061018; }
+    .workbench::before { position: absolute; left: 5px; top: 4px; width: 33px; height: 8px; content: ""; background: repeating-linear-gradient(90deg, #00d7f2 0 4px, #0b3b48 4px 7px); box-shadow: 0 0 7px rgba(0,229,255,.25); }
+    .workbench::after { position: absolute; right: 4px; bottom: 3px; width: 4px; height: 4px; content: ""; background: var(--amber); box-shadow: -9px 0 #00d8ef; }
+    .factory-stage.is-current .worker-a { animation: pixelWork .58s steps(2,end) infinite; }
+    .factory-stage.is-current .worker-b { animation: pixelWorkAlt .72s steps(2,end) infinite; }
+    .factory-stage.is-current .pixel-worker em { animation: pixelTool .42s steps(2,end) infinite; }
+    .factory-stage.is-current .workbench::before { animation: machineRun .6s steps(4,end) infinite; }
+    .factory-stage.is-current .workbench::after { animation: lampBlink .45s steps(2,end) infinite; }
+    .stage-output { grid-column: 2 / 4; align-self: stretch; display: grid; grid-template-columns: 105px minmax(0,1fr); gap: 7px; align-items: center; min-height: 42px; padding: 3px 5px; border-left: 2px solid var(--stage-color); background: linear-gradient(90deg, color-mix(in srgb, var(--stage-color) 12%, transparent), rgba(3,10,16,.56)); opacity: .46; transition: opacity .28s ease, transform .28s ease; }
+    .factory-stage.is-visited .stage-output, .factory-stage.is-current .stage-output { opacity: 1; }
+    .output-caption b { display: block; color: #dce8ed; font-size: 9.5px; line-height: 1.2; }
+    .output-caption small { display: block; margin-top: 3px; color: #8498a4; font: 7px/1.25 var(--mono); }
+    .product-viz { width: 100%; height: 36px; border: 1px solid color-mix(in srgb, var(--stage-color) 46%, transparent); background: linear-gradient(135deg, color-mix(in srgb, var(--stage-color) 15%, #071018), #071018 62%, color-mix(in srgb, var(--stage-secondary) 10%, #071018)); box-shadow: inset 0 0 12px color-mix(in srgb, var(--stage-color) 10%, transparent); overflow: visible; }
+    .product-viz .gridline { stroke: rgba(190,216,225,.22); stroke-width: .7; }
+    .product-viz .trace { fill: none; stroke: var(--stage-color); stroke-width: 2; vector-effect: non-scaling-stroke; filter: drop-shadow(0 0 2px var(--stage-color)); }
+    .product-viz .trace.secondary { stroke: var(--stage-secondary); stroke-width: 1.5; }
+    .product-viz .node { fill: color-mix(in srgb, var(--stage-color) 30%, #071018); stroke: var(--stage-color); stroke-width: 1; }
+    .product-viz .blocked-fill { fill: color-mix(in srgb, var(--stage-color) 26%, #071018); stroke: var(--stage-secondary); stroke-width: 1; }
+    .product-viz .fan-fill { fill: color-mix(in srgb, var(--stage-color) 24%, transparent); }
+    .factory-stage:nth-child(4) .product-viz { filter: saturate(1.65) brightness(1.28); }
+    .factory-stage.is-current .product-viz .trace { stroke-dasharray: 8 5; animation: productTrace 1s linear infinite; }
+    .factory-stage.is-current .product-viz .pulse-cell { animation: heatPulse .7s steps(3,end) infinite alternate; }
+    .work-status { position: absolute; z-index: 3; right: 3px; top: 3px; color: #758895; font: 800 7px/1 var(--mono); letter-spacing: .06em; }
+    .work-status::before { content: "待机"; }
+    .factory-stage.is-visited .work-status::before { content: "已产出"; color: var(--amber-soft); }
+    .factory-stage:first-child.is-visited .work-status::before { color: var(--cyan-soft); }
+    .factory-stage.is-current .work-status::before { content: "作业中"; color: var(--cyan-soft); }
+    .factory-note { display: flex; justify-content: space-between; gap: 8px; height: 27px; padding: 7px 8px; border: 1px solid rgba(0,229,255,.2); background: rgba(0,229,255,.05); color: #91a5b1; font: 8px/1.25 var(--mono); }
+    .factory-note b { color: var(--cyan-soft); font-weight: 800; }
+    .bottom { position: relative; z-index: 30; display: grid; grid-template-rows: 78px 54px; border-top: 1px solid var(--line); background: rgba(6,11,20,.9); backdrop-filter: blur(20px); }
+    .timeline { display: grid; grid-template-columns: 210px minmax(0,1fr) 250px; align-items: center; gap: 18px; padding: 11px 22px; }
+    .timeline-info b { display: block; font-size: 11px; }
+    .timeline-info span { color: var(--muted); font: 8px/1.4 var(--mono); }
+    .timeline-controls { display: flex; align-items: center; gap: 11px; }
+    .timeline-btn { display: grid; width: 34px; height: 34px; place-items: center; color: var(--cyan-soft); }
+    .timeline-track { position: relative; flex: 1; height: 24px; }
+    .timeline-track::before { position: absolute; left: 0; right: 0; top: 11px; height: 1px; content: ""; background: linear-gradient(90deg, rgba(0,229,255,.9), rgba(0,229,255,.2) 38%, rgba(251,191,36,.24)); }
+    .ticks { position: absolute; inset: 0; display: flex; justify-content: space-between; }
+    .ticks i { width: 1px; height: 8px; margin-top: 8px; background: rgba(148,163,184,.34); }
+    .time-thumb { position: absolute; left: 0; top: 5px; width: 13px; height: 13px; margin-left: -6px; border: 2px solid #dffbff; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 17px rgba(0,229,255,.8); transition: left .48s ease; }
+    .sync-status { justify-self: end; color: var(--muted); font: 8px/1.45 var(--mono); text-align: right; }
+    .sync-status b { color: var(--cyan-soft); }
+    .ledger { display: grid; grid-template-columns: 174px 1fr auto; gap: 16px; align-items: center; padding: 0 22px; border-top: 1px solid rgba(148,163,184,.1); }
+    .ledger-title b { display: block; font-size: 10px; }
+    .ledger-title span { color: var(--muted); font: 8px/1 var(--mono); }
+    .legend-line { gap: 8px; min-width: 0; overflow: hidden; }
+    .legend-item { display: flex; align-items: center; gap: 5px; min-width: 0; color: var(--muted); font-size: 8px; white-space: nowrap; }
+    .legend-item i { width: 5px; height: 5px; border-radius: 50%; background: var(--cyan); }
+    .legend-item:nth-child(2) i { background: #a8b3c7; }
+    .legend-item:nth-child(3) i { background: var(--amber); }
+    .legend-item:nth-child(4) i { background: var(--red); }
+    .ledger-toggle { padding: 7px 10px; font: 700 8px/1 var(--mono); }
+    .ledger-panel { position: absolute; z-index: 40; left: 0; right: 0; bottom: 54px; display: none; grid-template-columns: repeat(4, 1fr); gap: 1px; padding: 1px; background: var(--line); box-shadow: 0 -18px 50px rgba(0,0,0,.4); }
+    .ledger-panel.open { display: grid; }
+    .ledger-card { min-height: 90px; padding: 13px 16px; background: #09111a; }
+    .ledger-card b { display: block; color: var(--cyan-soft); font: 700 9px/1.3 var(--mono); }
+    .ledger-card span { display: block; margin-top: 7px; color: var(--muted); font-size: 8px; line-height: 1.45; }
+    .wide-warning { display: none; position: fixed; inset: 0; z-index: 99; place-items: center; padding: 30px; text-align: center; background: #081018; }
+    .wide-warning b { display: block; color: var(--cyan-soft); font-size: 20px; }
+    .wide-warning span { display: block; max-width: 460px; margin-top: 12px; color: var(--muted); line-height: 1.6; }
+    @keyframes flow { to { stroke-dashoffset: -84; } }
+    @keyframes dotPulse { 50% { opacity: .45; transform: scale(.72); } }
+    @keyframes radar { from { transform: scale(.2); opacity: .8; } to { transform: scale(2.1); opacity: 0; } }
+    @keyframes factoryScan { to { transform: translateX(110%); } }
+    @keyframes pixelWork { 50% { transform: translateY(-2px); } }
+    @keyframes pixelWorkAlt { 50% { transform: translateX(2px); } }
+    @keyframes pixelTool { 50% { transform: rotate(32deg); } }
+    @keyframes machineRun { to { background-position: 12px 0; } }
+    @keyframes lampBlink { 50% { opacity: .25; } }
+    @keyframes productTrace { to { stroke-dashoffset: -26; } }
+    @keyframes heatPulse { to { opacity: .38; } }
+    @media (max-width: 1368px) {
+      .screen { grid-template-rows: 58px minmax(0,1fr) 122px; }
+      .workspace { grid-template-columns: 280px minmax(480px,1fr) 390px; }
+      .rail { padding: 14px 15px 10px; }
+      .warning, .pipe-copy span { line-height: 1.35; }
+      .map-note { max-width: 180px; }
+      .timeline { grid-template-columns: 180px minmax(0,1fr) 210px; padding-inline: 16px; }
+    }
+    @media (max-width: 1180px) { .screen { display: none; } .wide-warning { display: grid; } }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="screen" data-step="0">
+    <header class="topbar">
+      <div class="brand">
+        <button class="back" id="backButton" type="button">← 返回电力地球</button>
+        <span class="bolt" aria-hidden="true">ϟ</span>
+        <div><h1>中国电力｜全国工作面</h1><p>OPEN GRID WORKS · CHINA POWER</p></div>
+      </div>
+      <span class="preview-badge">UNIT 3 规格预览 · 非实时运行页</span>
+      <div class="top-status">
+        <div class="clock"><strong id="clock">--:--:-- CST</strong><span>界面时钟 · 不代表数据时刻</span></div>
+        <div class="health"><i></i><span>来源已登记 · 运行态未连接</span></div>
+      </div>
+    </header>
+
+    <section class="workspace" aria-label="中国电力大屏预览">
+      <aside class="rail rail-left" aria-label="真实数据分析">
+        <p class="eyebrow">REAL DATA CONTEXT</p>
+        <div class="section-head"><h2>全国概览</h2><span id="scopeStatus">范围：全国</span></div>
+
+        <section class="band">
+          <span class="identity">官方统计 · 2024</span>
+          <div class="kpi-grid">
+            <div class="kpi"><strong>3,348.62</strong><small>全国装机 / GW</small></div>
+            <div class="kpi"><strong>10,086.88</strong><small>全国发电量 / TWh</small></div>
+          </div>
+          <div class="micro-row"><span>电源工程投资</span><b>1,168.7 十亿元</b></div>
+          <div class="micro-row"><span>电网工程投资</span><b>608.3 十亿元</b></div>
+        </section>
+
+        <section class="band">
+          <div class="section-head"><h2>公开设施资产</h2><span class="identity gray">映射样本</span></div>
+          <div class="sample-lead"><strong id="assetCount">9,143</strong><span id="assetLabel">条全国已映射记录</span></div>
+          <p class="warning" id="scopeWarning">地图设施汇总不等于官方全国总量；跨源重复和覆盖差异仍需治理。</p>
+        </section>
+
+        <section class="band">
+          <div class="section-head"><h2>OSM 电力覆盖</h2><span>2026-05-17</span></div>
+          <div class="osm-grid">
+            <div class="osm-item"><b>199,001</b><span>线路 / 电缆</span></div>
+            <div class="osm-item"><b>37,069</b><span>变电站</span></div>
+            <div class="osm-item"><b>14,644</b><span>电厂要素</span></div>
+            <div class="osm-item"><b>753,493</b><span>发电机组件</span></div>
+          </div>
+          <p class="warning">众包几何不含真实容量、损耗或潮流。生产首屏必须走矢量瓦片，禁止加载百万级 GeoJSON。</p>
+        </section>
+
+        <section class="band">
+          <div class="section-head"><h2>风光长期情景</h2><span class="identity amber">模型情景</span></div>
+          <div class="micro-row"><span>GFDL-ESM4 · SSP1-2.6</span><b>2021—2060</b></div>
+          <div class="scenario-chart" aria-label="模型情景趋势视觉示意，不代表具体序列">
+            <svg viewBox="0 0 280 82" role="img" aria-label="UI 示意趋势线">
+              <path d="M2 66 C38 59 49 63 77 48 S126 42 150 47 S195 27 222 32 S254 17 278 20" fill="none" stroke="rgba(0,229,255,.75)" stroke-width="2"/>
+              <path d="M2 70 C45 70 63 60 96 62 S137 49 170 53 S221 37 278 42" fill="none" stroke="rgba(251,191,36,.65)" stroke-width="1.5"/>
+              <line x1="2" y1="72" x2="278" y2="72" stroke="rgba(148,163,184,.2)"/>
+              <g class="trend-marker" id="trendMarker"><line x1="4" y1="7" x2="4" y2="73" stroke="#fff" stroke-opacity=".45"/><circle cx="4" cy="54" r="4" fill="#00e5ff"/></g>
+            </svg>
+          </div>
+          <div class="chart-labels"><span>2021</span><span>容量因子 · UI 趋势示意</span><span>2060</span></div>
+        </section>
+      </aside>
+
+      <section class="map-stage" aria-label="中央中国地图视觉示意">
+        <div class="map-meta">
+          <div class="map-title"><p class="eyebrow">NATIONAL GRID SURFACE</p><h2 id="mapScope">全国电力资产</h2><div class="scope-line"><span>当前范围</span><b id="scopeName">全国</b><span>·</span><span id="scopeDetail">公开设施 / OSM / 来源质量</span></div></div>
+          <div class="map-note"><strong>省级地形素材 · 非业务地图</strong>来自 coastal-grid-dashboard 的省级边界与地形/浮雕贴图；生产页仍接入审核后的边界、真实设施与矢量瓦片，发光线路不代表真实潮流。</div>
+        </div>
+        <div class="toast" id="toast" role="status" aria-live="polite"></div>
+        <div class="map-perspective">
+          <div class="map-plane">
+            <svg viewBox="0 0 780 460" aria-hidden="true">
+              <defs>
+                <linearGradient id="terrain" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#173e48"/><stop offset=".38" stop-color="#112b34"/><stop offset=".72" stop-color="#0b2029"/><stop offset="1" stop-color="#07141d"/></linearGradient>
+                <filter id="glow"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                <clipPath id="chinaClip"><path d="M431.7 401.9L416 396.3 414.6 390 417.4 386.7 406.1 384.9 399.3 379.9 383.3 389.5 379.4 386.6 371.8 390.6 365.7 387 361.5 391.4 354.3 393 356.7 406.1 349 398.9 337.8 402.2 335 395.7 326.1 394.2 330.1 384.5 322.4 381.7 322 370.5 306.8 373.1 309.8 357 319.9 349.6 319.8 329.1 307.9 318 291.4 319.1 295 314.8 288.4 306.6 271.5 308.3 239.7 327.2 214.8 320.5 202.7 332.2 199.5 322.9 187.5 326.2 167.9 325.1 120.5 296.1 109.3 299.6 85.3 283.2 76.7 269.8 80.7 251.8 75.4 244.2 72.5 234.2 50.1 230.3 46.1 220.2 28.5 214.4 37.4 211.4 34 199.1 21.6 196.7 19.6 186.6 34 174.2 51.8 175.8 58.9 167.7 80.9 161.3 98.8 155.5 98 148 105.4 142.1 100.3 130.8 101.8 123.4 116.3 115.8 126.3 118.5 132.4 93.8 153.4 98 164.3 80.3 178.6 70.9 189.8 70.1 191.8 77.3 219.8 87.9 228.3 101.2 223.9 113.7 258.2 120.7 280.2 128.7 292.6 147.4 353.9 149.5 380.5 159 395.8 160.9 417.2 152.5 448.1 150.7 479.2 135.5 472.8 127.6 478.8 119.2 499 123.1 510.7 115.3 534.8 104.5 545.3 101 574.4 99.9 572.5 94.2 549.2 84.1 537.1 85.6 522.3 82.4 536.2 62.1 550.5 65.8 567.1 59.2 566 55.1 585 34.8 583.9 29.2 576.5 27.4 587.8 20.6 619.3 17.4 643.8 23.5 652.1 31.7 667.1 57.5 690 67.3 702.6 73.7 708 87.7 733.7 82.7 752 81 753 87.4 746 92.4 742.3 105 733.4 118.4 718.2 116.1 707.8 121.9 711.1 139.5 701.1 147.3 694.8 144 683.1 155.5 672.5 156.2 673.8 163.3 656.7 159.4 647.9 169.1 627.2 180.9 610.1 184.8 590 195.2 597.8 187.4 591.2 185.5 603.2 174 598 168.3 590.1 169.2 581.7 177.2 568.7 183 563.7 189.8 549.4 190.4 547.9 198.9 563.3 203.5 563.4 212 573.1 214.1 585 206 608 211.2 604.1 218 585.7 220.4 578.2 225.6 566 241.8 579.2 248.7 586.2 268.1 598 277.2 582.2 274.7 598 287.3 578.3 297.1 591.1 296.4 601 301.6 594.1 306.2 599 310.4 591.2 323 576.5 340.4 574.6 344 563.7 357.5 549.4 190.4 563.7 357.5 550.1 366.3 544.2 376.9 533.6 384.6 504.2 389.9 496 385.1 498.6 393.3 460.8 406.9 460.1 416.5 452 409 455 402.2 445.8 402.9 437.8 397.1 431.7 401.9 Z"/></clipPath>
+                <clipPath id="chinaClip2"><path d="M431.7 401.9L399.3 379.9 354.3 393 322 370.5 307.9 318 239.7 327.2 167.9 325.1 120.5 296.1 85.3 283.2 72.5 234.2 19.6 186.6 34 174.2 80.9 161.3 105.4 142.1 132.4 93.8 178.6 70.9 228.3 101.2 292.6 147.4 395.8 160.9 448.1 150.7 499 123.1 545.3 101 574.4 99.9 536.2 62.1 585 34.8 619.3 17.4 652.1 31.7 667.1 57.5 708 87.7 752 81 733.4 118.4 707.8 121.9 701.1 147.3 647.9 169.1 610.1 184.8 590 195.2 547.9 198.9 573.1 214.1 608 211.2 566 241.8 598 277.2 578.3 297.1 601 301.6 591.2 323 576.5 340.4 563.7 357.5 533.6 384.6 498.6 393.3 460.8 406.9 452 409 431.7 401.9Z"/></clipPath>
+              </defs>
+              <path class="china-depth" d="M431.7 401.9L416 396.3 399.3 379.9 383.3 389.5 354.3 393 337.8 402.2 322 370.5 319.9 349.6 307.9 318 271.5 308.3 239.7 327.2 202.7 332.2 167.9 325.1 120.5 296.1 85.3 283.2 72.5 234.2 46.1 220.2 19.6 186.6 34 174.2 80.9 161.3 105.4 142.1 132.4 93.8 178.6 70.9 228.3 101.2 258.2 120.7 292.6 147.4 395.8 160.9 448.1 150.7 499 123.1 545.3 101 574.4 99.9 549.2 84.1 536.2 62.1 585 34.8 619.3 17.4 652.1 31.7 667.1 57.5 708 87.7 752 81 733.4 118.4 707.8 121.9 701.1 147.3 672.5 156.2 647.9 169.1 610.1 184.8 590 195.2 568.7 183 547.9 198.9 573.1 214.1 608 211.2 578.2 225.6 566 241.8 598 277.2 582.2 274.7 598 287.3 578.3 297.1 601 301.6 591.2 323 576.5 340.4 563.7 357.5 550.1 366.3 533.6 384.6 498.6 393.3 460.8 406.9 460.1 416.5 452 409 431.7 401.9Z"/>
+              <path class="china-main" d="M431.7 401.9L416 396.3 399.3 379.9 383.3 389.5 354.3 393 337.8 402.2 322 370.5 319.9 349.6 307.9 318 271.5 308.3 239.7 327.2 202.7 332.2 167.9 325.1 120.5 296.1 85.3 283.2 72.5 234.2 46.1 220.2 19.6 186.6 34 174.2 80.9 161.3 105.4 142.1 132.4 93.8 178.6 70.9 228.3 101.2 258.2 120.7 292.6 147.4 395.8 160.9 448.1 150.7 499 123.1 545.3 101 574.4 99.9 549.2 84.1 536.2 62.1 585 34.8 619.3 17.4 652.1 31.7 667.1 57.5 708 87.7 752 81 733.4 118.4 707.8 121.9 701.1 147.3 672.5 156.2 647.9 169.1 610.1 184.8 590 195.2 568.7 183 547.9 198.9 573.1 214.1 608 211.2 578.2 225.6 566 241.8 598 277.2 582.2 274.7 598 287.3 578.3 297.1 601 301.6 591.2 323 576.5 340.4 563.7 357.5 550.1 366.3 533.6 384.6 498.6 393.3 460.8 406.9 460.1 416.5 452 409 431.7 401.9Z M466.7 420.1L468.2 424.1 456.8 438.6 450.2 441.4 440.4 437.6 440 428.4 447.2 421.4 466.7 420.1Z"/>
+              <path class="china-main" d="M466.7 420.1L468.2 424.1 456.8 438.6 450.2 441.4 440.4 437.6 440 428.4 447.2 421.4 466.7 420.1Z"/>
+              <g clip-path="url(#chinaClip2)">
+                <path class="province-lines" d="M230 102L250 155 236 208 278 259 269 314M355 150L339 206 352 262 318 321M470 137L449 190 465 238 431 294 440 360M575 102L543 165 554 210 525 265 550 332M660 95L625 146 643 190 610 238 625 285M94 180L180 207 252 188 339 206 449 190 543 165 625 146M80 257L166 259 236 208 352 262 465 238 554 210 643 190M167 325L269 314 318 321 431 294 525 265 610 238M322 370L440 360 550 332 591 296"/>
+                <path class="flow" d="M94 235C213 188 294 205 386 255S557 317 674 210"/>
+                <path class="flow amber" d="M164 308C266 252 370 285 455 236S579 166 690 176"/>
+                <circle class="glow-dot" cx="164" cy="252" r="5"/><circle class="glow-dot" cx="358" cy="248" r="4"/><circle class="glow-dot" cx="532" cy="267" r="5"/><circle class="glow-dot" cx="624" cy="205" r="4"/>
+              </g>
+            </svg>
+            <svg id="coastalProvinceMap" class="coastal-province-map" viewBox="0 0 780 460" role="img" aria-label="coastal-grid-dashboard 中国省级三维地形素材；仅作页面视觉预览">
+              <defs>
+                <pattern id="coastalTerrain" patternUnits="userSpaceOnUse" width="780" height="460"><image href="assets/coastal-china-terrain.jpg" width="780" height="460" preserveAspectRatio="xMidYMid slice" /></pattern>
+                <filter id="coastalGlow"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                <clipPath id="coastalChinaClip" clipPathUnits="userSpaceOnUse"></clipPath>
+              </defs>
+              <g id="coastalProvinceDepth" transform="translate(0 14)"></g>
+              <g id="coastalProvinceFaces"></g>
+              <image class="relief-overlay" href="assets/coastal-china-relief.jpg" x="0" y="0" width="780" height="460" preserveAspectRatio="xMidYMid slice" clip-path="url(#coastalChinaClip)" />
+              <g id="coastalProvinceOutlines"></g>
+              <g clip-path="url(#coastalChinaClip)" aria-hidden="true">
+                <path class="source-grid" d="M74 126H706M52 201H732M47 276H737M79 351H705M190 45V408M340 30V424M490 24V430M640 46V408" />
+                <path class="ui-flow" d="M132 230C241 179 333 205 411 244S550 307 652 204" />
+                <path class="ui-flow amber" d="M182 310C270 259 363 276 449 234S565 171 669 175" />
+                <circle class="ui-dot" cx="168" cy="247" r="4.5"/><circle class="ui-dot" cx="359" cy="244" r="4"/><circle class="ui-dot" cx="530" cy="263" r="4.5"/><circle class="ui-dot" cx="625" cy="204" r="4"/>
+              </g>
+            </svg>
+            <div class="map-pulse" id="mapPulse"></div>
+            <div class="map-hotspots">
+              <button class="hotspot" type="button" data-province="xinjiang" aria-label="新疆"></button>
+              <button class="hotspot" type="button" data-province="inner-mongolia" aria-label="内蒙古"></button>
+              <button class="hotspot" type="button" data-province="sichuan" aria-label="四川"></button>
+              <button class="hotspot" type="button" data-province="shandong" aria-label="山东"></button>
+              <button class="hotspot" type="button" data-province="guangdong" aria-label="广东"></button>
+            </div>
+          </div>
+        </div>
+        <div class="layer-strip" aria-label="图层选择">
+          <button class="layer-btn is-active" type="button" data-layer="assets">设施样本</button>
+          <button class="layer-btn is-active" type="button" data-layer="osm">OSM 主干</button>
+          <button class="layer-btn" type="button" data-layer="pv">PV 足迹</button>
+          <button class="layer-btn" type="button" data-layer="gfs">GFS 预报</button>
+          <button class="layer-btn" type="button" data-layer="graced">GRACED Power</button>
+          <button class="layer-btn" type="button" data-layer="vre">长期情景</button>
+          <button class="layer-btn is-locked" type="button" data-layer="flow">跨省潮流 · 锁定</button>
+          <button class="layer-btn is-locked" type="button" data-layer="storage">储能 · 锁定</button>
+        </div>
+        <div class="province-shortcuts" aria-label="省份快捷选择">
+          <button class="province-btn is-active" type="button" data-province="china">全国</button>
+          <button class="province-btn" type="button" data-province="xinjiang">新疆</button>
+          <button class="province-btn" type="button" data-province="inner-mongolia">内蒙古</button>
+          <button class="province-btn" type="button" data-province="sichuan">四川</button>
+          <button class="province-btn" type="button" data-province="shandong">山东</button>
+          <button class="province-btn" type="button" data-province="guangdong">广东</button>
+        </div>
+      </section>
+
+      <aside class="rail rail-right" aria-label="预测就绪度">
+        <p class="eyebrow">FORECAST READINESS</p>
+        <div class="section-head"><h2>超短期预测链</h2><span class="identity red">预测锁定</span></div>
+        <p class="warning">当前只展示数据到模型的流程。真实功率标签与历史 NWP 未通过前，不输出预测值或概率区间。</p>
+
+        <section class="band">
+          <div class="forecast-factory" id="pipeline" aria-label="超短期预测动画工厂">
+            <article class="factory-stage" data-node="0" data-state="ready">
+              <span class="stage-index">01</span><div class="stage-copy"><b>GFS 气象输入</b><span>起报时刻 · 有效时刻 · 风速场</span></div>
+              <div class="workcell" aria-hidden="true"><span class="pixel-worker worker-a"><i></i><b></b><em></em></span><span class="pixel-worker worker-b"><i></i><b></b><em></em></span><span class="workbench"></span></div>
+              <div class="stage-output"><span class="output-caption"><b>气象场输入包</b><small>结构示意｜真实时刻由 API 读取</small></span><svg class="product-viz" viewBox="0 0 180 36" preserveAspectRatio="none" aria-label="风速与辐射输入结构示意"><path class="gridline" d="M0 12H180M0 24H180M45 0V36M90 0V36M135 0V36"/><path class="trace" d="M0 27L18 24L36 25L54 17L72 20L90 9L108 14L126 11L144 18L162 8L180 12"/><path class="trace secondary" d="M0 30L22 29L44 23L66 25L88 19L110 21L132 14L154 17L180 10"/></svg></div><span class="work-status"></span>
+            </article>
+            <article class="factory-stage" data-node="1" data-state="blocked">
+              <span class="stage-index">02</span><div class="stage-copy"><b>历史 NWP 档案</b><span>样本切片 · issue / valid 对齐</span></div>
+              <div class="workcell" aria-hidden="true"><span class="pixel-worker worker-a"><i></i><b></b><em></em></span><span class="pixel-worker worker-b"><i></i><b></b><em></em></span><span class="workbench"></span></div>
+              <div class="stage-output"><span class="output-caption"><b>时序样本库</b><small>等待档案｜不生成训练集</small></span><svg class="product-viz" viewBox="0 0 180 36" preserveAspectRatio="none" aria-label="历史样本数据库结构示意"><g class="blocked-fill"><rect x="8" y="6" width="116" height="6"/><rect x="15" y="15" width="130" height="6"/><rect x="23" y="24" width="142" height="6"/></g><path class="trace" d="M18 9H42M52 9H78M88 9H112M26 18H55M65 18H95M105 18H135M34 27H72M82 27H118M128 27H155"/></svg></div><span class="work-status"></span>
+            </article>
+            <article class="factory-stage" data-node="2" data-state="blocked">
+              <span class="stage-index">03</span><div class="stage-copy"><b>真实功率标签</b><span>风速与场站出力同步配对</span></div>
+              <div class="workcell" aria-hidden="true"><span class="pixel-worker worker-a"><i></i><b></b><em></em></span><span class="pixel-worker worker-b"><i></i><b></b><em></em></span><span class="workbench"></span></div>
+              <div class="stage-output"><span class="output-caption"><b>配对时序样本</b><small>缺实测｜曲线仅为结构占位</small></span><svg class="product-viz" viewBox="0 0 180 36" preserveAspectRatio="none" aria-label="气象与功率配对曲线结构示意"><path class="gridline" d="M0 12H180M0 24H180"/><path class="trace" d="M0 25L18 16L36 20L54 7L72 12L90 6L108 15L126 18L144 11L162 20L180 14"/><path class="trace secondary" d="M0 30L18 27L36 24L54 17L72 18L90 12L108 17L126 23L144 19L162 25L180 22"/></svg></div><span class="work-status"></span>
+            </article>
+            <article class="factory-stage" data-node="3" data-state="blocked">
+              <span class="stage-index">04</span><div class="stage-copy"><b>约束与编码检查</b><span>容量 · 停机 · 限电 · 质量掩码</span></div>
+              <div class="workcell" aria-hidden="true"><span class="pixel-worker worker-a"><i></i><b></b><em></em></span><span class="pixel-worker worker-b"><i></i><b></b><em></em></span><span class="workbench"></span></div>
+              <div class="stage-output"><span class="output-caption"><b>质量矩阵</b><small>参考 GADF 图式｜不是模型结果</small></span><svg class="product-viz" viewBox="0 0 180 36" preserveAspectRatio="none" aria-label="质量掩码热力矩阵结构示意"><g stroke="#071018" stroke-width="1"><rect class="pulse-cell" x="5" y="4" width="20" height="8" fill="#183f63"/><rect x="26" y="4" width="20" height="8" fill="#1f776b"/><rect x="47" y="4" width="20" height="8" fill="#b9a52a"/><rect x="68" y="4" width="20" height="8" fill="#315a72"/><rect x="89" y="4" width="20" height="8" fill="#12334c"/><rect x="110" y="4" width="20" height="8" fill="#488c63"/><rect x="131" y="4" width="20" height="8" fill="#d3bd33"/><rect x="152" y="4" width="20" height="8" fill="#245769"/><rect x="5" y="13" width="20" height="8" fill="#245769"/><rect x="26" y="13" width="20" height="8" fill="#b9a52a"/><rect x="47" y="13" width="20" height="8" fill="#488c63"/><rect class="pulse-cell" x="68" y="13" width="20" height="8" fill="#17384f"/><rect x="89" y="13" width="20" height="8" fill="#c8b331"/><rect x="110" y="13" width="20" height="8" fill="#1f776b"/><rect x="131" y="13" width="20" height="8" fill="#315a72"/><rect x="152" y="13" width="20" height="8" fill="#947d25"/><rect x="5" y="22" width="20" height="9" fill="#947d25"/><rect x="26" y="22" width="20" height="9" fill="#315a72"/><rect x="47" y="22" width="20" height="9" fill="#17384f"/><rect x="68" y="22" width="20" height="9" fill="#1f776b"/><rect class="pulse-cell" x="89" y="22" width="20" height="9" fill="#d3bd33"/><rect x="110" y="22" width="20" height="9" fill="#488c63"/><rect x="131" y="22" width="20" height="9" fill="#17384f"/><rect x="152" y="22" width="20" height="9" fill="#315a72"/></g></svg></div><span class="work-status"></span>
+            </article>
+            <article class="factory-stage" data-node="4" data-state="blocked">
+              <span class="stage-index">05</span><div class="stage-copy"><b>基线与 LightGBM</b><span>特征输入 · 模型比较 · 版本登记</span></div>
+              <div class="workcell" aria-hidden="true"><span class="pixel-worker worker-a"><i></i><b></b><em></em></span><span class="pixel-worker worker-b"><i></i><b></b><em></em></span><span class="workbench"></span></div>
+              <div class="stage-output"><span class="output-caption"><b>模型结构图</b><small>上游未通过｜训练保持锁定</small></span><svg class="product-viz" viewBox="0 0 180 36" preserveAspectRatio="none" aria-label="特征到模型的流程结构示意"><path class="gridline" d="M24 9L70 18L24 27M70 18L112 8M70 18L112 18M70 18L112 28M112 8L158 18M112 18L158 18M112 28L158 18"/><circle class="node" cx="18" cy="9" r="5"/><circle class="node" cx="18" cy="27" r="5"/><rect class="blocked-fill" x="61" y="12" width="18" height="12"/><rect class="node" x="105" y="3" width="14" height="9"/><rect class="node" x="105" y="14" width="14" height="9"/><rect class="node" x="105" y="25" width="14" height="8"/><rect class="blocked-fill" x="151" y="12" width="16" height="12"/></svg></div><span class="work-status"></span>
+            </article>
+            <article class="factory-stage" data-node="5" data-state="blocked">
+              <span class="stage-index">06</span><div class="stage-copy"><b>概率输出与回测</b><span>P10 / P50 / P90 · 误差回流</span></div>
+              <div class="workcell" aria-hidden="true"><span class="pixel-worker worker-a"><i></i><b></b><em></em></span><span class="pixel-worker worker-b"><i></i><b></b><em></em></span><span class="workbench"></span></div>
+              <div class="stage-output"><span class="output-caption"><b>滚动预测图</b><small>锁定｜无预测值与概率区间</small></span><svg class="product-viz" viewBox="0 0 180 36" preserveAspectRatio="none" aria-label="滚动预测与概率区间结构示意"><path class="gridline" d="M0 12H180M0 24H180M45 0V36M90 0V36M135 0V36"/><path class="fan-fill" d="M0 26L20 22L40 24L60 14L80 17L100 10L120 14L140 8L160 12L180 9L180 20L160 18L140 21L120 19L100 23L80 25L60 22L40 29L20 27L0 31Z"/><path class="trace" d="M0 28L20 24L40 26L60 18L80 21L100 16L120 17L140 14L160 15L180 13"/><path class="trace secondary" d="M0 25L20 23L40 25L60 17L80 20L100 15L120 18L140 13L160 16L180 14"/></svg></div><span class="work-status"></span>
+            </article>
+          </div>
+          <div class="factory-note"><span id="factoryStatus"><b>工位 01</b> 正在生成气象场输入图</span><span>UI 动画演示 · 非模型运行</span></div>
+        </section>
+      </aside>
+    </section>
+
+    <footer class="bottom">
+      <section class="timeline" aria-label="UI 演示时间轴">
+        <div class="timeline-info"><b>同步播放｜UI 演示</b><span>不代表真实分钟级业务时间</span></div>
+        <div class="timeline-controls"><button class="timeline-btn" id="playButton" type="button" aria-label="播放 UI 演示">▶</button><div class="timeline-track"><div class="ticks"><i></i><i></i><i></i><i></i><i></i><i></i></div><span class="time-thumb" id="timeThumb"></span></div></div>
+        <div class="sync-status"><b id="stepLabel">演示步 00 / 05</b><br>时间游标 · 地图脉冲 · 情景标记 · 流程节点同步</div>
+      </section>
+      <section class="ledger">
+        <div class="ledger-title"><b>来源与数据身份账本</b><span>TRACEABLE BY DESIGN</span></div>
+        <div class="legend-line"><span class="legend-item"><i></i>官方统计 / 正式预报</span><span class="legend-item"><i></i>映射样本 / 众包地图</span><span class="legend-item"><i></i>研究估算 / 模型情景</span><span class="legend-item"><i></i>不可用 / 待补齐</span></div>
+        <button class="ledger-toggle" id="ledgerToggle" type="button" aria-expanded="false">展开来源明细 ↑</button>
+      </section>
+      <div class="ledger-panel" id="ledgerPanel">
+        <div class="ledger-card"><b>官方统计｜2024</b><span>国家能源局装机与投资、国家统计局发电量。年度总量不拆成小时曲线。</span></div>
+        <div class="ledger-card"><b>设施与 OSM｜公开样本</b><span>GEM/WRI/水电 9,143 条；OSM 2026-05-17 众包快照。均不等于官方全量。</span></div>
+        <div class="ledger-card"><b>GFS / GRACED</b><span>GFS 是正式预报；GRACED Power 是研究估算。standalone 预览不连接运行 API。</span></div>
+        <div class="ledger-card"><b>VRE / 预测锁定</b><span>VRE 是 GFDL-ESM4 SSP1-2.6 长期情景；真实功率与历史 NWP 缺失，预测无输出。</span></div>
+      </div>
+    </footer>
+  </main>
+
+  <div class="wide-warning"><div><b>请使用 PC 宽屏查看完整大屏</b><span>Unit 3 的完整目标是 1440×900 至 1920×1080。当前窄屏不压缩真实性标签和预测工位，以免产生误读。</span></div></div>
+
+  <script>
+    (() => {
+      const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const provinces = {
+        china: { label: '全国', map: '全国电力资产', detail: '公开设施 / OSM / 来源质量' },
+        xinjiang: { label: '新疆', map: '新疆电力资产视图', detail: '省级样本待 Unit 4 空间查询' },
+        'inner-mongolia': { label: '内蒙古', map: '内蒙古电力资产视图', detail: '省级样本待 Unit 4 空间查询' },
+        sichuan: { label: '四川', map: '四川电力资产视图', detail: '省级样本待 Unit 4 空间查询' },
+        shandong: { label: '山东', map: '山东电力资产视图', detail: '省级样本待 Unit 4 空间查询' },
+        guangdong: { label: '广东', map: '广东电力资产视图', detail: '省级样本待 Unit 4 空间查询' }
+      };
+      const lockedLayers = {
+        flow: '省间通道容量、损耗、方向和真实潮流缺失；本层保持锁定。',
+        storage: '储能功率、能量容量、效率、SOC 与状态缺失；本层保持锁定。'
+      };
+      const layerNotes = {
+        assets: '设施层：9,143 条公开来源映射样本；生产页按视口和范围查询。',
+        osm: 'OSM 层：生产页必须使用矢量瓦片，禁止一次加载百万级 GeoJSON。',
+        pv: 'PV 足迹：真实 2015/2020/2024 来源；精细多边形尚待完整结构化。',
+        gfs: 'GFS：正式业务预报；standalone 预览不连接运行 API，也不生成替代天气。',
+        graced: 'GRACED Power：研究估算；预览不显示虚构的当前排放值。',
+        vre: 'VRE：GFDL-ESM4 SSP1-2.6 长期模型情景，不是实际发电。'
+      };
+      const $ = (id) => document.getElementById(id);
+      const svgNS = 'http://www.w3.org/2000/svg';
+      const toast = $('toast');
+      let toastTimer;
+      let scope = 'china';
+      let step = 0;
+      let timer = null;
+
+      function projectCoastalCoordinate([lon, lat]) {
+        const x = 20 + ((lon - 72) / (136.5 - 72)) * 740;
+        const y = 12 + ((54.5 - lat) / (54.5 - 16)) * 420;
+        return [x, y];
+      }
+      function ringPath(ring) {
+        return ring.map((point, index) => {
+          const [x, y] = projectCoastalCoordinate(point);
+          return `${index ? 'L' : 'M'}${x.toFixed(2)},${y.toFixed(2)}`;
+        }).join(' ') + 'Z';
+      }
+      function provincePath(geometry) {
+        const polygons = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates;
+        return polygons.filter((polygon) => polygon[0]?.some((point) => point[1] >= 18))
+          .map((polygon) => polygon.map(ringPath).join(' ')).join(' ');
+      }
+      function appendSvgPath(parent, d, className, label) {
+        const path = document.createElementNS(svgNS, 'path');
+        path.setAttribute('d', d); path.setAttribute('class', className); path.setAttribute('fill-rule', 'evenodd');
+        if (label) path.setAttribute('data-province-name', label);
+        parent.appendChild(path);
+        return path;
+      }
+      function loadCoastalProvinceMaterial() {
+        const depth = $('coastalProvinceDepth');
+        const faces = $('coastalProvinceFaces');
+        const outlines = $('coastalProvinceOutlines');
+        const clip = $('coastalChinaClip');
+        fetch('assets/coastal-china-full.json').then((response) => {
+          if (!response.ok) throw new Error('coastal province material unavailable');
+          return response.json();
+        }).then((geo) => {
+          geo.features.filter((feature) => feature.properties?.name).forEach((feature) => {
+            const d = provincePath(feature.geometry);
+            if (!d) return;
+            appendSvgPath(depth, d, 'province-depth', feature.properties.name);
+            appendSvgPath(faces, d, 'province-face', feature.properties.name);
+            appendSvgPath(outlines, d, 'province-outline', feature.properties.name);
+            const clipPath = document.createElementNS(svgNS, 'path');
+            clipPath.setAttribute('d', d); clipPath.setAttribute('fill-rule', 'evenodd'); clip.appendChild(clipPath);
+          });
+        }).catch(() => {
+          document.querySelector('.map-plane > svg:first-of-type').style.display = 'block';
+          $('coastalProvinceMap').style.display = 'none';
+          showToast('省级地形素材暂不可用，已回退到预览轮廓；生产页仍须使用审核后的真实边界。');
+        });
+      }
+
+      function showToast(message) {
+        toast.textContent = message;
+        toast.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toast.classList.remove('show'), 3200);
+      }
+      function setScope(id) {
+        const data = provinces[id];
+        if (!data) return;
+        scope = id;
+        $('scopeStatus').textContent = `范围：${data.label}`;
+        $('scopeName').textContent = data.label;
+        $('mapScope').textContent = data.map;
+        $('scopeDetail').textContent = data.detail;
+        if (id === 'china') {
+          $('assetCount').textContent = '9,143';
+          $('assetLabel').textContent = '条全国已映射记录';
+          $('scopeWarning').textContent = '地图设施汇总不等于官方全国总量；跨源重复和覆盖差异仍需治理。';
+        } else {
+          $('assetCount').textContent = '—';
+          $('assetLabel').textContent = '省级样本待生产契约查询';
+          $('scopeWarning').textContent = '预览不伪造省级记录数；Unit 4 按真实边界与当前筛选返回映射样本，空结果不代表官方为零。';
+        }
+        document.querySelectorAll('[data-province]').forEach(el => el.classList.toggle('is-active', el.dataset.province === id));
+        showToast(`${data.label}范围已同步：地图焦点、左侧样本口径与预测工位状态。`);
+      }
+      function setStep(next) {
+        step = (next + 6) % 6;
+        $('timeThumb').style.left = `${step * 20}%`;
+        $('stepLabel').textContent = `演示步 ${String(step).padStart(2,'0')} / 05`;
+        $('trendMarker').style.transform = `translateX(${step * 53}px)`;
+        document.querySelectorAll('.factory-stage').forEach(node => {
+          const index = Number(node.dataset.node);
+          node.classList.toggle('is-current', index === step);
+          node.classList.toggle('is-visited', index <= step);
+        });
+        const stageStatus = [
+          '<b>工位 01</b> 正在生成气象场输入图',
+          '<b>工位 02</b> 正在整理历史时序样本库',
+          '<b>工位 03</b> 正在对齐气象与真实功率',
+          '<b>工位 04</b> 正在生成约束质量矩阵',
+          '<b>工位 05</b> 正在登记模型结构与版本',
+          '<b>工位 06</b> 正在检查滚动预测与误差回流'
+        ];
+        $('factoryStatus').innerHTML = stageStatus[step];
+        $('mapPulse').style.left = `${35 + step * 6}%`;
+        $('mapPulse').style.top = `${45 + (step % 2) * 8}%`;
+      }
+      function togglePlay() {
+        if (prefersReducedMotion) { showToast('系统偏好已启用“减少动态效果”，自动播放保持关闭。'); return; }
+        if (timer) {
+          clearInterval(timer); timer = null; $('playButton').textContent = '▶'; $('playButton').setAttribute('aria-label','播放 UI 演示');
+        } else {
+          timer = setInterval(() => setStep(step + 1), 1100); $('playButton').textContent = 'Ⅱ'; $('playButton').setAttribute('aria-label','暂停 UI 演示');
+        }
+      }
+      document.querySelectorAll('[data-province]').forEach(button => button.addEventListener('click', () => setScope(button.dataset.province)));
+      document.querySelectorAll('.layer-btn').forEach(button => button.addEventListener('click', () => {
+        const key = button.dataset.layer;
+        if (lockedLayers[key]) { showToast(lockedLayers[key]); return; }
+        button.classList.toggle('is-active');
+        showToast(layerNotes[key]);
+      }));
+      $('playButton').addEventListener('click', togglePlay);
+      $('ledgerToggle').addEventListener('click', () => {
+        const open = $('ledgerPanel').classList.toggle('open');
+        $('ledgerToggle').textContent = open ? '收起来源明细 ↓' : '展开来源明细 ↑';
+        $('ledgerToggle').setAttribute('aria-expanded', String(open));
+      });
+      $('backButton').addEventListener('click', () => showToast('预览反馈：生产页返回时恢复电力地球的视角、图层与时间状态。'));
+      loadCoastalProvinceMaterial();
+      setInterval(() => {
+        const now = new Date();
+        $('clock').textContent = `${new Intl.DateTimeFormat('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false,timeZone:'Asia/Shanghai'}).format(now)} CST`;
+      }, 1000);
+      setStep(0);
+    })();
+  </script>
+</body>
+</html>
+

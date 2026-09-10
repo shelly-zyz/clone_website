@@ -270,7 +270,7 @@ Power Earth globe
 - Sensitive files and transient process files are not accidentally committed.
 - The working state after backup is understandable to the next task.
 
-- [ ] **Unit 3: China Dashboard Formal Spec and HTML Preview**
+- [x] **Unit 3: China Dashboard Formal Spec and HTML Preview**
 
 **Goal:** Convert the China dashboard MVP into a formal page specification and a standalone HTML preview that the user can inspect before production implementation.
 
@@ -290,16 +290,16 @@ Power Earth globe
 
 **Approach:**
 - Define all enabled cards, disabled modules, map layers, data provenance, empty states, click behavior, province behavior, facility behavior, timeline/playback behavior, PC resolution targets, and performance targets.
-- Produce a single-file preview that opens directly in a browser and shows the final intended composition without requiring the Next.js app server.
+- Produce a static preview bundle that opens through a lightweight local HTTP server and shows the final intended composition without requiring the Next.js app server.
 - Center area: 3D China map style inspired by the external coastal reference, reworded and recolored for national power assets.
 - Left rail: real-data analytics, including national official-stat strip, mapped asset mix, source coverage, VRE scenario trend context, and province focus summaries.
-- Right rail: ultra-short-term prediction pipeline visualization with synchronized stages: GFS input, feature readiness, historical label check, baseline/model readiness, P10/P50/P90 output slot, and error/backtest slot.
-- Bottom/source area: data identity, source, time range, unit, current limitations, and explicit unavailable data list.
+- Right rail: six synchronized animated workstations for GFS input, historical NWP, real-power labels, operating constraints, baseline/LightGBM, and P10/P50/P90 plus backtesting. Each workstation shows workers, machine activity, and a truthful visual artifact; unavailable stages produce waiting/lock artifacts rather than model values.
+- Bottom/source area: data identity, source, time range, unit, current limitations, and explicit unavailable states.
 - Mark every preview value as one of real source, derived from current inventory, or visual placeholder. Business placeholders must not be visually indistinguishable from real data.
 
 **Visual thesis:** A national power command surface: dark power-earth base, precise cyan grid energy, amber reliability/data-quality accents, central terrain-lit China map, softened boundaries, dense but readable analysis.
 
-**Interaction plan:** Synchronized playback should move a timeline cursor, pulse the active province/layer, update the left trend marker, and advance the right prediction pipeline stage. Province selection updates map focus, left analytics, and source/quality notes together.
+**Interaction plan:** Synchronized playback should move a timeline cursor, pulse the active province/layer, update the left trend marker, and advance the right prediction workstation. Province selection updates map focus, left analytics, and workstation state together.
 
 **Patterns to follow:**
 - `src/app/globals.css` for power-earth colors, panel density, controls, and focus states.
@@ -319,7 +319,11 @@ Power Earth globe
 - The spec lists every card, map layer, data source, no-data state, and click behavior.
 - No production code is changed in this unit.
 
-- [ ] **Unit 4A: China Dashboard Data Contracts and APIs**
+**Actual status (2026-09-09):** Complete and user-approved. Formal spec, static HTML bundle, source mapping, visual checklist, review record, and 1440×900 / 1920×1080 screenshots are present. The central map loads the user-specified `coastal-grid-dashboard` province/terrain assets; the right rail uses six animated worker stations and no longer contains separate national-gap or source-quality blocks. Browser checks passed for 34 province paths, 12 worker figures, workstation playback, unavailable-layer messaging, narrow-width warning, and zero console errors. The user approved continuing into production implementation.
+
+**Evidence:** `docs/project-management/CHINA_DASHBOARD_SPEC.md`; `docs/project-management/CHINA_DASHBOARD_PREVIEW_REVIEW.md`; `docs/design-references/china-dashboard/china-dashboard-preview.html`; `docs/design-references/china-dashboard/preview-data-sources.md`; `docs/design-references/china-dashboard/preview-visual-checklist.md`; `docs/pr-evidence/china-dashboard-preview-desktop.png`; `docs/pr-evidence/china-dashboard-preview-wide.png`.
+
+- [x] **Unit 4A: China Dashboard Data Contracts and APIs**
 
 **Goal:** Add production data contracts and read-only endpoints for the China dashboard MVP.
 
@@ -366,7 +370,9 @@ Power Earth globe
 - TypeScript types cover all enabled and unavailable dashboard states.
 - Validation confirms no mock/demo/synthetic business data enters the dashboard contract.
 
-- [ ] **Unit 4B: Production China Dashboard Shell and 3D Map**
+**Actual status (2026-09-09):** Complete. Added typed official-statistic, mapped-sample, geometry, live-field, and interface-only identities; three read-only dashboard endpoints; contract-first Node tests; and dashboard/data validators. The overview endpoint prefers PostgreSQL and falls back to the same traceable generated snapshot when the configured database is unreachable. Five contract tests, TypeScript, validation, lint, and production build pass.
+
+- [x] **Unit 4B: Production China Dashboard Shell and 3D Map**
 
 **Goal:** Implement the approved dashboard as a production page with central 3D China map, left analysis rail, right prediction workflow rail, source panel, and return-to-globe behavior.
 
@@ -413,7 +419,9 @@ Power Earth globe
 - Interactive controls do not overlap and text remains readable.
 - No fake prediction, dispatch, storage, or real-time provincial carbon claims appear in production UI.
 
-- [ ] **Unit 4C: Dense Layers, Vector Tiles, and Performance**
+**Actual status (2026-09-09):** Complete for the approved production shell. Added `/china`, a controlled power-earth toolbar entry, router-back behavior, full-height analysis rails, a CSS-perspective province map using the approved colored terrain/relief assets, province/layer controls, the six-stage pixel-worker factory with colorful per-stage SVG artifacts, synchronized playback, and the source ledger. Three.js was not added because the approved visual can be reproduced with a smaller isolated SVG/CSS scene; dense OSM rendering remains Unit 4C. Browser evidence at 1440×900 and 1920×1080 shows zero overflow, the 9,143-item traceable snapshot, and successful entry, Guangdong scope, and ledger interactions.
+
+- [x] **Unit 4C: Dense Layers, Vector Tiles, and Performance**
 
 **Goal:** Wire the production dashboard to dense OSM/PV/GFS/GRACED layers with bounded loading and measurable PC performance.
 
@@ -451,6 +459,8 @@ Power Earth globe
 - Dense layer rendering remains responsive on target PC desktop sizes.
 - Network payloads and feature counts are bounded by zoom/layer selection.
 - The data-quality panel reports vector-tile source, snapshot date, and simplification limits.
+
+**Actual status (2026-09-09):** Complete for the available source-backed layers. The China page now renders the existing OSM transmission, substation, plant, and generator source layers through the bounded z3–5 vector-tile API, with feature toggles, voltage-class filters, overview/detail thresholds, and a visible high-load warning before z4–5. The local route serves real PBF files and returns cacheable 204 responses for intentionally absent sparse tiles so one missing tile cannot trigger the unavailable database fallback or break the terrain map. PV is reported as partial from its validated summary; GFS and GRACED remain visibly unavailable when their current manifests are absent; VRE is identified as a long-term model scenario rather than a live field. The quality ledger records the OSM snapshot date and topology limitations. The 53-tile inventory totals 224,201,077 bytes; z3 contains six tiles/1,604,193 bytes, while large z4–5 payloads are user-triggered only. A production build at 1920×1080 measured approximately 178 ms navigation and 120 ms first-contentful paint locally, and browser checks confirmed tile-ready state, reversible OSM visibility, and voltage filtering.
 
 - [ ] **Unit 5: Real Forecast Training Data Acquisition**
 
@@ -490,6 +500,8 @@ Power Earth globe
 - The acquisition plan states exactly what the user may need to provide.
 - The validation gate defines the minimum fields for unlocking prediction work.
 - Dashboard and project docs still mark prediction as disabled until real data passes.
+
+**Actual status (2026-09-09):** In progress with a real-SCADA bypass pilot completed, while the production NWP gate remains blocked. The acquisition plan and executable validation gate have twelve tests. The official Baidu KDD Cup 2022 SDWPF release was downloaded to a Git-ignored local cache and processed with five additional quality-rule tests: 4,727,520 rows, 134 turbines, 245 anonymous days, and 10-minute sampling. A D215–245 persistence holdout gives 10-minute MAE/RMSE of 3.942/5.860 MW, now exposed in `/china` as a historical backtest. The release lacks absolute coordinates, calendar timestamps, historical NWP issue/valid times, and an explicit redistribution license, so it does not unlock production forecasting or justify publishing raw data. Completion still requires a legally obtained plant/province power series with absolute location/time and matching historical NWP.
 
 - [ ] **Unit 6: Prediction Center Baselines**
 
@@ -533,6 +545,8 @@ Power Earth globe
 - Baselines produce auditable results on validated real data.
 - Backtest metrics and prediction interval metadata are visible in the dashboard.
 - Advanced models are documented but not enabled prematurely.
+
+**Actual status (2026-09-09):** In progress. The local SDWPF pilot compares persistence, autoregressive ridge, and LightGBM with three expanding rolling-origin splits: D1–121/122–152/153–183, D1–152/153–183/184–214, and D1–183/184–214/215–245. LightGBM 4.7.0 wins the 10-minute comparison in only two of three folds (mean improvement +0.66%, worst fold -1.05%); 30 and 60 minutes win zero folds with mean improvements of -7.16% and -13.87%. The conservative gate requires every fold to beat persistence, so every LightGBM horizon is rejected and persistence remains the baseline. `/api/prediction/status` exposes locked data gates, `/api/prediction/models` records 3/3 folds with `rollingValidationPassed: false`, and `/api/prediction/forecast` returns HTTP 503 with null output and timestamps. The dashboard shows “未获稳定滚动增益” and the 2/3-fold result. Eight TypeScript contract/workflow/registry tests and four Python split/gate tests cover the path. No calibrated P10/P50/P90 or live forecast is exposed, and production remains locked pending historical NWP plus absolute site/time metadata.
 
 - [ ] **Unit 8: EnergyIR/GeoIR Controlled AI**
 
