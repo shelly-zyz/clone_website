@@ -1,7 +1,7 @@
 # Hill of Towie 2025历史GFS配对报告
 
 > 生成日期：2026-09-10  
-> 当前结论：本地点值和小时配对已完成可复核构建，但源数据质量门禁未通过；NWP表尚未写入服务器PG
+> 当前结论：本地点值和小时配对已写入服务器PG并完成独立核验；源数据质量门禁未通过，仍为研究级数据
 
 ## 1. 来源与范围
 
@@ -49,13 +49,23 @@ npm run forecast:validate:pairs
 
 ## 3. PostgreSQL状态
 
-本轮尝试连接 `218.197.118.49:5432/zyz` 时，在执行任何SQL之前连接超时：
+首次尝试连接 `218.197.118.49:5432/zyz` 时，在执行任何SQL之前连接超时。服务器恢复后重试成功，幂等导入结果为：
 
 ```text
 connection to server at "218.197.118.49", port 5432 failed: timeout expired
 ```
 
-因此本轮没有创建 `forecast_nwp_sources`、`forecast_nwp_points` 或 `forecast_training_pairs`，没有改写已存在的SCADA表。服务器恢复可达后，导入脚本是幂等的：
+```text
+forecast_nwp_sources: paired-research-only
+forecast_nwp_points: 2,921
+forecast_training_pairs: 6,605
+future_issue_rows: 0
+mismatched_valid_times: 0
+duplicate_or_capacity_overflow_rows: 0
+curtailment_known_rows: 0
+```
+
+既有SCADA复核仍为21台机组、52,561条场站观测和1,059,488条机组信号；配对导入没有删除或重建SCADA。当前服务器数据库端独立核验命令为：
 
 ```powershell
 npm run forecast:import:nwp
