@@ -291,7 +291,9 @@ export async function auditForecastWorkspace(root = process.cwd()) {
   const completeHourlyCandidates = Number(pairingAudit?.counts?.completeHourlyCandidates ?? 0);
   const trainingPairRows = Number(pairingAudit?.counts?.trainingPairRows ?? 0);
   const pairingCompleteness = completeHourlyCandidates > 0 ? trainingPairRows / completeHourlyCandidates : 0;
-  const qualityBlocked = invalidPowerHours > 0 || (pairedTrainingFileFound && pairingCompleteness < 0.95);
+  const cleanWindow = pairingAudit?.cleanWindow ?? null;
+  const cleanWindowBlocked = pairedTrainingFileFound && cleanWindow?.eligible === false;
+  const qualityBlocked = invalidPowerHours > 0 || (pairedTrainingFileFound && pairingCompleteness < 0.95) || cleanWindowBlocked;
 
   let status = "blocked-source-download-pending";
   if (annualScadaVerified && !historicalNwpVerified) status = "blocked-historical-nwp-pending";
@@ -308,6 +310,15 @@ export async function auditForecastWorkspace(root = process.cwd()) {
       historicalNwpArchive: historicalNwpVerified,
       observedWindSolarPower: annualScadaVerified,
       pairedTrainingFile: pairedTrainingFileFound,
+    },
+    qualityGate: {
+      status: qualityBlocked ? "blocked" : "passed",
+      completeHourlyCandidates,
+      trainingPairRows,
+      pairingCompleteness: Number(pairingCompleteness.toFixed(4)),
+      invalidPowerHours,
+      best90DayCompleteness: cleanWindow?.best90DayCompleteness ?? null,
+      cleanWindowEligible: cleanWindow?.eligible ?? null,
     },
     sourceCandidates: [...(sourceManifest ? [{
       id: sourceManifest.id,
@@ -333,6 +344,7 @@ export async function auditForecastWorkspace(root = process.cwd()) {
       ...(pairedTrainingFileFound ? [] : ["No local training pair file built from issue_time and valid_time is present."]),
       ...(invalidPowerHours ? [`${invalidPowerHours} complete hourly windows contain negative or invalid generation labels and were excluded; source-quality remediation is required.`] : []),
       ...(pairedTrainingFileFound && pairingCompleteness < 0.95 ? [`The local 60-minute pair file retains ${trainingPairRows} of ${completeHourlyCandidates} complete hourly candidates (${(pairingCompleteness * 100).toFixed(1)}%), below the 95% temporal completeness gate.`] : []),
+      ...(cleanWindowBlocked ? [`The best 90-day clean window reaches ${((cleanWindow.best90DayCompleteness ?? 0) * 100).toFixed(2)}% completeness, below the 95% temporal completeness gate.`] : []),
       "Grid curtailment remains unknown; source-reported PowerRed/PowerRef reduction evidence and shutdown duration cannot be promoted to a curtailment label without an authoritative mapping.",
       ...(pairedTrainingFileFound ? [] : ["No validated 60-minute training pair is present; native 10-minute data does not unlock the 15-minute gate."]),
     ],

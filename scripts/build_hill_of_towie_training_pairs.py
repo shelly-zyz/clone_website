@@ -14,7 +14,7 @@ import math
 import sys
 import zipfile
 from collections import Counter
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +26,7 @@ try:
         build_training_row,
         hour_end,
         interpolate_nwp,
+        iso_timestamp,
         load_nwp_records,
         parse_timestamp,
     )
@@ -38,6 +39,7 @@ except ModuleNotFoundError:
         build_training_row,
         hour_end,
         interpolate_nwp,
+        iso_timestamp,
         load_nwp_records,
         parse_timestamp,
     )
@@ -97,6 +99,65 @@ def build_hourly_availability(
         end: (sum(float(state[0]) for state in values) / len(values), any(bool(state[1]) for state in values))
         for end, values in grouped.items()
         if len(values) >= 6
+    }
+
+
+def clean_window_profile(
+    timestamps: list[datetime],
+    year: int = YEAR,
+    window_days: int = 90,
+    minimum_completeness: float = 0.95,
+) -> dict[str, Any]:
+    """Profile continuity and the best rolling coverage window without filling gaps."""
+    range_start = datetime(year, 1, 1, tzinfo=timezone.utc)
+    range_end = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+    unique = sorted({parse_timestamp(value) for value in timestamps if range_start <= parse_timestamp(value) < range_end})
+    hour = timedelta(hours=1)
+    runs: list[dict[str, Any]] = []
+    run_start: datetime | None = None
+    previous: datetime | None = None
+    for timestamp in unique:
+        if run_start is None or timestamp - (previous or timestamp) != hour:
+            if run_start is not None and previous is not None:
+                runs.append({"start": iso_timestamp(run_start), "end": iso_timestamp(previous), "hours": int((previous - run_start).total_seconds() // 3600) + 1})
+            run_start = timestamp
+        previous = timestamp
+    if run_start is not None and previous is not None:
+        runs.append({"start": iso_timestamp(run_start), "end": iso_timestamp(previous), "hours": int((previous - run_start).total_seconds() // 3600) + 1})
+    runs.sort(key=lambda item: (-item["hours"], item["start"]))
+
+    window_hours = window_days * 24
+    window_delta = timedelta(hours=window_hours)
+    best: dict[str, Any] | None = None
+    left = 0
+    right = 0
+    window_start = range_start
+    while window_start + window_delta <= range_end:
+        window_end = window_start + window_delta
+        while left < len(unique) and unique[left] < window_start:
+            left += 1
+        while right < len(unique) and unique[right] < window_end:
+            right += 1
+        valid_hours = max(0, right - left)
+        candidate = {
+            "start": iso_timestamp(window_start),
+            "end": iso_timestamp(window_end - hour),
+            "validHours": valid_hours,
+            "expectedHours": window_hours,
+            "completeness": round(valid_hours / window_hours, 4),
+        }
+        if best is None or candidate["validHours"] > best["validHours"]:
+            best = candidate
+        window_start += hour
+
+    return {
+        "windowDays": window_days,
+        "minimumCompleteness": minimum_completeness,
+        "contiguousRunCount": len(runs),
+        "longestContiguousHours": runs[0]["hours"] if runs else None,
+        "best90DayWindow": best,
+        "best90DayCompleteness": best["completeness"] if best else None,
+        "eligible": bool(best and best["completeness"] >= minimum_completeness),
     }
 
 
@@ -224,6 +285,7 @@ def build_pairs(repo_root: Path) -> tuple[list[dict[str, Any]], dict[str, Any]]:
             "status": "unknown-no-authoritative-grid-label",
             "promotionBlocked": True,
         },
+        "cleanWindow": clean_window_profile([parse_timestamp(row["observed_at"]) for row in training_rows]),
         "monthlyStats": monthly_stats,
         "missingNwpTargetTimes": missing_nwp_targets,
     }

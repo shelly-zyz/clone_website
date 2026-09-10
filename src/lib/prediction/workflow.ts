@@ -17,9 +17,12 @@ export function derivePredictionWorkflow(
   registry: PredictionModelRegistry | null = null,
 ): PredictionWorkflowStage[] {
   const evidence = status?.researchEvidence;
+  const realData = status?.realData?.status === "verified-research-only" ? status.realData : null;
   const tenMinute = evidence?.metrics.find((metric) => metric.horizonMinutes === 10);
   const rejected = evidence?.rejectedHorizonsMinutes.join("/");
   const hasObservedPower = status?.dataGates.observedPower === true;
+  const hasHistoricalNwp = status?.dataGates.historicalNwp === true;
+  const qualityGatePassed = status?.dataGates.temporalCoverage === true && status?.dataGates.sourceQuality === true;
 
   return [
     {
@@ -33,26 +36,32 @@ export function derivePredictionWorkflow(
     {
       title: "历史 NWP 档案",
       detail: "样本切片 · issue / valid 对齐",
-      product: "历史样本库未接入",
-      note: status?.dataGates.historicalNwp ? "历史NWP门禁已通过" : "缺历史NWP起报/有效时刻",
+      product: hasHistoricalNwp ? `${realData?.dataset.nwpPointRows?.toLocaleString() ?? ""}点历史NWP` : "历史样本库未接入",
+      note: hasHistoricalNwp
+        ? `${realData?.dataset.trainingPairRows?.toLocaleString() ?? ""}条配对 · issue / valid 已核验`
+        : "缺历史NWP起报/有效时刻",
       kind: "bars",
-      state: status?.dataGates.historicalNwp ? "complete" : "locked",
+      state: hasHistoricalNwp ? "complete" : "locked",
     },
     {
       title: "真实功率标签",
       detail: "风速与场站出力同步配对",
-      product: hasObservedPower ? "真实SCADA标签" : "功率标签未接入",
-      note: evidence ? `${(evidence.dataset.rawRows / 1_000_000).toFixed(2)}M行 · ${evidence.dataset.turbineCount}台机组` : "等待合法真实功率数据",
+      product: hasObservedPower ? realData ? `${realData.dataset.observedRows?.toLocaleString() ?? ""}条真实SCADA` : "真实SCADA标签" : "功率标签未接入",
+      note: realData
+        ? `${realData.dataset.turbineCount ?? "?"}台机组 · ${realData.dataset.observedStartUtc?.slice(0, 10) ?? "未知"}起`
+        : evidence ? `${(evidence.dataset.rawRows / 1_000_000).toFixed(2)}M行 · ${evidence.dataset.turbineCount}台机组` : "等待合法真实功率数据",
       kind: "dual",
       state: hasObservedPower ? "complete" : "locked",
     },
     {
       title: "约束与编码检查",
       detail: "容量 · 停机 · 限电 · 质量掩码",
-      product: evidence ? "质量隔离矩阵" : "质量检查未运行",
-      note: evidence ? `${(evidence.dataset.usableRatio * 100).toFixed(1)}%聚合时刻可回测` : "等待真实功率标签",
+      product: realData ? qualityGatePassed ? "质量门禁通过" : "质量缺口已隔离" : evidence ? "质量隔离矩阵" : "质量检查未运行",
+      note: realData
+        ? `最佳90天 ${(realData.quality.best90DayCompleteness == null ? 0 : realData.quality.best90DayCompleteness * 100).toFixed(2)}% · ${realData.quality.invalidHourlyWindows ?? 0}小时隔离`
+        : evidence ? `${(evidence.dataset.usableRatio * 100).toFixed(1)}%聚合时刻可回测` : "等待真实功率标签",
       kind: "matrix",
-      state: evidence ? "complete" : "locked",
+      state: realData ? qualityGatePassed ? "complete" : "research" : evidence ? "complete" : "locked",
     },
     {
       title: "基线与 LightGBM",

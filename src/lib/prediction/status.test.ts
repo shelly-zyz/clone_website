@@ -8,6 +8,8 @@ import { buildLockedForecast, buildPredictionStatus, normalizePredictionCountryC
 import { derivePredictionWorkflow } from "./workflow.ts";
 // @ts-expect-error TS5097 is intentionally isolated to this direct Node test import.
 import { buildModelRegistry } from "./registry.ts";
+// @ts-expect-error TS5097 is intentionally isolated to this direct Node test import.
+import { buildRealDataReadiness } from "./real-data-readiness.ts";
 import type { SdwpfPilotSummary } from "../china-dashboard.ts";
 
 const pilot: SdwpfPilotSummary = {
@@ -74,6 +76,45 @@ const pilot: SdwpfPilotSummary = {
   },
 };
 
+const verifiedRealData = buildRealDataReadiness({
+  checkedAt: "2026-09-11T00:00:00.000Z",
+  scada: {
+    sourceStatus: "imported",
+    entityId: "hill-of-towie",
+    turbineCount: 21,
+    validCoordinateCount: 21,
+    installedCapacityMw: 48.3,
+    observationRows: 52_561,
+    observationStartUtc: "2025-01-01T00:00:00Z",
+    observationEndUtc: "2026-01-01T00:00:00Z",
+    missingPowerRows: 0,
+    negativeObservationRows: 1,
+    suspectObservationRows: 1,
+    completeHourlyCandidates: 2_160,
+    invalidHourlyWindows: 1,
+    signalRows: 1_059_488,
+    missingSignalQualityRows: 1,
+    sourceReducedPowerRows: 37_299,
+    sourceReducedPowerSecondsRows: 66_219,
+    sourceReducedPowerSeconds: 22_360_804,
+  },
+  nwp: {
+    sourceStatus: "paired-research-only",
+    pointRows: 2_921,
+    futureIssueRows: 0,
+    nonValidRows: 0,
+    pairRows: 2_159,
+    pairStartUtc: "2025-01-01T00:00:00Z",
+    pairEndUtc: "2025-04-01T23:00:00Z",
+    futurePairRows: 0,
+    mismatchedValidTimes: 0,
+    capacityOverflowRows: 0,
+    curtailmentKnownRows: 0,
+  },
+  pairTimes: Array.from({ length: 90 * 24 }, (_, index) => new Date(Date.parse("2025-01-01T00:00:00Z") + index * 3_600_000).toISOString())
+    .filter((_, index) => index !== 10),
+});
+
 test("status exposes research evidence without unlocking production", () => {
   const status = buildPredictionStatus(pilot);
 
@@ -87,6 +128,23 @@ test("status exposes research evidence without unlocking production", () => {
   assert.deepEqual(status.researchEvidence?.rejectedHorizonsMinutes, [30]);
   assert.equal(status.researchEvidence?.dataset.rawRows, 4_727_520);
   assert.match(status.blockers.join(" "), /NWP|场址|时刻/);
+});
+
+test("status uses verified real-data evidence to close structural gates but keeps quality blockers", () => {
+  const status = buildPredictionStatus(pilot, "CHN", verifiedRealData);
+
+  assert.equal(status.schemaVersion, 2);
+  assert.equal(status.realData?.status, "verified-research-only");
+  assert.equal(status.dataGates.observedPower, true);
+  assert.equal(status.dataGates.historicalNwp, true);
+  assert.equal(status.dataGates.absoluteSiteTime, true);
+  assert.equal(status.dataGates.capacityAndAvailability, true);
+  assert.equal(status.dataGates.temporalCoverage, false);
+  assert.equal(status.dataGates.sourceQuality, false);
+  assert.equal(status.dataGates.curtailmentLabels, false);
+  assert.doesNotMatch(status.blockers.join(" "), /缺少与真实功率.*历史NWP/);
+  assert.match(status.blockers.join(" "), /95%/);
+  assert.deepEqual(derivePredictionWorkflow(status, true).map((stage) => stage.state), ["complete", "complete", "complete", "research", "research", "research"]);
 });
 
 test("workflow derives each workstation state from real gates", () => {

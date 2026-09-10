@@ -1,9 +1,13 @@
 import type { SdwpfPilotSummary } from "../china-dashboard";
-import type { PredictionStatus, UnavailableForecast } from "./contracts";
+import type { PredictionRealDataEvidence, PredictionSourceDataGates, PredictionStatus, UnavailableForecast } from "./contracts";
 
-const PRODUCTION_BLOCKERS = [
-  "缺少与真实功率按起报时刻和有效时刻配对的历史NWP档案。",
-  "SDWPF只有匿名日序和相对坐标，缺少绝对场址与日历时刻。",
+const PILOT_DATA_BLOCKERS = [
+  "SDWPF只有匿名日序和相对坐标，缺少可用于生产的绝对场址与日历时刻。",
+  "当前SDWPF回测证据与服务器端真实场站数据分离，不能代替正式训练集。",
+];
+
+const MODEL_BLOCKERS = [
+  "尚未完成至少3个滚动起点并证明目标时效稳定胜过持久性基线。",
   "尚未完成滚动概率校准，因此不能输出P10/P50/P90。",
 ];
 
@@ -25,26 +29,72 @@ export function normalizePredictionCountryCode(value: string | null | undefined)
   return /^[A-Z]{3}$/.test(code) ? code : null;
 }
 
-export function buildPredictionStatus(pilot: SdwpfPilotSummary | null, countryCode = "CHN"): PredictionStatus {
+function fallbackSourceGates(countryPilot: SdwpfPilotSummary | null): PredictionSourceDataGates {
+  return {
+    observedPower: countryPilot !== null,
+    historicalNwp: false,
+    absoluteSiteTime: false,
+    capacityAndAvailability: false,
+    temporalCoverage: false,
+    sourceQuality: false,
+    curtailmentLabels: false,
+  };
+}
+
+function modelBlockers(rollingHorizons: Array<{ passesRollingGate: boolean }> | undefined) {
+  const stableBaselineGain = rollingHorizons?.some((item) => item.passesRollingGate) ?? false;
+  return {
+    stableBaselineGain,
+    blockers: stableBaselineGain ? [MODEL_BLOCKERS[1]] : MODEL_BLOCKERS,
+  };
+}
+
+function nextRequiredInputs(realData: PredictionRealDataEvidence | null) {
+  return realData?.status === "verified-research-only"
+    ? [
+        "补充或取得连续90天且时间完整率不低于95%的真实功率窗口",
+        "补充权威电网限电/停机原因标签或可审计字段映射",
+        "在合格数据上完成至少3折滚动基线验证与概率区间校准",
+      ]
+    : [
+        "带实体ID、绝对坐标、时区和日历时刻的真实功率序列",
+        "带issue_time和valid_time的同期历史NWP",
+        "装机/可用容量、停机、限电和质量码",
+      ];
+}
+
+export function buildPredictionStatus(
+  pilot: SdwpfPilotSummary | null,
+  countryCode = "CHN",
+  realData: PredictionRealDataEvidence | null = null,
+): PredictionStatus {
   const normalizedCountryCode = normalizePredictionCountryCode(countryCode) ?? "CHN";
   const isChina = normalizedCountryCode === "CHN";
   const countryPilot = isChina ? pilot : null;
+  const countryRealData = isChina ? realData : null;
   const comparisons = countryPilot?.lightgbmComparison?.comparisons ?? [];
   const rollingHorizons = countryPilot?.lightgbmComparison?.rollingValidation?.horizons;
+  const sourceGates = countryRealData ? countryRealData.gates : fallbackSourceGates(countryPilot);
+  const { stableBaselineGain, blockers: modelGateBlockers } = modelBlockers(rollingHorizons);
+  const productionBlockers = countryRealData
+    ? [...countryRealData.blockers, ...modelGateBlockers]
+    : countryPilot
+      ? [...PILOT_DATA_BLOCKERS, ...modelGateBlockers]
+      : ["尚未构建可审计的本地真实功率历史回测试点。", ...GENERIC_COUNTRY_BLOCKERS, ...modelGateBlockers];
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     country: {
       code: normalizedCountryCode,
-      evidenceScope: countryPilot ? "country-specific" : "data-required",
+      evidenceScope: countryPilot || countryRealData?.status === "verified-research-only" ? "country-specific" : "data-required",
     },
     status: "locked",
     productionReady: false,
     dataGates: {
-      observedPower: countryPilot !== null,
-      historicalNwp: false,
-      absoluteSiteTime: false,
+      ...sourceGates,
+      stableBaselineGain,
       calibratedIntervals: false,
     },
+    realData: countryRealData,
     researchEvidence: countryPilot ? {
       identity: "historical-backtest-only",
       source: countryPilot.source.name,
@@ -80,14 +130,8 @@ export function buildPredictionStatus(pilot: SdwpfPilotSummary | null, countryCo
         };
       }),
     } : null,
-    blockers: isChina
-      ? countryPilot ? PRODUCTION_BLOCKERS : ["尚未构建可审计的本地真实功率历史回测试点。", ...PRODUCTION_BLOCKERS]
-      : GENERIC_COUNTRY_BLOCKERS,
-    nextRequiredInputs: [
-      "带实体ID、绝对坐标、时区和日历时刻的真实功率序列",
-      "带issue_time和valid_time的同期历史NWP",
-      "装机/可用容量、停机、限电和质量码",
-    ],
+    blockers: isChina ? productionBlockers : [...GENERIC_COUNTRY_BLOCKERS, ...modelGateBlockers],
+    nextRequiredInputs: nextRequiredInputs(countryRealData),
     modelRegistryHref: "/api/prediction/models",
   };
 }

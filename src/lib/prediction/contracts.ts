@@ -1,8 +1,61 @@
-export type PredictionDataGates = {
+export type PredictionSourceDataGates = {
   observedPower: boolean;
   historicalNwp: boolean;
   absoluteSiteTime: boolean;
+  capacityAndAvailability: boolean;
+  temporalCoverage: boolean;
+  sourceQuality: boolean;
+  curtailmentLabels: boolean;
+};
+
+export type PredictionDataGates = PredictionSourceDataGates & {
+  stableBaselineGain: boolean;
   calibratedIntervals: boolean;
+};
+
+export type PredictionRealDataEvidence = {
+  identity: "historical-backtest-only";
+  status: "verified-research-only" | "unavailable";
+  checkedAt: string;
+  source: {
+    scadaId: string;
+    nwpId: string;
+    name: string;
+    license: string;
+  };
+  dataset: {
+    entityId: string | null;
+    turbineCount: number | null;
+    installedCapacityMw: number | null;
+    observedRows: number | null;
+    signalRows: number | null;
+    nwpPointRows: number | null;
+    trainingPairRows: number | null;
+    observedStartUtc: string | null;
+    observedEndUtc: string | null;
+    pairCompleteness: number | null;
+  };
+  quality: {
+    completeHourlyCandidates: number | null;
+    invalidHourlyWindows: number | null;
+    negativeObservationRows: number | null;
+    suspectObservationRows: number | null;
+    missingSignalQualityRows: number | null;
+    sourceReducedPowerRows: number | null;
+    sourceReducedPowerSecondsRows: number | null;
+    sourceReducedPowerSeconds: number | null;
+    longestContiguousHours: number | null;
+    best90DayCompleteness: number | null;
+    best90DayWindow: {
+      start: string;
+      end: string;
+      validHours: number;
+      expectedHours: number;
+    } | null;
+    curtailmentKnownRows: number | null;
+  };
+  gates: PredictionSourceDataGates;
+  blockers: string[];
 };
 
 export type PredictionResearchMetric = {
@@ -37,7 +90,7 @@ export type PredictionResearchEvidence = {
 };
 
 export type PredictionStatus = {
-  schemaVersion: 1;
+  schemaVersion: 2;
   country: {
     code: string;
     evidenceScope: "country-specific" | "data-required";
@@ -45,6 +98,7 @@ export type PredictionStatus = {
   status: "locked";
   productionReady: false;
   dataGates: PredictionDataGates;
+  realData: PredictionRealDataEvidence | null;
   researchEvidence: PredictionResearchEvidence | null;
   blockers: string[];
   nextRequiredInputs: string[];

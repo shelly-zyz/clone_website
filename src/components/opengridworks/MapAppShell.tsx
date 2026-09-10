@@ -5550,6 +5550,10 @@ function FeaturePopup({
     const evidence = predictionStatus && predictionStatus.country.code === feature.countryCode && isChina
       ? predictionStatus.researchEvidence
       : null;
+    const realData = predictionStatus && predictionStatus.country.code === feature.countryCode && isChina
+      ? predictionStatus.realData
+      : null;
+    const realDataVerified = realData?.status === "verified-research-only";
     const stages: Array<{
       index: string;
       label: string;
@@ -5560,8 +5564,8 @@ function FeaturePopup({
     }> = isChina
       ? [
           { index: "01", label: "气象输入", status: "当前场就绪", product: "风速场切片", kind: "weather", state: "complete" },
-          { index: "02", label: "历史对齐", status: "接入作业中", product: "issue / valid 对齐", kind: "alignment", state: "busy" },
-          { index: "03", label: "滚动回测", status: evidence ? "3折已完成" : "状态读取中", product: "误差矩阵", kind: "backtest", state: evidence ? "complete" : "busy" },
+          { index: "02", label: "历史对齐", status: realDataVerified ? "已核验" : statusLoaded ? "待补齐" : "状态读取中", product: realDataVerified ? "issue / valid 对齐" : "历史NWP配对", kind: "alignment", state: realDataVerified ? "complete" : statusLoaded ? "locked" : "busy" },
+          { index: "03", label: "质量回测", status: realDataVerified ? "质量门禁未通过" : evidence ? "3折已完成" : "状态读取中", product: realDataVerified ? "异常窗口矩阵" : "误差矩阵", kind: "backtest", state: realDataVerified || evidence ? "complete" : "busy" },
           { index: "04", label: "预测输出", status: "生产锁定", product: "P10 / P50 / P90", kind: "forecast", state: "locked" },
         ]
       : [
@@ -5590,7 +5594,9 @@ function FeaturePopup({
         <h2>{feature.title}</h2>
         <p>{statusLoaded
           ? isChina
-            ? "真实历史回测已登记，生产预测仍受门禁控制。"
+            ? realDataVerified
+              ? `真实SCADA与历史NWP已核验；${realData?.dataset.trainingPairRows?.toLocaleString() ?? "?"}条配对的质量门禁未通过，生产预测仍锁定。`
+              : "真实历史回测已登记，但服务器数据门禁证据尚未完整。"
             : "预测能力已部署，等待该国历史功率与同期 NWP 数据。"
           : "正在读取该国预测状态…"}</p>
         <div className="og-country-forecast-chain" aria-label="国家超短期预测链">
@@ -5618,7 +5624,7 @@ function FeaturePopup({
           ))}
         </div>
         <div className="og-country-forecast-footer">
-          <span><i />{isChina ? "滚动门禁未通过" : "国家数据未接入"}</span>
+          <span><i />{isChina ? realDataVerified ? "数据质量门禁未通过" : "滚动门禁未通过" : "国家数据未接入"}</span>
           {isChina ? <Link href="/china">进入中国详细大屏 <ArrowUpDown size={13} /></Link> : <small>暂不生成虚构预测</small>}
         </div>
       </article>

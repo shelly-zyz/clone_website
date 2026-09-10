@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { loadSdwpfPilotSummary } from "@/lib/prediction/pilot-storage";
+import { loadRealForecastDataReadiness } from "@/lib/prediction/real-data-loader";
 import { buildPredictionStatus, normalizePredictionCountryCode } from "@/lib/prediction/status";
 
 export const runtime = "nodejs";
@@ -16,8 +17,11 @@ export async function GET(request: Request) {
     }, { status: 400, headers: { "Cache-Control": "no-store" } });
   }
   try {
-    const pilot = countryCode === "CHN" ? await loadSdwpfPilotSummary() : null;
-    const status = buildPredictionStatus(pilot, countryCode);
+    const [pilot, realData] = await Promise.all([
+      countryCode === "CHN" ? loadSdwpfPilotSummary() : Promise.resolve(null),
+      countryCode === "CHN" ? loadRealForecastDataReadiness() : Promise.resolve(null),
+    ]);
+    const status = buildPredictionStatus(pilot, countryCode, realData);
     return NextResponse.json(status, { headers: { "Cache-Control": "no-store" } });
   } catch {
     return NextResponse.json({

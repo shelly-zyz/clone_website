@@ -19,15 +19,20 @@ export function PredictionWorkflowRail({ currentStep, scope, status, registry, c
 }) {
   const stages = derivePredictionWorkflow(status, currentWeatherAvailable, registry);
   const evidence = status?.researchEvidence;
+  const realData = status?.realData;
   return (
     <aside className={`${styles.rail} ${styles.rightRail}`} aria-label="超短期预测链像素工厂">
       <div className={styles.workflowHead}>
         <div><p className={styles.eyebrow}>PIXEL FORECAST FACTORY</p><h2>超短期预测链</h2></div>
         <span className={`${styles.identity} ${styles.red}`}>生产预测锁定</span>
       </div>
-      <p className={styles.workflowWarning}>{evidence
-        ? `状态API：SDWPF历史回测 ${evidence.dataset.dayCount}天、${evidence.dataset.intervalMinutes}分钟粒度。缺历史NWP与绝对场址，生产门禁锁定。`
-        : `当前范围：${scope}。每个工位会产出彩色结构示意；真实功率与历史 NWP 未通过、预测尚未接入前，不输出预测值。`}</p>
+      <p className={styles.workflowWarning}>{realData?.status === "verified-research-only"
+        ? `真实数据门禁：${realData.dataset.trainingPairRows?.toLocaleString() ?? "?"}条小时配对，最佳90天完整率${realData.quality.best90DayCompleteness == null ? "未知" : `${(realData.quality.best90DayCompleteness * 100).toFixed(2)}%`}；${realData.quality.invalidHourlyWindows ?? 0}个质量异常小时已隔离，生产门禁锁定。`
+        : realData
+          ? "服务器真实预测数据证据暂时无法核验；预测保持锁定，不输出替代值。"
+          : evidence
+            ? `状态API：SDWPF历史回测 ${evidence.dataset.dayCount}天、${evidence.dataset.intervalMinutes}分钟粒度。研究证据与生产数据分离，生产门禁锁定。`
+            : `当前范围：${scope}。每个工位会产出彩色结构示意；真实功率与历史 NWP 未通过、预测尚未接入前，不输出预测值。`}</p>
       <div className={styles.forecastFactory}>
         {stages.map((stage, index) => {
           const current = currentStep === index && stage.state !== "locked";
@@ -51,7 +56,7 @@ export function PredictionWorkflowRail({ currentStep, scope, status, registry, c
           );
         })}
       </div>
-      <div className={styles.factoryNote}><span><b>{scope} · 状态接口驱动</b> 锁定工位停止作业</span><span>{evidence ? "真实SCADA · 历史留出回测" : "等待预测状态"}</span></div>
+      <div className={styles.factoryNote}><span><b>{scope} · 状态接口驱动</b> 锁定工位停止作业</span><span>{realData ? "真实SCADA · 历史NWP · 研究回测" : evidence ? "真实SCADA · 历史留出回测" : "等待预测状态"}</span></div>
     </aside>
   );
 }

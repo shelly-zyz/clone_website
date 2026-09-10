@@ -156,12 +156,15 @@ test("workspace audit reports verified local NWP and preserves the training-qual
   await writeFile(path.join(nwpDirectory, "pairing-audit.json"), JSON.stringify({
     status: "blocked-observation-quality",
     counts: { excludedInvalidPowerHours: 2155, completeHourlyCandidates: 8760, trainingPairRows: 6605 },
+    cleanWindow: { best90DayCompleteness: 0.8583, eligible: false },
   }));
 
   const audit = await auditForecastWorkspace(root);
   assert.equal(audit.status, "blocked-training-data-quality");
   assert.equal(audit.found.historicalNwpArchive, true);
   assert.equal(audit.found.pairedTrainingFile, true);
+  assert.equal(audit.qualityGate.cleanWindowEligible, false);
+  assert.equal(audit.qualityGate.best90DayCompleteness, 0.8583);
   assert.match(audit.blockers.join("\n"), /negative or invalid generation labels/i);
   assert.match(audit.blockers.join("\n"), /95% temporal completeness/i);
 });
