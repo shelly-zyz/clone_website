@@ -517,9 +517,15 @@ Power Earth globe
 - Create: `src/lib/prediction/evaluation.ts`
 - Create: `src/lib/prediction/baselines.test.ts`
 - Create: `src/lib/prediction/evaluation.test.ts`
+- Create: `src/lib/prediction/real-data-backtest.ts`
+- Create: `src/lib/prediction/real-data-backtest.test.ts`
+- Create: `src/lib/prediction/real-data-backtest-loader.ts`
 - Create: `src/app/api/prediction/status/route.ts`
 - Create: `src/app/api/prediction/forecast/route.ts`
+- Create: `src/app/api/prediction/backtest/route.ts`
 - Create: `src/components/china-dashboard/PredictionResultPanel.tsx`
+- Modify: `src/components/china-dashboard/PredictionWorkflowRail.tsx`
+- Modify: `src/components/china-dashboard/ChinaDashboardShell.tsx`
 - Modify: `docs/project-management/PAPER_REPRODUCTION_ASSESSMENT.md`
 
 **Approach:**
@@ -547,6 +553,8 @@ Power Earth globe
 - Advanced models are documented but not enabled prematurely.
 
 **Actual status (2026-09-11):** The first research prediction-center slice is implemented, but production remains locked. `src/lib/prediction/baselines.ts` now provides auditable persistence and previous-day-same-time baselines that reject missing history and horizon/interval mismatches; `src/lib/prediction/evaluation.ts` provides point MAE/RMSE/bias, strict baseline comparison, interval coverage/width, and research-row normalization. `PredictionResultPanel.tsx` renders the existing SDWPF evidence under the six-stage China workflow as colored model-vs-persistence error bars, rolling-fold status, and an explicit no-P10/P50/P90 notice. The local SDWPF pilot compares persistence, autoregressive ridge, and LightGBM with three expanding rolling-origin splits: D1–121/122–152/153–183, D1–152/153–183/184–214, and D1–183/184–214/215–245. LightGBM 4.7.0 wins the 10-minute comparison in only two of three folds (mean improvement +0.66%, worst fold -1.05%); 30 and 60 minutes win zero folds with mean improvements of -7.16% and -13.87%. The conservative gate requires every fold to beat persistence, so every LightGBM horizon is rejected and persistence remains the research baseline. `/api/prediction/status` now uses schema v2 and reads the same read-only PostgreSQL evidence as `/api/prediction/forecast`: SCADA, historical issue-time-preserving NWP, absolute site/time metadata, and capacity checks pass; temporal coverage, source quality, and authoritative curtailment-label gates fail. The response identifies Hill of Towie + NOAA GFS as `historical-backtest-only` / `verified-research-only`, exposes 6,605 pairs, 75.4% overall coverage, 85.83% best 90-day coverage, 2,155 invalid hourly windows, and the unresolved curtailment-label gap. China renders these facts in the workflow rail and country popup; other countries do not inherit China evidence. `/api/prediction/forecast` still returns HTTP 503 with null output and timestamps. No calibrated P10/P50/P90 or live forecast is exposed. The 18 prediction tests, 17 data validation tests, Python pair tests, lint, typecheck, and production build pass.
+
+**Follow-up status (2026-09-11):** Unit 6 now also has a read-only real-data backtest path. `real-data-backtest-loader.ts` queries only `website_data.forecast_training_pairs`; `real-data-backtest.ts` accepts valid nonnegative historical pairs, rejects duplicate timestamps, refuses to impute missing history, and records coverage/quarantine/blocker evidence. The CHN route was verified against the connected PostgreSQL server: 6,605 raw and valid pair rows, zero rows with an authoritative curtailment label, persistence coverage 94.70% with MAE 3.5525 MW/RMSE 5.4123 MW, and previous-day-same-time coverage 81.36% with MAE 11.9476 MW/RMSE 15.9878 MW and -236.32% relative improvement. The latter does not beat persistence; both results remain `historical-backtest-only`. Non-CHN requests return unavailable rather than inheriting China evidence. The route is surfaced below the prediction-chain workstations, while `/api/prediction/forecast` remains HTTP 503 with null output and no P10/P50/P90. Prediction tests now pass 21/21, with typecheck and lint passing (one pre-existing warning remains); the production build is the remaining verification before commit.
 
 - [ ] **Unit 8: Energy Data Understanding and Trusted Analysis Agent**
 

@@ -1,4 +1,4 @@
-import type { PredictionModelRegistry, PredictionStatus } from "@/lib/prediction/contracts";
+import type { PredictionModelRegistry, PredictionRealBaselineBacktest, PredictionStatus } from "@/lib/prediction/contracts";
 import { buildResearchEvaluationRows } from "@/lib/prediction/evaluation";
 import styles from "./china-dashboard.module.css";
 
@@ -20,13 +20,24 @@ function ResearchErrorChart({ modelMaeMw, baselineMaeMw, horizonMinutes }: {
   );
 }
 
-export function PredictionResultPanel({ status, registry }: {
+function RealBaselineChart({ valueMw, maximum, label }: { valueMw: number | null; maximum: number; label: string }) {
+  return (
+    <div className={styles.realBaselineChart} aria-label={`${label} MAE`}>
+      <span style={{ width: valueMw === null ? "0%" : `${(valueMw / maximum) * 100}%` }} />
+    </div>
+  );
+}
+
+export function PredictionResultPanel({ status, registry, realBacktest }: {
   status: PredictionStatus | null;
   registry: PredictionModelRegistry | null;
+  realBacktest: PredictionRealBaselineBacktest | null;
 }) {
   const evidence = status?.researchEvidence;
   const rows = evidence ? buildResearchEvaluationRows(evidence.metrics) : [];
   const realData = status?.realData?.status === "verified-research-only" ? status.realData : null;
+  const realEvaluations = realBacktest?.status === "research-only" ? realBacktest.evaluations : [];
+  const realMaximumMae = Math.max(...realEvaluations.map((evaluation) => evaluation.maeMw ?? 0), 1);
   const completedFolds = registry?.promotionGate.completedFolds ?? 0;
   const minimumFolds = registry?.promotionGate.minimumFolds ?? 3;
 
@@ -36,6 +47,22 @@ export function PredictionResultPanel({ status, registry }: {
         <div><p className={styles.eyebrow}>BASELINE EVALUATION</p><strong>历史回测结果</strong></div>
         <span className={`${styles.identity} ${styles.purple}`}>研究模式</span>
       </div>
+      {realBacktest?.status === "research-only" && (
+        <>
+          <div className={styles.realBaselineHead}><span>PG 真实小时配对 · 60 MIN</span><small>{realBacktest.dataset.validRows.toLocaleString()} 条有效 / {realBacktest.dataset.quarantinedRows.toLocaleString()} 条隔离</small></div>
+          <div className={styles.realBaselineRows}>
+            {realEvaluations.map((evaluation) => (
+              <div className={styles.realBaselineRow} key={evaluation.model}>
+                <b>{evaluation.model === "persistence" ? "持久性" : "前一日同刻"}</b>
+                <RealBaselineChart valueMw={evaluation.maeMw} maximum={realMaximumMae} label={evaluation.model} />
+                <span>{(evaluation.coverage * 100).toFixed(1)}%</span>
+                <strong>{evaluation.maeMw === null ? "—" : formatMae(evaluation.maeMw)}</strong>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      {realBacktest?.status === "unavailable" && <p className={styles.researchPanelEmpty}>服务器 PG 小时配对暂不可用，未使用替代值。</p>}
       {rows.length > 0 ? (
         <>
           <div className={styles.evaluationLegend}><span><i className={styles.legendModel} />候选模型</span><span><i className={styles.legendBaseline} />持久性基线</span><span>MAE / MW</span></div>
@@ -65,7 +92,6 @@ export function PredictionResultPanel({ status, registry }: {
           : "SDWPF 结果仅用于方法回测"}
         <span>不生成正式预测 / P10 / P50 / P90</span>
       </p>
-      {rows.length > 0 && <div className={styles.researchMaeSummary}>{rows.map((row) => <span key={row.horizonMinutes}>{row.horizonMinutes}m {formatMae(row.modelMaeMw)} / {formatMae(row.persistenceMaeMw)}</span>)}</div>}
     </section>
   );
 }

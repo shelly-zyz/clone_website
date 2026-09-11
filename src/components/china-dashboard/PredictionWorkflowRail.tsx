@@ -1,5 +1,5 @@
 import styles from "./china-dashboard.module.css";
-import type { PredictionModelRegistry, PredictionStatus } from "@/lib/prediction/contracts";
+import type { PredictionModelRegistry, PredictionRealBaselineBacktest, PredictionStatus } from "@/lib/prediction/contracts";
 import { derivePredictionWorkflow } from "@/lib/prediction/workflow";
 import { PredictionResultPanel } from "./PredictionResultPanel";
 
@@ -11,11 +11,12 @@ function WorkProduct({ kind }: { kind: string }) {
   return <svg className={styles.workProduct} viewBox="0 0 180 38" preserveAspectRatio="none" aria-label="彩色时序曲线结构示意"><path d="M0 29L18 24L36 27L54 13L72 20L90 8L108 15L126 10L144 20L162 7L180 13" fill="none" stroke="currentColor" strokeWidth="2.2" /><path d="M0 33L24 29L48 21L72 25L96 17L120 23L144 12L180 18" fill="none" stroke="#ffd166" strokeWidth="1.6" /></svg>;
 }
 
-export function PredictionWorkflowRail({ currentStep, scope, status, registry, currentWeatherAvailable }: {
+export function PredictionWorkflowRail({ currentStep, scope, status, registry, realBacktest, currentWeatherAvailable }: {
   currentStep: number;
   scope: string;
   status: PredictionStatus | null;
   registry: PredictionModelRegistry | null;
+  realBacktest: PredictionRealBaselineBacktest | null;
   currentWeatherAvailable: boolean;
 }) {
   const stages = derivePredictionWorkflow(status, currentWeatherAvailable, registry);
@@ -57,7 +58,7 @@ export function PredictionWorkflowRail({ currentStep, scope, status, registry, c
           );
         })}
       </div>
-      <PredictionResultPanel status={status} registry={registry} />
+      <PredictionResultPanel status={status} registry={registry} realBacktest={realBacktest} />
       <div className={styles.factoryNote}><span><b>{scope} · 状态接口驱动</b> 锁定工位停止作业</span><span>{realData ? "真实SCADA · 历史NWP · 研究回测" : evidence ? "真实SCADA · 历史留出回测" : "等待预测状态"}</span></div>
     </aside>
   );

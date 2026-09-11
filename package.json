@@ -36,7 +36,7 @@
     "data:import": "node --max-old-space-size=4096 scripts/import-data-to-postgres.mjs",
     "validate:china-data": "node scripts/validate-china-data.mjs",
     "validate:china-dashboard": "node --test src/lib/china-dashboard.test.ts && node scripts/validate-china-dashboard.mjs",
-    "validate:prediction-api": "node --test src/lib/prediction/status.test.ts",
+    "validate:prediction-api": "node --test src/lib/prediction/status.test.ts src/lib/prediction/baselines.test.ts src/lib/prediction/evaluation.test.ts src/lib/prediction/real-data-backtest.test.ts",
     "validate:forecast-data": "node --test scripts/validate-forecast-training-data.test.mjs && node scripts/validate-forecast-training-data.mjs --audit-workspace",
     "forecast:acquire:hill-of-towie": "node --test scripts/acquire-hill-of-towie.test.mjs scripts/inspect-hill-of-towie-metadata.test.mjs && node scripts/acquire-hill-of-towie.mjs && node scripts/inspect-hill-of-towie-metadata.mjs",
     "forecast:acquire:gfs": "node --test scripts/acquire-hill-of-towie-gfs.test.mjs && node scripts/acquire-hill-of-towie-gfs.mjs --year 2025",

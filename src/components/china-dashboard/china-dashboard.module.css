@@ -183,6 +183,15 @@
 .researchPanelHead .eyebrow { margin-bottom: 3px; color: #b7aaff; }
 .researchPanelHead strong { color: #edf1ff; font-size: 11px; }
 .researchPanelHead .identity { min-height: 16px; font-size: 7px; }
+.realBaselineHead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 5px; color: #d8f5f3; font: 800 8px/1 Consolas, monospace; }
+.realBaselineHead small { color: #769a9d; font: 7px/1 Consolas, monospace; }
+.realBaselineRows { display: grid; gap: 3px; margin-top: 4px; }
+.realBaselineRow { display: grid; grid-template-columns: 54px minmax(0,1fr) 34px 54px; align-items: center; gap: 6px; min-width: 0; }
+.realBaselineRow > b { overflow: hidden; color: #dceceb; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.realBaselineRow > span { color: #9ab5b7; font: 7px/1 Consolas, monospace; text-align: right; }
+.realBaselineRow > strong { color: #f3cf79; font: 800 8px/1 Consolas, monospace; text-align: right; }
+.realBaselineChart { position: relative; height: 5px; overflow: hidden; border: 1px solid rgba(101,240,207,.22); background: rgba(5,11,18,.84); }
+.realBaselineChart span { display: block; height: 100%; background: linear-gradient(90deg, #65f0cf, #2ee9ff); box-shadow: 0 0 7px rgba(101,240,207,.55); transition: width .3s ease; }
 .evaluationLegend { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 5px; color: #768c99; font: 7px/1 Consolas, monospace; }
 .evaluationLegend span { display: inline-flex; align-items: center; gap: 3px; }
 .evaluationLegend i { display: inline-block; width: 8px; height: 3px; }
@@ -198,11 +207,10 @@
 .evaluationRow > span:last-child { overflow: hidden; font: 800 8px/1 Consolas, monospace; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 .evaluationPass { color: #65f5a7; }
 .evaluationReject { color: #ff9a85; }
-.researchPanelMeta { display: flex; justify-content: space-between; gap: 8px; margin-top: 5px; color: #8c9cac; font: 7px/1 Consolas, monospace; }
+.researchPanelMeta { display: flex; justify-content: space-between; gap: 8px; margin-top: 4px; color: #8c9cac; font: 7px/1 Consolas, monospace; }
 .researchPanelEmpty, .researchPanelNote { margin: 5px 0 0; color: #9aa9b1; font: 8px/1.25 Consolas, monospace; }
 .researchPanelNote { display: flex; justify-content: space-between; gap: 8px; color: #d5bd76; }
 .researchPanelNote span { color: #a9a1d6; text-align: right; }
-.researchMaeSummary { display: flex; gap: 9px; margin-top: 4px; color: #78909d; font: 7px/1 Consolas, monospace; }
 
 .toast { position: absolute; z-index: 30; top: 77px; left: 50%; width: min(460px,calc(100% - 40px)); padding: 11px 14px; border-left: 2px solid var(--amber); background: rgba(5,11,18,.96); color: #ded3ad; font-size: 10px; transform: translate(-50%,-12px); opacity: 0; pointer-events: none; transition: .25s ease; }
 .toastVisible { transform: translate(-50%,0); opacity: 1; }
@@ -227,7 +235,7 @@
   .factoryStage { grid-template-rows: 27px minmax(36px,1fr); }
   .workProduct { height: 31px; }
   .researchPanel { padding-top: 4px; padding-bottom: 4px; }
-  .researchPanelMeta, .researchMaeSummary { margin-top: 3px; }
+  .researchPanelMeta { margin-top: 3px; }
 }
 
 @media (max-width: 1179px) {

@@ -6,7 +6,7 @@ import type {
   ChinaDashboardOverview,
   ChinaLayerCatalog,
 } from "@/lib/china-dashboard";
-import type { PredictionModelRegistry, PredictionStatus } from "@/lib/prediction/contracts";
+import type { PredictionModelRegistry, PredictionRealBaselineBacktest, PredictionStatus } from "@/lib/prediction/contracts";
 import { ChinaMapScene } from "./ChinaMapScene";
 import { LeftAnalysisRail } from "./LeftAnalysisRail";
 import { PredictionWorkflowRail } from "./PredictionWorkflowRail";
@@ -20,6 +20,7 @@ export function ChinaDashboardShell() {
   const [layers, setLayers] = useState<ChinaLayerCatalog | null>(null);
   const [predictionStatus, setPredictionStatus] = useState<PredictionStatus | null>(null);
   const [modelRegistry, setModelRegistry] = useState<PredictionModelRegistry | null>(null);
+  const [realBacktest, setRealBacktest] = useState<PredictionRealBaselineBacktest | null>(null);
   const [scope, setScope] = useState("全国");
   const [step, setStep] = useState(0);
   const [pageVisible, setPageVisible] = useState(true);
@@ -41,6 +42,7 @@ export function ChinaDashboardShell() {
     load<ChinaLayerCatalog>("/api/china-dashboard/layers", setLayers);
     load<PredictionStatus>("/api/prediction/status", setPredictionStatus);
     load<PredictionModelRegistry>("/api/prediction/models", setModelRegistry);
+    load<PredictionRealBaselineBacktest>("/api/prediction/backtest?country=CHN", setRealBacktest);
     return () => { active = false; };
   }, []);
 
@@ -115,6 +117,7 @@ export function ChinaDashboardShell() {
           scope={scope}
           status={predictionStatus}
           registry={modelRegistry}
+          realBacktest={realBacktest}
           currentWeatherAvailable={layers?.layers.some((layer) => layer.id === "gfs-weather" && layer.status === "available") ?? false}
         />
       </section>

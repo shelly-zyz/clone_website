@@ -58,6 +58,44 @@ export type PredictionRealDataEvidence = {
   blockers: string[];
 };
 
+export type PredictionRealBaselineEvaluation = {
+  model: "persistence" | "previous-day-same-time";
+  horizonMinutes: 60;
+  candidateRows: number;
+  eligibleRows: number;
+  coverage: number;
+  missingForecastRows: number;
+  maeMw: number | null;
+  rmseMw: number | null;
+  biasMw: number | null;
+  beatsPersistence: boolean | null;
+  improvementPct: number | null;
+};
+
+export type PredictionRealBaselineBacktest = {
+  schemaVersion: 1;
+  identity: "historical-backtest-only";
+  status: "research-only" | "unavailable";
+  checkedAt: string;
+  source: {
+    scadaId: string;
+    nwpId: string;
+    entityId: string;
+    name: string;
+  };
+  dataset: {
+    candidateRows: number;
+    validRows: number;
+    quarantinedRows: number;
+    curtailmentKnownRows: number;
+    startUtc: string | null;
+    endUtc: string | null;
+    resolutionMinutes: 60;
+  };
+  evaluations: PredictionRealBaselineEvaluation[];
+  blockers: string[];
+};
+
 export type PredictionResearchMetric = {
   horizonMinutes: number;
   modelMaeMw: number;
