@@ -52,6 +52,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import type { RegionSummary } from "@/lib/regions/contracts";
 import { normalizeRegionName } from "@/lib/regions/geometry";
+import { DeepAgentChat } from "@/components/opengridworks/DeepAgentChat";
 import {
   buildCarbonHeatCollection,
   carbonColor,
@@ -7211,6 +7212,7 @@ export function MapAppShell() {
         </>
       ) : null}
       <HoverBubble tooltip={hoverTooltip} />
+      <DeepAgentChat />
       <Toast message={toast} />
       {cinematic ? (
         <div className="og-cinematic-banner">

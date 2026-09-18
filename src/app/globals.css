@@ -1515,10 +1515,221 @@ button.og-nav-item {
   box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.22), 0 0 24px rgba(0, 229, 255, 0.38);
 }
 
+.og-deepagent-toggle {
+  position: absolute;
+  right: 16px;
+  bottom: 48px;
+  z-index: 63;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 108px;
+  height: 38px;
+  padding: 0 13px;
+  color: #dffafe;
+  background: rgba(8, 12, 24, 0.92);
+  border: 1px solid rgba(103, 232, 249, 0.35);
+  border-radius: 8px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.44), inset 0 0 18px rgba(0, 229, 255, 0.05);
+  font-size: 12px;
+  font-weight: 900;
+  transition: color 160ms ease, background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.og-deepagent-toggle:hover,
+.og-deepagent-toggle.is-active {
+  color: #06111a;
+  background: #67e8f9;
+  border-color: rgba(207, 250, 254, 0.7);
+  transform: translateY(-1px);
+}
+
+.og-deepagent-panel {
+  position: absolute;
+  right: 16px;
+  bottom: 96px;
+  z-index: 64;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  width: min(380px, calc(100vw - 32px));
+  height: min(560px, calc(100svh - 132px));
+  overflow: hidden;
+  color: #e2e8f0;
+  background: rgba(8, 12, 24, 0.95);
+  border: 1px solid rgba(103, 232, 249, 0.28);
+  border-radius: 10px;
+  box-shadow: 0 22px 58px rgba(0, 0, 0, 0.55), inset 0 1px rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(18px);
+  animation: og-deepagent-enter 180ms ease both;
+}
+
+.og-deepagent-panel header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 46px;
+  padding: 0 12px 0 14px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.13);
+}
+
+.og-deepagent-panel header span,
+.og-deepagent-message.is-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.og-deepagent-panel header span {
+  color: #67e8f9;
+}
+
+.og-deepagent-panel header strong {
+  color: #f8fafc;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.og-deepagent-panel header button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  color: #94a3b8;
+  border-radius: 7px;
+}
+
+.og-deepagent-panel header button:hover {
+  color: #f8fafc;
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.og-deepagent-messages {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-height: 0;
+  padding: 13px;
+  overflow: hidden auto;
+  scrollbar-color: rgba(100, 116, 139, 0.8) transparent;
+  scrollbar-width: thin;
+}
+
+.og-deepagent-message {
+  max-width: 88%;
+  padding: 10px 11px;
+  overflow-wrap: anywhere;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.og-deepagent-message.is-assistant {
+  justify-self: start;
+  color: #dbeafe;
+  background: rgba(15, 23, 42, 0.78);
+  border: 1px solid rgba(51, 65, 85, 0.72);
+}
+
+.og-deepagent-message.is-user {
+  justify-self: end;
+  color: #06111a;
+  background: #67e8f9;
+  border: 1px solid rgba(207, 250, 254, 0.72);
+}
+
+.og-deepagent-message.is-error {
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.44);
+  border-color: rgba(248, 113, 113, 0.44);
+}
+
+.og-deepagent-message.is-loading {
+  color: #94a3b8;
+}
+
+.og-deepagent-form {
+  display: grid;
+  grid-template-columns: 1fr 42px;
+  gap: 9px;
+  padding: 11px;
+  border-top: 1px solid rgba(148, 163, 184, 0.13);
+  background: rgba(6, 11, 20, 0.62);
+}
+
+.og-deepagent-form textarea {
+  width: 100%;
+  min-width: 0;
+  max-height: 116px;
+  resize: none;
+  color: #f8fafc;
+  background: rgba(15, 23, 42, 0.82);
+  border: 1px solid rgba(51, 65, 85, 0.78);
+  border-radius: 8px;
+  padding: 9px 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  outline: 0;
+}
+
+.og-deepagent-form textarea:focus-visible {
+  border-color: rgba(103, 232, 249, 0.64);
+  box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.12);
+}
+
+.og-deepagent-form textarea::placeholder {
+  color: #64748b;
+}
+
+.og-deepagent-form button {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  color: #06111a;
+  background: #67e8f9;
+  border: 1px solid rgba(207, 250, 254, 0.72);
+  border-radius: 8px;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.og-deepagent-form button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.og-deepagent-form button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+  transform: none;
+}
+
+.og-spin,
+.og-deepagent-message.is-loading svg {
+  animation: og-spin 900ms linear infinite;
+}
+
 .og-mobile-controls,
 .og-bottom-sheet,
 .og-mobile-generation-sheet {
   display: none;
+}
+
+@keyframes og-deepagent-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes og-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes og-pulse {
@@ -1772,6 +1983,22 @@ button.og-nav-item {
   .og-info-button {
     right: 12px;
     bottom: 80px;
+  }
+
+  .og-deepagent-toggle {
+    right: 50px;
+    bottom: 80px;
+    min-width: 96px;
+    height: 34px;
+    padding: 0 11px;
+  }
+
+  .og-deepagent-panel {
+    right: 12px;
+    bottom: 124px;
+    left: 12px;
+    width: auto;
+    height: min(430px, calc(100svh - 178px));
   }
 
   .og-mobile-generation-sheet {

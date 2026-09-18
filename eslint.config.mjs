@@ -13,6 +13,7 @@ const eslintConfig = defineConfig([
     ".next-dev-validation/**",
     "out/**",
     "build/**",
+    "deepagent/**",
     "public/earth/**",
     "public/xiaoyun/**",
     ".forecast-data/**",
