@@ -8,8 +8,8 @@ export async function GET(request: Request) {
   if (!country) {
     return NextResponse.json(buildUnavailableRealBaselineBacktest("国家代码无效，不能读取研究回测。"), { status: 400 });
   }
-  if (country !== "CHN") {
-    return NextResponse.json(buildUnavailableRealBaselineBacktest("当前只登记中国Hill of Towie研究回测；其他国家不继承中国数据。"));
+  if (country !== "GBR") {
+    return NextResponse.json(buildUnavailableRealBaselineBacktest("当前真实小时配对仅登记英国 Hill of Towie 场站；该证据不会用于中国或其他国家。"));
   }
   const result = await loadRealBaselineBacktest();
   return NextResponse.json(result, { status: result.status === "research-only" ? 200 : 503 });

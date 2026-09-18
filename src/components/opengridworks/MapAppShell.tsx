@@ -50,6 +50,8 @@ import {
   Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import type { RegionSummary } from "@/lib/regions/contracts";
+import { normalizeRegionName } from "@/lib/regions/geometry";
 import {
   buildCarbonHeatCollection,
   carbonColor,
@@ -2126,6 +2128,18 @@ function addInteractiveLayers(map: Map) {
   });
 
   map.addLayer({
+    id: "china-province-hit",
+    type: "fill",
+    source: "ne-admin1-polygons",
+    minzoom: 4,
+    filter: ["==", ["get", "adm0_a3"], "CHN"],
+    paint: {
+      "fill-color": "rgba(39, 232, 255, 0.01)",
+      "fill-opacity": 0.01,
+    },
+  });
+
+  map.addLayer({
     id: "generation-heat-border",
     type: "line",
     source: "ne-admin1-polygons",
@@ -2697,6 +2711,35 @@ function findCountryFeature(
   return boundaries.find((feature) => geoContains(feature, coordinates)) ?? null;
 }
 
+function chinaProvinceFeatureToSelected(feature: MapGeoJSONFeature, coordinates: Coordinates, theme: "power" | "weather" | "carbon"): SelectedFeature {
+  const properties = feature.properties as Record<string, unknown> | null;
+  const rawName = readString(properties ?? {}, "name_zh") || readString(properties ?? {}, "name_local") || readString(properties ?? {}, "name");
+  const title = normalizeRegionName(rawName.split("|").at(-1) || "省级地区");
+  const isoCode = readString(properties ?? {}, "iso_3166_2");
+  return {
+    id: `region-${isoCode || title}`,
+    kind: "region",
+    title,
+    subtitle: "正在读取边界内的地区摘要",
+    coordinates,
+    color: "#27e8ff",
+    rows: [],
+    source: "共享地区分析服务",
+    countryCode: "CHN",
+    regionId: title,
+    regionTheme: theme,
+  };
+}
+
+function findChinaProvinceFeature(map: Map, point: MapMouseEvent["point"]) {
+  if (map.getZoom() < 4 || !map.getLayer("china-province-hit")) return null;
+  try {
+    return map.queryRenderedFeatures(point, { layers: ["china-province-hit"] })[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 type WeatherParticle = {
   x: number;
   y: number;
@@ -3066,6 +3109,7 @@ function MapViewport({
   focusRequest,
   screenshotRequest,
   cinematic,
+  analysisMode,
   onSelectFeature,
   onHoverTooltip,
   onRegionHover,
@@ -3097,6 +3141,7 @@ function MapViewport({
   focusRequest: FocusRequest | null;
   screenshotRequest: number;
   cinematic: boolean;
+  analysisMode: "region" | "point";
   onSelectFeature: (feature: SelectedFeature) => void;
   onHoverTooltip: (tooltip: HoverTooltip) => void;
   onRegionHover: (regionId: RegionTargetId) => void;
@@ -3118,6 +3163,7 @@ function MapViewport({
   const generationDataRef = useRef(generationHeatmapData);
   const generationFrameRef = useRef(generationFrame);
   const activeProjectRef = useRef(activeProject);
+  const analysisModeRef = useRef(analysisMode);
   const weatherMetricRef = useRef(weatherMetric);
   const weatherFieldRef = useRef(weatherField);
   const carbonFrameRef = useRef(carbonFrame);
@@ -3137,10 +3183,11 @@ function MapViewport({
     generationDataRef.current = generationHeatmapData;
     generationFrameRef.current = generationFrame;
     activeProjectRef.current = activeProject;
+    analysisModeRef.current = analysisMode;
     weatherMetricRef.current = weatherMetric;
     weatherFieldRef.current = weatherField;
     carbonFrameRef.current = carbonFrame;
-  }, [activeProject, carbonFrame, generationFrame, generationHeatmapActive, generationHeatmapData, onCameraChange, onHoverTooltip, onRegionHover, onScreenshotComplete, onSelectFeature, weatherField, weatherMetric]);
+  }, [activeProject, analysisMode, carbonFrame, generationFrame, generationHeatmapActive, generationHeatmapData, onCameraChange, onHoverTooltip, onRegionHover, onScreenshotComplete, onSelectFeature, weatherField, weatherMetric]);
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) {
@@ -3339,6 +3386,11 @@ function MapViewport({
 
     const handleClick = (event: MapMouseEvent) => {
       if (activeProjectRef.current === "carbon") {
+        const provinceFeature = analysisModeRef.current === "region" ? findChinaProvinceFeature(map, event.point) : null;
+        if (provinceFeature) {
+          selectRef.current(chinaProvinceFeatureToSelected(provinceFeature, [event.lngLat.lng, event.lngLat.lat], "carbon"));
+          return;
+        }
         const activeCarbonFrame = carbonFrameRef.current;
         const value = activeCarbonFrame
           ? sampleCarbonFrame(activeCarbonFrame, event.lngLat.lng, event.lngLat.lat)
@@ -3420,6 +3472,14 @@ function MapViewport({
       if (feature) {
         selectRef.current(featureToSelected(feature, [event.lngLat.lng, event.lngLat.lat]));
         return;
+      }
+
+      if (analysisModeRef.current === "region") {
+        const provinceFeature = findChinaProvinceFeature(map, event.point);
+        if (provinceFeature) {
+          selectRef.current(chinaProvinceFeatureToSelected(provinceFeature, [event.lngLat.lng, event.lngLat.lat], "power"));
+          return;
+        }
       }
 
       const coordinates: Coordinates = [event.lngLat.lng, event.lngLat.lat];
@@ -5540,8 +5600,54 @@ function FeaturePopup({
   predictionStatus: PredictionStatus | null;
   onClose: () => void;
 }) {
+  const [regionSummary, setRegionSummary] = useState<RegionSummary | null>(null);
+  const [regionLoading, setRegionLoading] = useState(false);
+  const [regionError, setRegionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (feature?.kind !== "region" || !feature.regionId || !feature.regionTheme) return;
+    const controller = new AbortController();
+    const metric = feature.regionTheme === "weather" ? "wind" : feature.regionTheme === "carbon" ? "Power" : "assets";
+    const timer = window.setTimeout(() => {
+      setRegionSummary(null);
+      setRegionError(null);
+      setRegionLoading(true);
+    }, 0);
+    fetch(`/api/regions/summary?regionId=${encodeURIComponent(feature.regionId)}&theme=${feature.regionTheme}&metric=${metric}`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(String(response.status));
+        return response.json() as Promise<RegionSummary>;
+      })
+      .then(setRegionSummary)
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setRegionError("地区摘要暂不可用。");
+      })
+      .finally(() => { if (!controller.signal.aborted) setRegionLoading(false); });
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [feature]);
+
   if (!feature) {
     return null;
+  }
+
+  if (feature.kind === "region") {
+    const summaryMatches = regionSummary?.request.regionName === feature.regionId;
+    const summary = summaryMatches ? regionSummary : null;
+    const themeLabel = feature.regionTheme === "power" ? "电力" : feature.regionTheme === "weather" ? "气象" : "碳排放";
+    return (
+      <article className="og-feature-popup og-region-popup" aria-label={`${feature.title}地区分析`}>
+        <button className="og-popup-close" type="button" aria-label="关闭" onClick={onClose}><X size={18} /></button>
+        <div className="og-region-kicker">REGION SUMMARY · {themeLabel}</div>
+        <h2>{feature.title}</h2>
+        <p>{regionLoading ? "正在汇总省界内的真实数据…" : regionError ?? summary?.missingReason ?? summary?.title ?? feature.subtitle}</p>
+        {summary?.status === "available" ? (
+          <dl>{summary.metrics.slice(0, 3).map((item) => <div key={item.id}><dt>{item.label}</dt><dd>{item.value === null ? "—" : `${item.value.toLocaleString("zh-CN", { maximumFractionDigits: 1 })} ${item.unit}`}</dd></div>)}</dl>
+        ) : null}
+        {summary ? <div className="og-region-source"><strong>{summary.source.name}</strong><span>{summary.coverage.label}</span><p>{summary.source.limitation}</p></div> : null}
+        <div className="og-region-actions"><Link href={`/china?province=${encodeURIComponent(feature.regionId ?? feature.title)}&theme=${feature.regionTheme ?? "power"}`}>进入中国分析 <ArrowUpDown size={13} /></Link></div>
+      </article>
+    );
   }
 
   if (feature.kind === "country") {
@@ -5878,8 +5984,8 @@ function SourcesPanel({ onClose }: { onClose: () => void }) {
       href: "https://www.nea.gov.cn/",
     },
     {
-      label: "中国以外仍为演示数据",
-      value: "演示电源项目、规划升级、数据中心、海缆与天然气管线",
+      label: "中国以外图层范围",
+      value: "各图层按自身来源与覆盖范围展示，未核验地区不进入地区统计",
       href: "https://docs.peeringdb.com/api_specs/",
     },
   ];
@@ -6317,6 +6423,7 @@ function MobileWeatherSheet({
 
 export function MapAppShell() {
   const [activeProject, setActiveProject] = useState<ProjectMode>("power");
+  const [analysisMode, setAnalysisMode] = useState<"region" | "point">("region");
   const [visibleTechnologies, setVisibleTechnologies] = useState(hiddenTechnologyState);
   const [visibleLayers, setVisibleLayers] = useState(hiddenLayerState);
   const [visibleCustomLayers, setVisibleCustomLayers] = useState<BooleanRecord<CustomLayerKey>>({
@@ -6887,6 +6994,7 @@ export function MapAppShell() {
           focusRequest={focusRequest}
           screenshotRequest={screenshotRequest}
           cinematic={cinematic}
+          analysisMode={analysisMode}
           onSelectFeature={setSelectedFeature}
           onHoverTooltip={setHoverTooltip}
           onRegionHover={handleRegionHover}
@@ -7048,7 +7156,7 @@ export function MapAppShell() {
         <LayersPanel
           visibleLayers={visibleLayers}
           onToggleLayer={toggleLayer}
-          onLocked={(label) => showToast(`${label} 在当前演示版本中暂未开放。`)}
+          onLocked={(label) => showToast(`${label} 尚无可用数据或接口。`)}
           onClose={() => setActivePanel(null)}
         />
       ) : null}
@@ -7077,6 +7185,12 @@ export function MapAppShell() {
         predictionStatus={selectedCountryCode ? predictionStatuses[selectedCountryCode] ?? null : null}
         onClose={() => setSelectedFeature(null)}
       />
+      {activeProject !== "weather" ? (
+        <div className="og-analysis-mode" role="group" aria-label="地图点击模式">
+          <button type="button" aria-pressed={analysisMode === "region"} onClick={() => setAnalysisMode("region")}>地区分析</button>
+          <button type="button" aria-pressed={analysisMode === "point"} onClick={() => setAnalysisMode("point")}>单点探查</button>
+        </div>
+      ) : null}
       {activeProject !== "weather" ? (
         <LayerCards
           activePanel={activePanel}

@@ -18,6 +18,7 @@ export type PredictionRealDataEvidence = {
   status: "verified-research-only" | "unavailable";
   checkedAt: string;
   source: {
+    countryCode: "GBR";
     scadaId: string;
     nwpId: string;
     name: string;
@@ -78,6 +79,7 @@ export type PredictionRealBaselineBacktest = {
   status: "research-only" | "unavailable";
   checkedAt: string;
   source: {
+    countryCode: "GBR";
     scadaId: string;
     nwpId: string;
     entityId: string;
@@ -110,6 +112,8 @@ export type PredictionResearchMetric = {
 
 export type PredictionResearchEvidence = {
   identity: "historical-backtest-only";
+  countryCode: "CHN";
+  geographicScope: "anonymous-china-competition-fleet";
   source: string;
   generatedAt: string;
   model: string | null;
@@ -131,7 +135,7 @@ export type PredictionStatus = {
   schemaVersion: 2;
   country: {
     code: string;
-    evidenceScope: "country-specific" | "data-required";
+    evidenceScope: "country-specific" | "research-dataset" | "data-required";
   };
   status: "locked";
   productionReady: false;

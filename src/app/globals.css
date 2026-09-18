@@ -3759,6 +3759,59 @@ button.og-nav-item {
   font-weight: 700;
 }
 
+.og-analysis-mode {
+  position: absolute;
+  z-index: 27;
+  right: 78px;
+  bottom: 28px;
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 8px;
+  background: rgba(8, 12, 24, 0.88);
+  backdrop-filter: blur(12px);
+}
+
+.og-analysis-mode button {
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.og-analysis-mode button[aria-pressed="true"] {
+  color: #b9f7ff;
+  background: rgba(0, 229, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(0, 229, 255, 0.24);
+}
+
+.og-region-kicker {
+  margin-bottom: 7px;
+  color: #67e8f9;
+  font: 700 9px/1.2 Consolas, monospace;
+  letter-spacing: .12em;
+}
+
+.og-region-source {
+  display: grid;
+  gap: 5px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid rgba(103, 232, 249, 0.16);
+  border-radius: 6px;
+  background: rgba(8, 47, 57, 0.22);
+}
+
+.og-region-source strong { color: #c8f6fa; font-size: 10px; }
+.og-region-source span { color: #94a3b8; font-size: 10px; }
+.og-region-source p { margin: 2px 0 0; color: #d6c68f; font-size: 10px; line-height: 1.45; }
+.og-region-actions { display: flex; justify-content: flex-end; margin-top: 12px; }
+.og-region-actions a { display: inline-flex; align-items: center; gap: 6px; color: #67e8f9; font-size: 11px; font-weight: 700; text-decoration: none; }
+
 .og-country-forecast {
   top: 43%;
   width: min(560px, calc(100vw - 32px));
@@ -4053,6 +4106,8 @@ button.og-nav-item {
     width: auto;
     transform: none;
   }
+
+  .og-analysis-mode { right: 16px; bottom: 150px; }
 
   .og-country-forecast {
     bottom: 146px;

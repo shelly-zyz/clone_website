@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 
 import { spawn } from "node:child_process";
-import { promises as fs } from "node:fs";
+import { existsSync, promises as fs } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 import dotenv from "dotenv";
 import pg from "pg";
+import { acquireWeatherSyncLock, releaseWeatherSyncLock } from "./weather-sync-lock.mjs";
 
 dotenv.config({ path: ".env.local", quiet: true });
 
@@ -16,6 +17,7 @@ const cacheDirectory = path.join(repoRoot, ".weather-cache");
 const manifestPath = path.join(cacheDirectory, "manifest.json");
 const statusPath = path.join(cacheDirectory, "live-sync-status.json");
 const lockPath = path.join(cacheDirectory, "live-sync.lock");
+const projectWeatherPython = path.resolve(repoRoot, "..", "outputs", "20260904-pg-migration", "venv", "Scripts", "python.exe");
 const watchMode = process.argv.includes("--watch");
 const intervalMinutes = numberArgument("--interval-minutes", 60);
 const expectedMetrics = new Set([
@@ -48,7 +50,7 @@ function numberArgument(name, fallback) {
   return value;
 }
 
-async function run(command, args, label) {
+async function run(command, args, label, timeoutMs = 5 * 60_000) {
   await new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd: repoRoot,
@@ -58,15 +60,24 @@ async function run(command, args, label) {
     });
     let stdout = "";
     let stderr = "";
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      child.kill();
+    }, timeoutMs);
     child.stdout.on("data", (chunk) => { stdout += chunk.toString(); });
     child.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
-    child.on("error", reject);
+    child.on("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
     child.on("exit", (code) => {
+      clearTimeout(timeout);
       if (code === 0) {
         resolve();
         return;
       }
-      reject(new Error(`${label} failed with exit ${code}: ${(stderr || stdout).trim().slice(-2000)}`));
+      reject(new Error(`${label} ${timedOut ? "timed out" : `failed with exit ${code}`}: ${(stderr || stdout).trim().slice(-2000)}`));
     });
   });
 }
@@ -168,34 +179,53 @@ async function writeStatus(status) {
   await fs.rename(temporaryPath, statusPath);
 }
 
-async function syncOnce() {
+async function syncOnce(lockRecovery = null) {
   const startedAt = new Date().toISOString();
-  await run(process.execPath, ["scripts/update-weather-earth-data.mjs", "--quiet"], "GFS download and decode");
-  const cache = await validateCache();
-  const pythonCommand = process.env.WEATHER_PYTHON || "python";
-  await retry(
-    () => run(pythonCommand, ["scripts/import-weather-cache-to-postgres.py"], "GFS database import"),
-    "GFS database import",
-  );
-  const database = await retry(
-    () => verifyDatabase(cache.manifest),
-    "GFS database verification",
-  );
-  const status = {
-    ok: true,
-    startedAt,
-    finishedAt: new Date().toISOString(),
-    source: "NOAA/NCEP GFS",
-    sourceType: "near-real-time operational forecast",
-    runTimeUtc: cache.manifest.runTimeUtc,
-    validTimeUtc: cache.manifest.validTimeUtc,
-    forecastHour: cache.manifest.forecastHour,
-    runAgeHours: Number(cache.runAgeHours.toFixed(2)),
-    metrics: cache.fields,
-    database,
+  const stages = {
+    acquisitionAndDecode: { status: "running", startedAt },
+    cacheValidation: { status: "pending" },
+    databaseImport: { status: "pending" },
+    databaseVerification: { status: "pending" },
   };
-  await writeStatus(status);
-  console.log(JSON.stringify(status, null, 2));
+  try {
+    await writeStatus({ ok: false, state: "running", startedAt, stages, lockRecovery });
+    await run(process.execPath, ["scripts/update-weather-earth-data.mjs", "--quiet"], "GFS download and decode");
+    stages.acquisitionAndDecode = { ...stages.acquisitionAndDecode, status: "complete", finishedAt: new Date().toISOString() };
+    stages.cacheValidation = { status: "running", startedAt: new Date().toISOString() };
+    await writeStatus({ ok: false, state: "running", startedAt, stages, lockRecovery });
+    const cache = await validateCache();
+    stages.cacheValidation = { ...stages.cacheValidation, status: "complete", finishedAt: new Date().toISOString() };
+    const pythonCommand = process.env.WEATHER_PYTHON || (existsSync(projectWeatherPython) ? projectWeatherPython : "python");
+    stages.databaseImport = { status: "running", startedAt: new Date().toISOString() };
+    await writeStatus({ ok: false, state: "running", startedAt, stages, lockRecovery });
+    await retry(
+      () => run(pythonCommand, ["scripts/import-weather-cache-to-postgres.py"], "GFS database import"),
+      "GFS database import",
+    );
+    stages.databaseImport = { ...stages.databaseImport, status: "complete", finishedAt: new Date().toISOString() };
+    stages.databaseVerification = { status: "running", startedAt: new Date().toISOString() };
+    const database = await retry(
+      () => verifyDatabase(cache.manifest),
+      "GFS database verification",
+    );
+    stages.databaseVerification = { ...stages.databaseVerification, status: "complete", finishedAt: new Date().toISOString() };
+    const status = {
+      ok: true, state: "complete", startedAt, finishedAt: new Date().toISOString(),
+      source: "NOAA/NCEP GFS", sourceType: "near-real-time operational forecast",
+      runTimeUtc: cache.manifest.runTimeUtc, validTimeUtc: cache.manifest.validTimeUtc,
+      forecastHour: cache.manifest.forecastHour, runAgeHours: Number(cache.runAgeHours.toFixed(2)),
+      metrics: cache.fields, database, stages, lockRecovery,
+    };
+    await writeStatus(status);
+    console.log(JSON.stringify(status, null, 2));
+  } catch (error) {
+    const failedAt = new Date().toISOString();
+    for (const stage of Object.values(stages)) {
+      if (stage.status === "running") Object.assign(stage, { status: "failed", finishedAt: failedAt });
+    }
+    await writeStatus({ ok: false, state: "failed", startedAt, failedAt, error: error instanceof Error ? error.message : String(error), stages, lockRecovery });
+    throw error;
+  }
 }
 
 async function delay(milliseconds) {
@@ -204,38 +234,20 @@ async function delay(milliseconds) {
 
 async function main() {
   await fs.mkdir(cacheDirectory, { recursive: true });
-  let lock;
-  try {
-    lock = await fs.open(lockPath, "wx");
-    await lock.writeFile(`${JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() })}\n`);
-  } catch (error) {
-    if (error?.code === "EEXIST") {
-      throw new Error(`Another live weather sync owns ${lockPath}.`);
-    }
-    throw error;
-  }
+  const lock = await acquireWeatherSyncLock(lockPath);
 
   try {
     do {
       try {
-        await syncOnce();
+        await syncOnce(lock.recovered);
       } catch (error) {
-        const status = {
-          ok: false,
-          failedAt: new Date().toISOString(),
-          error: error instanceof Error ? error.message : String(error),
-        };
-        await writeStatus(status);
-        console.error(JSON.stringify(status, null, 2));
+        console.error(error instanceof Error ? error.message : String(error));
         if (!watchMode) throw error;
       }
       if (watchMode) await delay(intervalMinutes * 60_000);
     } while (watchMode);
   } finally {
-    await lock.close();
-    await fs.unlink(lockPath).catch((error) => {
-      if (error?.code !== "ENOENT") throw error;
-    });
+    await releaseWeatherSyncLock(lockPath, lock);
   }
 }
 

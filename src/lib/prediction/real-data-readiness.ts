@@ -179,6 +179,7 @@ export function buildRealDataReadiness(input: RealDataReadinessInput): Predictio
     status: gates.observedPower && gates.historicalNwp && input.nwp.pairRows > 0 ? "verified-research-only" : "unavailable",
     checkedAt,
     source: {
+      countryCode: "GBR",
       scadaId: SCADA_SOURCE_ID,
       nwpId: NWP_SOURCE_ID,
       name: "Hill of Towie 2025 SCADA + NOAA GFS historical issued forecast",
@@ -221,6 +222,7 @@ export function buildUnavailableRealDataEvidence(reason: string, checkedAt = new
     status: "unavailable",
     checkedAt,
     source: {
+      countryCode: "GBR",
       scadaId: SCADA_SOURCE_ID,
       nwpId: NWP_SOURCE_ID,
       name: "Hill of Towie 2025 SCADA + NOAA GFS historical issued forecast",

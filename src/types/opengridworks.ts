@@ -306,7 +306,8 @@ export type SelectedFeatureKind =
   | "submarine-cable"
   | "landing-point"
   | "carbon"
-  | "weather";
+  | "weather"
+  | "region";
 
 export type SelectedFeature = {
   id: string;
@@ -321,6 +322,8 @@ export type SelectedFeature = {
   }[];
   source?: string;
   countryCode?: string;
+  regionId?: string;
+  regionTheme?: "power" | "weather" | "carbon";
 };
 
 export type LayerPanelKey = "layers" | "customLayers" | "mapType";

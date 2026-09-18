@@ -1,4 +1,5 @@
 import type { ChinaDashboardOverview } from "@/lib/china-dashboard";
+import type { RegionSummary, RegionTheme } from "@/lib/regions/contracts";
 import styles from "./china-dashboard.module.css";
 
 function compact(value: number | null, divisor: number) {
@@ -6,7 +7,20 @@ function compact(value: number | null, divisor: number) {
   return new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 1 }).format(value / divisor);
 }
 
-export function LeftAnalysisRail({ overview, scope }: { overview: ChinaDashboardOverview | null; scope: string }) {
+function compactMetric(value: number) {
+  return new Intl.NumberFormat("zh-CN", {
+    notation: Math.abs(value) >= 100_000 ? "compact" : "standard",
+    maximumFractionDigits: 1,
+  }).format(value);
+}
+
+const themeCopy: Record<RegionTheme, { title: string; body: string }> = {
+  power: { title: "设施与容量样本", body: "地图中的设施数量和容量只代表已映射公开样本；官方年度总量单独列示。" },
+  weather: { title: "数值天气摘要", body: "区域值按有效网格面积加权；它来自 GFS 预报，不是地面站实测。" },
+  carbon: { title: "网格排放估算", body: "省域结果保留源数据单位 kgC/h；它不是实时电力碳强度。" },
+};
+
+export function LeftAnalysisRail({ overview, scope, theme, summary }: { overview: ChinaDashboardOverview | null; scope: string; theme: RegionTheme; summary: RegionSummary | null }) {
   const official = overview?.official;
   const sample = overview?.mappedSample;
 
@@ -25,35 +39,33 @@ export function LeftAnalysisRail({ overview, scope }: { overview: ChinaDashboard
       </section>
 
       <section className={styles.leftBand}>
-        <p className={styles.eyebrow}>MAPPED ASSET SAMPLE</p>
-        <div className={styles.sectionHead}><h2>{scope}公开设施</h2><span className={`${styles.identity} ${styles.amber}`}>映射样本</span></div>
+        <p className={styles.eyebrow}>CURRENT CONTEXT</p>
+        <div className={styles.sectionHead}><h2>{scope} · {themeCopy[theme].title}</h2><span className={`${styles.identity} ${styles.amber}`}>{summary?.status === "available" ? "可用" : "核查中"}</span></div>
         <div className={styles.sampleLead}>
-          <strong>{scope === "全国" && sample?.count !== null ? sample?.count.toLocaleString("zh-CN") : "—"}</strong>
-          <span>{scope === "全国" ? "条可查询电源项目" : "等待省级空间查询"}</span>
+          <strong>{summary?.metrics[0]?.value == null ? "—" : compactMetric(summary.metrics[0].value)}</strong>
+          <span>{summary?.metrics[0] ? `${summary.metrics[0].label} · ${summary.metrics[0].unit}` : "等待地区摘要"}</span>
         </div>
-        <div className={styles.sampleBar}><span style={{ width: sample?.status === "available" ? "82%" : "18%" }} /></div>
-        <p className={styles.warning}>{scope === "全国" ? sample?.note ?? "正在读取地图样本数据库…" : "省级无结果只表示当前样本未覆盖，不能解释为官方统计为零。"}</p>
+        <p className={styles.warning}>{summary?.missingReason ?? themeCopy[theme].body}</p>
       </section>
 
       <section className={styles.leftBand}>
-        <p className={styles.eyebrow}>NETWORK SNAPSHOT</p>
-        <div className={styles.sectionHead}><h2>OSM 电网快照</h2><span className={`${styles.identity} ${styles.gray}`}>众包地图</span></div>
-        <div className={styles.osmGrid}>
-          <div><b>199,001</b><span>输电线路</span></div><div><b>37,069</b><span>变电站</span></div>
-          <div><b>14,644</b><span>电厂面</span></div><div><b>753,493</b><span>发电单元</span></div>
-        </div>
+        <p className={styles.eyebrow}>DATA QUALITY</p>
+        <div className={styles.sectionHead}><h2>覆盖与口径</h2><span className={`${styles.identity} ${styles.gray}`}>可追溯</span></div>
+        <dl className={styles.qualityList}>
+          <div><dt>地区</dt><dd>{summary?.request.regionName ?? scope}</dd></div>
+          <div><dt>覆盖</dt><dd>{summary?.coverage.label ?? "正在读取"}</dd></div>
+          <div><dt>时间</dt><dd>{summary?.source.timeRange ?? "—"}</dd></div>
+        </dl>
       </section>
 
       <section className={styles.leftBand}>
-        <p className={styles.eyebrow}>SCENARIO CONTEXT</p>
-        <div className={styles.sectionHead}><h2>长期情景轨迹</h2><span className={`${styles.identity} ${styles.purple}`}>模型情景</span></div>
-        <svg className={styles.scenarioChart} viewBox="0 0 280 88" role="img" aria-label="长期情景结构示意，不是实时预测">
-          <path d="M0 69H280M0 44H280M0 19H280" className={styles.gridLine} />
-          <path d="M0 68 C42 63 70 62 102 53 S164 37 202 29 S244 15 280 12" className={styles.scenarioArea} />
-          <path d="M0 68 C42 63 70 62 102 53 S164 37 202 29 S244 15 280 12" className={styles.scenarioTrace} />
-        </svg>
-        <div className={styles.chartLabels}><span>2021</span><span>2030</span><span>2045</span><span>2060</span></div>
-        <p className={styles.explain}>GFDL-ESM4 SSP1-2.6 仅作长期气候—VRE 情景，不是当前实际发电。</p>
+        <p className={styles.eyebrow}>SOURCE & LIMITS</p>
+        <div className={styles.sectionHead}><h2>数据说明</h2><span className={`${styles.identity} ${styles.purple}`}>按需展开</span></div>
+        <details className={styles.sourceDetails}>
+          <summary>{summary?.source.name ?? "等待地区数据"}</summary>
+          <p>{summary?.source.limitation ?? "地区、专题与来源会在完成查询后统一显示。"}</p>
+        </details>
+        {theme === "power" ? <p className={styles.explain}>{sample?.note ?? "年度官方总量与设施坐标样本分开呈现。"}</p> : null}
       </section>
     </aside>
   );

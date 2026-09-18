@@ -2,6 +2,8 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync, promises as fs } from "node:fs";
 import path from "node:path";
 import { NextResponse } from "next/server";
+import { queryDatabase } from "@/lib/db";
+import { evaluateWeatherFreshness } from "@/lib/weather-freshness";
 import {
   WEATHER_METRICS,
   type WeatherField,
@@ -24,8 +26,7 @@ const projectWeatherPython = path.resolve(
   "Scripts",
   "python.exe",
 );
-const cacheMaxAgeMs = 75 * 60 * 1000;
-const refreshTimeoutMs = 120 * 1000;
+const refreshTimeoutMs = 6 * 60 * 1000;
 let refreshPromise: Promise<void> | null = null;
 
 const metricKeys = new Set<WeatherMetricKey>(WEATHER_METRICS.map((metric) => metric.key));
@@ -64,8 +65,8 @@ export async function GET(request: Request) {
 
 async function ensureFreshCache() {
   const manifest = await readCachedManifest();
-  const generatedAt = manifest ? Date.parse(manifest.generatedAt) : 0;
-  if (manifest && Number.isFinite(generatedAt) && Date.now() - generatedAt < cacheMaxAgeMs) {
+  const freshness = evaluateWeatherFreshness(manifest?.generatedAt, manifest?.runTimeUtc);
+  if (manifest && !freshness.stale) {
     return;
   }
 
@@ -74,12 +75,7 @@ async function ensureFreshCache() {
       refreshPromise = null;
     });
   }
-
-  try {
-    await refreshPromise;
-  } catch {
-    // Readers below may still use an existing real-data cache.
-  }
+  void refreshPromise.catch(() => {});
 }
 
 async function readManifest(): Promise<WeatherManifest | null> {
@@ -106,31 +102,80 @@ async function readCachedManifest() {
 
 async function readStatus(): Promise<WeatherStatus> {
   const manifest = await readCachedManifest();
-  const generatedAt = manifest ? Date.parse(manifest.generatedAt) : 0;
-  const cacheFresh = Boolean(manifest && Number.isFinite(generatedAt) && Date.now() - generatedAt < cacheMaxAgeMs);
+  const freshness = evaluateWeatherFreshness(manifest?.generatedAt, manifest?.runTimeUtc);
   const fieldFilesPresent = await metricPresence();
-  const wgrib2 = spawnSync("wgrib2", ["-version"], { encoding: "utf8", windowsHide: true });
+  const wgrib2 = spawnSync("wgrib2", ["-version"], { encoding: "utf8", windowsHide: true, timeout: 1_500 });
   const wgrib2Available = !wgrib2.error && wgrib2.status === 0;
   const pythonCommand = process.env.WEATHER_PYTHON
     || (existsSync(projectWeatherPython) ? projectWeatherPython : "python");
-  const eccodes = spawnSync(pythonCommand, ["-c", "import eccodes"], { encoding: "utf8", windowsHide: true });
+  const eccodes = spawnSync(pythonCommand, ["-c", "import eccodes"], { encoding: "utf8", windowsHide: true, timeout: 1_500 });
   const eccodesAvailable = !eccodes.error && eccodes.status === 0;
   const decoderAvailable = wgrib2Available || eccodesAvailable;
-  const message = manifest?.message
-    ?? (!decoderAvailable ? "未检测到wgrib2或ecCodes，无法刷新真实GFS气象数据。" : undefined);
+  const [syncState, database] = await Promise.all([readSyncState(), readDatabaseState(manifest?.validTimeUtc ?? null)]);
+  const message = freshness.stale
+    ? `GFS缓存已过期${freshness.runAgeHours === null ? "" : `（起报距今 ${freshness.runAgeHours} 小时）`}，后台刷新已触发。`
+    : manifest?.message ?? (!decoderAvailable ? "未检测到wgrib2或ecCodes，无法刷新真实GFS气象数据。" : undefined);
 
   return {
     wgrib2Available,
     decoderAvailable,
     decoderName: wgrib2Available ? "wgrib2" : (eccodesAvailable ? "python-eccodes" : null),
-    cacheFresh,
-    refreshStatus: manifest?.refreshStatus ?? "error",
+    cacheFresh: freshness.cacheFresh,
+    runFresh: freshness.runFresh,
+    stale: freshness.stale,
+    cacheAgeMinutes: freshness.ageMinutes,
+    runAgeHours: freshness.runAgeHours,
+    refreshStatus: freshness.stale ? "error" : manifest?.refreshStatus ?? "error",
     generatedAt: manifest?.generatedAt ?? null,
     validTimeUtc: manifest?.validTimeUtc ?? null,
     fieldFilesPresent,
     message,
-    lastRefreshError: manifest?.refreshStatus === "error" ? message : undefined,
+    lastRefreshError: syncState.state === "failed" ? syncState.error ?? message : undefined,
+    database,
+    pipeline: {
+      state: syncState.state,
+      stages: syncState.stages,
+      failedAt: syncState.failedAt,
+    },
   };
+}
+
+type SyncState = {
+  state: "idle" | "running" | "complete" | "failed";
+  stages: Record<string, { status?: string; startedAt?: string; finishedAt?: string }>;
+  failedAt?: string;
+  error?: string;
+};
+
+async function readSyncState(): Promise<SyncState> {
+  try {
+    const raw = await fs.readFile(path.join(cacheDir, "live-sync-status.json"), "utf8");
+    const value = JSON.parse(raw) as Partial<SyncState> & { ok?: boolean };
+    return {
+      state: value.state ?? (value.ok ? "complete" : value.failedAt ? "failed" : "idle"),
+      stages: value.stages ?? {},
+      failedAt: value.failedAt,
+      error: value.error,
+    };
+  } catch {
+    return { state: "idle", stages: {} };
+  }
+}
+
+async function readDatabaseState(cacheValidTimeUtc: string | null): Promise<WeatherStatus["database"]> {
+  try {
+    const result = await Promise.race([
+      queryDatabase<{ latest_valid: string | null }>(
+        "SELECT max(valid_time_utc)::text AS latest_valid FROM website_data.weather_forecast_fields WHERE source='GFS'",
+      ),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("weather database check timed out")), 1_800)),
+    ]);
+    const latest = result.rows[0]?.latest_valid ?? null;
+    const inSync = Boolean(latest && cacheValidTimeUtc && Date.parse(latest) >= Date.parse(cacheValidTimeUtc));
+    return { latestValidTimeUtc: latest, inSyncWithCache: inSync, status: inSync ? "current" : "behind" };
+  } catch {
+    return { latestValidTimeUtc: null, inSyncWithCache: false, status: "unavailable" };
+  }
 }
 
 async function metricPresence() {
@@ -148,9 +193,16 @@ async function metricPresence() {
 
 function normalizeManifest(manifest: WeatherManifest): WeatherManifest {
   const metricMap = new Map(manifest.metrics.map((metric) => [metric.key, metric]));
+  const freshness = evaluateWeatherFreshness(manifest.generatedAt, manifest.runTimeUtc);
   return {
     ...manifest,
-    refreshStatus: manifest.refreshStatus === "live" || manifest.refreshStatus === "cached" ? manifest.refreshStatus : "error",
+    stale: freshness.stale,
+    refreshStatus: freshness.stale
+      ? "cached"
+      : manifest.refreshStatus === "live" || manifest.refreshStatus === "cached" ? manifest.refreshStatus : "error",
+    message: freshness.stale
+      ? `缓存已过期；起报距今 ${freshness.runAgeHours ?? "未知"} 小时。`
+      : manifest.message,
     metrics: WEATHER_METRICS.map((metric) => ({
       ...metric,
       kind: metric.key === "wind" ? "vector" : "scalar",
@@ -162,7 +214,7 @@ function normalizeManifest(manifest: WeatherManifest): WeatherManifest {
 
 function runRefreshScript() {
   return new Promise<void>((resolve, reject) => {
-    const child = spawn(process.execPath, ["scripts/update-weather-earth-data.mjs", "--quiet"], {
+    const child = spawn(process.execPath, ["scripts/sync-live-weather.mjs"], {
       cwd: process.cwd(),
       env: process.env,
       stdio: "ignore",

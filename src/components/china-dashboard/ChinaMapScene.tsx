@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ChinaLayerCatalog } from "@/lib/china-dashboard";
 import { CHINA_VOLTAGE_CLASSES, type ChinaOsmFeatureLayer, type ChinaVoltageClass } from "@/lib/china-layer-styles";
+import type { RegionTheme } from "@/lib/regions/contracts";
+import { normalizeRegionName } from "@/lib/regions/geometry";
 import { LayerControlStrip } from "./LayerControlStrip";
 import { OsmPowerTileOverlay } from "./OsmPowerTileOverlay";
 import styles from "./china-dashboard.module.css";
@@ -45,17 +47,19 @@ export function ChinaMapScene({
   provinces,
   scope,
   scopeNote,
-  step,
+  theme,
   onScopeChange,
   onNotice,
+  onLayerContextChange,
 }: {
   layers: ChinaLayerCatalog | null;
   provinces: string[];
   scope: string;
   scopeNote: string;
-  step: number;
+  theme: RegionTheme;
   onScopeChange: (scope: string) => void;
   onNotice: (message: string) => void;
+  onLayerContextChange: (layer: string) => void;
 }) {
   const [features, setFeatures] = useState<ProvinceFeature[]>([]);
   const [activeLayers, setActiveLayers] = useState(() => new Set(["terrain", "provinces", "osm-power"]));
@@ -87,6 +91,7 @@ export function ChinaMapScene({
   })).filter((item) => item.path), [features]);
 
   const toggleLayer = (id: string, status: string, detailText: string) => {
+    onLayerContextChange(id);
     const renderableLayers = new Set(["terrain", "provinces", "osm-power"]);
     if (status !== "available" || !renderableLayers.has(id)) {
       onNotice(detailText);
@@ -99,11 +104,14 @@ export function ChinaMapScene({
     });
   };
 
+  const selectProvince = (name: string) => onScopeChange(normalizeRegionName(name));
+  const themeLabel = theme === "power" ? "电力资产" : theme === "weather" ? "气象摘要" : "碳排放摘要";
+
   return (
     <section className={styles.mapStage} aria-label="彩色土地地貌中国省级地图">
       <div className={styles.mapMeta}>
-        <div><p className={styles.eyebrow}>SPATIAL COMMAND VIEW</p><h2>{scope}电力资产</h2><span>范围：<b>{scope}</b> · {scopeNote}</span></div>
-        <p><strong>土地纹理来自已审核的 coastal-grid-dashboard 素材</strong>官方总量不作为地图坐标来源</p>
+        <div><p className={styles.eyebrow}>SPATIAL ANALYSIS</p><h2>{scope} · {themeLabel}</h2><span>范围：<b>{scope}</b> · {scopeNote}</span></div>
+        <p><strong>点击省界固定地区，再切换专题比较</strong>地图样本、预报与研究估算分别标识</p>
       </div>
 
       <div className={styles.mapPerspective}>
@@ -118,8 +126,8 @@ export function ChinaMapScene({
             </defs>
             <g className={styles.provinceDepth}>{paths.map((item) => <path d={item.path} key={`depth-${item.name}`} fillRule="evenodd" />)}</g>
             {activeLayers.has("terrain") ? (
-              <g className={styles.provinceFaces}>{paths.map((item) => <path d={item.path} key={item.name} fillRule="evenodd" className={scope === item.name.replace(/[省市自治区壮族回族维吾尔特别行政区]/g, "") ? styles.selectedProvince : ""} />)}</g>
-            ) : <g className={styles.provinceFallback}>{paths.map((item) => <path d={item.path} key={item.name} fillRule="evenodd" />)}</g>}
+              <g className={styles.provinceFaces}>{paths.map((item) => <path d={item.path} key={item.name} fillRule="evenodd" role="button" tabIndex={0} aria-label={`选择${item.name}`} onClick={() => selectProvince(item.name)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") selectProvince(item.name); }} className={scope === normalizeRegionName(item.name) ? styles.selectedProvince : ""} />)}</g>
+            ) : <g className={styles.provinceFallback}>{paths.map((item) => <path d={item.path} key={item.name} fillRule="evenodd" role="button" tabIndex={0} aria-label={`选择${item.name}`} onClick={() => selectProvince(item.name)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") selectProvince(item.name); }} />)}</g>}
             {activeLayers.has("terrain") ? <image className={styles.reliefOverlay} href="/data/china-dashboard/relief.jpg" width="780" height="450" preserveAspectRatio="xMidYMid slice" clipPath="url(#chinaClip)" /> : null}
             {activeLayers.has("provinces") ? <g className={styles.provinceOutlines}>{paths.map((item) => <path d={item.path} key={`outline-${item.name}`} fillRule="evenodd" />)}</g> : null}
           </svg>
@@ -133,7 +141,6 @@ export function ChinaMapScene({
           <div className={styles.mapHotspots}>
             {hotspots.map((point) => <button key={point.name} type="button" aria-label={point.name} className={`${styles.hotspot} ${scope === point.name ? styles.hotspotActive : ""}`} style={{ left: point.left, top: point.top }} onClick={() => onScopeChange(point.name)} />)}
           </div>
-          <span className={styles.mapPulse} style={{ left: `${35 + step * 6}%`, top: `${45 + (step % 2) * 8}%` }} />
         </div>
       </div>
 

@@ -7,9 +7,13 @@ import type {
   ChinaLayerCatalog,
 } from "@/lib/china-dashboard";
 import type { PredictionModelRegistry, PredictionRealBaselineBacktest, PredictionStatus } from "@/lib/prediction/contracts";
+import type { RegionSummary, RegionTheme } from "@/lib/regions/contracts";
+import type { VoiceDashboardCommand } from "@/lib/voice/voice-state";
 import { ChinaMapScene } from "./ChinaMapScene";
+import { AskEnergyPanel } from "./AskEnergyPanel";
+import { XiaoyunAssistant } from "./XiaoyunAssistant";
 import { LeftAnalysisRail } from "./LeftAnalysisRail";
-import { PredictionWorkflowRail } from "./PredictionWorkflowRail";
+import { RegionAnalysisRail } from "./RegionAnalysisRail";
 import styles from "./china-dashboard.module.css";
 
 const provinces = ["全国", "新疆", "内蒙古", "四川", "山东", "广东"];
@@ -22,10 +26,14 @@ export function ChinaDashboardShell() {
   const [modelRegistry, setModelRegistry] = useState<PredictionModelRegistry | null>(null);
   const [realBacktest, setRealBacktest] = useState<PredictionRealBaselineBacktest | null>(null);
   const [scope, setScope] = useState("全国");
-  const [step, setStep] = useState(0);
-  const [pageVisible, setPageVisible] = useState(true);
+  const [theme, setTheme] = useState<RegionTheme>("power");
+  const [regionSummary, setRegionSummary] = useState<RegionSummary | null>(null);
+  const [regionLoading, setRegionLoading] = useState(true);
+  const [regionError, setRegionError] = useState<string | null>(null);
   const [clock, setClock] = useState("");
   const [toast, setToast] = useState("");
+  const [askOpen, setAskOpen] = useState(false);
+  const [selectedLayer, setSelectedLayer] = useState("osm-power");
 
   useEffect(() => {
     let active = true;
@@ -40,8 +48,8 @@ export function ChinaDashboardShell() {
     };
     load<ChinaDashboardOverview>("/api/china-dashboard/overview", setOverview);
     load<ChinaLayerCatalog>("/api/china-dashboard/layers", setLayers);
-    load<PredictionStatus>("/api/prediction/status", setPredictionStatus);
-    load<PredictionModelRegistry>("/api/prediction/models", setModelRegistry);
+    load<PredictionStatus>("/api/prediction/status?country=CHN", setPredictionStatus);
+    load<PredictionModelRegistry>("/api/prediction/models?country=CHN", setModelRegistry);
     load<PredictionRealBaselineBacktest>("/api/prediction/backtest?country=CHN", setRealBacktest);
     return () => { active = false; };
   }, []);
@@ -56,17 +64,43 @@ export function ChinaDashboardShell() {
   }, []);
 
   useEffect(() => {
-    const updateVisibility = () => setPageVisible(document.visibilityState === "visible");
-    updateVisibility();
-    document.addEventListener("visibilitychange", updateVisibility);
-    return () => document.removeEventListener("visibilitychange", updateVisibility);
+    const params = new URL(window.location.href).searchParams;
+    const requestedProvince = params.get("province");
+    const requestedTheme = params.get("theme");
+    const timer = window.setTimeout(() => {
+      if (requestedProvince) setScope(requestedProvince);
+      if (requestedTheme === "power" || requestedTheme === "weather" || requestedTheme === "carbon") setTheme(requestedTheme);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
-    if (!pageVisible || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const timer = window.setInterval(() => setStep((value) => (value + 1) % 6), 1_650);
-    return () => window.clearInterval(timer);
-  }, [pageVisible]);
+    const controller = new AbortController();
+    const regionId = scope === "全国" ? "CN" : scope;
+    const metric = theme === "weather" ? "wind" : theme === "carbon" ? "Power" : "assets";
+    const expected = `${regionId}:${theme}:${metric}`;
+    const loadingTimer = window.setTimeout(() => {
+      setRegionLoading(true);
+      setRegionError(null);
+    }, 0);
+    fetch(`/api/regions/summary?regionId=${encodeURIComponent(regionId)}&theme=${theme}&metric=${metric}`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`地区摘要接口返回 ${response.status}`);
+        return response.json() as Promise<RegionSummary>;
+      })
+      .then((value) => {
+        const actual = `${value.request.regionId === "CN" ? "CN" : value.request.regionName}:${value.request.theme}:${value.request.metric ?? metric}`;
+        if (actual !== expected && value.request.regionName !== scope) return;
+        setRegionSummary(value);
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setRegionSummary(null);
+        setRegionError("地区数据暂不可用，请稍后重试。");
+      })
+      .finally(() => { if (!controller.signal.aborted) setRegionLoading(false); });
+    return () => { window.clearTimeout(loadingTimer); controller.abort(); };
+  }, [scope, theme]);
 
   useEffect(() => {
     if (!toast) return;
@@ -74,13 +108,27 @@ export function ChinaDashboardShell() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  const scopeNote = useMemo(() => scope === "全国"
-    ? "公开设施 / OSM / 来源质量"
-    : "省级样本按边界筛选；空结果不等于官方为零", [scope]);
+  const currentSummary = useMemo(() => (
+    regionSummary?.request.theme === theme && regionSummary.request.regionName === scope ? regionSummary : null
+  ), [regionSummary, scope, theme]);
+  const scopeNote = currentSummary?.coverage.label ?? (scope === "全国"
+    ? "正在汇总全国数据"
+    : "按已审核省界汇总；空结果不等于官方为零");
+  const currentRegionLoading = regionLoading || (!currentSummary && !regionError);
 
   const goBack = () => {
     if (window.history.length > 1) router.back();
     else router.push("/");
+  };
+
+  const applyScope = (next: string) => {
+    setScope(next);
+    setToast(`${next}范围已同步到地图与样本口径。`);
+  };
+
+  const applyVoiceCommand = (command: VoiceDashboardCommand) => {
+    if (command.type === "select-province") applyScope(command.province);
+    else setAskOpen(false);
   };
 
   return (
@@ -89,9 +137,14 @@ export function ChinaDashboardShell() {
         <div className={styles.brand}>
           <button className={styles.back} type="button" onClick={goBack}>← 返回电力地球</button>
           <span className={styles.bolt}>ϟ</span>
-          <div><h1>中国电力运行研究台</h1><p>POWER · TERRAIN · FORECAST WORKFLOW</p></div>
+          <div><h1>中国电力运行研究台</h1><p>POWER · WEATHER · CARBON ANALYSIS</p></div>
         </div>
-        <span className={styles.modeBadge}>真实数据界面 · 预测锁定</span>
+        <div className={styles.topCenter}>
+          <nav className={styles.themeNav} aria-label="分析专题">
+            {(["power", "weather", "carbon"] as RegionTheme[]).map((item) => <button key={item} type="button" aria-pressed={theme === item} onClick={() => setTheme(item)}>{item === "power" ? "电力" : item === "weather" ? "气象" : "碳排放"}</button>)}
+          </nav>
+          <button className={styles.askToggle} type="button" aria-expanded={askOpen} onClick={() => setAskOpen((value) => !value)}>⌁ 能源问数</button>
+        </div>
         <div className={styles.topStatus}>
           <div><strong>{clock} CST</strong><span>Asia / Shanghai</span></div>
           <span className={styles.health}><i /> 数据身份可追溯</span>
@@ -99,31 +152,32 @@ export function ChinaDashboardShell() {
       </header>
 
       <section className={styles.workspace}>
-        <LeftAnalysisRail overview={overview} scope={scope} />
+        <LeftAnalysisRail overview={overview} scope={scope} theme={theme} summary={currentSummary} />
         <ChinaMapScene
           layers={layers}
           provinces={provinces}
           scope={scope}
           scopeNote={scopeNote}
-          step={step}
-          onScopeChange={(next) => {
-            setScope(next);
-            setToast(`${next}范围已同步到地图与样本口径。`);
-          }}
+          theme={theme}
+          onScopeChange={applyScope}
           onNotice={setToast}
+          onLayerContextChange={setSelectedLayer}
         />
-        <PredictionWorkflowRail
-          currentStep={step}
-          scope={scope}
+        <RegionAnalysisRail
+          summary={currentSummary}
+          loading={currentRegionLoading}
+          error={regionError}
+          theme={theme}
           status={predictionStatus}
           registry={modelRegistry}
           realBacktest={realBacktest}
-          currentWeatherAvailable={layers?.layers.some((layer) => layer.id === "gfs-weather" && layer.status === "available") ?? false}
         />
       </section>
 
+      {askOpen ? <AskEnergyPanel context={{ selectedProvince: scope, selectedLayer, timeMode: "current" }} onClose={() => setAskOpen(false)} onDashboardCommand={applyVoiceCommand} /> : null}
+      <XiaoyunAssistant context={{ selectedProvince: scope, selectedLayer, timeMode: "current" }} onDashboardCommand={applyVoiceCommand} onOpenPanel={() => setAskOpen(true)} />
+
       <div className={`${styles.toast} ${toast ? styles.toastVisible : ""}`}>{toast}</div>
-      <div className={styles.narrowWarning}>请使用 PC 宽屏查看完整中国电力研究台</div>
     </main>
   );
 }

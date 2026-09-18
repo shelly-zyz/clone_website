@@ -1,0 +1,396 @@
+diff --git a/bin/xiaoyun.mjs b/bin/xiaoyun.mjs
+index 082b8e1..40e944b 100644
+--- a/bin/xiaoyun.mjs
++++ b/bin/xiaoyun.mjs
+@@ -28,7 +28,8 @@ async function main(){
+     if(envIndex>=0&&!envFile)throw new Error('--env 后需要文件路径');
+     if(await exists(envFile))dotenv.config({path:envFile,quiet:true});
+     process.env.XIAOYUN_PACKAGE_ROOT=root;process.env.VOICE_ENABLE_DEMO??='false';process.env.VOICE_MODE??='live';
+-    const version=JSON.parse(await readFile(path.join(root,'package.json'),'utf8')).version;
++    const manifest=JSON.parse(await readFile(path.join(root,'package.json'),'utf8'));
++    const version=manifest.protocolVersion||manifest.version;
+     const url=`http://${process.env.HOST&&process.env.HOST!=='0.0.0.0'?process.env.HOST:'127.0.0.1'}:${Number(process.env.PORT||8765)}`;
+     let health;try{const response=await fetch(`${url}/api/health`,{signal:AbortSignal.timeout(1000)});if(response.ok)health=await response.json();}catch{}
+     if(health){if(health.protocolVersion!==version)throw new Error(`端口上的小云后台版本为 ${health.protocolVersion||'未知'}，请先同步更新到 ${version}。`);console.log(`小云后台已在运行：${url}；页面可直接复用。`);return;}
+diff --git a/package.json b/package.json
+index ec4e633..d721005 100644
+--- a/package.json
++++ b/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@xiaoyun/voice",
+-  "version": "1.0.0-beta.1",
++  "version": "1.0.0-beta.1-power-earth.3",
+   "private": true,
+   "type": "module",
+   "license": "UNLICENSED",
+@@ -85,5 +85,6 @@
+     "react-dom": "19.3.0",
+     "streamdown": "2.6.0",
+     "esbuild": "0.28.1"
+-  }
++  },
++  "protocolVersion": "1.0.0-beta.1"
+ }
+diff --git a/packages/protocol/src/index.ts b/packages/protocol/src/index.ts
+index b395365..4f8e37a 100644
+--- a/packages/protocol/src/index.ts
++++ b/packages/protocol/src/index.ts
+@@ -81,11 +81,16 @@ export type ServerMessage =
+   | {type:'metrics'; name:string; value:number; taskId?:string};
+ export interface VoiceEvent { type:string; [key:string]:unknown }
+ export interface VoiceUIOptions {
++  theme?:'default'|'power-earth';
+   baseFontSize?:number;
+   position?:{right?:number;bottom?:number};
+   shortResultMs?:number; longResultMs?:number;
+ }
+ export interface VoiceAssistantOptions {
++  /** Host-owned, cancellable text/ browser-speech pipeline. No Qwen or audio upload. */
++  browserAdapter?: {
++    submit(text:string,context:JsonObject,signal:AbortSignal):Promise<Pick<TaskResult,'summary'|'markdown'|'data'|'sources'>>;
++  };
+   container?:HTMLElement|string; backendUrl?:string; projectId:string; assetBaseUrl?:string;
+   context?:JsonObject; actions?:VoiceAction[]; mode?:RuntimeMode;
+   wakeWord?:string;
+diff --git a/packages/server/src/project.ts b/packages/server/src/project.ts
+index aacce75..a439ece 100644
+--- a/packages/server/src/project.ts
++++ b/packages/server/src/project.ts
+@@ -7,7 +7,7 @@ import {projectSkills} from './skills.ts';
+ import {salesPath, querySql,type QueryResult} from './execution.ts';
+ import {runReadOnly} from './tool-runtime.ts';
+ 
+-export interface ProjectToolContext {signal:AbortSignal; taskId:string; contextAtStart:JsonObject}
++export interface ProjectToolContext {signal:AbortSignal; taskId:string; contextAtStart:JsonObject; originalQuestion?:string}
+ export type FormattedProjectResult=Pick<TaskResult,'summary'|'markdown'|'data'|'artifacts'|'sources'>;
+ export interface ProjectTool {
+   name:string; description:string; parameters:JsonObject;
+diff --git a/packages/server/src/session.ts b/packages/server/src/session.ts
+index 9ef47d1..d265942 100644
+--- a/packages/server/src/session.ts
++++ b/packages/server/src/session.ts
+@@ -23,6 +23,7 @@ const wait=(ms:number,signal:AbortSignal)=>new Promise<void>((resolve,reject)=>{
+ });
+ 
+ export class VoiceSession {
++  private originalQuestion='';
+   private clientId='';private projectId='';private project?:ProjectDefinition;
+   private context:JsonObject={};private actions:ActionDescriptor[]=[];private mode:RuntimeMode='demo';
+   private autoEndSession=false;
+@@ -85,6 +86,7 @@ export class VoiceSession {
+       case 'actions.update':if(message.contextVersion!==undefined&&message.contextVersion<this.contextVersion)break;this.validateActions(message.actions);this.actions=message.actions;this.contextVersion=message.contextVersion??this.contextVersion+1;this.syncContext();break;
+       case 'input.text':
+         if(!this.active||message.sessionId!==this.sessionId)return;
++        this.originalQuestion=message.text;
+         this.discardQueuedWaiting('用户继续对话');this.speechQueue=this.speechQueue.filter(s=>s.kind!=='greeting');this.interrupt();this.userSpeaking=false;this.accepting=true;this.inputAt=Date.now();this.state('thinking');
+         this.inputGate.reset();this.diagnostic('input.ended',{detail:'text'});
+         if(this.handleResultCommand(message.text)){this.accepting=false;this.pumpSpeech();this.maybeIdle();break;}
+@@ -194,7 +196,11 @@ export class VoiceSession {
+           this.inputGate.reset();this.accepting=false;this.userSpeaking=false;
+           if(fatal){gateway.close();this.qwen=undefined;this.end('connection_error');}else{this.pumpSpeech();this.maybeIdle();}
+         },
+-        trace:(direction,event)=>recordVoiceEvent(sessionId,direction,event),
++        trace:(direction,event)=>{
++          if(direction==='receive'&&event.type==='input_audio_buffer.speech_started')this.originalQuestion='';
++          if(direction==='receive'&&event.type==='conversation.item.input_audio_transcription.completed'&&typeof event.transcript==='string')this.originalQuestion=event.transcript;
++          recordVoiceEvent(sessionId,direction,event);
++        },
+         idle:()=>{this.pumpSpeech();this.maybeIdle();},canGenerate:()=>this.active&&(!this.current||!this.currentGenerated),
+       });
+       this.qwen=gateway;this.syncContext();
+@@ -450,13 +456,14 @@ export class VoiceSession {
+     if(name==='replay_result'){this.replayResult(String(args.taskId));return {output:{queued:true},suppressReply:true};}
+     if(name==='stop_delivery'){this.stopDelivery(String(args.taskId));return {output:{stopped:true},suppressReply:true};}
+     if(name.startsWith('project__')){
++      const originalQuestion=this.originalQuestion;
+       const tool=getVoiceDirectTools(this.project!).find(t=>t.name===name);if(!tool)throw new Error('项目没有开放这个直达工具');
+       const {__taskId,__newTask,...businessArgs}=args;
+       const pending=!__newTask&&this.pendingClarification?this.tasks.get(this.pendingClarification):undefined;
+-      const task=__taskId?this.requireTask(String(__taskId)):pending?.info.status==='collecting'?pending:this.createTask(tool.description.slice(0,32),`${name.slice(9)} ${JSON.stringify(businessArgs)}`);
++      const task=__taskId?this.requireTask(String(__taskId)):pending?.info.status==='collecting'?pending:this.createTask(originalQuestion.slice(0,60)||tool.description.slice(0,32),`${name.slice(9)} ${JSON.stringify(businessArgs)}`);
+       if(task.info.status!=='collecting')return {output:{taskId:task.info.taskId,status:task.info.status},suppressReply:true};
+       if(this.pendingClarification===task.info.taskId)this.pendingClarification=undefined;task.info.sessionId=this.sessionId;
+-      this.manager.runDirect(task,async()=>this.manager.result(task,await runProjectTool(this.project!,name.slice(9),businessArgs,{signal:task.abort.signal,taskId:task.info.taskId,contextAtStart:task.info.contextAtStart})));
++      this.manager.runDirect(task,async()=>this.manager.result(task,await runProjectTool(this.project!,name.slice(9),businessArgs,{signal:task.abort.signal,taskId:task.info.taskId,contextAtStart:task.info.contextAtStart,originalQuestion})));
+       return {output:{taskId:task.info.taskId,status:'accepted'},suppressReply:true};
+     }
+     if(name==='start_task'){
+diff --git a/packages/voice/src/controller.ts b/packages/voice/src/controller.ts
+index 9cfa14e..9730598 100644
+--- a/packages/voice/src/controller.ts
++++ b/packages/voice/src/controller.ts
+@@ -4,11 +4,15 @@ import {PROTOCOL_VERSION,TERMINAL_TASK_STATUSES} from '@xiaoyun/protocol';
+ import {AudioEngine} from './audio';
+ import {VoiceTransport} from './transport';
+ import {WakeWordDetector} from './wake-word';
++import {startBrowserRecognition} from './browser-recognition';
+ import {createWidgetView} from './ui';
+ import type {WidgetSnapshot,WidgetView} from './ui-types';
+ 
+ const terminal=(task:TaskInfo)=>TERMINAL_TASK_STATUSES.includes(task.status);
+ export class VoiceController implements VoiceAssistant {
++  private stopRecognition?:()=>void;
++  private browserRequest?:AbortController;
++  private browserTask?:TaskInfo;
+   private host:HTMLElement;
+   private view:WidgetView;
+   private transport:VoiceTransport;
+@@ -67,7 +71,7 @@ export class VoiceController implements VoiceAssistant {
+       onToggleMic:()=>void this.setMicEnabled(!this.snapshot.micEnabled).catch(error=>this.report(error)),
+       onSubmitText:text=>void this.submitText(text).catch(error=>this.report(error)),
+       onPin:id=>this.pinCard(id),onClose:id=>this.closeCard(id),
+-      onCancelTask:id=>this.transport.send({type:'task.cancel',taskId:id}),
++      onCancelTask:id=>{if(this.options.browserAdapter&&this.browserTask?.taskId===id)this.cancelBrowserRequest();else this.transport.send({type:'task.cancel',taskId:id});},
+       onReplay:id=>void this.replayResult(id).catch(error=>this.report(error)),
+       onStopDelivery:id=>this.stopDelivery(id),onSelectResult:id=>this.selectResult(id),
+       onReadingChange:(id,value)=>{
+@@ -77,7 +81,8 @@ export class VoiceController implements VoiceAssistant {
+       onAcceptResults:()=>this.acceptResults(),onRetryTask:id=>this.retryTask(id),
+       onRetryDelivery:id=>void this.retryDelivery(id).catch(error=>this.report(error)),
+     },{ui:options.ui,renderResult:options.renderResult});
+-    const assets=options.assetBaseUrl?new URL(options.assetBaseUrl.endsWith('/')?options.assetBaseUrl:options.assetBaseUrl+'/',location.href):new URL('./assets/',import.meta.url);
++    const assetRoot=options.assetBaseUrl??new URL('/sdk/assets/',options.backendUrl??'http://127.0.0.1:8765').href;
++    const assets=new URL(assetRoot.endsWith('/')?assetRoot:assetRoot+'/',location.href);
+     this.audio=new AudioEngine(assets,{
+       onPCM:(pcm,rms)=>this.onPCM(pcm,rms),
+       onLevel:level=>this.view.setAudioLevel(level),
+@@ -98,7 +103,8 @@ export class VoiceController implements VoiceAssistant {
+     });
+     this.setActions(options.actions??[]);
+     this.loadPins();
+-    this.transport.connect({type:'hello',protocolVersion:PROTOCOL_VERSION,clientId:this.clientId(),projectId:options.projectId,context:this.context,contextVersion:this.contextVersion,actions:this.descriptors(),mode:options.mode,autoEndSession:options.autoEndSession??false});
++    if(options.browserAdapter){this.snapshot.connected=true;this.snapshot.mode='live';}
++    else this.transport.connect({type:'hello',protocolVersion:PROTOCOL_VERSION,clientId:this.clientId(),projectId:options.projectId,context:this.context,contextVersion:this.contextVersion,actions:this.descriptors(),mode:options.mode,autoEndSession:options.autoEndSession??false});
+     this.render();
+   }
+   private emit(event:VoiceEvent) {
+@@ -120,6 +126,7 @@ export class VoiceController implements VoiceAssistant {
+   }
+   async replayResult(taskId:string){
+     if(!this.snapshot.sessionActive)await this.startSession(true);
++    if(this.options.browserAdapter){const result=this.taskResults.get(taskId);if(result)this.speakBrowserResult(result);return;}
+     this.transport.send({type:'result.replay',taskId});
+   }
+   async retryDelivery(deliveryId:string){if(!this.snapshot.sessionActive)await this.startSession(true);this.transport.send({type:'delivery.retry',deliveryId});}
+@@ -128,7 +135,7 @@ export class VoiceController implements VoiceAssistant {
+     this.transport.send({type:'delivery.stop',taskId});
+   }
+   selectResult(taskId?:string){this.transport.send({type:'result.select',taskId});}
+-  retryTask(taskId:string){void this.startSession(true).then(()=>this.transport.send({type:'task.retry',taskId})).catch(error=>this.report(error));}
++  retryTask(taskId:string){if(this.options.browserAdapter){const task=this.tasks.get(taskId);if(task)void this.submitText(task.title);return;}void this.startSession(true).then(()=>this.transport.send({type:'task.retry',taskId})).catch(error=>this.report(error));}
+   private descriptors():ActionDescriptor[]{return this.actions.map(({name,description,parameters})=>({name,description,parameters}));}
+   updateContext(context:JsonObject){this.contextVersion++;this.context=structuredClone(context);this.transport.updateHello(this.context,this.descriptors(),this.contextVersion);this.transport.send({type:'context.update',context:this.context,contextVersion:this.contextVersion});}
+   setActions(actions:VoiceAction[]){
+@@ -145,6 +152,14 @@ export class VoiceController implements VoiceAssistant {
+   }
+   async setMicEnabled(enabled:boolean){
+     if(this.destroyed)return;
++    if(this.options.browserAdapter){
++      if(!enabled){this.stopRecognition?.();this.stopRecognition=undefined;this.snapshot.micEnabled=false;this.endSession();return;}
++      if(this.snapshot.micEnabled)return;
++      this.stopRecognition=startBrowserRecognition(text=>void this.submitText(text).catch(error=>this.report(error)),text=>{
++        this.cancelBrowserRequest();this.interrupt();this.setState('listening');this.emit({type:'input.transcript',text});
++      },message=>{this.snapshot.micEnabled=false;this.stopRecognition=undefined;this.report(new Error(message));});
++      this.snapshot.micEnabled=true;this.setState('listening');return;
++    }
+     if(!enabled){this.micGeneration++;this.endSession();this.snapshot.micEnabled=false;this.audio.disableMicrophone();this.wakeWord.destroy();this.setState('mic_off');return;}
+     if(this.snapshot.micEnabled)return;
+     if(!this.micRequest)this.micRequest=(async()=>{
+@@ -159,6 +174,7 @@ export class VoiceController implements VoiceAssistant {
+   }
+   private async startSession(textOnly:boolean){
+     if(this.destroyed||this.snapshot.sessionActive)return;
++    if(this.options.browserAdapter){this.sessionId=crypto.randomUUID();this.snapshot.sessionActive=true;this.firstTaskSeen=false;this.setState('listening');return;}
+     if(this.sessionRequest)return this.sessionRequest;
+     const generation=this.lifecycleGeneration;
+     this.sessionRequest=(async()=>{
+@@ -175,6 +191,7 @@ export class VoiceController implements VoiceAssistant {
+   }
+   endSession(){this.stopSession('manual');}
+   private stopSession(reason:'manual'|'timeout'|'complete',notify=true){
++    if(this.options.browserAdapter){this.cancelBrowserRequest();this.stopRecognition?.();this.stopRecognition=undefined;this.snapshot.micEnabled=false;}
+     this.lifecycleGeneration++;
+     this.clearWait();clearTimeout(this.transitionTimer);
+     this.playingDelivery=undefined;
+@@ -192,6 +209,7 @@ export class VoiceController implements VoiceAssistant {
+   }
+   async submitText(text:string){
+     text=text.trim();if(!text||this.destroyed)return;
++    if(this.options.browserAdapter){await this.submitBrowserText(text);return;}
+     const active=this.snapshot.sessionActive;
+     if(!active)await this.startSession(true);
+     if(this.destroyed||!this.snapshot.sessionActive)return;
+@@ -203,6 +221,37 @@ export class VoiceController implements VoiceAssistant {
+     this.setState('thinking');this.transport.send({type:'input.text',text,sessionId:this.sessionId});
+     this.emit({type:'input.text',text,sessionId:this.sessionId});
+   }
++  private cancelBrowserRequest(){
++    this.browserRequest?.abort();this.browserRequest=undefined;this.inputProcessing=false;
++    if(this.browserTask){this.onTask({...this.browserTask,status:'cancelled',updatedAt:Date.now()});this.browserTask=undefined;}
++  }
++  private async submitBrowserText(text:string){
++    if(text.length>300){this.report(new Error('问题请保持在300字以内。'));return;}
++    this.cancelBrowserRequest();
++    const request=new AbortController();this.browserRequest=request;
++    this.interrupt();await this.startSession(true);
++    if(request.signal.aborted||this.destroyed)return;
++    const task:TaskInfo={taskId:crypto.randomUUID(),sessionId:this.sessionId,title:text,status:'running',requestOrder:Date.now(),createdAt:Date.now(),updatedAt:Date.now(),contextAtStart:structuredClone(this.context)};
++    this.browserTask=task;this.inputProcessing=true;this.onTask(task);this.emit({type:'input.text',text});
++    try{
++      const value=await this.options.browserAdapter!.submit(text,task.contextAtStart!,request.signal);
++      if(request.signal.aborted||this.destroyed)return;
++      const result:TaskResult={...value,taskId:task.taskId,sessionId:task.sessionId,projectId:this.options.projectId,status:'succeeded',title:text,requestOrder:task.requestOrder,contextAtStart:task.contextAtStart!};
++      this.onTask({...task,status:'succeeded',updatedAt:Date.now()});this.onResult(result);
++      if(this.snapshot.micEnabled)this.speakBrowserResult(result);
++    }catch(error){
++      if(request.signal.aborted||this.destroyed)return;
++      const message=error instanceof Error?error.message:'问数服务暂不可用，请重试。';
++      this.onTask({...task,status:'failed',updatedAt:Date.now()});
++      this.onResult({taskId:task.taskId,sessionId:task.sessionId,projectId:this.options.projectId,status:'failed',title:text,summary:message,requestOrder:task.requestOrder,contextAtStart:task.contextAtStart!});
++    }finally{
++      if(this.browserRequest===request){this.browserRequest=undefined;this.browserTask=undefined;this.inputProcessing=false;this.reconcile();}
++    }
++  }
++  private speakBrowserResult(result:TaskResult){
++    this.interrupt();
++    this.onSpeechStart({speechId:crypto.randomUUID(),deliveryId:crypto.randomUUID(),sessionId:this.sessionId,taskId:result.taskId,kind:'result',text:result.summary,provider:'demo',sentenceIndex:0,sentenceCount:1});
++  }
+   private onPCM(pcm:ArrayBuffer,rms:number){
+     if(!this.snapshot.micEnabled)return;
+     if(!this.snapshot.sessionActive){this.wakeWord.feed(pcm);return;}
+@@ -418,5 +467,5 @@ export class VoiceController implements VoiceAssistant {
+   private persistPins(){try{localStorage.setItem(this.storageKey,JSON.stringify([...this.snapshot.cards,...this.pendingCards].filter(c=>c.pinned)));}catch{this.emit({type:'storage.error',message:'此浏览器无法保存固定卡片'});}}
+   private setState(state:VisualState,message?:string){this.snapshot.visualState=state;this.snapshot.statusText=message;this.render();}
+   private report(error:unknown){const message=error instanceof Error?error.message:String(error);this.emit({type:'error',message});this.setState('error',message);clearTimeout(this.transitionTimer);this.transitionTimer=setTimeout(()=>this.reconcile(),900);}
+-  destroy(){if(this.destroyed)return;this.lifecycleGeneration++;this.micGeneration++;this.clearWait();clearTimeout(this.transitionTimer);clearTimeout(this.captionTimer);cancelAnimationFrame(this.readingFrame);this.transport.destroy();this.audio.destroy();this.wakeWord.destroy();this.destroyed=true;this.view.destroy();this.host.remove();}
++  destroy(){if(this.destroyed)return;this.cancelBrowserRequest();this.stopRecognition?.();this.lifecycleGeneration++;this.micGeneration++;this.clearWait();clearTimeout(this.transitionTimer);clearTimeout(this.captionTimer);cancelAnimationFrame(this.readingFrame);this.transport.destroy();this.audio.destroy();this.wakeWord.destroy();this.destroyed=true;this.view.destroy();this.host.remove();}
+ }
+diff --git a/packages/voice/src/transport.ts b/packages/voice/src/transport.ts
+index 65fb4d1..d4c959f 100644
+--- a/packages/voice/src/transport.ts
++++ b/packages/voice/src/transport.ts
+@@ -40,7 +40,7 @@ export class VoiceTransport {
+     socket.onerror=()=>this.onConnection(false);
+   }
+   updateHello(context:Extract<ClientMessage,{type:'hello'}>['context'],actions:Extract<ClientMessage,{type:'hello'}>['actions'],contextVersion:number) {if(this.hello){this.hello.context=context;this.hello.actions=actions;this.hello.contextVersion=contextVersion;}}
+-  send(message:ClientMessage) {if(this.ready&&this.socket?.readyState===WebSocket.OPEN)this.socket.send(JSON.stringify(message));else this.queue.push(message);}
++  send(message:ClientMessage) {if(!this.hello||this.closed)return;if(this.ready&&this.socket?.readyState===WebSocket.OPEN)this.socket.send(JSON.stringify(message));else this.queue.push(message);}
+   audio(pcm:ArrayBuffer) {if(this.ready&&this.socket?.readyState===WebSocket.OPEN&&this.socket.bufferedAmount<320000)this.socket.send(pcm);}
+   destroy() {this.closed=true;this.ready=false;clearTimeout(this.retry);this.queue=[];this.socket?.close();}
+ }
+diff --git a/packages/voice/src/ui/index.tsx b/packages/voice/src/ui/index.tsx
+index 6f47c0a..d6fe9ff 100644
+--- a/packages/voice/src/ui/index.tsx
++++ b/packages/voice/src/ui/index.tsx
+@@ -5,6 +5,7 @@ import type {ResultCard,TaskInfo,TaskStatus,VisualState} from '@xiaoyun/protocol
+ import type {WidgetHandlers,WidgetOptions,WidgetSnapshot,WidgetView} from '../ui-types';
+ import {CharacterView} from './character';
+ import {styles} from './styles';
++import {powerEarthTheme} from './power-earth-theme';
+ import {useDock} from './use-dock';
+ import {BUBBLE_EXIT_MS,useCardHeight,useCardPresence,useCardLifetime} from './motion';
+ 
+@@ -286,7 +287,7 @@ function Widget({snapshot,handlers,options,onCharacter}:{snapshot:WidgetSnapshot
+ }
+ 
+ export function createWidgetView(root:ShadowRoot,handlers:WidgetHandlers,options:WidgetOptions={}):WidgetView {
+-  const style=document.createElement('style'); style.textContent=styles;
++  const style=document.createElement('style'); style.textContent=styles+(options.ui?.theme==='power-earth'?powerEarthTheme:'');
+   const mount=document.createElement('div'); root.append(style,mount);
+   const reactRoot=createRoot(mount);
+   let character:CharacterView|null=null;
+diff --git a/packages/voice/src/browser-recognition.ts b/packages/voice/src/browser-recognition.ts
+new file mode 100644
+index 0000000..3c43e8d
+--- /dev/null
++++ b/packages/voice/src/browser-recognition.ts
+@@ -0,0 +1,36 @@
++type Recognition = {
++  lang:string; continuous:boolean; interimResults:boolean;
++  onresult:((event:{resultIndex:number;results:ArrayLike<{isFinal:boolean;0?:{transcript:string}}>})=>void)|null;
++  onerror:((event:{error:string})=>void)|null; onend:(()=>void)|null;
++  start():void; abort():void;
++};
++
++/** Every callback is guarded by lifetime; late browser events cannot submit after close. */
++export function startBrowserRecognition(onText:(text:string)=>void,onInterim:(text:string)=>void,onError:(message:string)=>void) {
++  const speechWindow=window as typeof window & {SpeechRecognition?:new()=>Recognition;webkitSpeechRecognition?:new()=>Recognition};
++  const Constructor=speechWindow.SpeechRecognition??speechWindow.webkitSpeechRecognition;
++  if(!Constructor)throw new Error('当前浏览器不支持语音识别，请点击键盘使用文字问数。');
++  let active=true;let timer:ReturnType<typeof setTimeout>|undefined;
++  const recognition=new Constructor();
++  recognition.lang='zh-CN';recognition.continuous=true;recognition.interimResults=true;
++  const stop=()=>{active=false;clearTimeout(timer);recognition.onresult=null;recognition.onerror=null;recognition.onend=null;recognition.abort();};
++  recognition.onresult=event=>{
++    if(!active)return;
++    let final='';let interim='';
++    for(let i=event.resultIndex;i<event.results.length;i++){
++      const result=event.results[i];const text=result?.[0]?.transcript??'';
++      if(result.isFinal)final+=text;else interim+=text;
++    }
++    if(interim.trim()||final.trim())onInterim(interim.trim()||final.trim());
++    if(final.trim())onText(final.trim());
++  };
++  recognition.onerror=event=>{
++    if(!active||event.error==='aborted')return;
++    if(event.error==='no-speech')return;
++    stop();
++    onError(event.error==='not-allowed'||event.error==='service-not-allowed'?'麦克风权限未获允许，请授权后重试。':event.error==='audio-capture'?'未找到可用麦克风。':'浏览器语音服务不可用，请重试或使用文字问数。');
++  };
++  recognition.onend=()=>{if(active)timer=setTimeout(()=>{if(active)try{recognition.start();}catch{stop();onError('语音识别已停止，请重新开启麦克风。');}},400);};
++  try{recognition.start();}catch(error){stop();throw error;}
++  return stop;
++}
+diff --git a/packages/voice/src/ui/power-earth-theme.ts b/packages/voice/src/ui/power-earth-theme.ts
+new file mode 100644
+index 0000000..9e93ced
+--- /dev/null
++++ b/packages/voice/src/ui/power-earth-theme.ts
+@@ -0,0 +1,16 @@
++export const powerEarthTheme = `
++:host { --xy-ink:#e0f3f7; --xy-muted:#8fa9b4; --xy-paper:#081b27f5; --xy-line:#294651; --xy-accent:#27e8ff; --xy-green:#8beaf5; color-scheme:dark; }
++.xy-card,.xy-caption,.xy-composer,.xy-task-group { background:#071923f2; border-color:#315561; outline-color:#27e8ff25; box-shadow:0 12px 32px #0005; border-radius:12px; }
++.xy-card[data-pinned=true] { background:#222418f5; border-color:#736037; outline-color:#ffd16640; }
++.xy-card-head h3,.xy-attachment-label,.xy-icon-button,.xy-sources,.xy-task,.xy-status { color:#acc5ce; }
++.xy-icon-button:hover,.xy-icon-button[aria-pressed=true] { background:#143641; color:#a0f5ff; }
++.xy-dock-controls { background:#0b2431ed; border-color:#47717d; box-shadow:inset 0 1px #c4f7ff25,0 8px 24px #0005; }
++.xy-pill { color:#a9dbe4; }
++.xy-pill:hover,.xy-pill[aria-pressed=true] { background:#215061; color:#dcfbff; }
++.xy-status { background:#0b2431ed; border-color:#47717d; color:#b3cdd5; }
++.xy-markdown pre,.xy-markdown code,.xy-transcript pre,.xy-transcript code,.xy-markdown th,.xy-transcript th { background:#112c39; color:#d0ecf2; }
++.xy-markdown a,.xy-transcript a { color:#73dfef; }
++.xy-markdown td,.xy-markdown th,.xy-transcript td,.xy-transcript th { border-color:#294651; }
++.xy-composer input,.xy-composer textarea { background:#05131e; color:#e0f3f7; border-color:#315561; }
++button:focus-visible,input:focus-visible,[tabindex]:focus-visible { outline-color:#27e8ff; }
++`;
+diff --git a/packages/voice/test/browser-recognition.test.ts b/packages/voice/test/browser-recognition.test.ts
+new file mode 100644
+index 0000000..6125d13
+--- /dev/null
++++ b/packages/voice/test/browser-recognition.test.ts
+@@ -0,0 +1,24 @@
++import assert from 'node:assert/strict';
++import test from 'node:test';
++import {startBrowserRecognition} from '../src/browser-recognition.ts';
++
++test('browser recognition stops late input after close and preserves final text',()=>{
++  let instance:FakeRecognition;
++  class FakeRecognition {
++    lang='';continuous=false;interimResults=false;
++    onresult:((e:unknown)=>void)|null=null;onerror:((e:unknown)=>void)|null=null;onend:(()=>void)|null=null;
++    aborted=false;constructor(){instance=this;}start(){}abort(){this.aborted=true;}
++  }
++  const previous=Object.getOwnPropertyDescriptor(globalThis,'window');
++  Object.defineProperty(globalThis,'window',{value:{SpeechRecognition:FakeRecognition},configurable:true});
++  try{
++    const texts:string[]=[];const interim:string[]=[];
++    const stop=startBrowserRecognition(t=>texts.push(t),t=>interim.push(t),()=>assert.fail('Unexpected recognition error'));
++    const handler=instance!.onresult!;
++    handler({resultIndex:0,results:[{isFinal:false,0:{transcript:'广东'}}]});
++    handler({resultIndex:0,results:[{isFinal:true,0:{transcript:'广东有多少光伏设施'}}]});
++    assert.deepEqual(texts,['广东有多少光伏设施']);assert.equal(interim.length,2);
++    stop();handler({resultIndex:0,results:[{isFinal:true,0:{transcript:'late'}}]});
++    assert.equal(texts.length,1);assert.equal(instance!.aborted,true);
++  }finally{if(previous)Object.defineProperty(globalThis,'window',previous);else Reflect.deleteProperty(globalThis,'window');}
++});

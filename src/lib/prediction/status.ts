@@ -21,6 +21,8 @@ const GENERIC_COUNTRY_BLOCKERS = [
 const COUNTRY_CODE_ALIASES: Record<string, string> = {
   CN: "CHN",
   CHINA: "CHN",
+  GB: "GBR",
+  UK: "GBR",
 };
 
 export function normalizePredictionCountryCode(value: string | null | undefined) {
@@ -29,9 +31,9 @@ export function normalizePredictionCountryCode(value: string | null | undefined)
   return /^[A-Z]{3}$/.test(code) ? code : null;
 }
 
-function fallbackSourceGates(countryPilot: SdwpfPilotSummary | null): PredictionSourceDataGates {
+function fallbackSourceGates(): PredictionSourceDataGates {
   return {
-    observedPower: countryPilot !== null,
+    observedPower: false,
     historicalNwp: false,
     absoluteSiteTime: false,
     capacityAndAvailability: false,
@@ -71,10 +73,10 @@ export function buildPredictionStatus(
   const normalizedCountryCode = normalizePredictionCountryCode(countryCode) ?? "CHN";
   const isChina = normalizedCountryCode === "CHN";
   const countryPilot = isChina ? pilot : null;
-  const countryRealData = isChina ? realData : null;
+  const countryRealData = realData?.source.countryCode === normalizedCountryCode ? realData : null;
   const comparisons = countryPilot?.lightgbmComparison?.comparisons ?? [];
   const rollingHorizons = countryPilot?.lightgbmComparison?.rollingValidation?.horizons;
-  const sourceGates = countryRealData ? countryRealData.gates : fallbackSourceGates(countryPilot);
+  const sourceGates = countryRealData ? countryRealData.gates : fallbackSourceGates();
   const { stableBaselineGain, blockers: modelGateBlockers } = modelBlockers(rollingHorizons);
   const productionBlockers = countryRealData
     ? [...countryRealData.blockers, ...modelGateBlockers]
@@ -85,7 +87,11 @@ export function buildPredictionStatus(
     schemaVersion: 2,
     country: {
       code: normalizedCountryCode,
-      evidenceScope: countryPilot || countryRealData?.status === "verified-research-only" ? "country-specific" : "data-required",
+      evidenceScope: countryRealData?.status === "verified-research-only"
+        ? "country-specific"
+        : countryPilot
+          ? "research-dataset"
+          : "data-required",
     },
     status: "locked",
     productionReady: false,
@@ -97,6 +103,8 @@ export function buildPredictionStatus(
     realData: countryRealData,
     researchEvidence: countryPilot ? {
       identity: "historical-backtest-only",
+      countryCode: "CHN",
+      geographicScope: "anonymous-china-competition-fleet",
       source: countryPilot.source.name,
       generatedAt: countryPilot.generatedAt,
       model: countryPilot.lightgbmComparison?.name ?? null,
@@ -130,7 +138,7 @@ export function buildPredictionStatus(
         };
       }),
     } : null,
-    blockers: isChina ? productionBlockers : [...GENERIC_COUNTRY_BLOCKERS, ...modelGateBlockers],
+    blockers: productionBlockers,
     nextRequiredInputs: nextRequiredInputs(countryRealData),
     modelRegistryHref: "/api/prediction/models",
   };

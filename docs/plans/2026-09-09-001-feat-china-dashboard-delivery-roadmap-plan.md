@@ -556,7 +556,7 @@ Power Earth globe
 
 **Follow-up status (2026-09-11):** Unit 6 now also has a read-only real-data backtest path. `real-data-backtest-loader.ts` queries only `website_data.forecast_training_pairs`; `real-data-backtest.ts` accepts valid nonnegative historical pairs, rejects duplicate timestamps, refuses to impute missing history, and records coverage/quarantine/blocker evidence. The CHN route was verified against the connected PostgreSQL server: 6,605 raw and valid pair rows, zero rows with an authoritative curtailment label, persistence coverage 94.70% with MAE 3.5525 MW/RMSE 5.4123 MW, and previous-day-same-time coverage 81.36% with MAE 11.9476 MW/RMSE 15.9878 MW and -236.32% relative improvement. The latter does not beat persistence; both results remain `historical-backtest-only`. Non-CHN requests return unavailable rather than inheriting China evidence. The route is surfaced below the prediction-chain workstations, while `/api/prediction/forecast` remains HTTP 503 with null output and no P10/P50/P90. Prediction tests now pass 21/21, with typecheck and lint passing (one pre-existing warning remains); the production build is the remaining verification before commit.
 
-- [ ] **Unit 8: Energy Data Understanding and Trusted Analysis Agent**
+- [x] **Unit 8: Energy Data Understanding and Trusted Analysis Agent**
 
 **Goal:** Add a controlled energy analysis agent that understands the approved data catalog before answering questions, converts user intent into structured EnergyIR/GeoIR plans, routes requests to the correct read-only tool, validates results, and saves approved analyses as reusable versioned recipes. Text-to-SQL is only one constrained tool, not the product center.
 
@@ -615,7 +615,9 @@ Power Earth globe
 - No free AI-generated SQL reaches the production database in the first release.
 - Every displayed value and explanation can be traced back to a deterministic tool result and its source metadata.
 
-- [ ] **Unit 9: Full-Duplex Voice Layer**
+**Actual status (2026-09-16):** The first EnergyDataAgent slice is implemented and live-provider acceptance is complete. `ResponsesEnergyPlanner` supports explicit OpenAI or DeepSeek selection and uses the Responses API with strict structured output to produce only a decision envelope and EnergyIR; `runEnergyDataAgent` re-validates and compiles that model output before invoking one deterministic read-only tool, then blocks display unless units and provenance pass result validation. DeepSeek is configured locally with `deepseek-flash`, the official `https://api.deepseek.com` base URL, non-thinking mode for bounded schema planning, and a Git-ignored key. Two real production-route calls returned HTTP 200: the model selected `mapped-assets`, the validated result resolved Guangdong solar to 188 mapped facilities, and the answer retained the mapped-sample/not-official-statistics limitation. Province suffixes such as “广东省” are normalized before deterministic boundary lookup. The production API does not use the deterministic Chinese parser as its agent: that parser remains only as a 40-question offline regression baseline. The `/china` overlay carries province/layer/time context and shows provider/model configuration, facts, provenance, limitations, IR, plan, and trace. Missing the selected provider key or explicit `ENERGY_AGENT_MODEL` still produces an honest disabled/503 state instead of a rules-based fallback. The 19 EnergyIR/agent tests, six voice tests, typecheck, lint, diff check, and production build pass. Earlier 1440×900 browser evidence remains at `output/playwright/china-dashboard-unit8-energy-ir-1440x900.png`.
+
+- [x] **Unit 9: Full-Duplex Voice Layer**
 
 **Goal:** Add voice as an optional input/output layer on top of the stable EnergyIR/GeoIR text workflow.
 
@@ -651,6 +653,8 @@ Power Earth globe
 - Voice feature cannot bypass EnergyIR/GeoIR.
 - User can see and control whether audio capture and speech output are active.
 - Existing text workflow remains usable with voice off.
+
+**Actual status (2026-09-14):** The browser voice layer is implemented inside the existing trusted-query panel. Capture and speech output are independently controlled and both default off; recognized questions use the same abortable EnergyDataAgent request function as typed questions. Interim or final speech immediately cancels queued/current synthesis, final new questions replace any older in-flight request, and recognition remains active during speech when both controls are enabled. Reviewed province commands reuse the same dashboard scope callback; all other utterances preserve their text and enter EnergyIR. Unsupported browsers, denied permission, missing devices, no-speech, and recognition network failures expose recoverable states without affecting text queries. Six state-machine tests, typecheck, lint (one unrelated existing warning), and production build pass. Browser checks cover the honest unconfigured/disabled state, native permission-denied recovery, and an isolated no-microphone contract fixture that verifies listening, barge-in cancellation, Guangdong scope change, POST to `/api/energy-ir/query`, controlled speech output, and capture shutdown. Evidence is `output/playwright/china-dashboard-unit9-voice-default-1440x900.png` and `china-dashboard-unit9-voice-contract-1440x900.png`. No real microphone audio or provider credential was used, so live device/provider acceptance remains a deployment check.
 
 - [ ] **Unit 10: Operations, Backups, QA, and Deployment**
 

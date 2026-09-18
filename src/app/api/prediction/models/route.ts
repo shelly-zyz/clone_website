@@ -1,11 +1,19 @@
 import { NextResponse } from "next/server";
 import { loadSdwpfPilotSummary } from "@/lib/prediction/pilot-storage";
 import { buildModelRegistry } from "@/lib/prediction/registry";
+import { normalizePredictionCountryCode } from "@/lib/prediction/status";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const country = normalizePredictionCountryCode(new URL(request.url).searchParams.get("country"));
+  if (country !== "CHN") {
+    return NextResponse.json(buildModelRegistry(null), {
+      status: 404,
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
   try {
     const registry = buildModelRegistry(await loadSdwpfPilotSummary());
     return NextResponse.json(registry, {

@@ -119,10 +119,10 @@ test("status exposes research evidence without unlocking production", () => {
   const status = buildPredictionStatus(pilot);
 
   assert.equal(status.country.code, "CHN");
-  assert.equal(status.country.evidenceScope, "country-specific");
+  assert.equal(status.country.evidenceScope, "research-dataset");
   assert.equal(status.status, "locked");
   assert.equal(status.productionReady, false);
-  assert.equal(status.dataGates.observedPower, true);
+  assert.equal(status.dataGates.observedPower, false);
   assert.equal(status.dataGates.historicalNwp, false);
   assert.deepEqual(status.researchEvidence?.candidateHorizonsMinutes, [10]);
   assert.deepEqual(status.researchEvidence?.rejectedHorizonsMinutes, [30]);
@@ -130,10 +130,13 @@ test("status exposes research evidence without unlocking production", () => {
   assert.match(status.blockers.join(" "), /NWP|场址|时刻/);
 });
 
-test("status uses verified real-data evidence to close structural gates but keeps quality blockers", () => {
-  const status = buildPredictionStatus(pilot, "CHN", verifiedRealData);
+test("UK status uses Hill of Towie evidence while China cannot inherit it", () => {
+  const status = buildPredictionStatus(null, "GBR", verifiedRealData);
+  const china = buildPredictionStatus(pilot, "CHN", verifiedRealData);
 
   assert.equal(status.schemaVersion, 2);
+  assert.equal(status.country.code, "GBR");
+  assert.equal(status.country.evidenceScope, "country-specific");
   assert.equal(status.realData?.status, "verified-research-only");
   assert.equal(status.dataGates.observedPower, true);
   assert.equal(status.dataGates.historicalNwp, true);
@@ -142,16 +145,18 @@ test("status uses verified real-data evidence to close structural gates but keep
   assert.equal(status.dataGates.temporalCoverage, false);
   assert.equal(status.dataGates.sourceQuality, false);
   assert.equal(status.dataGates.curtailmentLabels, false);
-  assert.doesNotMatch(status.blockers.join(" "), /缺少与真实功率.*历史NWP/);
   assert.match(status.blockers.join(" "), /95%/);
-  assert.deepEqual(derivePredictionWorkflow(status, true).map((stage) => stage.state), ["complete", "complete", "complete", "research", "research", "research"]);
+  assert.equal(china.realData, null);
+  assert.equal(china.dataGates.observedPower, false);
+  assert.equal(china.dataGates.historicalNwp, false);
+  assert.equal(china.researchEvidence?.countryCode, "CHN");
 });
 
 test("workflow derives each workstation state from real gates", () => {
   const status = buildPredictionStatus(pilot);
   const stages = derivePredictionWorkflow(status, true, buildModelRegistry(pilot));
 
-  assert.deepEqual(stages.map((stage) => stage.state), ["complete", "locked", "complete", "complete", "research", "research"]);
+  assert.deepEqual(stages.map((stage) => stage.state), ["complete", "locked", "locked", "complete", "research", "research"]);
   assert.match(stages[1].note, /历史NWP/);
   assert.match(stages[4].product, /10分钟/);
   assert.match(stages[4].note, /1\/3折/);
@@ -177,6 +182,7 @@ test("status remains locked when no local research pilot exists", () => {
 test("country codes normalize safely and preserve the legacy China default", () => {
   assert.equal(normalizePredictionCountryCode(null), "CHN");
   assert.equal(normalizePredictionCountryCode("cn"), "CHN");
+  assert.equal(normalizePredictionCountryCode("uk"), "GBR");
   assert.equal(normalizePredictionCountryCode(" usa "), "USA");
   assert.equal(normalizePredictionCountryCode("US"), null);
   assert.equal(normalizePredictionCountryCode("../../etc"), null);

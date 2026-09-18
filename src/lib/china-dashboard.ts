@@ -327,7 +327,7 @@ export function buildChinaDashboardQuality({
   return {
     sources,
     predictionReady: false,
-    notice: "预测链为交互演示；在模型、实时输入与回测通过前不输出预测值。",
+    notice: "预测链只登记可核验的研究状态；在模型、实时输入与回测通过前不输出预测值。",
   };
 }
 

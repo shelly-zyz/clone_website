@@ -19,7 +19,7 @@ export async function GET(request: Request) {
   try {
     const [pilot, realData] = await Promise.all([
       countryCode === "CHN" ? loadSdwpfPilotSummary() : Promise.resolve(null),
-      countryCode === "CHN" ? loadRealForecastDataReadiness() : Promise.resolve(null),
+      countryCode === "GBR" ? loadRealForecastDataReadiness() : Promise.resolve(null),
     ]);
     const status = buildPredictionStatus(pilot, countryCode, realData);
     return NextResponse.json(status, { headers: { "Cache-Control": "no-store" } });

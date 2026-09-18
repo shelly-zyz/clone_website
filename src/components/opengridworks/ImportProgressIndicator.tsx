@@ -79,6 +79,10 @@ export function ImportProgressIndicator() {
     return () => window.clearInterval(timer);
   }, [refresh]);
 
+  if (!loading && !error && progress?.status === "completed") {
+    return null;
+  }
+
   return (
     <section className={`og-import-progress ${expanded ? "is-expanded" : ""}`} aria-label="气候数据导入进度">
       <button

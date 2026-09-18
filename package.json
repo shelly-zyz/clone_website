@@ -37,6 +37,8 @@
     "validate:china-data": "node scripts/validate-china-data.mjs",
     "validate:china-dashboard": "node --test src/lib/china-dashboard.test.ts && node scripts/validate-china-dashboard.mjs",
     "validate:prediction-api": "node --test src/lib/prediction/status.test.ts src/lib/prediction/baselines.test.ts src/lib/prediction/evaluation.test.ts src/lib/prediction/real-data-backtest.test.ts",
+    "validate:energy-ir": "node --test src/lib/energy-ir/schema.test.ts src/lib/energy-ir/compiler.test.ts src/lib/energy-ir/agent.test.ts",
+    "validate:voice": "node --test src/lib/voice/voice-state.test.ts",
     "validate:forecast-data": "node --test scripts/validate-forecast-training-data.test.mjs && node scripts/validate-forecast-training-data.mjs --audit-workspace",
     "forecast:acquire:hill-of-towie": "node --test scripts/acquire-hill-of-towie.test.mjs scripts/inspect-hill-of-towie-metadata.test.mjs && node scripts/acquire-hill-of-towie.mjs && node scripts/inspect-hill-of-towie-metadata.mjs",
     "forecast:acquire:gfs": "node --test scripts/acquire-hill-of-towie-gfs.test.mjs && node scripts/acquire-hill-of-towie-gfs.mjs --year 2025",
@@ -62,11 +64,15 @@
     "potential:import": "python scripts/import-renewable-resource-potential.py",
     "catalog:sync": "python scripts/sync-dataset-catalog.py",
     "agent:climate-vre": "python scripts/build-climate-vre-data.py --input \"../data/VRE_gfdl-esm4_ssp126_2021_2060.mat\"",
-    "check": "npm run lint && npm run typecheck && npm run build"
+    "check": "npm run lint && npm run typecheck && npm run build",
+    "dev:voice": "node scripts/start-with-voice.mjs",
+    "start:voice": "node scripts/start-local-voice.mjs --no-open",
+    "validate:xiaoyun": "node --test scripts/voice-project.test.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.3.0",
     "@types/d3-geo": "^3.1.0",
+    "@xiaoyun/voice": "file:vendor/xiaoyun-voice-1.0.0-beta.1-power-earth.3.tgz",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "d3-geo": "^3.1.1",

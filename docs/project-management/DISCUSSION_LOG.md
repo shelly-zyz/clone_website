@@ -581,6 +581,33 @@
 - 新增`/api/prediction/models`模型登记接口，统一登记持久性、自回归岭回归和LightGBM的版本、特征边界、时间切分、分时效MAE/RMSE、相对基线提升和准入决定。接口最初明确记录只有1/3折，不能把单次严格留出称为滚动验证通过。
 - 随后实际完成三折扩展窗口滚动验证。10分钟LightGBM只在2/3折胜出，三折平均提升0.66%、最差一折-1.05%；30/60分钟均为0/3折胜，平均提升-7.16%/-13.87%。按“每折均胜且平均提升为正”的保守规则，LightGBM所有时效全部拒绝，模型登记改为3/3折完成但`rollingValidationPassed: false`。大屏模型工位同步显示“未获稳定滚动增益”和“10min 2/3折胜 · 均值 +0.66%”。
 
+## 2026-09-11：Unit 8 EnergyDataAgent首版实现
+
+- 用户明确指出第八步必须构建智能体，不能只做确定性查询解析器。生产主路径因此改为`OpenAIResponsesEnergyPlanner → EnergyIR校验/编译 → 白名单只读工具 → 来源与单位验证 → 结构化回答`；确定性中文Grounding仅作为40条金标准问题的离线回归基线。
+- 模型通过OpenAI Responses API严格Structured Outputs生成决策信封和EnergyIR，不获得数据库连接、SQL或工具执行权限。服务端对模型输出做第二次运行时校验；写入、删除、更新、未知指标和异常信封均在工具调用前拦截。
+- 新增设施数量/来源、数据质量、图层可用性、GFS运行时间和预测门禁工具。广东光伏集成链实际读取本地映射快照并完成省界空间筛选，命中188个映射设施；结果明确标为映射样本而非官方统计。
+- `/china`新增覆盖式“能源问数”面板，传递当前省份、最后选择图层、时间模式和最多6条裁剪会话；展示智能体配置、事实、来源身份、时间、限制、EnergyIR、执行计划与审计轨迹。
+- 模型名必须通过`ENERGY_AGENT_MODEL`显式设置，密钥只从`OPENAI_API_KEY`读取。当前工作区未配置二者，因此界面禁用提交、POST返回503 `agent-unconfigured`，不退化为伪智能体；真实供应商调用留作部署环境验收。
+- 自动验证通过：17项EnergyIR/智能体测试、TypeScript类型检查、lint（仅保留一个与本次无关的旧脚本警告）、`git diff --check`和生产构建。1440×900生产浏览器验证显示配置GET为200、未配置POST为503 `agent-unconfigured`、控制台0错误/0警告，截图为`output/playwright/china-dashboard-unit8-energy-ir-1440x900.png`。未使用子智能体，未删除文件，未提交或推送。
+
+## 2026-09-16：Unit 8 EnergyDataAgent接入DeepSeek API
+
+- 用户要求把已构建的智能体接入DeepSeek。运行配置新增`ENERGY_AGENT_PROVIDER=deepseek`、供应商独立密钥、`deepseek-flash`模型和官方Responses API服务地址；真实密钥仅写入Git忽略的`.env.local`，未进入代码、文档、日志或版本状态。
+- 原OpenAI专用规划器泛化为`ResponsesEnergyPlanner`，OpenAI路径继续保留；DeepSeek路径不回退读取OpenAI密钥。两种供应商共用严格JSON Schema、二次EnergyIR校验、白名单只读工具和来源/单位结果验证。
+- 按DeepSeek官方Responses API能力，DeepSeek规划请求显式设置`reasoning.effort=none`，避免默认思考模式消耗结构化输出预算；模型输出中的“省/市/自治区/特别行政区”后缀在执行省界筛选前归一化。
+- 真实联网验收连续两次返回HTTP 200：规划器为`deepseek-responses-energy-planner`、模型为`deepseek-flash`、工具为`mapped-assets`、`validatedBeforeExplanation=true`，结果为广东188个光伏设施映射样本，并保留“不是官方统计”的限制说明。
+- 自动验证通过：19项EnergyIR/智能体测试、6项语音测试、TypeScript类型检查、lint和生产构建。未删除文件，未提交或推送。
+
+## 2026-09-14：Unit 9全双工语音首版实现
+
+- 按路线图继续到Unit 9；语音没有另建业务智能体，普通识别文本原样进入同一个`/api/energy-ir/query`，继续受EnergyIR、只读工具和来源/单位验证约束。
+- 新增显式语音状态机与可视控件：麦克风和AI播报默认关闭且独立控制；支持starting/listening/processing/error/unsupported状态；关闭、面板卸载时终止识别和播报。
+- 使用浏览器Web Speech API的持续识别和中间结果。任何新语音先调用`speechSynthesis.cancel()`停止旧播报；最终新问题会中止旧问数请求，避免旧回答覆盖新回答。
+- “切换/选择/查看/定位”全国、新疆、内蒙古、四川、山东、广东复用地图现有范围回调；关闭问数面板为本地指令；其他语音不走命令旁路，保持原文进入EnergyDataAgent。
+- 隐私边界明确：未配置智能体时麦克风禁用；本站不读取、上传或保存原始音频，但浏览器识别实现可能使用远端服务。浏览器不支持、权限拒绝、设备、无语音和网络错误均显示可恢复状态，文字问数不受影响。
+- 6项语音状态机测试、类型检查、lint和生产构建通过。真实默认态及隔离契约浏览器验收完成；隔离夹具验证监听、插话取消、广东范围切换、同一问数POST、受控播报与关闭采集。未使用真实麦克风或模型凭据；生产页面另有既有预测回测503，保持预测锁定且与语音无关。
+- 证据：`docs/project-management/VOICE_INTERACTION_SPEC.md`、`output/playwright/china-dashboard-unit9-voice-default-1440x900.png`、`output/playwright/china-dashboard-unit9-voice-contract-1440x900.png`。未使用子智能体，未删除文件，未提交或推送。
+
 ## 早期总体思路
 
 - 平台核心链条为“气象→风光容量因子→发电量→负荷→供需缺口→跨区调度→电力碳排放”。

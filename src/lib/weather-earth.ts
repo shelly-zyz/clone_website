@@ -88,12 +88,26 @@ export type WeatherStatus = {
   decoderAvailable: boolean;
   decoderName: "wgrib2" | "python-eccodes" | null;
   cacheFresh: boolean;
+  runFresh: boolean;
+  stale: boolean;
+  cacheAgeMinutes: number | null;
+  runAgeHours: number | null;
   refreshStatus: WeatherManifest["refreshStatus"];
   generatedAt: string | null;
   validTimeUtc: string | null;
   fieldFilesPresent: Record<WeatherMetricKey, boolean>;
   message?: string;
   lastRefreshError?: string;
+  database: {
+    latestValidTimeUtc: string | null;
+    inSyncWithCache: boolean;
+    status: "current" | "behind" | "unavailable";
+  };
+  pipeline: {
+    state: "idle" | "running" | "complete" | "failed";
+    stages: Record<string, { status?: string; startedAt?: string; finishedAt?: string }>;
+    failedAt?: string;
+  };
 };
 
 export const WEATHER_METRICS: WeatherMetricMeta[] = [

@@ -106,6 +106,7 @@ export function buildRealBaselineBacktest(
     status: candidateRows > 0 ? "research-only" : "unavailable",
     checkedAt,
     source: {
+      countryCode: "GBR",
       scadaId: SCADA_SOURCE_ID,
       nwpId: NWP_SOURCE_ID,
       entityId: ENTITY_ID,
@@ -132,6 +133,7 @@ export function buildUnavailableRealBaselineBacktest(reason: string, checkedAt =
     status: "unavailable",
     checkedAt,
     source: {
+      countryCode: "GBR",
       scadaId: SCADA_SOURCE_ID,
       nwpId: NWP_SOURCE_ID,
       entityId: ENTITY_ID,

@@ -5,6 +5,8 @@ node_modules/
 
 # Build
 .next/
+.next-validation/
+.next-dev-validation/
 out/
 build/
 dist/
@@ -72,3 +74,12 @@ __pycache__/
 /*.jpg
 /*.jpeg
 /*.webp
+
+.env.xiaoyun
+.xiaoyun/
+/public/xiaoyun/
+
+# Historical local Xiaoyun package archives; the checked-in adapter is the .3 bundle.
+vendor/xiaoyun-voice-1.0.0-beta.1.tgz
+vendor/xiaoyun-voice-1.0.0-beta.1-power-earth.1.tgz
+vendor/xiaoyun-voice-1.0.0-beta.1-power-earth.2.tgz

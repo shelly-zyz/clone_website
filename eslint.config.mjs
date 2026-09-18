@@ -9,10 +9,14 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    ".next-validation/**",
+    ".next-dev-validation/**",
     "out/**",
     "build/**",
     "public/earth/**",
+    "public/xiaoyun/**",
     ".forecast-data/**",
+    "vendor/**",
     "next-env.d.ts",
   ]),
 ]);

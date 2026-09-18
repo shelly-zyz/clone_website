@@ -14,8 +14,8 @@ function ResearchErrorChart({ modelMaeMw, baselineMaeMw, horizonMinutes }: {
   const maximum = Math.max(modelMaeMw, baselineMaeMw, 1);
   return (
     <div className={styles.errorChart} aria-label={`${horizonMinutes}分钟模型与持久性基线误差对比`}>
-      <span className={styles.errorBarModel} style={{ width: `${(modelMaeMw / maximum) * 100}%` }} />
-      <span className={styles.errorBarBaseline} style={{ width: `${(baselineMaeMw / maximum) * 100}%` }} />
+      <span className={styles.errorBarModel} style={{ transform: `scaleX(${modelMaeMw / maximum})` }} />
+      <span className={styles.errorBarBaseline} style={{ transform: `scaleX(${baselineMaeMw / maximum})` }} />
     </div>
   );
 }
@@ -23,7 +23,7 @@ function ResearchErrorChart({ modelMaeMw, baselineMaeMw, horizonMinutes }: {
 function RealBaselineChart({ valueMw, maximum, label }: { valueMw: number | null; maximum: number; label: string }) {
   return (
     <div className={styles.realBaselineChart} aria-label={`${label} MAE`}>
-      <span style={{ width: valueMw === null ? "0%" : `${(valueMw / maximum) * 100}%` }} />
+      <span style={{ transform: `scaleX(${valueMw === null ? 0 : valueMw / maximum})` }} />
     </div>
   );
 }
