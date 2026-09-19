@@ -14,6 +14,18 @@ export function pointInGeometry(point: Position, geometry: RegionGeometry) {
   return polygons.some((polygon) => pointInPolygon(point, polygon));
 }
 
+// Prepare each polygon once; point queries only inspect rings within its bounds.
+// Keeping the original rings preserves the existing hole/boundary semantics.
+export function createRegionMatcher(geometries: RegionGeometry[]) {
+  const polygons = geometries.flatMap((geometry) => (
+    geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates
+  )).map((rings) => ({ rings, bounds: geometryBounds({ type: "Polygon", coordinates: rings }) }));
+  return (lng: number, lat: number) => polygons.some(({ rings, bounds }) => (
+    lng >= bounds.minLng && lng <= bounds.maxLng && lat >= bounds.minLat && lat <= bounds.maxLat
+    && pointInPolygon([lng, lat], rings)
+  ));
+}
+
 function pointInPolygon(point: Position, rings: Position[][]) {
   if (!rings[0] || !pointInRing(point, rings[0])) return false;
   return !rings.slice(1).some((ring) => pointInRing(point, ring));

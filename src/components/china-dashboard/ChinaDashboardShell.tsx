@@ -8,6 +8,7 @@ import type {
 } from "@/lib/china-dashboard";
 import type { PredictionModelRegistry, PredictionRealBaselineBacktest, PredictionStatus } from "@/lib/prediction/contracts";
 import type { RegionSummary, RegionTheme } from "@/lib/regions/contracts";
+import { fetchDashboardJson } from "@/lib/regions/fetch-json";
 import type { VoiceDashboardCommand } from "@/lib/voice/voice-state";
 import { ChinaMapScene } from "./ChinaMapScene";
 import { AskEnergyPanel } from "./AskEnergyPanel";
@@ -17,6 +18,20 @@ import { RegionAnalysisRail } from "./RegionAnalysisRail";
 import styles from "./china-dashboard.module.css";
 
 const provinces = ["全国", "新疆", "内蒙古", "四川", "山东", "广东"];
+
+function DashboardClock() {
+  const [clock, setClock] = useState("");
+  useEffect(() => {
+    const formatter = new Intl.DateTimeFormat("zh-CN", {
+      hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZone: "Asia/Shanghai",
+    });
+    const update = () => setClock(formatter.format(new Date()));
+    update();
+    const timer = window.setInterval(update, 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return <strong>{clock} CST</strong>;
+}
 
 export function ChinaDashboardShell() {
   const router = useRouter();
@@ -30,38 +45,29 @@ export function ChinaDashboardShell() {
   const [regionSummary, setRegionSummary] = useState<RegionSummary | null>(null);
   const [regionLoading, setRegionLoading] = useState(true);
   const [regionError, setRegionError] = useState<string | null>(null);
-  const [clock, setClock] = useState("");
+  const [regionAttempt, setRegionAttempt] = useState(0);
+  const [dataAttempt, setDataAttempt] = useState(0);
+  const [dataError, setDataError] = useState("");
   const [toast, setToast] = useState("");
   const [askOpen, setAskOpen] = useState(false);
   const [selectedLayer, setSelectedLayer] = useState("osm-power");
 
   useEffect(() => {
-    let active = true;
+    const controller = new AbortController();
     const load = <T,>(url: string, apply: (value: T) => void) => {
-      fetch(url)
-        .then((response) => {
-          if (!response.ok) throw new Error(`${url} returned ${response.status}`);
-          return response.json() as Promise<T>;
-        })
-        .then((value) => { if (active) apply(value); })
-        .catch(() => { if (active) setToast("部分仪表盘数据接口暂不可用，未使用替代数据。"); });
+      fetchDashboardJson<T>(url, { signal: controller.signal })
+        .then((value) => { if (!controller.signal.aborted) apply(value); })
+        .catch(() => {
+          if (!controller.signal.aborted) setDataError("部分数据加载失败或超时，可以重试。");
+        });
     };
     load<ChinaDashboardOverview>("/api/china-dashboard/overview", setOverview);
     load<ChinaLayerCatalog>("/api/china-dashboard/layers", setLayers);
     load<PredictionStatus>("/api/prediction/status?country=CHN", setPredictionStatus);
     load<PredictionModelRegistry>("/api/prediction/models?country=CHN", setModelRegistry);
     load<PredictionRealBaselineBacktest>("/api/prediction/backtest?country=CHN", setRealBacktest);
-    return () => { active = false; };
-  }, []);
-
-  useEffect(() => {
-    const update = () => setClock(new Intl.DateTimeFormat("zh-CN", {
-      hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZone: "Asia/Shanghai",
-    }).format(new Date()));
-    update();
-    const timer = window.setInterval(update, 1_000);
-    return () => window.clearInterval(timer);
-  }, []);
+    return () => controller.abort();
+  }, [dataAttempt]);
 
   useEffect(() => {
     const params = new URL(window.location.href).searchParams;
@@ -78,29 +84,31 @@ export function ChinaDashboardShell() {
     const controller = new AbortController();
     const regionId = scope === "全国" ? "CN" : scope;
     const metric = theme === "weather" ? "wind" : theme === "carbon" ? "Power" : "assets";
-    const expected = `${regionId}:${theme}:${metric}`;
     const loadingTimer = window.setTimeout(() => {
       setRegionLoading(true);
       setRegionError(null);
     }, 0);
-    fetch(`/api/regions/summary?regionId=${encodeURIComponent(regionId)}&theme=${theme}&metric=${metric}`, { signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`地区摘要接口返回 ${response.status}`);
-        return response.json() as Promise<RegionSummary>;
-      })
+    fetchDashboardJson<RegionSummary>(`/api/regions/summary?regionId=${encodeURIComponent(regionId)}&theme=${theme}&metric=${metric}`, { signal: controller.signal })
       .then((value) => {
-        const actual = `${value.request.regionId === "CN" ? "CN" : value.request.regionName}:${value.request.theme}:${value.request.metric ?? metric}`;
-        if (actual !== expected && value.request.regionName !== scope) return;
+        if (controller.signal.aborted) return;
+        if (value.request.regionName !== scope || value.request.theme !== theme || (value.request.metric ?? metric) !== metric) {
+          throw new Error("地区摘要与当前选择不匹配。");
+        }
         setRegionSummary(value);
       })
       .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
+        if (controller.signal.aborted) return;
         setRegionSummary(null);
-        setRegionError("地区数据暂不可用，请稍后重试。");
+        setRegionError(error instanceof Error && error.name === "TimeoutError"
+          ? "地区数据加载超时，请重试。也可以先切换地区或专题。"
+          : "地区数据暂不可用，请重试。");
       })
-      .finally(() => { if (!controller.signal.aborted) setRegionLoading(false); });
+      .finally(() => {
+        window.clearTimeout(loadingTimer);
+        if (!controller.signal.aborted) setRegionLoading(false);
+      });
     return () => { window.clearTimeout(loadingTimer); controller.abort(); };
-  }, [scope, theme]);
+  }, [scope, theme, regionAttempt]);
 
   useEffect(() => {
     if (!toast) return;
@@ -111,7 +119,7 @@ export function ChinaDashboardShell() {
   const currentSummary = useMemo(() => (
     regionSummary?.request.theme === theme && regionSummary.request.regionName === scope ? regionSummary : null
   ), [regionSummary, scope, theme]);
-  const scopeNote = currentSummary?.coverage.label ?? (scope === "全国"
+  const scopeNote = currentSummary?.coverage.label ?? regionError ?? (scope === "全国"
     ? "正在汇总全国数据"
     : "按已审核省界汇总；空结果不等于官方为零");
   const currentRegionLoading = regionLoading || (!currentSummary && !regionError);
@@ -146,7 +154,7 @@ export function ChinaDashboardShell() {
           <button className={styles.askToggle} type="button" aria-expanded={askOpen} onClick={() => setAskOpen((value) => !value)}>⌁ 能源问数</button>
         </div>
         <div className={styles.topStatus}>
-          <div><strong>{clock} CST</strong><span>Asia / Shanghai</span></div>
+          <div><DashboardClock /><span>Asia / Shanghai</span></div>
           <span className={styles.health}><i /> 数据身份可追溯</span>
         </div>
       </header>
@@ -167,6 +175,7 @@ export function ChinaDashboardShell() {
           summary={currentSummary}
           loading={currentRegionLoading}
           error={regionError}
+          onRetry={() => { setRegionLoading(true); setRegionError(null); setRegionAttempt((value) => value + 1); }}
           theme={theme}
           status={predictionStatus}
           registry={modelRegistry}
@@ -177,7 +186,10 @@ export function ChinaDashboardShell() {
       {askOpen ? <AskEnergyPanel context={{ selectedProvince: scope, selectedLayer, timeMode: "current" }} onClose={() => setAskOpen(false)} onDashboardCommand={applyVoiceCommand} /> : null}
       <XiaoyunAssistant context={{ selectedProvince: scope, selectedLayer, timeMode: "current" }} onDashboardCommand={applyVoiceCommand} onOpenPanel={() => setAskOpen(true)} />
 
-      <div className={`${styles.toast} ${toast ? styles.toastVisible : ""}`}>{toast}</div>
+      <div role="status" className={`${styles.toast} ${dataError || toast ? styles.toastVisible : ""} ${dataError ? styles.loadError : ""}`}>
+        {dataError || toast}
+        {dataError ? <button className={styles.retryButton} type="button" onClick={() => { setDataError(""); setDataAttempt((value) => value + 1); }}>重新加载</button> : null}
+      </div>
     </main>
   );
 }

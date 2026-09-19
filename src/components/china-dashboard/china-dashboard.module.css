@@ -362,3 +362,7 @@
 .xiaoyunNotice button { pointer-events: auto; margin-top: 6px; padding: 4px 6px; border: 1px solid #315561; background: #102e3c; color: #9cecf6; font-size: 9px; cursor: pointer; }
 .xiaoyunNotice button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
 @media (max-width: 1100px) { .xiaoyunNotice { right: 18px; } }
+
+.loadError { pointer-events: auto; }
+.retryButton { margin: 8px; padding: 6px 10px; border: 1px solid var(--cyan); background: rgba(4,58,69,.65); color: #a6f7ff; font: inherit; cursor: pointer; }
+.retryButton:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }

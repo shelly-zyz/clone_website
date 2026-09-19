@@ -2,16 +2,18 @@ import "server-only";
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { setImmediate as yieldToRequests } from "node:timers/promises";
 import { gunzipSync } from "node:zlib";
 import { queryDatabase } from "@/lib/db";
 import { WEATHER_METRICS, decodeWeatherValue, type WeatherField, type WeatherMetricKey } from "@/lib/weather-earth";
 import { evaluateWeatherFreshness } from "@/lib/weather-freshness";
 import type { RegionSummary, RegionTheme } from "./contracts";
-import { geometryBounds, normalizeRegionName, pointInGeometry, type RegionGeometry } from "./geometry";
+import { createRegionMatcher, normalizeRegionName, type RegionGeometry } from "./geometry";
+import { createSummaryCache } from "./summary-cache";
 
 type ProvinceFeature = { properties?: { name?: string; adcode?: number }; geometry: RegionGeometry };
 type ProvinceCollection = { features?: ProvinceFeature[] };
-type ResolvedRegion = { id: string; name: string; geometries: RegionGeometry[] };
+type ResolvedRegion = { id: string; name: string; contains: (lng: number, lat: number) => boolean };
 type AssetRow = {
   id: string; name: string; technology: string; capacity_mw: number; status: string;
   source: string; latitude: number; longitude: number;
@@ -22,57 +24,58 @@ type CarbonRow = {
 };
 type CarbonChunkRow = { chunk_data: Buffer };
 
-const cache = new Map<string, { expiresAt: number; value: RegionSummary }>();
+const loadCachedSummary = createSummaryCache<RegionSummary>(5 * 60_000);
+let preparedRegions: Promise<{ national: ResolvedRegion; provinces: ResolvedRegion[] }> | undefined;
 const technologyLabels: Record<string, string> = {
   solar: "光伏", wind: "陆上风电", offshore: "海上风电", hydro: "水电", nuclear: "核电",
   coal: "煤电", gas: "燃气", oil: "燃油", geothermal: "地热", biomass: "生物质", other: "其他",
 };
 
 export async function loadRegionSummary(input: { regionId: string; theme: RegionTheme; metric?: string | null; time?: string | null }) {
-  const key = JSON.stringify(input);
-  const cached = cache.get(key);
-  if (cached && cached.expiresAt > Date.now()) return cached.value;
-  const region = await resolveRegion(input.regionId);
-  if (!region) return unavailable(input, input.regionId, "未找到已审核的省级边界。", "mapped-asset-sample");
-  const value = input.theme === "power"
-    ? await loadPowerSummary(region, input)
-    : input.theme === "weather"
-      ? await loadWeatherSummary(region, input)
-      : await loadCarbonSummary(region, input);
-  cache.set(key, { expiresAt: Date.now() + 5 * 60_000, value });
-  return value;
+  const key = JSON.stringify([input.regionId, input.theme, input.metric ?? null, input.time ?? null]);
+  return loadCachedSummary(key, async () => {
+    const region = await resolveRegion(input.regionId);
+    if (!region) return unavailable(input, input.regionId, "未找到已审核的省级边界。", "mapped-asset-sample");
+    return input.theme === "power"
+      ? loadPowerSummary(region, input)
+      : input.theme === "weather"
+        ? loadWeatherSummary(region, input)
+        : loadCarbonSummary(region, input);
+  });
+}
+
+async function prepareRegions() {
+  const collection = JSON.parse(await fs.readFile(path.join(process.cwd(), "public/data/china-dashboard/provinces.geojson"), "utf8")) as ProvinceCollection;
+  const features = (collection.features ?? []).filter((feature) => feature.properties?.name);
+  return {
+    national: { id: "CN", name: "全国", contains: createRegionMatcher(features.map((feature) => feature.geometry)) },
+    provinces: features.map((feature) => ({
+      id: String(feature.properties?.adcode ?? normalizeRegionName(feature.properties?.name ?? "")),
+      name: normalizeRegionName(feature.properties?.name ?? ""),
+      contains: createRegionMatcher([feature.geometry]),
+    })),
+  };
 }
 
 async function resolveRegion(regionId: string): Promise<ResolvedRegion | null> {
-  const collection = JSON.parse(await fs.readFile(path.join(process.cwd(), "public/data/china-dashboard/provinces.geojson"), "utf8")) as ProvinceCollection;
-  const features = (collection.features ?? []).filter((feature) => feature.properties?.name);
+  preparedRegions ??= prepareRegions().catch((error: unknown) => { preparedRegions = undefined; throw error; });
+  const regions = await preparedRegions;
   if (regionId === "CN" || normalizeRegionName(regionId) === "全国") {
-    return { id: "CN", name: "全国", geometries: features.map((feature) => feature.geometry) };
+    return regions.national;
   }
   const normalized = normalizeRegionName(regionId);
-  const feature = features.find((candidate) => (
-    String(candidate.properties?.adcode ?? "") === regionId
-    || normalizeRegionName(candidate.properties?.name ?? "") === normalized
-  ));
-  return feature ? {
-    id: String(feature.properties?.adcode ?? normalized),
-    name: normalizeRegionName(feature.properties?.name ?? normalized),
-    geometries: [feature.geometry],
-  } : null;
-}
-
-function contains(region: { geometries: RegionGeometry[] }, lng: number, lat: number) {
-  return region.geometries.some((geometry) => {
-    const bounds = geometryBounds(geometry);
-    return lng >= bounds.minLng && lng <= bounds.maxLng && lat >= bounds.minLat && lat <= bounds.maxLat
-      && pointInGeometry([lng, lat], geometry);
-  });
+  return regions.provinces.find((candidate) => candidate.id === regionId || candidate.name === normalized) ?? null;
 }
 
 async function loadPowerSummary(region: ResolvedRegion, input: { regionId: string; theme: RegionTheme; metric?: string | null; time?: string | null }): Promise<RegionSummary> {
   const rows = (await queryDatabase<AssetRow>(`SELECT id,name,technology,capacity_mw,status,source,latitude,longitude
     FROM website_data.energy_assets WHERE country_code IN ('CN','CHN') ORDER BY capacity_mw DESC`)).rows;
-  const assets = rows.filter((row) => contains(region, row.longitude, row.latitude));
+  const assets: AssetRow[] = [];
+  for (let index = 0; index < rows.length; index += 1) {
+    if (index > 0 && index % 512 === 0) await yieldToRequests();
+    const row = rows[index];
+    if (region.contains(row.longitude, row.latitude)) assets.push(row);
+  }
   const capacityMw = assets.reduce((sum, row) => sum + Number(row.capacity_mw || 0), 0);
   const sources = new Set(assets.map((row) => row.source).filter(Boolean));
   const byTechnology = new Map<string, { count: number; capacity: number }>();
@@ -117,11 +120,12 @@ async function loadWeatherSummary(region: ResolvedRegion, input: { regionId: str
   let weightedSum = 0; let weightSum = 0; let valid = 0; let candidates = 0; let minimum = Infinity; let maximum = -Infinity;
   const { header } = field;
   for (let row = 0; row < header.ny; row += 1) {
+    if (row > 0 && row % 16 === 0) await yieldToRequests();
     const lat = header.la1 - row * header.dy;
     if (lat < 3 || lat > 54.5) continue;
     for (let column = 0; column < header.nx; column += 1) {
       const lng = header.lo1 + column * header.dx;
-      if (lng < 73 || lng > 136 || !contains(region, lng, lat)) continue;
+      if (lng < 73 || lng > 136 || !region.contains(lng, lat)) continue;
       candidates += 1;
       const index = row * header.nx + column;
       const value = field.kind === "vector"
@@ -161,11 +165,12 @@ async function loadCarbonSummary(region: ResolvedRegion, input: { regionId: stri
   const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
   let sum = 0; let valid = 0; let candidates = 0; let maximum = -Infinity;
   for (let row = 0; row < frame.height; row += 1) {
+    if (row > 0 && row % 16 === 0) await yieldToRequests();
     const lat = frame.latitude_max - row * frame.dy;
     if (lat < 3 || lat > 54.5) continue;
     for (let column = 0; column < frame.width; column += 1) {
       const lng = frame.longitude_min + column * frame.dx;
-      if (lng < 73 || lng > 136 || !contains(region, lng, lat)) continue;
+      if (lng < 73 || lng > 136 || !region.contains(lng, lat)) continue;
       candidates += 1;
       const value = view.getFloat32((row * frame.width + column) * 4, true);
       if (!Number.isFinite(value) || value < 0) continue;

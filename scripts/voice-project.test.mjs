@@ -29,3 +29,11 @@ test('China dashboard mounts Xiaoyun on startup while keeping the detail panel o
   assert.match(source, /\{askOpen \? <AskEnergyPanel[\s\S]*?\/\> : null\}\s*<XiaoyunAssistant/);
   assert.doesNotMatch(source, /\{askOpen \? <XiaoyunAssistant/);
 });
+
+test('Earth shell mounts the same Xiaoyun assistant with Earth context', async () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const file = path.join(root, 'src/components/opengridworks/MapAppShell.tsx');
+  const source = await readFile(file, 'utf8');
+  assert.match(source, /import \{ XiaoyunAssistant \} from "@\/components\/china-dashboard\/XiaoyunAssistant"/);
+  assert.match(source, /<XiaoyunAssistant[\s\S]*page="earth"[\s\S]*selectedProvince: activeRegion\.label/);
+});

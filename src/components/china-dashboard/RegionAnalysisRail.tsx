@@ -19,10 +19,11 @@ function valueLabel(value: number | null, unit: string) {
   return `${new Intl.NumberFormat("zh-CN", { notation: Math.abs(value) >= 100_000 ? "compact" : "standard", maximumFractionDigits: 1 }).format(value)} ${unit}`;
 }
 
-export function RegionAnalysisRail({ summary, loading, error, theme, status, registry, realBacktest }: {
+export function RegionAnalysisRail({ summary, loading, error, onRetry, theme, status, registry, realBacktest }: {
   summary: RegionSummary | null;
   loading: boolean;
   error: string | null;
+  onRetry: () => void;
   theme: RegionTheme;
   status: PredictionStatus | null;
   registry: PredictionModelRegistry | null;
@@ -54,7 +55,7 @@ export function RegionAnalysisRail({ summary, loading, error, theme, status, reg
           </div>
 
           {loading ? <div className={styles.analysisState}>正在汇总边界内的真实数据…</div> : null}
-          {!loading && error ? <div className={`${styles.analysisState} ${styles.analysisError}`}>{error}</div> : null}
+          {!loading && error ? <div role="alert" className={`${styles.analysisState} ${styles.analysisError}`}>{error}<button type="button" className={styles.retryButton} onClick={onRetry}>重新加载地区数据</button></div> : null}
           {!loading && !error && summary?.status === "unavailable" ? (
             <div className={styles.emptyAnalysis}><strong>当前没有可用数据</strong><p>{summary.missingReason}</p></div>
           ) : null}

@@ -6,11 +6,22 @@ import type { DashboardQueryContext, EnergyResult } from "@/lib/energy-ir/schema
 import { classifyVoiceUtterance, type VoiceDashboardCommand } from "@/lib/voice/voice-state";
 import styles from "./china-dashboard.module.css";
 
-export function XiaoyunAssistant({ context, onDashboardCommand, onOpenPanel }: {
+
+type XiaoyunAssistantProps = {
   context: DashboardQueryContext;
   onDashboardCommand: (command: VoiceDashboardCommand) => void;
   onOpenPanel: () => void;
-}) {
+  page?: string;
+  position?: { right: number; bottom: number };
+};
+
+export function XiaoyunAssistant({
+  context,
+  onDashboardCommand,
+  onOpenPanel,
+  page = "china-dashboard",
+  position,
+}: XiaoyunAssistantProps) {
   const mount = useRef<HTMLDivElement>(null);
   const voice = useRef<VoiceAssistant | null>(null);
   const callbacks = useRef({ context, onDashboardCommand, onOpenPanel });
@@ -20,8 +31,8 @@ export function XiaoyunAssistant({ context, onDashboardCommand, onOpenPanel }: {
     callbacks.current = { context, onDashboardCommand, onOpenPanel };
   }, [context, onDashboardCommand, onOpenPanel]);
   useEffect(() => {
-    voice.current?.updateContext({ page: "china-dashboard", ...context });
-  }, [context.selectedProvince, context.selectedLayer, context.selectedFacility, context.timeMode]); // eslint-disable-line react-hooks/exhaustive-deps
+    voice.current?.updateContext({ page, ...context });
+  }, [page, context.selectedProvince, context.selectedLayer, context.selectedFacility, context.timeMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     let disposed = false;
@@ -30,13 +41,13 @@ export function XiaoyunAssistant({ context, onDashboardCommand, onOpenPanel }: {
       if (disposed || !mount.current) return;
       const selectProvince = (province: string) => {
         callbacks.current.onDashboardCommand({ type: "select-province", province });
-        voice.current?.updateContext({ page: "china-dashboard", ...callbacks.current.context, selectedProvince: province });
+        voice.current?.updateContext({ page, ...callbacks.current.context, selectedProvince: province });
         return { province };
       };
       voice.current = createVoiceAssistant({
         projectId: "power-earth", container: mount.current, assetBaseUrl: "/xiaoyun/", mode: "live", backendUrl: "http://127.0.0.1:8765",
-        context: { page: "china-dashboard", ...callbacks.current.context },
-        ui: { theme: "power-earth", baseFontSize: 13, position: { right: window.innerWidth >= 1100 ? 450 : 28, bottom: 105 } },
+        context: { page, ...callbacks.current.context },
+        ui: { theme: "power-earth", baseFontSize: 13, position: position ?? { right: window.innerWidth >= 1100 ? 450 : 28, bottom: 105 } },
         actions: [{
           name: "select_province", description: "切换地图范围，与省份按钮共用操作。",
           parameters: { type: "object", properties: { province: { type: "string", enum: ["全国", "新疆", "内蒙古", "四川", "山东", "广东"] } }, required: ["province"], additionalProperties: false },
@@ -89,7 +100,7 @@ export function XiaoyunAssistant({ context, onDashboardCommand, onOpenPanel }: {
       });
     }).catch(() => { if (!disposed) setNotice("小云加载失败，请刷新页面或使用能源问数面板。"); });
     return () => { disposed = true; voice.current?.destroy(); voice.current = null; };
-  }, [mode]);
+  }, [mode, page, position]);
 
   return <div ref={mount} className={styles.xiaoyunHost}>
     <div className={styles.xiaoyunNotice}>

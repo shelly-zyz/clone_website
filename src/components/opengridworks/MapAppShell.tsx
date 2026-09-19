@@ -53,6 +53,8 @@ import type { LucideIcon } from "lucide-react";
 import type { RegionSummary } from "@/lib/regions/contracts";
 import { normalizeRegionName } from "@/lib/regions/geometry";
 import { DeepAgentChat } from "@/components/opengridworks/DeepAgentChat";
+import { XiaoyunAssistant } from "@/components/china-dashboard/XiaoyunAssistant";
+import type { VoiceDashboardCommand } from "@/lib/voice/voice-state";
 import {
   buildCarbonHeatCollection,
   carbonColor,
@@ -6826,6 +6828,17 @@ export function MapAppShell() {
     requestFocus(feature.coordinates, feature.kind === "energy" ? 6.4 : 5.6, 42, -12);
   }, [requestFocus]);
 
+  const handleVoiceCommand = useCallback((command: VoiceDashboardCommand) => {
+    if (command.type === "select-province") {
+      window.location.assign(`/china?province=${encodeURIComponent(command.province)}`);
+    }
+  }, []);
+
+  const openVoicePanel = useCallback(() => {
+    setActiveProject("power");
+    setActivePanel("search");
+  }, []);
+
   const toggleTechnology = (key: TechnologyKey) => {
     setVisibleTechnologies((state) => ({ ...state, [key]: !state[key] }));
   };
@@ -7212,6 +7225,17 @@ export function MapAppShell() {
         </>
       ) : null}
       <HoverBubble tooltip={hoverTooltip} />
+      <XiaoyunAssistant
+        page="earth"
+        context={{
+          selectedProvince: activeRegion.label,
+          selectedLayer: activeProject,
+          selectedFacility: selectedFeature?.title,
+          timeMode: activeProject === "weather" ? "current" : "latest",
+        }}
+        onDashboardCommand={handleVoiceCommand}
+        onOpenPanel={openVoicePanel}
+      />
       <DeepAgentChat />
       <Toast message={toast} />
       {cinematic ? (
