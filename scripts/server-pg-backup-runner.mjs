@@ -9,7 +9,7 @@ const remoteReport=`D:/pgbackups/${id}.report.json`;
 const script=(await fs.readFile(path.join(repo,'scripts/server-pg-backup-worker.ps1'),'utf8')).replace('__BACKUP_ID__',id);
 const program='C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand '+Buffer.from(script,'utf16le').toString('base64');
 if(program.length>8000)throw new Error('Server command too long');
-const client=new Client({host:'218.197.118.49',port:5432,database:'zyz',user:'postgres',password:process.env.MIGRATION_ADMIN_PASSWORD,ssl:false,connectionTimeoutMillis:15000,query_timeout:600000,keepAlive:true,keepAliveInitialDelayMillis:10000});
+const client=new Client({host:'218.197.118.49',port:5432,database:'zyz',user:'postgres',password:process.env.MIGRATION_ADMIN_PASSWORD,ssl:false,connectionTimeoutMillis:15000,query_timeout:7200000,keepAlive:true,keepAliveInitialDelayMillis:10000});
 client.on('error',error=>console.error(error.message));
 async function loadWebsiteDataTableCounts(){
  const tableRows=(await client.query("SELECT tablename FROM pg_tables WHERE schemaname='website_data' ORDER BY tablename")).rows;

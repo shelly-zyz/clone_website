@@ -10,6 +10,8 @@ type JsonDocumentRow = {
 };
 
 type ClimateHourlyRow = {
+  gcm: string;
+  scenario: string;
   region_id: string;
   year: number;
   technology: string;
@@ -45,17 +47,19 @@ export async function GET(request: Request) {
       const regionId = url.searchParams.get("regionId");
       const technology = url.searchParams.get("technology");
       const year = Number(url.searchParams.get("year"));
+      const gcm = url.searchParams.get("gcm") || "gfdl-esm4";
+      const scenario = url.searchParams.get("scenario") || "ssp126";
 
-      if (!regionId || !technology || !Number.isInteger(year)) {
-        return NextResponse.json({ error: "regionId, technology, and year are required." }, { status: 400 });
+      if (!gcm || !scenario || !regionId || !technology || !Number.isInteger(year)) {
+        return NextResponse.json({ error: "gcm, scenario, regionId, technology, and year are required." }, { status: 400 });
       }
 
       const result = await queryDatabase<ClimateHourlyRow>(
-        `SELECT region_id, year, technology, region_label, capacity_mw, scale,
+        `SELECT gcm, scenario, region_id, year, technology, region_label, capacity_mw, scale,
                 hours, values_json, stats, metadata
          FROM website_data.climate_vre_hourly
-         WHERE region_id = $1 AND year = $2 AND technology = $3`,
-        [regionId, year, technology],
+         WHERE gcm = $1 AND scenario = $2 AND region_id = $3 AND year = $4 AND technology = $5`,
+        [gcm, scenario, regionId, year, technology],
       );
       const row = result.rows[0];
       if (!row) {
@@ -64,6 +68,8 @@ export async function GET(request: Request) {
 
       return NextResponse.json({
         ...row.metadata,
+        gcm: row.gcm,
+        scenario: row.scenario,
         regionId: row.region_id,
         regionLabel: row.region_label,
         technology: row.technology,

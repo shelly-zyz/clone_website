@@ -741,36 +741,35 @@ def replace_frame_chunks(cursor, sector: str, observed_on: str, frame_data: byte
         if 0 <= int(row[0]) < len(chunk_offsets)
         and int(row[1]) == min(CHUNK_SIZE_BYTES, len(frame_data) - chunk_offsets[int(row[0])])
     }
-    for chunk_index, offset in enumerate(chunk_offsets):
-        if chunk_index in existing_chunks:
-            if chunk_index == 0 or (chunk_index + 1) % 50 == 0 or chunk_index + 1 == len(chunk_offsets):
-                print(
-                    f"Chunked {sector} / {observed_on}: {chunk_index + 1}/{len(chunk_offsets)} (existing)",
-                    flush=True,
-            )
-            continue
-        execute_with_short_connection(
+    missing_rows = [
+        (
+            observed_on,
+            sector,
+            chunk_index,
+            psycopg2.Binary(frame_data[offset : offset + CHUNK_SIZE_BYTES]),
+        )
+        for chunk_index, offset in enumerate(chunk_offsets)
+        if chunk_index not in existing_chunks
+    ]
+    if missing_rows:
+        execute_values_with_short_connection(
             """
             INSERT INTO website_data.carbon_emission_frame_chunks (
               observed_on, sector, chunk_index, chunk_data, imported_at
-            ) VALUES (%s,%s,%s,%s,now())
+            ) VALUES %s
             ON CONFLICT (observed_on, sector, chunk_index) DO UPDATE SET
               chunk_data=EXCLUDED.chunk_data,
               imported_at=now()
             """,
-            (
-                observed_on,
-                sector,
-                chunk_index,
-                psycopg2.Binary(frame_data[offset : offset + CHUNK_SIZE_BYTES]),
-            ),
+            missing_rows,
+            "(%s,%s,%s,%s,now())",
         )
-        if chunk_index == 0 or (chunk_index + 1) % 50 == 0 or chunk_index + 1 == len(chunk_offsets):
-            print(
-                f"Chunked {sector} / {observed_on}: {chunk_index + 1}/{len(chunk_offsets)}",
-                flush=True,
-            )
-        return False
+    print(
+        f"Chunked {sector} / {observed_on}: {len(chunk_offsets)}/{len(chunk_offsets)} "
+        f"({len(existing_chunks)} existing, {len(missing_rows)} written)",
+        flush=True,
+    )
+    # Only report completion after every chunk has been verified or inserted.
     return True
 
 

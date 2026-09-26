@@ -1,0 +1,554 @@
+{
+  "date": "2026-09-26",
+  "main_base_commit": "d3279fb0e9ec95f3b9c3a776312d0a45a1893828",
+  "voice_base_commit": "dffee06f24f189b20f5f2c806b7a0ee45006b1da",
+  "voice_origin": "https://github.com/personoj/xiaoyun-voice.git",
+  "earth_reference_commit": "5f091f0c3b60aa38a996a886985bacb3673d16c3",
+  "earth_reference_origin": "https://github.com/cambecc/earth.git",
+  "archives": [
+    {
+      "path": "xiaoyun-voice-source.zip",
+      "sha256": "ac002e7d9653926a2e6ee6e964d90a1e65a36c333d72033696d2eb87d67d8fd7",
+      "bytes": 14930609,
+      "files": [
+        {
+          "path": "xiaoyun-voice/.env.example",
+          "size": 621,
+          "sha256": "5a3f2c42dadbbfa6fbf93504cf7892431851007f9fdfef120a1dd3ee2543bc5a"
+        },
+        {
+          "path": "xiaoyun-voice/.gitattributes",
+          "size": 80,
+          "sha256": "f67c4b67a009c260026ae992a07518ad2683f665ff1adf45673fe92af6e02719"
+        },
+        {
+          "path": "xiaoyun-voice/.gitignore",
+          "size": 121,
+          "sha256": "9722131fd0db7d0222893858b931c49ab60735cb7d8379feeed9453afdd1e830"
+        },
+        {
+          "path": "xiaoyun-voice/AGENTS.md",
+          "size": 3600,
+          "sha256": "8bd003a4fb4d58603533853b7b125017877ed1637cbe38374a160e8480b32a3b"
+        },
+        {
+          "path": "xiaoyun-voice/README.md",
+          "size": 3704,
+          "sha256": "5b53b52791769cda5096af8ede859906a0788595586a8efd427b62c76e593adf"
+        },
+        {
+          "path": "xiaoyun-voice/THIRD_PARTY_NOTICES.md",
+          "size": 1422,
+          "sha256": "06a99930b73c6a6023ef36575d3f6d8b4f7dbae36f0dddaa74b92fdf6d0f0d5c"
+        },
+        {
+          "path": "xiaoyun-voice/bin/xiaoyun.mjs",
+          "size": 3219,
+          "sha256": "749494e1ee3e17b6fba0705d561c905914787ee6a96698a1de2c1fec30a96aa0"
+        },
+        {
+          "path": "xiaoyun-voice/docs/INTEGRATION.md",
+          "size": 8735,
+          "sha256": "119531e8855e7cff98cf9a4eb3c2bff11405f52d347116523b0382d6f43bdcca"
+        },
+        {
+          "path": "xiaoyun-voice/docs/REQUIREMENTS-1.0-alpha.md",
+          "size": 9000,
+          "sha256": "dbffbbbe8eb5c9bfbfbc7e09f83b50bca92dd209e1a40ed7ed6451eb203bea6d"
+        },
+        {
+          "path": "xiaoyun-voice/docs/SKILLS.md",
+          "size": 4476,
+          "sha256": "a735d897d63fb07e19beab6624722ddcdcb2b70d2da76a77013e0f3a330a51e0"
+        },
+        {
+          "path": "xiaoyun-voice/docs/VALIDATION-1.0-alpha.2.md",
+          "size": 3619,
+          "sha256": "bb86fdfd0b094ba68989967d9bb41fb76776966426f9001706571dc4585518d2"
+        },
+        {
+          "path": "xiaoyun-voice/docs/VALIDATION-1.0-alpha.3.md",
+          "size": 2070,
+          "sha256": "6c6c05b96b9c42004567a9e68bdb48087da7fa249579a73624d1ce0fba1325be"
+        },
+        {
+          "path": "xiaoyun-voice/docs/VALIDATION-1.0-alpha.4.md",
+          "size": 3376,
+          "sha256": "43e4f0008324508c94c353ff2836f924af7e5a1683983c0ca5b20c1ac1732c48"
+        },
+        {
+          "path": "xiaoyun-voice/docs/VALIDATION-1.0-alpha.5.md",
+          "size": 3045,
+          "sha256": "a03bc0e77a9bdb9cba1a404fad096036d97288fd12c4a4251beeaeb05a6b1809"
+        },
+        {
+          "path": "xiaoyun-voice/docs/VALIDATION-1.0-alpha.md",
+          "size": 4753,
+          "sha256": "b68d9e1a0858326c1cdfbf09cd8bd6aee2739438ec9679d11c82e259b64d8032"
+        },
+        {
+          "path": "xiaoyun-voice/docs/VALIDATION-1.0-beta.md",
+          "size": 1992,
+          "sha256": "ae6997e0864eb1aa825f1a02fcc352ddf0bf1adddede858a6258e1eb9e8e87ee"
+        },
+        {
+          "path": "xiaoyun-voice/docs/VALIDATION.md",
+          "size": 2692,
+          "sha256": "807c36c20a2d3ff7ff1cc7e7a09ab7b5c9022a7b1f874df1473b5780537a0f1b"
+        },
+        {
+          "path": "xiaoyun-voice/docs/evidence/validation-1.0-alpha.2.json",
+          "size": 4649,
+          "sha256": "7bb7a428512fdd9647f0ce4e7e33d947670c77c0d122fc4eeecfe9b47288f15d"
+        },
+        {
+          "path": "xiaoyun-voice/docs/evidence/validation-1.0-alpha.3.json",
+          "size": 1139,
+          "sha256": "9f0f99fced034dc3b239a5dfeea96a78ad66a7ec6ffd3a53b3a5abe43666143e"
+        },
+        {
+          "path": "xiaoyun-voice/docs/evidence/validation-1.0-alpha.4.json",
+          "size": 4931,
+          "sha256": "00309b5d7b1c3edaf313389a0512d19c2d0ec4417c2201dbe70901bb67e4ea68"
+        },
+        {
+          "path": "xiaoyun-voice/docs/evidence/validation-1.0-alpha.5.json",
+          "size": 2093,
+          "sha256": "01d9683522f855441cd2d9fae370a2768828a5cab9d9f050f218bd5f654bcfcb"
+        },
+        {
+          "path": "xiaoyun-voice/docs/evidence/validation-1.0-alpha.json",
+          "size": 4240,
+          "sha256": "0d89c723e89cf3bdc2b65d6bff45131a8b836c893effb4a14fdfdf8aa115a0f5"
+        },
+        {
+          "path": "xiaoyun-voice/docs/evidence/validation-1.0-beta.json",
+          "size": 3143,
+          "sha256": "2dab974cca53c99200d7d2db287e998ac68a584f7bbc9f2af615b695c218f31f"
+        },
+        {
+          "path": "xiaoyun-voice/examples/meeting/README.md",
+          "size": 953,
+          "sha256": "5d4511cf29cd012c41f8b63a26b489a1bc9fa9833f30ea6168cf456a9478fcba"
+        },
+        {
+          "path": "xiaoyun-voice/examples/meeting/package.json",
+          "size": 227,
+          "sha256": "90c197579cdb2a3df710f874b913454b2f20d00e155b3c0d1c3a36a948b62408"
+        },
+        {
+          "path": "xiaoyun-voice/examples/meeting/public/index.html",
+          "size": 2482,
+          "sha256": "21e3c46b5d69d35f92d324077da0056ff05c6ef34d81bec84ad1b573e30f399f"
+        },
+        {
+          "path": "xiaoyun-voice/examples/meeting/server.mjs",
+          "size": 1121,
+          "sha256": "d9e95dd53964823f16cb9db4eaead7981344a2c2d2aeb9ed151acce9a6b0ba4a"
+        },
+        {
+          "path": "xiaoyun-voice/examples/meeting/skills/meeting/SKILL.md",
+          "size": 640,
+          "sha256": "f9e471f6953a12893e777e0e3b5d77a119764075fe53df5131261a1dedbb3110"
+        },
+        {
+          "path": "xiaoyun-voice/examples/meeting/voice-project.mjs",
+          "size": 582,
+          "sha256": "36410b1c3cc5c1cb6019bb116f01757e73541ca624f93b8272ec1187e18558ef"
+        },
+        {
+          "path": "xiaoyun-voice/package-lock.json",
+          "size": 163600,
+          "sha256": "724d1fa161c8db45f9175daadb653cd38d0c0285955bfb5ad08fbae262838b12"
+        },
+        {
+          "path": "xiaoyun-voice/package.json",
+          "size": 2528,
+          "sha256": "136457ff065009053792a49346a46b411ead762f561a6c00923da8a309c17676"
+        },
+        {
+          "path": "xiaoyun-voice/packages/protocol/package.json",
+          "size": 133,
+          "sha256": "ecdd023954d8a9961ff27ba7cdfcdb920bf96bced75537358ee43521829f5a3e"
+        },
+        {
+          "path": "xiaoyun-voice/packages/protocol/src/index.ts",
+          "size": 6550,
+          "sha256": "25c6b0f758e3e6e5d225254c881812c24df8d360c090a60227308e8fe57954c7"
+        },
+        {
+          "path": "xiaoyun-voice/packages/server/package.json",
+          "size": 165,
+          "sha256": "4ee55b34ace212757f8f3a4de48496134af3d3591c3cddd7a410c8cb17c5327d"
+        },
+        {
+          "path": "xiaoyun-voice/packages/server/src/config.ts",
+          "size": 1809,
+          "sha256": "6fdafaa805d7922d2165a7d66b15e68c205f92b0103f9d9950a31ab4ce4b9edf"
+        },
+        {
+          "path": "xiaoyun-voice/packages/server/src/conversation-control.ts",
+          "size": 470,
+          "sha256": "3770dc47a459ca23fdf3cf60de07266ef8fbe5bd649e5c1fb1824dbf08b70ad8"
+        },
+        {
+          "path": "xiaoyun-voice/packages/server/src/delivery.ts",
+          "size": 2135,
+          "sha256": "e21d0f059c541cac5d459865ac1928feb6aa74a2c7f88fd0bd0655b6f518d7d3"
+        },
+        {
+          "path": "xiaoyun-voice/packages/server/src/execution.ts",
+          "size": 3704,
+          "sha256": "0c2b19f41728ae7240ece711e7659a715c7833213baf8e8ed70457b725870897"
+        },
+        {
+          "path": "xiaoyun-voice/packages/server/src/greeting.ts",
+          "size": 1012,
+          "sha256": "43a22954b8a24b85bee3233c0921cf11c6f89b46993e916737a273d4e93a24ec"
+        },
+        {
+          "path": "xiaoyun-voice/packages/server/src/harness.ts",
+          "size": 14105,
+          "sha256": "201d5f8a10bbcf8d3337ec7293d9a923f1d90eed6421884663a9486cd3bfedb9"
+        },
+        {
+          "path": "xiaoyun-voice/packages/server/src/index.ts",
+          "size": 5264,
+          "sha256": "70d513f8a18db6a7487604b0560fa2db8763c629968f0ff941799a11115b38b0"
+        },
+        {
+          "path": "xiaoyun-voice/packages/server/src/library.ts",
+          "size": 242,
+          "sha256": "b1eeabc3f6bd4262f21c37d5b787865f66467aca49018169b550a7f3263b1df9"
+        },
+        {
+          "path": "xiaoyun-voice/packages/server/src/page-actions.ts",
+          "size": 1898,
+          "sha256": "2700183fe8d04dea49509109c77c7130ed4e53ac7d6b1f60bf0a3d9ecb954de9"
+        },
+        {
+          "path": "xiaoyun-voice/packages/server/src/page-extractor.ts",
+          "size": 5023,
+          "sha256": "4645e6e470b732a8ede07bedada34a1aefaea594b787a674b8141e3908316ce5"
+        },
+        {
+          "path": "xiaoyun-voice/packages/server/src/project.ts",
+          "size": 6670,
+          "sha256": "18488062f39e129bff69a0f43ceb4ab7fe3d80abe8cd3ce9d3cbb17b9430717c"
+        },
+        {
+          "path": "xiaoyun-voice/packages/server/src/python_worker.py",
+          "size": 5314,
+          "sha256": "8a9af9c358a3ad3992d86bdb644390022ce58674e40f2800dd1c72863c849305"
+        },
+        {
+          "path": "xiaoyun-voice/packages/server/src/qwen.ts",
+          "size": 27331,
+          "sha256": "6f109129968cddf9835e1dd591469c52cf9a8c6ea5496507cfaa40304bc74782"
+        },
+        {
+          "path": "xiaoyun-voice/packages/server/src/session.ts",
+          "size": 54385,
+          "sha256": "6ee5e4ecb7343c38df6edc3155215863f57d6a99a9c1ce71a65362ba07efc65f"
+        },
+        {
+          "path": "xiaoyun-voice/packages/server/src/skills.ts",
+          "size": 2414,
+          "sha256": "0a63538dc5d056d9671b484241368914d8f58752283d5bd7ab147208dacc4915"
+        },
+        {
+          "path": "xiaoyun-voice/packages/server/src/task-manager.ts",
+          "size": 5632,
+          "sha256": "6d09abf7cacf1e22de1e365153c9e642eb4d7441cca7d3067fe524827456e7eb"
+        },
+        {
+          "path": "xiaoyun-voice/packages/server/src/time-context.ts",
+          "size": 534,
+          "sha256": "501f9f41502ffe9acd5d9612fa75dca499d6d229461adf16cb73757d1f60c733"
+        },
+        {
+          "path": "xiaoyun-voice/packages/server/src/tool-runtime.ts",
+          "size": 2650,
+          "sha256": "902ad35d38fbd48cb05be86e138947247ed354110ad2fd7596789fe85ec93c6f"
+        },
+        {
+          "path": "xiaoyun-voice/packages/server/src/voice-log.ts",
+          "size": 2404,
+          "sha256": "ec8204c45614e7b248f9b495b044ec7cbb4fcbfb6aec4593afc066d6c02dd98e"
+        },
+        {
+          "path": "xiaoyun-voice/packages/server/test/delivery.test.ts",
+          "size": 17293,
+          "sha256": "0b4a9631117915fa36a74228daf7f58fec9a55e5ff3af2c631eae51f61790c00"
+        },
+        {
+          "path": "xiaoyun-voice/packages/server/test/harness.test.ts",
+          "size": 11003,
+          "sha256": "7e9e7f40c47af1cc27d343321b358c214c88c2c16f4eca0367c6e09c6077eca8"
+        },
+        {
+          "path": "xiaoyun-voice/packages/server/test/qwen.test.ts",
+          "size": 26846,
+          "sha256": "7812575031bed246f4f0b98bf4c4871fbdbf48a8805e679a13252a638fe2eeb4"
+        },
+        {
+          "path": "xiaoyun-voice/packages/server/test/runtime.test.ts",
+          "size": 10708,
+          "sha256": "7e7aca70ec64738055cc169913708ca9567c02c746456d6dc27886b0fadd05d4"
+        },
+        {
+          "path": "xiaoyun-voice/packages/server/test/skills-page.test.ts",
+          "size": 6400,
+          "sha256": "99319c59b7e6a09ed931ab837da7dc2b50d9dc3c7667e861680d330b86ad8943"
+        },
+        {
+          "path": "xiaoyun-voice/packages/voice/README.md",
+          "size": 6718,
+          "sha256": "300cae4ae4a233b3f5e6bf3229e7d1765d25753a7822be20914720f1cd78db5c"
+        },
+        {
+          "path": "xiaoyun-voice/packages/voice/THIRD_PARTY_NOTICES.md",
+          "size": 1422,
+          "sha256": "06a99930b73c6a6023ef36575d3f6d8b4f7dbae36f0dddaa74b92fdf6d0f0d5c"
+        },
+        {
+          "path": "xiaoyun-voice/packages/voice/package.json",
+          "size": 525,
+          "sha256": "89713b6a77252baad1fd667f33e43ffac27061448a91454235789a00025fda57"
+        },
+        {
+          "path": "xiaoyun-voice/packages/voice/public/assets/capture.worklet.js",
+          "size": 1190,
+          "sha256": "49374fc4b8ff7dbcfa27318a3dd9f3680d21d19e893d32a1f0a302240d16c482"
+        },
+        {
+          "path": "xiaoyun-voice/packages/voice/public/assets/kws/LICENSE-sherpa-onnx.txt",
+          "size": 11358,
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        },
+        {
+          "path": "xiaoyun-voice/packages/voice/public/assets/kws/SOURCES.md",
+          "size": 3413,
+          "sha256": "99645fbb9d0e6abf6abb84c371c012967b18d30a75c60bd675c6e156a013a05d"
+        },
+        {
+          "path": "xiaoyun-voice/packages/voice/public/assets/kws/keywords.json",
+          "size": 106,
+          "sha256": "81ba115f06366c4c117dd369fe2378b0837e2bd6cc642079b22e7f195e0c1cb9"
+        },
+        {
+          "path": "xiaoyun-voice/packages/voice/public/assets/kws/sherpa-onnx-kws.js",
+          "size": 9939,
+          "sha256": "570b89a895f53b6d93167989843f3ba85297e6715a94120cbf1b4a68f70a42f4"
+        },
+        {
+          "path": "xiaoyun-voice/packages/voice/public/assets/kws/sherpa-onnx-wasm-kws-main.data",
+          "size": 13077967,
+          "sha256": "bc31f951b55040c44fcf297042b663e485d5f6c92825f11d9211c07e4e5e010f"
+        },
+        {
+          "path": "xiaoyun-voice/packages/voice/public/assets/kws/sherpa-onnx-wasm-kws-main.js",
+          "size": 78300,
+          "sha256": "d2f988c26317640c4f2d2910697020d2b6fede7a63a8880527d6ec73fa424c9d"
+        },
+        {
+          "path": "xiaoyun-voice/packages/voice/public/assets/kws/sherpa-onnx-wasm-kws-main.wasm",
+          "size": 10536647,
+          "sha256": "3c27f2b8fe3e72d8870704ae8e180e1ddbd88a42bac17de4bbc03941e30379af"
+        },
+        {
+          "path": "xiaoyun-voice/packages/voice/public/assets/player.worklet.js",
+          "size": 1692,
+          "sha256": "a1f63e1a328197e5879c69ae329c42001fde37229d08a1f790a90e558d3c7b35"
+        },
+        {
+          "path": "xiaoyun-voice/packages/voice/public/assets/wake-worker.js",
+          "size": 3416,
+          "sha256": "9262e53b0c7269c827d7df1b0f79910141d9fef1684eb1d0d9b492c66f66fa1c"
+        },
+        {
+          "path": "xiaoyun-voice/packages/voice/src/audio.ts",
+          "size": 5588,
+          "sha256": "225e77e36f4a2ce87fb0ec699497d49207820a2a614a1b0d8f2ea54c899cee69"
+        },
+        {
+          "path": "xiaoyun-voice/packages/voice/src/browser-recognition.ts",
+          "size": 2269,
+          "sha256": "3842ebbf7f941031ad0c90df735ddb0afc3c0c70449168cfac8aa4020cf31afa"
+        },
+        {
+          "path": "xiaoyun-voice/packages/voice/src/controller.ts",
+          "size": 34123,
+          "sha256": "015028dd5cdd6201500ff70d058951684aa3919ad4be50bd41696d4f550d1778"
+        },
+        {
+          "path": "xiaoyun-voice/packages/voice/src/index.ts",
+          "size": 638,
+          "sha256": "7faffef25d133b491c6e763227a104933c5d89855d658b35b915fd5141ec56c2"
+        },
+        {
+          "path": "xiaoyun-voice/packages/voice/src/transport.ts",
+          "size": 3274,
+          "sha256": "cfa1ba7f28234c56cecf0927ff8385b40941be3c9701c16b7992c890c9ef87c3"
+        },
+        {
+          "path": "xiaoyun-voice/packages/voice/src/ui-types.ts",
+          "size": 1033,
+          "sha256": "04974b8fc9eb0db3e3254c1d9b2309a5b115909c7db8d5de4c3af441ea7351e2"
+        },
+        {
+          "path": "xiaoyun-voice/packages/voice/src/ui/character.ts",
+          "size": 2650,
+          "sha256": "d701722f55c6af6c00eb90a44a88af155ba82c800c7cf668c754274b4b00e83b"
+        },
+        {
+          "path": "xiaoyun-voice/packages/voice/src/ui/index.tsx",
+          "size": 22914,
+          "sha256": "ca29f3ce4600e9235d2b1d144e676fc07498fbdbc6fcbe62f1150b739a793107"
+        },
+        {
+          "path": "xiaoyun-voice/packages/voice/src/ui/motion.ts",
+          "size": 3452,
+          "sha256": "ef047675c280563111b613eae7876c0b5f07b5b8fbca98c09927f13caf6c575a"
+        },
+        {
+          "path": "xiaoyun-voice/packages/voice/src/ui/power-earth-theme.ts",
+          "size": 1446,
+          "sha256": "944d075b45a14b09cef47c6e0b4615c28a35772196870cb664b5f5fa79b4ba4b"
+        },
+        {
+          "path": "xiaoyun-voice/packages/voice/src/ui/styles.ts",
+          "size": 21712,
+          "sha256": "d584c8559a0d9a77db09b3dd4fc83218e13cadf96c53b45661822c1df2bf169f"
+        },
+        {
+          "path": "xiaoyun-voice/packages/voice/src/ui/use-dock.ts",
+          "size": 4626,
+          "sha256": "a483190d992880838fca35e65b480abd0242c4d92b1db065bea89d9da8939a4e"
+        },
+        {
+          "path": "xiaoyun-voice/packages/voice/src/ui/vendor/grok-engine.ts",
+          "size": 194504,
+          "sha256": "a03fb347dd0a72e378536a2ac9b2f4b29346476388753f18cbeb734f79eacac9"
+        },
+        {
+          "path": "xiaoyun-voice/packages/voice/src/wake-word.ts",
+          "size": 1638,
+          "sha256": "f7b8eea0d571ee03c9bb0fa40e4c87d612aa42ac92c8fe555ede29d38473178b"
+        },
+        {
+          "path": "xiaoyun-voice/packages/voice/test/audio.test.ts",
+          "size": 1830,
+          "sha256": "4bbef6c0fbb387bdf7961bb2e4673bac2cc70a0981dd7409457c143fd6d1560c"
+        },
+        {
+          "path": "xiaoyun-voice/packages/voice/test/browser-recognition.test.ts",
+          "size": 1498,
+          "sha256": "057ed06e0a8778378d532e641b9147c45dab52e86bb9713134f2ad3ede86b561"
+        },
+        {
+          "path": "xiaoyun-voice/packages/voice/test/result-presence.test.ts",
+          "size": 1193,
+          "sha256": "da1f488fba211430e6b2baebdf8f52e2bdad306a81b531648bf13127c83183fc"
+        },
+        {
+          "path": "xiaoyun-voice/packages/voice/test/transport.test.ts",
+          "size": 2440,
+          "sha256": "a326dd10fb4d4f64aa0f01c120f6bc9a8170e20b56300e25519c4f861c930991"
+        },
+        {
+          "path": "xiaoyun-voice/packages/voice/vite.config.ts",
+          "size": 860,
+          "sha256": "94d56de4360c1803335a1083bc0a1b83322978651348d52487ea23c2b8b1bab7"
+        },
+        {
+          "path": "xiaoyun-voice/requirements-search.txt",
+          "size": 13,
+          "sha256": "7f6d11923be905123dd24a69cc16dc2af0e1fdc9286040692cef907c205f112e"
+        },
+        {
+          "path": "xiaoyun-voice/scripts/build-server.mjs",
+          "size": 371,
+          "sha256": "34baa7f31658292906a432b5a7072f004dca2806709fc1dccfe0fbd900f43509"
+        },
+        {
+          "path": "xiaoyun-voice/skills/sales-analysis/SKILL.md",
+          "size": 1526,
+          "sha256": "6f388c53b8a256c5a95fecd3070dbe2caba8993b3a91dbfed9ef464c72217c03"
+        },
+        {
+          "path": "xiaoyun-voice/skills/sales-analysis/references/data-contract.md",
+          "size": 1177,
+          "sha256": "702558b2153e9fd6b1c1658299d2e58ccaf5a777db602b469030ccef77b55949"
+        },
+        {
+          "path": "xiaoyun-voice/tsconfig.json",
+          "size": 625,
+          "sha256": "d79d600a86780b21e2f644f72da904ed34648cdf4ee805ad0c2c839cfc99ce18"
+        }
+      ]
+    },
+    {
+      "path": "workspace-support.zip",
+      "sha256": "9ac920f342e873a038dc45adc8dd00694f2830f443288d66bf2574d97e76cb84",
+      "bytes": 53926,
+      "files": [
+        {
+          "path": "docs/research/components/opengridworks-map-shell.md",
+          "size": 1498,
+          "sha256": "1f3ac1f0783a63d1332919cdd04c7786d0ff58a11722755503b5a5cb7f68e255"
+        },
+        {
+          "path": "docs/research/opengridworks/BEHAVIORS.md",
+          "size": 1134,
+          "sha256": "2b559f5d56df25f98620109ea75a524b6fd64e2e65fb6b50c9abc47103a12736"
+        },
+        {
+          "path": "docs/research/opengridworks/PAGE_TOPOLOGY.md",
+          "size": 1936,
+          "sha256": "f558078e74fafa4d9abcf85981addff004ccba7795ab24e75c6bebec50165f8e"
+        },
+        {
+          "path": "docs/产品说明书.tex",
+          "size": 15784,
+          "sha256": "5547d807d582ead404dd73573e634da0149bccea95d3bfa97484b09fada6d0a3"
+        },
+        {
+          "path": "docs/产品说明书草稿.md",
+          "size": 13672,
+          "sha256": "95f46037ae4628806c379d6f74eda49135aa6243a29721f2b5c43c83fd3f356c"
+        },
+        {
+          "path": "docs/参考文献逐篇精读与项目落地评估.md",
+          "size": 48508,
+          "sha256": "004f0546e0fe27cec0bc04ed753031e8f70448175777586a47e2d7ed1c235fb5"
+        },
+        {
+          "path": "earth/package-lock.json",
+          "size": 40937,
+          "sha256": "6a93a48b2cc00a42df508952388bbd67c739ed3fdf16646d220cb58b20171f79"
+        },
+        {
+          "path": "scripts/render_product_manual_pdf.py",
+          "size": 11873,
+          "sha256": "8efe15927fdc97a955113bf8d4815d302b943c0b5e18cf62afef75e71137575a"
+        },
+        {
+          "path": "start-power-voice.cmd",
+          "size": 101,
+          "sha256": "bd5651b4525be9f5fef709325870769a85c78b407b430bad4842afb87042466f"
+        },
+        {
+          "path": "start-website.bat",
+          "size": 1368,
+          "sha256": "d982d8ff74bb6d2c7a6a14d15899e04862bcb4a505708ae85e1f27078d1bf486"
+        },
+        {
+          "path": "一键启动网站.cmd",
+          "size": 40,
+          "sha256": "0b99e61ea48c0a8e6b81d391702d4a6b9ec769c92b65ed49f344f5b67fd43135"
+        }
+      ]
+    }
+  ]
+}

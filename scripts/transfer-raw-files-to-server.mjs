@@ -17,7 +17,7 @@ const outputDirectory = path.join(path.dirname(repo), "outputs/20260908-raw-arch
 const defaultManifest = path.join(outputDirectory, "raw-transfer-manifest.json");
 const defaultKnownHosts = path.join(outputDirectory, "windows-server-2222-known-hosts");
 const defaultKey = path.join(outputDirectory, "private-config-v2/raw-transfer-v2-ed25519");
-const progressPath = path.join(outputDirectory, "raw-transfer-upload-progress.json");
+const defaultProgressPath = path.join(outputDirectory, "raw-transfer-upload-progress.json");
 
 const args = new Map();
 for (let index = 2; index < process.argv.length; index += 1) {
@@ -41,6 +41,7 @@ const options = {
   verifyOnly: args.has("verify-only"),
   dryRun: args.has("dry-run"),
   skipDb: args.has("skip-db"),
+  progress: path.resolve(args.get("progress") ?? defaultProgressPath),
 };
 
 const sshOptions = [
@@ -162,7 +163,11 @@ async function uploadFile(localPath, serverPath) {
   const localForSftp = localPath.replaceAll("\\", "/");
   const partPath = `${remotePath(serverPath)}.part`;
   const batch = `put "${localForSftp}" "${partPath}"\n`;
-  await run("sftp", ["-b", "-", "-P", String(options.port), ...sshOptions, remote], batch);
+  await run(
+    "sftp",
+    ["-b", "-", "-P", String(options.port), "-B", "1048576", "-R", "256", ...sshOptions, remote],
+    batch,
+  );
   return partPath;
 }
 
@@ -183,7 +188,7 @@ async function markAsset(client, item, status, error = null) {
 }
 
 async function writeProgress(progress) {
-  await fsp.writeFile(progressPath, `${JSON.stringify(progress, null, 2)}\n`);
+  await fsp.writeFile(options.progress, `${JSON.stringify(progress, null, 2)}\n`);
 }
 
 async function main() {

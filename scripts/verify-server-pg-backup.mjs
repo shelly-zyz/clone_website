@@ -14,7 +14,7 @@ const resume=previous?.backupFile===backup.file&&previous.createdOid&&!previous.
 const name=resume?previous.database:'zyz_verify_'+new Date().toISOString().replaceAll(/[^0-9]/g,'');
 if(!/^zyz_verify_\d+$/.test(name))throw new Error('Invalid audit database name');
 const result={database:name,backupFile:backup.file,passed:false,temporaryDatabaseDropped:false,tableCounts:{}};
-const options={host:'218.197.118.49',port:5432,ssl:false,connectionTimeoutMillis:15000,query_timeout:600000,keepAlive:true,keepAliveInitialDelayMillis:10000};
+const options={host:'218.197.118.49',port:5432,ssl:false,connectionTimeoutMillis:15000,query_timeout:7200000,keepAlive:true,keepAliveInitialDelayMillis:10000};
 const admin=new Client({...options,database:'zyz',user:'postgres',password:process.env.MIGRATION_ADMIN_PASSWORD});
 const audit=new Client({...options,database:name,user:'zyz',password:process.env.MIGRATION_APP_PASSWORD});
 admin.on('error',error=>console.error(error.message));audit.on('error',error=>console.error(error.message));

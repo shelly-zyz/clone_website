@@ -355,14 +355,6 @@
 @media (prefers-reduced-motion: reduce) {
   .screen *, .screen *::before, .screen *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
 }
-.xiaoyunNotice { position: fixed; z-index: 39; right: 450px; bottom: 14px; width: 280px; padding: 9px 12px; border-left: 2px solid var(--cyan); background: rgba(4,18,28,.94); pointer-events: none; }
-.xiaoyunNotice strong { display: block; color: #b4f1f7; font-size: 11px; }
-.xiaoyunNotice span { display: block; margin-top: 4px; color: #9ab1bc; font-size: 10px; }
-.xiaoyunNotice small { display: block; margin-top: 5px; color: #8b9da6; font-size: 9px; line-height: 1.5; }
-.xiaoyunNotice button { pointer-events: auto; margin-top: 6px; padding: 4px 6px; border: 1px solid #315561; background: #102e3c; color: #9cecf6; font-size: 9px; cursor: pointer; }
-.xiaoyunNotice button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
-@media (max-width: 1100px) { .xiaoyunNotice { right: 18px; } }
-
 .loadError { pointer-events: auto; }
 .retryButton { margin: 8px; padding: 6px 10px; border: 1px solid var(--cyan); background: rgba(4,58,69,.65); color: #a6f7ff; font: inherit; cursor: pointer; }
 .retryButton:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }

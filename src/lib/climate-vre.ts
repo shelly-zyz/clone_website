@@ -111,9 +111,16 @@ export function loadClimateVreSummary(_path: string) {
   return fetchJson<ClimateVreSummary>("/api/data/climate-vre?request=summary");
 }
 
-export function loadClimateVreHourly(_template: string, regionId: string, year: number, technology: VreTechnology) {
+export function loadClimateVreHourly(
+  _template: string,
+  regionId: string,
+  year: number,
+  technology: VreTechnology,
+  gcm = "gfdl-esm4",
+  scenario = "ssp126",
+) {
   void _template;
-  const path = `/api/data/climate-vre?request=hourly&regionId=${encodeURIComponent(regionId)}&year=${year}&technology=${technology}`;
+  const path = `/api/data/climate-vre?request=hourly&gcm=${encodeURIComponent(gcm)}&scenario=${encodeURIComponent(scenario)}&regionId=${encodeURIComponent(regionId)}&year=${year}&technology=${technology}`;
   return fetchJson<ClimateVreHourly>(path);
 }
 

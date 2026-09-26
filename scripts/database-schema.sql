@@ -106,6 +106,8 @@ CREATE INDEX IF NOT EXISTS vector_tiles_coordinates_idx
   ON website_data.vector_tiles (dataset, z, x, y);
 
 CREATE TABLE IF NOT EXISTS website_data.climate_vre_hourly (
+  gcm text NOT NULL,
+  scenario text NOT NULL,
   region_id text NOT NULL,
   year integer NOT NULL,
   technology text NOT NULL,
@@ -116,8 +118,70 @@ CREATE TABLE IF NOT EXISTS website_data.climate_vre_hourly (
   values_json jsonb NOT NULL,
   stats jsonb NOT NULL,
   metadata jsonb NOT NULL,
-  PRIMARY KEY (region_id, year, technology)
+  PRIMARY KEY (gcm, scenario, region_id, year, technology)
 );
+
+-- Older deployments stored GCM/SSP only inside metadata and used a key that
+-- could overwrite a second scenario.  Backfill those rows before enforcing
+-- the explicit model-scenario dimensions.
+ALTER TABLE website_data.climate_vre_hourly
+  ADD COLUMN IF NOT EXISTS gcm text;
+ALTER TABLE website_data.climate_vre_hourly
+  ADD COLUMN IF NOT EXISTS scenario text;
+UPDATE website_data.climate_vre_hourly
+SET gcm = COALESCE(NULLIF(gcm, ''), NULLIF(metadata->>'gcm', ''), 'gfdl-esm4'),
+    scenario = COALESCE(NULLIF(scenario, ''), NULLIF(metadata->>'scenario', ''), 'ssp126')
+WHERE gcm IS NULL OR scenario IS NULL OR gcm = '' OR scenario = '';
+ALTER TABLE website_data.climate_vre_hourly
+  ALTER COLUMN gcm SET NOT NULL;
+ALTER TABLE website_data.climate_vre_hourly
+  ALTER COLUMN scenario SET NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid='website_data.climate_vre_hourly'::regclass
+      AND contype='p'
+      AND conname <> 'climate_vre_hourly_model_scenario_pkey'
+  ) THEN
+    EXECUTE 'ALTER TABLE website_data.climate_vre_hourly DROP CONSTRAINT ' ||
+      quote_ident((SELECT conname FROM pg_constraint
+        WHERE conrelid='website_data.climate_vre_hourly'::regclass
+          AND contype='p' LIMIT 1));
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid='website_data.climate_vre_hourly'::regclass
+      AND conname='climate_vre_hourly_model_scenario_pkey'
+  ) THEN
+    ALTER TABLE website_data.climate_vre_hourly
+      ADD CONSTRAINT climate_vre_hourly_model_scenario_pkey
+      PRIMARY KEY (gcm, scenario, region_id, year, technology);
+  END IF;
+END
+$$;
+
+CREATE TABLE IF NOT EXISTS website_data.climate_vre_sources (
+  gcm text NOT NULL,
+  scenario text NOT NULL,
+  file_name text NOT NULL UNIQUE,
+  source_path text NOT NULL,
+  expected_size_bytes bigint NOT NULL,
+  md5 text NOT NULL,
+  period_start date NOT NULL,
+  period_end date NOT NULL,
+  download_status text NOT NULL DEFAULT 'verified',
+  import_status text NOT NULL DEFAULT 'pending',
+  imported_rows integer NOT NULL DEFAULT 0,
+  source_attributes jsonb NOT NULL DEFAULT '{}'::jsonb,
+  error text,
+  imported_at timestamptz,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (gcm, scenario)
+);
+
+CREATE INDEX IF NOT EXISTS climate_vre_hourly_model_scenario_idx
+  ON website_data.climate_vre_hourly (gcm, scenario, year, technology);
 
 CREATE INDEX IF NOT EXISTS climate_vre_hourly_year_technology_idx
   ON website_data.climate_vre_hourly (year, technology);

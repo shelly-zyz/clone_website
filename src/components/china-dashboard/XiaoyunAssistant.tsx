@@ -25,7 +25,6 @@ export function XiaoyunAssistant({
   const mount = useRef<HTMLDivElement>(null);
   const voice = useRef<VoiceAssistant | null>(null);
   const callbacks = useRef({ context, onDashboardCommand, onOpenPanel });
-  const [notice, setNotice] = useState("文字问数 · 浏览器语音");
   const [mode, setMode] = useState<"native" | "browser">("native");
   useEffect(() => {
     callbacks.current = { context, onDashboardCommand, onOpenPanel };
@@ -48,11 +47,18 @@ export function XiaoyunAssistant({
         projectId: "power-earth", container: mount.current, assetBaseUrl: "/xiaoyun/", mode: "live", backendUrl: "http://127.0.0.1:8765",
         context: { page, ...callbacks.current.context },
         ui: { theme: "power-earth", baseFontSize: 13, position: position ?? { right: window.innerWidth >= 1100 ? 450 : 28, bottom: 105 } },
-        actions: [{
-          name: "select_province", description: "切换地图范围，与省份按钮共用操作。",
-          parameters: { type: "object", properties: { province: { type: "string", enum: ["全国", "新疆", "内蒙古", "四川", "山东", "广东"] } }, required: ["province"], additionalProperties: false },
-          execute: ({ province }) => selectProvince(String(province)),
-        }],
+        actions: [
+          {
+            name: "select_province", description: "切换地图范围，与省份按钮共用操作。",
+            parameters: { type: "object", properties: { province: { type: "string", enum: ["全国", "新疆", "内蒙古", "四川", "山东", "广东"] } }, required: ["province"], additionalProperties: false },
+            execute: ({ province }) => selectProvince(String(province)),
+          },
+          {
+            name: "open_energy_panel", description: "打开能源可信问数面板，查看完整数据来源与执行轨迹。",
+            parameters: { type: "object", properties: {}, required: [], additionalProperties: false },
+            execute: () => { callbacks.current.onOpenPanel(); return { opened: true }; },
+          },
+        ],
         browserAdapter: mode === "native" ? undefined : {
           async submit(question, snapshot, signal) {
             signal.throwIfAborted();
@@ -88,27 +94,14 @@ export function XiaoyunAssistant({
           },
         },
         onEvent(event) {
-          if (disposed) return;
-          if (event.type === "error") setNotice(String(event.message));
-          if (event.type === "ready") setNotice(mode === "native" ? "Qwen 实时语音 · DeepSeek 问数" : "浏览器语音 · DeepSeek 问数");
-          if (event.type === "input.text") setNotice("正在查询项目数据…");
-          if (event.type === "action.executed" || event.type === "playback.finished") setNotice(mode === "native" ? "Qwen 实时语音 · DeepSeek 问数" : "浏览器语音 · DeepSeek 问数");
-          if (event.type === "input.transcript") setNotice(`识别：${String(event.text).slice(0, 60)}`);
-          if (event.type === "session.end") setNotice("麦克风已关闭");
+          if (!disposed && mode === "native" && event.type === "connection" && !event.connected) setMode("browser");
         },
-        onTaskResult() { if (!disposed) setNotice(mode === "native" ? "Qwen 实时语音 · DeepSeek 问数" : "浏览器语音 · DeepSeek 问数"); },
       });
-    }).catch(() => { if (!disposed) setNotice("小云加载失败，请刷新页面或使用能源问数面板。"); });
+    });
     return () => { disposed = true; voice.current?.destroy(); voice.current = null; };
   }, [mode, page, position]);
 
-  return <div ref={mount} className={styles.xiaoyunHost}>
-    <div className={styles.xiaoyunNotice}>
-      <strong>小云 · 电力研究助手</strong><span role="status">{notice}</span>
-      <small>{mode === "native" ? "默认不录音；开启后音频由 Qwen 实时服务处理。" : "开启后由浏览器语音服务识别。"}点击键盘可文字问数。</small>
-      <button type="button" onClick={() => { setMode(mode === "native" ? "browser" : "native"); setNotice("正在切换语音模式…"); }}>{mode === "native" ? "切换浏览器语音" : "切换 Qwen 实时语音"}</button>
-    </div>
-  </div>;
+  return <div ref={mount} className={styles.xiaoyunHost} />;
 }
 
 function escapeMarkdown(value: string) { return value.replace(/[\\`*_{}[\]<>|]/g, "\\$&"); }

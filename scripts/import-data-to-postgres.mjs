@@ -392,6 +392,8 @@ async function importClimateHourly() {
     try {
       const payload = JSON.parse(await fs.readFile(filePath, "utf8"));
       const {
+        gcm = "gfdl-esm4",
+        scenario = "ssp126",
         regionId,
         year,
         technology,
@@ -407,7 +409,7 @@ async function importClimateHourly() {
         relativePath,
         recordCount: values.length,
         row: {
-          region_id: regionId, year, technology, region_label: regionLabel,
+          gcm, scenario, region_id: regionId, year, technology, region_label: regionLabel,
           capacity_mw: capacityMw, scale, hours, values_json: values, stats, metadata,
         },
       });
@@ -429,17 +431,17 @@ async function importClimateHourly() {
 async function flushClimateBatch(batch) {
   await queryWithRetry(
     `INSERT INTO website_data.climate_vre_hourly (
-       region_id, year, technology, region_label, capacity_mw, scale,
+       gcm, scenario, region_id, year, technology, region_label, capacity_mw, scale,
        hours, values_json, stats, metadata
      )
-     SELECT region_id, year, technology, region_label, capacity_mw, scale,
+     SELECT gcm, scenario, region_id, year, technology, region_label, capacity_mw, scale,
             hours, values_json, stats, metadata
      FROM jsonb_to_recordset($1::jsonb) AS row(
-       region_id text, year integer, technology text, region_label text,
+       gcm text, scenario text, region_id text, year integer, technology text, region_label text,
        capacity_mw double precision, scale double precision, hours integer,
        values_json jsonb, stats jsonb, metadata jsonb
      )
-     ON CONFLICT (region_id,year,technology) DO UPDATE SET
+     ON CONFLICT (gcm,scenario,region_id,year,technology) DO UPDATE SET
        region_label=EXCLUDED.region_label, capacity_mw=EXCLUDED.capacity_mw,
        scale=EXCLUDED.scale, hours=EXCLUDED.hours,
        values_json=EXCLUDED.values_json, stats=EXCLUDED.stats,
