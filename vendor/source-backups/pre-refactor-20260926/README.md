@@ -24,4 +24,4 @@
 - 主站 `npm run typecheck` 通过；基线现有修改的 `git diff --check` 通过。
 - 没有重新运行数据库导入、模型训练、生产构建或浏览器功能验收；此基线保存当前状态，不宣称所有功能已重新验收。
 
-目标：现有私有仓库 `https://github.com/shelly-zyz/clone_website`，分支 `codex/pre-refactor-baseline-20260926`。推送完成后须以远端提交 SHA 与本地 SHA 一致为成功证据。
+已推送至现有私有仓库 `https://github.com/shelly-zyz/clone_website`，分支 `codex/pre-refactor-baseline-20260926`。源码基线提交为 `ec5ec4873a2853b2304cbb179865522364017019`；2026-09-26 通过 `git ls-remote --heads origin refs/heads/codex/pre-refactor-baseline-20260926` 核验，远端 SHA 与本地一致。推送后主站工作区干净；本条验证记录单独随后提交，不改变源码基线内容。
