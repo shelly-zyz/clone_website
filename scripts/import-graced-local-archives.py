@@ -23,7 +23,7 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 WORKSPACE_ROOT = REPO_ROOT.parent
-ARCHIVE_RE = re.compile(r"^GRACED_(?P<sector>[A-Za-z]+)_y(?P<year>\d{4})_m(?P<month>\d{2})\.nc\.tar\.gz$")
+ARCHIVE_RE = re.compile(r"^GRACED_(?:0_)?(?P<sector>[A-Za-z]+)_y(?P<year>\d{4})_m(?P<month>\d{2})\.nc\.tar\.gz$")
 
 
 def path_label(path: Path) -> str:
@@ -107,6 +107,12 @@ def write_manifest(converter, archive: Path, work_dir: Path, processed_dir: Path
     # Keep the archive as the durable local source.  The NetCDF is an extracted
     # intermediate and is removed after the import to avoid ~0.8 GB per month.
     manifest["source"]["localNetcdfPath"] = path_label(archive)
+    manifest["source"].setdefault("attributes", {}).update(
+        {
+            "localArchiveImport": True,
+            "sourceIdKind": "synthetic-local",
+        }
+    )
     manifest_path = processed_dir / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     netcdf.unlink(missing_ok=True)
@@ -142,7 +148,7 @@ def main() -> None:
             print(f"Skipping unrecognized filename: {path.name}", flush=True)
             continue
         sector = match.group("sector")
-        if sector != "total":
+        if sector not in converter.SECTORS:
             print(f"Skipping unsupported sector in local batch: {path.name}", flush=True)
             continue
         month = f"{match.group('year')}-{match.group('month')}"
@@ -158,7 +164,8 @@ def main() -> None:
         # IDs are deterministic and outside the official IDs already present in
         # the database.  source_attributes records that these are user-provided
         # local archives, rather than an invented official API identifier.
-        official_id = 900_000_000 + int(month.replace("-", ""))
+        sector_index = converter.SECTORS.index(sector)
+        official_id = 900_000_000 + sector_index * 100_000_000 + int(month.replace("-", ""))
         processed_dir = (args.processed_root / sector / month).resolve()
         work_dir = (args.work_root / sector / month).resolve()
         manifest_path = processed_dir / "manifest.json"

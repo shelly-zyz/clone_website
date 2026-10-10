@@ -1,0 +1,1469 @@
+[
+  {
+    "nodes": {
+      "raw": {
+        "text": "官方文件／API\n登记来源与不可变批次",
+        "x": 260,
+        "y": 80,
+        "kind": "io"
+      },
+      "stage": {
+        "text": "导入暂存表 staging\nCOPY批量装载与类型检查",
+        "x": 260,
+        "y": 280,
+        "kind": "step"
+      },
+      "check": {
+        "text": "规则校验通过",
+        "x": 260,
+        "y": 490,
+        "kind": "decision"
+      },
+      "bad": {
+        "text": "隔离批次并报告\n线上旧版本继续可用",
+        "x": 750,
+        "y": 490,
+        "kind": "error"
+      },
+      "std": {
+        "text": "专题标准表 standard\n单位、实体、时刻统一",
+        "x": 260,
+        "y": 710,
+        "kind": "store"
+      },
+      "derive": {
+        "text": "派生表／文件 derived\n统计、瓦片、特征",
+        "x": 1240,
+        "y": 710,
+        "kind": "store"
+      },
+      "pub": {
+        "text": "事务发布 catalog\n数据完成后切换版本指针",
+        "x": 750,
+        "y": 925,
+        "kind": "store"
+      }
+    },
+    "edges": [
+      {
+        "a": "raw",
+        "b": "stage",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "stage",
+        "b": "check",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "check",
+        "b": "bad",
+        "label": "否",
+        "start": "E",
+        "end": "W",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "check",
+        "b": "std",
+        "label": "是",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "std",
+        "b": "derive",
+        "label": "",
+        "start": "E",
+        "end": "W",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "std",
+        "b": "pub",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "derive",
+        "b": "pub",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      }
+    ],
+    "height": 1020
+  },
+  {
+    "nodes": {
+      "in": {
+        "text": "查询条件与已发布版本\n地区、时间、指标",
+        "x": 260,
+        "y": 80,
+        "kind": "io"
+      },
+      "where": {
+        "text": "WHERE筛选有效记录\n先缩小扫描范围",
+        "x": 750,
+        "y": 80,
+        "kind": "step"
+      },
+      "join": {
+        "text": "JOIN连接实体字典\n绑定名称与空间范围",
+        "x": 1240,
+        "y": 80,
+        "kind": "step"
+      },
+      "group": {
+        "text": "GROUP BY分组\n按日／区域聚合",
+        "x": 1240,
+        "y": 285,
+        "kind": "step"
+      },
+      "metric": {
+        "text": "SUM／AVG等计算\n按指标规则选择权重",
+        "x": 750,
+        "y": 285,
+        "kind": "step"
+      },
+      "out": {
+        "text": "ORDER BY排序返回\n结果与覆盖情况一起输出",
+        "x": 260,
+        "y": 285,
+        "kind": "io"
+      }
+    },
+    "edges": [
+      {
+        "a": "in",
+        "b": "where",
+        "label": "",
+        "start": "E",
+        "end": "W",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "where",
+        "b": "join",
+        "label": "",
+        "start": "E",
+        "end": "W",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "join",
+        "b": "group",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "group",
+        "b": "metric",
+        "label": "",
+        "start": "W",
+        "end": "E",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "metric",
+        "b": "out",
+        "label": "",
+        "start": "W",
+        "end": "E",
+        "via": null,
+        "labelxy": null
+      }
+    ],
+    "height": 390
+  },
+  {
+    "nodes": {
+      "req": {
+        "text": "输入用户目标与项目范围\n加载权威目录和规则版本",
+        "x": 750,
+        "y": 80,
+        "kind": "io"
+      },
+      "parse": {
+        "text": "解析指标与筛选\n形成结构化查询意图",
+        "x": 750,
+        "y": 270,
+        "kind": "step"
+      },
+      "ok": {
+        "text": "语义与权限通过",
+        "x": 750,
+        "y": 475,
+        "kind": "decision"
+      },
+      "ask": {
+        "text": "歧义或口径不兼容\n澄清／给出不可执行原因",
+        "x": 1240,
+        "y": 475,
+        "kind": "error"
+      },
+      "tool": {
+        "text": "选择已审核查询模板\n参数化执行与规模限制",
+        "x": 750,
+        "y": 690,
+        "kind": "step"
+      },
+      "result": {
+        "text": "核对单位、范围、覆盖\n返回DataRef及质量说明",
+        "x": 750,
+        "y": 885,
+        "kind": "store"
+      }
+    },
+    "edges": [
+      {
+        "a": "req",
+        "b": "parse",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "parse",
+        "b": "ok",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "ok",
+        "b": "ask",
+        "label": "否",
+        "start": "E",
+        "end": "W",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "ok",
+        "b": "tool",
+        "label": "是",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "tool",
+        "b": "result",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      }
+    ],
+    "height": 980
+  },
+  {
+    "nodes": {
+      "i": {
+        "text": "DataRef＋表达目标\n读取字段、单位与数据规模",
+        "x": 750,
+        "y": 80,
+        "kind": "io"
+      },
+      "profile": {
+        "text": "匹配能力目录\n选择已启用模板并解释",
+        "x": 750,
+        "y": 280,
+        "kind": "step"
+      },
+      "check": {
+        "text": "字段与目标明确",
+        "x": 750,
+        "y": 490,
+        "kind": "decision"
+      },
+      "ask": {
+        "text": "追问缺失条件\n或建议可用表达",
+        "x": 1240,
+        "y": 490,
+        "kind": "error"
+      },
+      "spec": {
+        "text": "MCP／本地适配器\n生成受限图形配置",
+        "x": 750,
+        "y": 710,
+        "kind": "step"
+      },
+      "v": {
+        "text": "配置与规模校验通过",
+        "x": 750,
+        "y": 900,
+        "kind": "decision"
+      },
+      "repair": {
+        "text": "修正字段映射或配置\n最多两次修正尝试",
+        "x": 260,
+        "y": 900,
+        "kind": "step"
+      },
+      "stop": {
+        "text": "超限则报告错误\n保留原有视图",
+        "x": 260,
+        "y": 1090,
+        "kind": "error"
+      },
+      "render": {
+        "text": "前端渲染与事件回传\n保存模板版本及映射",
+        "x": 750,
+        "y": 1090,
+        "kind": "store"
+      }
+    },
+    "edges": [
+      {
+        "a": "i",
+        "b": "profile",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "profile",
+        "b": "check",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "check",
+        "b": "ask",
+        "label": "否",
+        "start": "E",
+        "end": "W",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "check",
+        "b": "spec",
+        "label": "是",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "spec",
+        "b": "v",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "v",
+        "b": "repair",
+        "label": "否",
+        "start": "W",
+        "end": "E",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "repair",
+        "b": "spec",
+        "label": "可重试",
+        "start": "N",
+        "end": "W",
+        "via": [
+          [
+            260,
+            710
+          ]
+        ],
+        "labelxy": [
+          250,
+          790
+        ]
+      },
+      {
+        "a": "repair",
+        "b": "stop",
+        "label": "超限",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "v",
+        "b": "render",
+        "label": "是",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      }
+    ],
+    "height": 1180
+  },
+  {
+    "nodes": {
+      "d": {
+        "text": "已发布数据及质量摘要\n目标：统计／分群／预测",
+        "x": 750,
+        "y": 80,
+        "kind": "io"
+      },
+      "s": {
+        "text": "月度能源／年度贸易\nSQL统计与结构比较",
+        "x": 260,
+        "y": 295,
+        "kind": "step"
+      },
+      "c": {
+        "text": "区域或站点特征矩阵\nscikit-learn聚类",
+        "x": 750,
+        "y": 295,
+        "kind": "step"
+      },
+      "t": {
+        "text": "连续、等间隔目标序列\n基线＋TimesFM候选",
+        "x": 1240,
+        "y": 295,
+        "kind": "step"
+      },
+      "qs": {
+        "text": "结果表与覆盖率\n排名、同比、分布",
+        "x": 260,
+        "y": 525,
+        "kind": "store"
+      },
+      "qc": {
+        "text": "标准化后分群\n标签、中心与诊断指标",
+        "x": 750,
+        "y": 525,
+        "kind": "store"
+      },
+      "qt": {
+        "text": "按历史截点回测\n预测、误差及区间检验",
+        "x": 1240,
+        "y": 525,
+        "kind": "store"
+      },
+      "out": {
+        "text": "统一ResultRef\n结果入库后交可视化或报告",
+        "x": 750,
+        "y": 760,
+        "kind": "store"
+      }
+    },
+    "edges": [
+      {
+        "a": "d",
+        "b": "s",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "d",
+        "b": "c",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "d",
+        "b": "t",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "s",
+        "b": "qs",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "c",
+        "b": "qc",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "t",
+        "b": "qt",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "qs",
+        "b": "out",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "qc",
+        "b": "out",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "qt",
+        "b": "out",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      }
+    ],
+    "height": 850
+  },
+  {
+    "nodes": {
+      "in": {
+        "text": "输入目标与DataRef\n读取已启用算法目录",
+        "x": 750,
+        "y": 80,
+        "kind": "io"
+      },
+      "v": {
+        "text": "输入与回测条件通过",
+        "x": 750,
+        "y": 285,
+        "kind": "decision"
+      },
+      "bad": {
+        "text": "返回缺口或请求澄清\n不强行插值或换模型",
+        "x": 1240,
+        "y": 285,
+        "kind": "error"
+      },
+      "plan": {
+        "text": "选择方法与基线\n冻结数据、参数、版本",
+        "x": 750,
+        "y": 505,
+        "kind": "step"
+      },
+      "job": {
+        "text": "提交任务并保存job_id\nWorker排队执行",
+        "x": 750,
+        "y": 705,
+        "kind": "step"
+      },
+      "done": {
+        "text": "任务成功完成",
+        "x": 750,
+        "y": 910,
+        "kind": "decision"
+      },
+      "fail": {
+        "text": "失败／取消／超时\n记录原因，有限重试",
+        "x": 1240,
+        "y": 910,
+        "kind": "error"
+      },
+      "out": {
+        "text": "核验结果并登记ResultRef\n通知总管和可视化",
+        "x": 750,
+        "y": 1130,
+        "kind": "store"
+      }
+    },
+    "edges": [
+      {
+        "a": "in",
+        "b": "v",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "v",
+        "b": "bad",
+        "label": "否",
+        "start": "E",
+        "end": "W",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "v",
+        "b": "plan",
+        "label": "是",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "plan",
+        "b": "job",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "job",
+        "b": "done",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "done",
+        "b": "fail",
+        "label": "否",
+        "start": "E",
+        "end": "W",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "done",
+        "b": "out",
+        "label": "是",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      }
+    ],
+    "height": 1220
+  },
+  {
+    "nodes": {
+      "a": {
+        "text": "总管安排分析目标\n附带当前项目修订",
+        "x": 260,
+        "y": 80,
+        "kind": "step"
+      },
+      "d": {
+        "text": "数据模块返回DataRef\n冻结查询与源版本",
+        "x": 750,
+        "y": 80,
+        "kind": "step"
+      },
+      "w": {
+        "text": "分析Agent提交任务\nWorker计算并保存结果",
+        "x": 1240,
+        "y": 80,
+        "kind": "step"
+      },
+      "r": {
+        "text": "结果服务登记ResultRef\n指标、产物、模型与来源",
+        "x": 1240,
+        "y": 315,
+        "kind": "store"
+      },
+      "v": {
+        "text": "可视化Agent读结果\n生成曲线／误差分布",
+        "x": 750,
+        "y": 315,
+        "kind": "step"
+      },
+      "k": {
+        "text": "知识Agent补充解释\n只引用可核验资料",
+        "x": 260,
+        "y": 315,
+        "kind": "step"
+      },
+      "u": {
+        "text": "小云汇报真实状态\n用户保存或下载报告",
+        "x": 750,
+        "y": 565,
+        "kind": "io"
+      }
+    },
+    "edges": [
+      {
+        "a": "a",
+        "b": "d",
+        "label": "",
+        "start": "E",
+        "end": "W",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "d",
+        "b": "w",
+        "label": "",
+        "start": "E",
+        "end": "W",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "w",
+        "b": "r",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "r",
+        "b": "v",
+        "label": "",
+        "start": "W",
+        "end": "E",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "v",
+        "b": "k",
+        "label": "",
+        "start": "W",
+        "end": "E",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "v",
+        "b": "u",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "k",
+        "b": "u",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      }
+    ],
+    "height": 650
+  },
+  {
+    "nodes": {
+      "voice": {
+        "text": "小云语音／文字／鼠标\n生成统一用户请求",
+        "x": 750,
+        "y": 80,
+        "kind": "io"
+      },
+      "intent": {
+        "text": "总管读取当前项目\n识别操作、分析或问答",
+        "x": 750,
+        "y": 280,
+        "kind": "step"
+      },
+      "amb": {
+        "text": "目标或页面影响不明确",
+        "x": 750,
+        "y": 480,
+        "kind": "decision"
+      },
+      "ask": {
+        "text": "明确提醒并等待选择\n重开当前页／旁边对比",
+        "x": 1240,
+        "y": 480,
+        "kind": "error"
+      },
+      "route": {
+        "text": "按意图分发子图\n数据／可视化／分析／知识",
+        "x": 750,
+        "y": 700,
+        "kind": "step"
+      },
+      "status": {
+        "text": "工具事件→前端状态\n完成后播报并保存项目",
+        "x": 750,
+        "y": 900,
+        "kind": "store"
+      }
+    },
+    "edges": [
+      {
+        "a": "voice",
+        "b": "intent",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "intent",
+        "b": "amb",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "amb",
+        "b": "ask",
+        "label": "是",
+        "start": "E",
+        "end": "W",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "amb",
+        "b": "route",
+        "label": "否",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "route",
+        "b": "status",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      }
+    ],
+    "height": 995
+  },
+  {
+    "nodes": {
+      "src": {
+        "text": "管理员提交审核资料\n官方网站／论文／内部说明",
+        "x": 260,
+        "y": 80,
+        "kind": "io"
+      },
+      "parse": {
+        "text": "解析正文与表格\n保留页码、章节和链接",
+        "x": 750,
+        "y": 80,
+        "kind": "step"
+      },
+      "chunk": {
+        "text": "按章节切分并去重\n绑定文档和版本",
+        "x": 1240,
+        "y": 80,
+        "kind": "step"
+      },
+      "embed": {
+        "text": "本地BGE-M3嵌入\n记录模型版本与向量",
+        "x": 1240,
+        "y": 310,
+        "kind": "step"
+      },
+      "index": {
+        "text": "PG文档表＋pgvector\n中文关键词索引",
+        "x": 750,
+        "y": 310,
+        "kind": "store"
+      },
+      "approve": {
+        "text": "管理员审核后发布\n未审资料不进入可信检索",
+        "x": 260,
+        "y": 310,
+        "kind": "store"
+      }
+    },
+    "edges": [
+      {
+        "a": "src",
+        "b": "parse",
+        "label": "",
+        "start": "E",
+        "end": "W",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "parse",
+        "b": "chunk",
+        "label": "",
+        "start": "E",
+        "end": "W",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "chunk",
+        "b": "embed",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "embed",
+        "b": "index",
+        "label": "",
+        "start": "W",
+        "end": "E",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "index",
+        "b": "approve",
+        "label": "",
+        "start": "W",
+        "end": "E",
+        "via": null,
+        "labelxy": null
+      }
+    ],
+    "height": 420
+  },
+  {
+    "nodes": {
+      "q": {
+        "text": "问题＋项目上下文\n判断概念问题或数值查询",
+        "x": 750,
+        "y": 80,
+        "kind": "io"
+      },
+      "value": {
+        "text": "数据Agent／查询服务\n读取真实数值及来源",
+        "x": 260,
+        "y": 80,
+        "kind": "step"
+      },
+      "r": {
+        "text": "审核库混合检索\n向量＋关键词，融合去重",
+        "x": 750,
+        "y": 275,
+        "kind": "step"
+      },
+      "enough": {
+        "text": "证据足够且一致",
+        "x": 750,
+        "y": 480,
+        "kind": "decision"
+      },
+      "web": {
+        "text": "指定官网／论文检索\nTavily搜索＋原文提取",
+        "x": 1240,
+        "y": 480,
+        "kind": "step"
+      },
+      "verify": {
+        "text": "核对作者、日期和原文\n不符白名单则拒收",
+        "x": 1240,
+        "y": 700,
+        "kind": "step"
+      },
+      "answer": {
+        "text": "逐项核对引文后回答\n不足则说明未找到依据",
+        "x": 750,
+        "y": 915,
+        "kind": "io"
+      },
+      "save": {
+        "text": "保存回答与证据引用\n外部内容标为未审核",
+        "x": 750,
+        "y": 1100,
+        "kind": "store"
+      }
+    },
+    "edges": [
+      {
+        "a": "q",
+        "b": "value",
+        "label": "数值",
+        "start": "W",
+        "end": "E",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "value",
+        "b": "answer",
+        "label": "",
+        "start": "S",
+        "end": "W",
+        "via": [
+          [
+            260,
+            915
+          ]
+        ],
+        "labelxy": null
+      },
+      {
+        "a": "q",
+        "b": "r",
+        "label": "概念",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "r",
+        "b": "enough",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "enough",
+        "b": "web",
+        "label": "否",
+        "start": "E",
+        "end": "W",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "web",
+        "b": "verify",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "verify",
+        "b": "answer",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "enough",
+        "b": "answer",
+        "label": "是",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "answer",
+        "b": "save",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      }
+    ],
+    "height": 1190
+  },
+  {
+    "nodes": {
+      "open": {
+        "text": "打开已保存项目\n读取原数据和模板版本",
+        "x": 750,
+        "y": 80,
+        "kind": "io"
+      },
+      "new": {
+        "text": "检测到数据有新版本\n提示可主动更新",
+        "x": 750,
+        "y": 270,
+        "kind": "step"
+      },
+      "choose": {
+        "text": "用户选择更新",
+        "x": 750,
+        "y": 475,
+        "kind": "decision"
+      },
+      "keep": {
+        "text": "保持原修订\n继续旧版项目和结果",
+        "x": 1240,
+        "y": 475,
+        "kind": "store"
+      },
+      "rev": {
+        "text": "生成新的项目修订\n重新校验视图与分析输入",
+        "x": 750,
+        "y": 690,
+        "kind": "step"
+      },
+      "save": {
+        "text": "保存修订与引用关系\n旧任务仍绑定旧输入",
+        "x": 750,
+        "y": 885,
+        "kind": "store"
+      }
+    },
+    "edges": [
+      {
+        "a": "open",
+        "b": "new",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "new",
+        "b": "choose",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "choose",
+        "b": "keep",
+        "label": "否",
+        "start": "E",
+        "end": "W",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "choose",
+        "b": "rev",
+        "label": "是",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "rev",
+        "b": "save",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      }
+    ],
+    "height": 980
+  },
+  {
+    "nodes": {
+      "web": {
+        "text": "浏览器 Next.js／React\n现有地球、BI、小云",
+        "x": 750,
+        "y": 80,
+        "kind": "io"
+      },
+      "api": {
+        "text": "FastAPI业务服务\n鉴权、目录、项目与工具",
+        "x": 750,
+        "y": 285,
+        "kind": "step"
+      },
+      "ag": {
+        "text": "LangGraph编排进程\n只传引用与受限配置",
+        "x": 260,
+        "y": 505,
+        "kind": "step"
+      },
+      "queue": {
+        "text": "PG任务队列\n持久化、幂等与状态",
+        "x": 750,
+        "y": 505,
+        "kind": "store"
+      },
+      "worker": {
+        "text": "CPU／GPU Worker\n重计算独立运行",
+        "x": 1240,
+        "y": 505,
+        "kind": "step"
+      },
+      "db": {
+        "text": "PostgreSQL与文件服务\n专题数据、检查点与结果",
+        "x": 750,
+        "y": 750,
+        "kind": "store"
+      }
+    },
+    "edges": [
+      {
+        "a": "web",
+        "b": "api",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "api",
+        "b": "ag",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "api",
+        "b": "queue",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "queue",
+        "b": "worker",
+        "label": "",
+        "start": "E",
+        "end": "W",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "ag",
+        "b": "db",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "queue",
+        "b": "db",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "worker",
+        "b": "db",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      }
+    ],
+    "height": 850
+  },
+  {
+    "nodes": {
+      "a": {
+        "text": "阶段1 核对基线与契约\n目录、权限、接口样例",
+        "x": 260,
+        "y": 80,
+        "kind": "step"
+      },
+      "b": {
+        "text": "阶段2 数据闭环\n导入→发布→查询→导出",
+        "x": 750,
+        "y": 80,
+        "kind": "step"
+      },
+      "c": {
+        "text": "阶段3 可视化闭环\n地球＋交互BI＋三维模板",
+        "x": 1240,
+        "y": 80,
+        "kind": "step"
+      },
+      "gate": {
+        "text": "各模块独立验证\n未通过则定位修正",
+        "x": 750,
+        "y": 325,
+        "kind": "step"
+      }
+    },
+    "edges": [
+      {
+        "a": "a",
+        "b": "b",
+        "label": "",
+        "start": "E",
+        "end": "W",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "b",
+        "b": "c",
+        "label": "",
+        "start": "E",
+        "end": "W",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "a",
+        "b": "gate",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "b",
+        "b": "gate",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "c",
+        "b": "gate",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      }
+    ],
+    "height": 430
+  },
+  {
+    "nodes": {
+      "a": {
+        "text": "阶段4 算法与回测\n基线＋聚类＋通用预测",
+        "x": 260,
+        "y": 80,
+        "kind": "step"
+      },
+      "b": {
+        "text": "阶段5 知识与小云\n引用回答＋真实任务调度",
+        "x": 750,
+        "y": 80,
+        "kind": "step"
+      },
+      "c": {
+        "text": "阶段6 端到端试运行\n私有项目、恢复与资源验证",
+        "x": 1240,
+        "y": 80,
+        "kind": "step"
+      },
+      "ready": {
+        "text": "形成可运行研究基线\n记录结果与后续计划",
+        "x": 750,
+        "y": 325,
+        "kind": "store"
+      }
+    },
+    "edges": [
+      {
+        "a": "a",
+        "b": "b",
+        "label": "",
+        "start": "E",
+        "end": "W",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "b",
+        "b": "c",
+        "label": "",
+        "start": "E",
+        "end": "W",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "a",
+        "b": "ready",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "b",
+        "b": "ready",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      },
+      {
+        "a": "c",
+        "b": "ready",
+        "label": "",
+        "start": "S",
+        "end": "N",
+        "via": null,
+        "labelxy": null
+      }
+    ],
+    "height": 420
+  }
+]
