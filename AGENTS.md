@@ -4,10 +4,22 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
-# Website Reverse-Engineer Template
+# OpenGridWorks
 
 ## What This Is
-A reusable template for reverse-engineering any website into a clean, modern Next.js codebase using AI coding agents. The Next.js + shadcn/ui + Tailwind v4 base is pre-scaffolded — just run `/clone-website <url1> [<url2> ...]`.
+OpenGridWorks 由网站复刻模板起步，现基于已有网站建设多源异构数据可视化与智能分析平台。
+
+## 当前改进方向
+
+- 以项目根目录的 [技术方案 V11](./TECHNICAL_PROPOSAL_V11_2026-09-28%20%281%29.docx) 为架构、实施和验收依据。沿用现有 Next.js 前端和 PostgreSQL，保持气象、电力、碳三个地球视图的渲染样式，后续专题通过统一的地球适配接口接入。
+- 围绕数据查询、交互可视化、统计分析与预测、知识问答四类能力开展开发。按项目保存筛选条件、图表配置、分析结果和证据引用，使结果可追溯到数据版本和原始出处。
+- 按 V11 第 8 节依次推进基线、数据、可视化、算法、知识与调度、交互试运行六个阶段。各阶段先用固定输入验证，再接入真实数据，按对应的验收标准检查。方案中的待决事项在对应阶段核实。
+- 改进前的源码基线保存在 Git 标签 `pre-proposal-v11-20261107`，对应提交 `25b3698`。
+
+## GitHub 更新要求
+
+- 每次完成项目更新（包括代码、配置和文档），运行与变更范围相符的检查，提交本次变更并推送到 GitHub 远端 `origin` 的对应分支。交付时核对远端已包含提交，并报告分支与提交号。若推送失败，保留本地提交并说明具体原因。
+- 暂存范围限于本次任务涉及的文件。密钥、数据库备份、未经授权的数据和本地临时文件保留在适当的本地或受控存储中。
 
 ## Tech Stack
 - **Framework:** Next.js 16 (App Router, React 19, TypeScript strict)
@@ -30,7 +42,7 @@ A reusable template for reverse-engineering any website into a clean, modern Nex
 - 2-space indentation
 - Responsive: mobile-first
 
-## Design Principles
+## Design Principles for Website Emulation
 - **Pixel-perfect emulation** — match the target's spacing, colors, typography exactly
 - **No personal aesthetic changes during emulation phase** — match 1:1 first, customize later
 - **Real content** — use actual text and assets from the target site, not placeholders
