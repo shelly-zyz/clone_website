@@ -42,4 +42,13 @@ V11 第 1.5 节规定模块通过 `DataRef` 交接。第 2.4–2.7 节规定数�
 - `/api/data/vector-tiles/postgis/{z}/{x}/{y}.pbf` 读取 PostGIS 动态瓦片。当前图层 `osm_power_points` 使用现有 OpenStreetMap 电力点，范围为 7 至 15 级，每瓦片最多 5,000 个点。更新源表后执行 `REFRESH MATERIALIZED VIEW CONCURRENTLY derived.osm_power_point`。调用地图时显示 OpenStreetMap 署名。
 - 查询结果保留 V11 的 `dataset_id`、`version`、`query_hash`、字段、单位、时间范围与质量信息。本期项目结果为限行内联数据，`artifact_uri` 为 `null`。语义 embedding 索引、Wren MDL、SQLGlot、SeaweedFS Parquet 与其他专题的定时源更新属于后续接入。
 
+## 可视化交接
+
+`GET /api/visualization` 返回当前可用图表。对已有的项目查询结果，调用 `POST /api/visualization`，沿用数据服务的 Bearer 授权与 `X-Data-Project-Key`。
+
+- 固定模板用 `{"action":"render","project_id":"<项目 UUID>","result_id":"<结果 UUID>","chart":"line"}`，也支持 `bar`，无需模型。
+- 自然语言用 `{"action":"ask","project_id":"<项目 UUID>","result_id":"<结果 UUID>","instruction":"请用柱状图比较各月"}`。Pi 只选择图表模板，由同一个服务从授权项目读取结果并调用本机 `mcp-echarts`。
+
+响应按 V11 的 `VisualizationSpec` 提供模板版本、原始 `DataRef`、字段映射、ECharts `options` 和预留的事件列表。MCP 只接收时间标签和有效观测值。服务核对 MCP 的图表类型和点位数据，再恢复原查询中的缺测位置。MCP 失败时返回错误，调用方可重试。该接口目前供业务调用方使用，地图中的小云尚未分派可视化请求。
+
 ![三个地球专题的 Pi 实测查询与 DataRef](pr-evidence/v11-data-agent-metrics.png)
