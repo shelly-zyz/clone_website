@@ -3,6 +3,7 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import maplibregl, {
   type ExpressionSpecification,
@@ -4093,6 +4094,9 @@ function NavRail({
       >
         <Leaf size={18} />
       </button>
+      <Link className="og-nav-item" href="/energy" aria-label="能源智能体工作台" title="能源智能体工作台">
+        <Activity size={18} />
+      </Link>
     </nav>
   );
 }
