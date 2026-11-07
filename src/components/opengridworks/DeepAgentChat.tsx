@@ -34,7 +34,10 @@ export function DeepAgentChat() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([starterMessage]);
   const [input, setInput] = useState("");
-  const [threadId, setThreadId] = useState<string | null>(null);
+  const [token, setToken] = useState("");
+  const [needsToken, setNeedsToken] = useState(false);
+  const [threadId, setThreadId] = useState<string | null>(() =>
+    typeof window === "undefined" ? null : window.sessionStorage.getItem("og-map-assistant-thread"));
   const [sending, setSending] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
 
@@ -62,17 +65,23 @@ export function DeepAgentChat() {
     try {
       const response = await fetch("/api/deepagent", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...(token.trim() ? { Authorization: `Bearer ${token.trim()}` } : {}) },
         body: JSON.stringify({ message: question, threadId }),
       });
       const payload = await response.json() as DeepAgentResponse;
 
       if (!response.ok) {
+        if (response.status === 401) {
+          setNeedsToken(true);
+          setInput(question);
+        }
         const detail = [payload.error, payload.hint].filter(Boolean).join("\n");
         throw new Error(detail || "DeepAgent 暂时不可用。");
       }
 
       setThreadId(payload.threadId ?? threadId);
+      setNeedsToken(false);
+      if (payload.threadId) window.sessionStorage.setItem("og-map-assistant-thread", payload.threadId);
       setMessages((items) => [
         ...items,
         {
@@ -132,6 +141,13 @@ export function DeepAgentChat() {
               </div>
             ) : null}
           </div>
+          {needsToken && (
+            <label className="grid gap-1 px-3 py-2 text-sm">
+              服务访问令牌
+              <input type="password" autoComplete="off" value={token} onChange={(event) => setToken(event.target.value)}
+                className="rounded border px-2 py-1" />
+            </label>
+          )}
           <form className="og-deepagent-form" onSubmit={sendMessage}>
             <textarea
               aria-label="输入给 DeepAgent 的问题"

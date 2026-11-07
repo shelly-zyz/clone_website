@@ -94,6 +94,12 @@ export async function queryData(query: DataQuery) {
     const metric = entry.metrics.find(({ metric_code }) => metric_code === (query.metric_code ?? entry.metric.metric_code));
     if (!metric) throw new DataAgentError("INVALID_METRIC", "该指标未在所选专题和版本发布，或当前未通过审核。");
     const entity = query.topic === "power" ? query.region_code : "global";
+    if (query.topic === "power" && entity !== "000000000000") {
+      const region = await client.query(`
+        SELECT 1 FROM standard.std_data_agent_fact
+        WHERE topic_id = 'power' AND dataset_version_id = $1 AND entity_code = $2 LIMIT 1`, [version.id, entity]);
+      if (!region.rowCount) throw new DataAgentError("INVALID_REGION", "该版本中没有此地区编码。");
+    }
     const seriesCodes: readonly string[] = metric.series_codes ?? legacySeries[query.topic];
     const series = (query.topic === "power" ? query.product : undefined) ?? seriesCodes[0];
     if (!seriesCodes.includes(series)) throw new DataAgentError("INVALID_SERIES", "该指标在所选版本中没有发布此产品序列。");

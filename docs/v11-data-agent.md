@@ -7,6 +7,8 @@ V11 第 1.5 节规定模块通过 `DataRef` 交接。第 2.4–2.7 节规定数�
 - 复用 Greensystem 数据 Agent 的 Pi 工具循环、目录优先、每轮调用上限和 PostgreSQL 只读事务。自然语言入口按专题限定工具，模型只提供经 JSON Schema 检查的筛选条件。
 - 发布脚本把数据写入按专题分区的标准事实表。每个发布版本保存全部审核指标的口径、单位、可用序列及来源指纹。切换当前版本时保留历史版本。查询回传的 `query` 可以按原版本复现。
 - 查询区分空结果、来源缺测和真实零值。`green_agent_ro` 读取目录、语义指标和发布事实，查询不触发问答候选写入。
+- 项目 Agent 采用 Pi 运行时。问数每轮从 PostgreSQL 加载最近四条问题和最后一份已确认的查询条件。批次清洗、发布和审核由程序及独立数据库角色负责。
+- 地图通用助手保留 `/api/deepagent` 入口并使用 Pi。旧实现保存在 `deepagent/`，新会话最多向模型加载最近四轮对话。
 
 | 专题 | 查询范围 | 口径 |
 | --- | --- | --- |
@@ -20,11 +22,23 @@ V11 第 1.5 节规定模块通过 `DataRef` 交接。第 2.4–2.7 节规定数�
 
 ## 复现
 
-1. 在完成 `scripts/v11-schema-baseline.sql` 的 `zyz` 库中，以 `zyz` 执行 `scripts/v11-data-agent-schema.sql`，升级 API 服务，再执行 `scripts/v11-data-agent-publish.sql`。旧服务需要先升级才能正确读取含多个指标的当前版本。发布脚本可以重复执行。
+1. 在完成 `scripts/v11-schema-baseline.sql` 的 `zyz` 库中，以管理员执行 `scripts/v11-data-agent-extensions.sql`。宿主先安装与 PostgreSQL 主版本匹配的扩展文件，并为 TimescaleDB 配置 `shared_preload_libraries`。再以 `zyz` 依次执行 `v11-data-agent-schema.sql`、`v11-data-agent-nbs.sql`、`v11-data-agent-refresh-log.sql`、`v11-data-agent-context.sql` 和 `v11-data-agent-tiles.sql`，文件都在 `scripts/` 下。升级 API 服务后执行 `v11-data-agent-publish.sql` 发布已有源表。
 2. 在服务端配置 `DATA_AGENT_DATABASE_URL`。生产环境给 JSON 和 MCP 客户端配置同一个服务端 Bearer token。自然语言入口另需配置 `DATA_AGENT_PI_ENABLED=true` 与 `DEEPSEEK_API_KEY`。
-3. `GET /api/data-agent` 读取当前目录。`POST /api/data-agent` 接受 `catalog`、`query` 或 `ask` 操作。Streamable HTTP MCP 路径为 `/api/mcp/data-agent`，提供 `list_published_catalog` 和 `query_published_data`。两种接口使用同一个查询执行器。
-4. 运行 `node scripts/verify-v11-data-agent.mjs` 验证三个专题。加 `--pi` 验证自然语言工具调用。
+3. `GET /api/data-agent` 读取当前目录。`POST /api/data-agent` 接受 `catalog`、`query`、`ask` 和会话操作。Streamable HTTP MCP 路径为 `/api/mcp/data-agent`，提供 `list_published_catalog`、`query_published_data` 和 `resolve_project_result`。
+4. 运行 `node scripts/verify-v11-data-agent.mjs` 验证三个专题。加 `--pi` 验证自然语言工具调用，加 `--sessions` 验证追问、会话恢复和业务取数。
 
-查询响应保留 V11 的 `dataset_id`、`version`、`query_hash`、字段、单位、时间范围与质量信息。首批结果为有行数上限的内联数据，`artifact_uri` 为 `null`。Wren MDL、SQLGlot 校验、pgvector 检索、FastAPI 和 SeaweedFS Parquet 产物属于后续实现。
+## 国家统计局更新和审核
+
+服务器上的 WSL cron 每两小时扫描一次国家统计局发布索引。脚本提取全国月报 13 项观测并保存原文哈希、原文、结构化值和校验结果。现有国家数据月表继续提供历史和省级序列。新闻发布表只补充实际发布的全国报告期，1–2 月合报需要单独处理。
+
+新增报告期通过校验后自动发布。已有报告期修订或与上年同月相比出现大幅波动的批次进入复核。`/data-review` 显示来源、现值、新值和审核状态。解析失败或越界数据留在待审列表，可驳回并等待合格批次。发布在同一事务内更新事实、当前版本和批次状态。重复内容复用原批次，历史版本保持可读。调度检查记录写入 TimescaleDB 超表。
+
+部署 worker 时用仅具备 `green_agent_ingest` 成员权限的独立登录，在受限的 `worker.env` 配置连接。把 `refresh-v11-nbs.mjs` 和 `run-v11-nbs-scheduled.sh` 放在同一服务目录，安装锁定的 `pg` 依赖并配置 `runtime/bin/node`。WSL 运行期间由 cron 执行。审核 API 另用 `green_agent_review` 连接和独立的 `DATA_AGENT_REVIEW_TOKEN`。DataGrip 可用于查看原表和进一步核验。
+
+## 项目、结果和瓦片
+
+- `create_project` 返回项目编号与访问密钥。后续 `create_session`、`get_session`、`resolve_result` 和带 `session` 的 `ask` 用 `X-Data-Project-Key` 提供该密钥。状态连接使用 `green_agent_context`。会话按修订号写入，复用上次查询条件的追问默认固定到上次版本。保存结果可由 HTTP 或 MCP 读取，项目密钥由调用方保管。
+- `/api/data/vector-tiles/postgis/{z}/{x}/{y}.pbf` 读取 PostGIS 动态瓦片。当前图层 `osm_power_points` 使用现有 OpenStreetMap 电力点，范围为 7 至 15 级，每瓦片最多 5,000 个点。更新源表后执行 `REFRESH MATERIALIZED VIEW CONCURRENTLY derived.osm_power_point`。调用地图时显示 OpenStreetMap 署名。
+- 查询结果保留 V11 的 `dataset_id`、`version`、`query_hash`、字段、单位、时间范围与质量信息。本期项目结果为限行内联数据，`artifact_uri` 为 `null`。语义 embedding 索引、Wren MDL、SQLGlot、SeaweedFS Parquet 与其他专题的定时源更新属于后续接入。
 
 ![三个地球专题的 Pi 实测查询与 DataRef](pr-evidence/v11-data-agent-metrics.png)

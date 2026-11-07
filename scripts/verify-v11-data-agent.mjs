@@ -7,9 +7,13 @@ const token = process.env.DATA_AGENT_TOKEN;
 const authorization = token ? { Authorization: `Bearer ${token}` } : {};
 
 async function run(body, status = 200) {
+  return runWithKey(body, status);
+}
+
+async function runWithKey(body, status, projectKey) {
   const response = await fetch(new URL("/api/data-agent", base), {
     method: "POST",
-    headers: { ...authorization, "Content-Type": "application/json" },
+    headers: { ...authorization, "Content-Type": "application/json", ...(projectKey ? { "X-Data-Project-Key": projectKey } : {}) },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(35000),
   });
@@ -43,6 +47,8 @@ const explicitDefault = await run({ action: "query", query: { ...powerQuery, met
 assert.deepEqual(explicitDefault, power);
 await run({ action: "query", query: { topic: "carbon", version: power.data_ref.version } }, 404);
 await run({ action: "query", query: { topic: "power", sql: "drop table anything" } }, 400);
+await run({ action: "query", query: { topic: "power", start_date: "0000-01-01" } }, 400);
+await run({ action: "query", query: { topic: "power", region_code: "999999999999" } }, 422);
 const empty = await run({ action: "query", query: { topic: "carbon", end_date: "1900-01-01" } });
 assert.equal(empty.status, "empty");
 assert.deepEqual(empty.rows, []);
@@ -81,13 +87,63 @@ const mcp = new Client({ name: "verify-v11-data-agent", version: "1.0.0" });
 try {
   await mcp.connect(new StreamableHTTPClientTransport(new URL("/api/mcp/data-agent", base), { requestInit: { headers: authorization } }));
   const tools = await mcp.listTools();
-  assert.deepEqual(tools.tools.map(({ name }) => name).sort(), ["list_published_catalog", "query_published_data"]);
+  assert.deepEqual(tools.tools.map(({ name }) => name).sort(), ["list_published_catalog", "query_published_data", "resolve_project_result"]);
   const directory = await mcp.callTool({ name: "list_published_catalog", arguments: {} });
   assert.deepEqual(directory.structuredContent, catalog);
   const result = await mcp.callTool({ name: "query_published_data", arguments: { query: samples[2][0] } });
   assert.deepEqual(result.structuredContent, results[2]);
+  const badArguments = await mcp.callTool({ name: "list_published_catalog", arguments: { unknown: true } });
+  assert.equal(badArguments.isError, true);
 } finally {
   await mcp.close();
+}
+
+if (process.argv.includes("--sessions")) {
+  const project = await run({ action: "create_project", topic: "power", name: "V11 问数验收" });
+  const key = project.project_key;
+  const projectId = project.project_id;
+  const session = await runWithKey({ action: "create_session", project_id: projectId }, 200, key);
+  const scope = { project_id: projectId, session_id: session.session_id, revision: 0 };
+  const ask = (question, revision) => ({ action: "ask", topic: "power", question, session: { ...scope, revision } });
+  const first = await runWithKey(ask("查国家统计局 2025 年 3 月全国发电量本期值。", 0), 200, key);
+  assert.equal(first.status, "ok");
+  assert.equal(first.revision, 1);
+  assert.deepEqual(first.rows.map(({ value }) => value), ["7780.2"]);
+  const second = await runWithKey(ask("把上一条的地区换成湖北，其他条件保持一样。", 1), 200, key);
+  assert.equal(second.status, "ok");
+  assert.equal(second.revision, 2);
+  assert.equal(second.query.region_code, "420000000000");
+  assert.equal(second.data_ref.version, first.data_ref.version);
+  assert.equal(second.query.start_date, first.query.start_date);
+  assert.equal(second.metric.metric_code, first.metric.metric_code);
+  await runWithKey(ask("重复上一条。", 1), 409, key);
+
+  const getSession = { action: "get_session", project_id: projectId, session_id: scope.session_id };
+  const restored = await runWithKey(getSession, 200, key);
+  assert.equal(restored.summary.region_code, "420000000000");
+  assert.equal(restored.turns.length, 2);
+  const ref = { project_id: projectId, result_id: second.result_id };
+  const resolved = await runWithKey({ action: "resolve_result", ...ref }, 200, key);
+  assert.deepEqual(resolved.data_ref, second.data_ref);
+  assert.deepEqual(resolved.rows, second.rows);
+  await run({ action: "resolve_result", ...ref }, 404);
+  await run(getSession, 404);
+
+  const other = await runWithKey({ action: "create_session", project_id: projectId }, 200, key);
+  const otherState = await runWithKey({ ...getSession, session_id: other.session_id }, 200, key);
+  assert.equal(otherState.summary, null);
+  assert.deepEqual(otherState.turns, []);
+  const business = new Client({ name: "verify-project-result", version: "1.0.0" });
+  try {
+    await business.connect(new StreamableHTTPClientTransport(new URL("/api/mcp/data-agent", base), {
+      requestInit: { headers: { ...authorization, "X-Data-Project-Key": key } },
+    }));
+    const result = await business.callTool({ name: "resolve_project_result", arguments: ref });
+    assert.deepEqual(result.structuredContent, resolved);
+  } finally {
+    await business.close();
+  }
+  console.log("PASS: persisted Pi follow-up, session isolation, revision conflict and MCP result resolution");
 }
 
 for (const dataset of catalog.datasets) {

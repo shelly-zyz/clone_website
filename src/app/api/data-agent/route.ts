@@ -2,6 +2,7 @@ import { dataRequestSchema, topicSchema } from "@/lib/data-agent/contracts";
 import { authorizeDataAgent, dataAgentErrorResponse } from "@/lib/data-agent/http.server";
 import { askDataAgent } from "@/lib/data-agent/pi.server";
 import { listDataCatalog, queryData } from "@/lib/data-agent/query.server";
+import { askDataSession, createDataProject, createDataSession, readDataSession, resolveDataResult } from "@/lib/data-agent/state.server";
 
 export const runtime = "nodejs";
 
@@ -31,11 +32,20 @@ export async function POST(request: Request) {
   if (!input.success) return Response.json({ code: "INVALID_REQUEST", issues: input.error.issues }, { status: 400 });
 
   const data = input.data;
+  const key = request.headers.get("x-data-project-key");
   try {
-    const result = data.action === "catalog" ? await listDataCatalog(data.topic)
-      : data.action === "query" ? await queryData(data.query)
-        : await askDataAgent(data.topic, data.question, request.signal);
-    return Response.json(result, { headers: { "Cache-Control": "no-store" } });
+    const reply = (result: object) => Response.json(result, { headers: { "Cache-Control": "no-store" } });
+    switch (data.action) {
+      case "catalog": return reply(await listDataCatalog(data.topic));
+      case "query": return reply(await queryData(data.query));
+      case "create_project": return reply(await createDataProject(data.topic, data.name));
+      case "create_session": return reply(await createDataSession(data.project_id, key));
+      case "get_session": return reply(await readDataSession(data.project_id, data.session_id, key));
+      case "resolve_result": return reply(await resolveDataResult(data.project_id, data.result_id, key));
+      case "ask": return reply(data.session
+        ? await askDataSession(data.topic, data.question, data.session, key, request.signal)
+        : await askDataAgent(data.topic, data.question, request.signal));
+    }
   } catch (error) {
     return dataAgentErrorResponse(error);
   }

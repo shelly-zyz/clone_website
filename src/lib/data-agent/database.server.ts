@@ -5,8 +5,41 @@ import { Pool, type PoolClient } from "pg";
 const globalForDataAgent = globalThis as typeof globalThis & { dataAgentPool?: Pool };
 
 export class DataAgentError extends Error {
-  constructor(readonly code: "NOT_CONFIGURED" | "VERSION_NOT_FOUND" | "INVALID_METRIC" | "INVALID_SERIES" | "BUSY", message: string) {
+  constructor(readonly code: "NOT_CONFIGURED" | "VERSION_NOT_FOUND" | "INVALID_METRIC" | "INVALID_SERIES" |
+    "INVALID_REGION" | "PROJECT_NOT_FOUND" | "SESSION_CONFLICT" | "REVIEW_CONFLICT" | "BUSY", message: string) {
     super(message);
+  }
+}
+
+const writePools = new Map<string, Pool>();
+
+export async function runDataAgentWrite<T>(
+  role: "green_agent_context" | "green_agent_review",
+  run: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  const connectionString = (role === "green_agent_context"
+    ? process.env.DATA_AGENT_STATE_DATABASE_URL : process.env.DATA_AGENT_REVIEW_DATABASE_URL)?.trim();
+  if (!connectionString) throw new DataAgentError("NOT_CONFIGURED", "未配置此数据服务的数据库连接。");
+  let pool = writePools.get(role);
+  if (!pool) {
+    pool = new Pool({ connectionString, max: 3, connectionTimeoutMillis: 4000, idleTimeoutMillis: 15000 });
+    pool.on("error", () => console.warn("Data agent lost an idle write connection."));
+    writePools.set(role, pool);
+  }
+  const client = await pool.connect();
+  let discard: Error | undefined;
+  try {
+    await client.query("BEGIN");
+    await client.query(`SET LOCAL ROLE ${role}`);
+    await client.query("SET LOCAL search_path = pg_catalog; SET LOCAL statement_timeout = '20s'");
+    const result = await run(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    try { await client.query("ROLLBACK"); } catch { discard = new Error("Data agent transaction cleanup failed"); }
+    throw error;
+  } finally {
+    client.release(discard);
   }
 }
 

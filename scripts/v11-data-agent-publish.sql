@@ -113,6 +113,23 @@ JOIN (VALUES
   ON f.metric_code = indicators.source_metric AND f.product_code = ANY(indicators.products) AND f.unit = indicators.source_unit
 WHERE f.scope IN ('national', 'province');
 
+DO $$
+BEGIN
+  IF to_regclass('staging.nbs_release_facts') IS NOT NULL THEN
+    -- A full rebuild retains releases published by the incremental updater.
+    DELETE FROM data_agent_stage s
+    USING staging.nbs_release_facts f
+    WHERE f.status = 'published' AND (s.dataset_id, s.metric_code, s.entity_code, s.series_code, s.time_start) =
+      (f.dataset_id, f.metric_code, f.entity_code, f.series_code, f.time_start);
+    INSERT INTO data_agent_stage
+    SELECT DISTINCT ON (f.metric_code, f.series_code, f.time_start)
+      f.topic_id, f.dataset_id, f.metric_code, f.entity_code, f.series_code, f.time_start, f.issue_time, f.value, f.source_ref
+    FROM staging.nbs_release_facts f WHERE f.status = 'published'
+    ORDER BY f.metric_code, f.series_code, f.time_start, f.reviewed_at DESC, f.batch_id;
+  END IF;
+END;
+$$;
+
 INSERT INTO data_agent_stage
 SELECT 'carbon', 'carbon_graced_power', metrics.metric_code, 'global', 'Power', f.observed_on::timestamptz, NULL,
        metrics.value, jsonb_build_object('url', a.source_url, 'archive_sha256', a.archive_sha256,
