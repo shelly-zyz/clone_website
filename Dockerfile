@@ -16,6 +16,7 @@ WORKDIR /app
 
 # Copy package-related files first to leverage Docker's caching mechanism
 COPY package.json yarn.lock* package-lock.json* pnpm-lock.yaml* .npmrc* ./
+COPY vendor/xiaoyun-voice-1.0.0-beta.1-power-earth.3.tgz ./vendor/
 
 # Install project dependencies with frozen lockfile for reproducible builds
 RUN --mount=type=cache,target=/root/.npm \
@@ -99,6 +100,9 @@ RUN chown node:node .next
 # https://nextjs.org/docs/advanced-features/output-file-tracing
 COPY --from=builder --chown=node:node /app/.next/standalone ./
 COPY --from=builder --chown=node:node /app/.next/static ./.next/static
+# The analysis worker is run as a separate process against the same PostgreSQL
+# queue. Keep its small, standalone runtime in the image.
+COPY --from=builder --chown=node:node /app/scripts/analysis-models.py /app/scripts/run-analysis-worker.mjs /app/scripts/analysis-requirements.txt ./scripts/
 
 # If you want to persist the fetch cache generated during the build so that
 # cached responses are available immediately on startup, uncomment this line:

@@ -1,4 +1,6 @@
-# Deep Agents Template
+# Deep Agents Template（历史实现）
+
+当前网站的地图助手由 Next.js 的 `/api/deepagent` 提供，使用 Pi 运行时并在 PostgreSQL 保存会话。本目录保留旧版实现供查阅。
 
 Deployment template for a deep agent built with `create_deep_agent(...)`.
 
