@@ -16,13 +16,13 @@ function invalid(error: string) {
 export async function runAnalysisRequest(request: Request, key: string | null, signal: AbortSignal) {
   const projectId = request.project_id;
   await assertDataProject(projectId, key);
-  if (request.action === "create_session") return createAgentSession(projectId, "analysis");
+  if (request.action === "create_session") return await createAgentSession(projectId, "analysis");
   if (request.action === "get_job") {
-    const job = getAnalysisJob(projectId, request.job_id);
+    const job = await getAnalysisJob(projectId, request.job_id);
     if (!job) throw new DataAgentError("PROJECT_NOT_FOUND", "该项目没有此分析任务。");
     return job;
   }
-  const session = getAgentSession(projectId, request.session_id, "analysis");
+  const session = await getAgentSession(projectId, request.session_id, "analysis");
   if (!session) throw new DataAgentError("PROJECT_NOT_FOUND", "该项目没有此分析会话。");
   if (request.action === "get_session") return session;
   if (request.revision !== session.revision) throw new DataAgentError("SESSION_CONFLICT", "请刷新分析会话后重试。");
@@ -64,7 +64,7 @@ export async function runAnalysisRequest(request: Request, key: string | null, s
     : operation === "cluster" ? { operation, clusters: parsed.clusters ?? 3 } : { operation };
   if (predicting && valid < 8) return invalid("预测需要至少 8 条连续历史观测。请保存更长的时间范围。");
   signal.throwIfAborted();
-  const saved = advanceAgentSession(session, "analysis", { result_id: resultId, selection: plan },
+  const saved = await advanceAgentSession(session, "analysis", { result_id: resultId, selection: plan },
     { instruction, status: "queued", selection: plan },
     { plan, input: { observations, grain: metric.time_grain, unit: metric.unit, metric: metric.name, source_name: metric.source_name }, data_ref });
   if (saved.status === "conflict") throw new DataAgentError("SESSION_CONFLICT", "分析会话已有新消息，请刷新后重试。");

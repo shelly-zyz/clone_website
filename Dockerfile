@@ -100,9 +100,9 @@ RUN chown node:node .next
 # https://nextjs.org/docs/advanced-features/output-file-tracing
 COPY --from=builder --chown=node:node /app/.next/standalone ./
 COPY --from=builder --chown=node:node /app/.next/static ./.next/static
-# The analysis worker is run as a separate process with the same mounted
-# OGW_AGENT_STATE_DB file. Keep its small, standalone runtime in the image.
-COPY --from=builder --chown=node:node /app/scripts/analysis-models.py /app/scripts/analysis-worker-state.mjs /app/scripts/run-analysis-worker.mjs /app/scripts/analysis-requirements.txt ./scripts/
+# The analysis worker is run as a separate process against the same PostgreSQL
+# queue. Keep its small, standalone runtime in the image.
+COPY --from=builder --chown=node:node /app/scripts/analysis-models.py /app/scripts/run-analysis-worker.mjs /app/scripts/analysis-requirements.txt ./scripts/
 
 # If you want to persist the fetch cache generated during the build so that
 # cached responses are available immediately on startup, uncomment this line:

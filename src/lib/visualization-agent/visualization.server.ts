@@ -58,8 +58,8 @@ async function renderOptions(
 export async function visualizeResult(request: Request, projectKey: string | null, signal: AbortSignal) {
   if (request.action === "create_session" || request.action === "get_session") {
     await assertDataProject(request.project_id, projectKey);
-    if (request.action === "create_session") return createAgentSession(request.project_id, "visualization");
-    const session = getAgentSession(request.project_id, request.session_id, "visualization");
+    if (request.action === "create_session") return await createAgentSession(request.project_id, "visualization");
+    const session = await getAgentSession(request.project_id, request.session_id, "visualization");
     if (!session) throw new DataAgentError("PROJECT_NOT_FOUND", "该项目没有此可视化会话。");
     return session;
   }
@@ -71,7 +71,7 @@ export async function visualizeResult(request: Request, projectKey: string | nul
   active += 1;
   try {
     if (request.action === "ask_session") await assertDataProject(request.project_id, projectKey);
-    const session = request.action === "ask_session" ? getAgentSession(request.project_id, request.session_id, "visualization") : undefined;
+    const session = request.action === "ask_session" ? await getAgentSession(request.project_id, request.session_id, "visualization") : undefined;
     if (request.action === "ask_session" && (!session || session.revision !== request.revision)) {
       throw new DataAgentError("SESSION_CONFLICT", "请刷新可视化会话后重试。");
     }
@@ -111,7 +111,7 @@ export async function visualizeResult(request: Request, projectKey: string | nul
     const spec = await renderOptions(chart, renderer, points, title, metric.unit, timeAxis, signal);
     signal.throwIfAborted();
     const saved = session && request.action === "ask_session"
-      ? advanceAgentSession(session, "visualization", { result_id: resultId, selection: { chart, renderer } },
+      ? await advanceAgentSession(session, "visualization", { result_id: resultId, selection: { chart, renderer } },
         { instruction: request.instruction, status: "ok", selection: { chart, renderer } })
       : undefined;
     if (saved?.status === "conflict") throw new DataAgentError("SESSION_CONFLICT", "可视化会话已有新消息，请刷新后重试。");

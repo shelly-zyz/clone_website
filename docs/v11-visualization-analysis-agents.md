@@ -44,18 +44,18 @@ Worker 使用固定、可追溯版本：StatsForecast `2.0.3`、TimesFM `3.0.2`�
 ```bash
 python3 -m venv /opt/opengridworks-analysis/venv
 /opt/opengridworks-analysis/venv/bin/pip install -r scripts/analysis-requirements.txt
-OGW_AGENT_STATE_DB=/var/lib/opengridworks/agent-state.sqlite \
+DATA_AGENT_INGEST_DATABASE_URL=postgresql://worker:password@host:5432/zyz \
 OGW_ANALYSIS_PYTHON=/opt/opengridworks-analysis/venv/bin/python \
 OGW_ANALYSIS_DEVICE=cuda npm run analysis:worker
 ```
 
-应用服务与 Worker 必须共享同一个 `OGW_AGENT_STATE_DB` 挂载卷。任务有 190 秒租约、最多两次尝试、队列上限 32；超时或 Worker 异常会明确标记失败，不会驱动 Pi 反复消耗 token。
+应用服务通过 `green_agent_context` 写入，Worker 通过 `green_agent_ingest` 从 PostgreSQL 的 `results.analysis_job` 抢占任务。任务有 190 秒租约、最多两次尝试、队列上限 32；超时或 Worker 异常会明确标记失败，不会驱动 Pi 反复消耗 token。
 
 ## 上下文与权限
 
 每个项目可创建多个独立的可视化/分析会话。会话保存数据结果引用、最后确认的图表/分析参数，以及最近四轮精简交互；更新使用 `revision` 乐观锁，避免并发追问互相覆盖。
 
-当前 `green_v11_web_context` 没有创建迁移表的权限，因此会话与任务队列存放在应用主机上、权限为 `0600` 的 SQLite 文件中；项目存在性与 DataRef 读取仍由 PostgreSQL 和数据库 Agent 的项目访问散列校验控制。取得 DDL 迁移权限后，应将 `agent_session`、`analysis_job` 迁回 PostgreSQL，并把 `OGW_AGENT_STATE_DB` 迁移为只读备份。
+会话持久化在 PostgreSQL `projects.agent_session`，异步任务持久化在 `results.analysis_job`。两张表都以 `projects.data_project` 外键约束项目归属；项目存在性、DataRef 读取和写入仍经过数据库 Agent 的访问散列校验。迁移由 `green_ddl` 执行 [`v11-business-agent-context.sql`](../scripts/v11-business-agent-context.sql)，网站运行角色不需要也不应拥有 DDL 权限。
 
 ## 验证记录
 

@@ -26,11 +26,13 @@ async function connectDataAgent(pool: Pool) {
 }
 
 export async function runDataAgentWrite<T>(
-  role: "green_agent_context" | "green_agent_review",
+  role: "green_agent_context" | "green_agent_review" | "green_agent_ingest",
   run: (client: PoolClient) => Promise<T>,
 ): Promise<T> {
   const connectionString = (role === "green_agent_context"
-    ? process.env.DATA_AGENT_STATE_DATABASE_URL : process.env.DATA_AGENT_REVIEW_DATABASE_URL)?.trim();
+    ? process.env.DATA_AGENT_STATE_DATABASE_URL
+    : role === "green_agent_review" ? process.env.DATA_AGENT_REVIEW_DATABASE_URL
+      : process.env.DATA_AGENT_INGEST_DATABASE_URL)?.trim();
   if (!connectionString) throw new DataAgentError("NOT_CONFIGURED", "未配置此数据服务的数据库连接。");
   let pool = writePools.get(role);
   if (!pool) {
