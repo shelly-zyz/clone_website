@@ -47,7 +47,7 @@ import {
   Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { DeepAgentChat } from "@/components/opengridworks/DeepAgentChat";
+import { XiaoyunAssistant } from "@/components/opengridworks/XiaoyunAssistant";
 import {
   buildCarbonHeatCollection,
   carbonColor,
@@ -6487,6 +6487,41 @@ export function MapAppShell() {
     setVisibleTechnologies((state) => ({ ...state, [key]: !state[key] }));
   };
 
+  const handleXiaoyunMapCommand = useCallback((message: string) => {
+    const command = message.trim().replace(/[。！!]+$/, "").replace(/\s/g, "");
+    const project = command.match(/^(?:请)?(?:切换到|切到|打开)(电源地球|气象地球|碳排放地球|碳地球)$/)?.[1];
+    if (project) {
+      const next = project === "电源地球" ? "power" : project === "气象地球" ? "weather" : "carbon";
+      if (next !== activeProject) switchProject(next);
+      return `已打开${project}。`;
+    }
+
+    const layer = command.match(/^(?:请)?(打开|显示|关闭|隐藏)风电图层$/)?.[1];
+    if (layer) {
+      const enabled = layer === "打开" || layer === "显示";
+      if (enabled && activeProject !== "power") switchProject("power");
+      setVisibleTechnologies((state) => ({ ...state, wind: enabled }));
+      return enabled ? "已打开电源地球的风电图层。" : "已关闭电源地球的风电图层。";
+    }
+
+    const place = command.match(/^(?:请)?(?:切换到|切到|定位到)([^，。！？,.!?]+?)(?:地图)?$/)?.[1];
+    if (!place) return null;
+    const target = regionTargets.find((item) => item.label === place);
+    if (target) {
+      flyToRegion(target);
+      return `已将地图定位到${place}。`;
+    }
+    if (place === "广东" || place === "广东省") {
+      requestFocus([113.26, 23.13], 6.2, 0, 0);
+      return "已将地图定位到广东。";
+    }
+    if (place === "湖北" || place === "湖北省") {
+      requestFocus([114.30, 30.59], 6.2, 0, 0);
+      return "已将地图定位到湖北。";
+    }
+    return null;
+  }, [activeProject, flyToRegion, requestFocus, switchProject]);
+
   const toggleTechnologyGroup = () => {
     const anyTechnologyVisible = technologies.some((item) => visibleTechnologies[item.key]);
     setVisibleTechnologies(anyTechnologyVisible ? hiddenTechnologyState() : technologyState());
@@ -6857,7 +6892,7 @@ export function MapAppShell() {
         </>
       ) : null}
       <HoverBubble tooltip={hoverTooltip} />
-      <DeepAgentChat />
+      <XiaoyunAssistant topic={activeProject === "weather" ? "meteo" : activeProject} onMapCommand={handleXiaoyunMapCommand} />
       <Toast message={toast} />
       {cinematic ? (
         <div className="og-cinematic-banner">

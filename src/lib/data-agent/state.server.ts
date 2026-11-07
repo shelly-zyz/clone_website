@@ -4,6 +4,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { dataQuerySchema, type Topic, type SessionScope } from "./contracts";
 import { DataAgentError, runDataAgentWrite } from "./database.server";
 import { askDataAgent } from "./pi.server";
+import type { queryData } from "./query.server";
 
 const contextWriter = "green_agent_context";
 const digest = (key: string) => createHash("sha256").update(key).digest("hex");
@@ -40,8 +41,11 @@ export async function createDataSession(projectId: string, key: string | null) {
 export async function readDataSession(projectId: string, sessionId: string, key: string | null) {
   const hash = projectHash(key);
   return runDataAgentWrite(contextWriter, async (client) => {
-    const { rows: [session] } = await client.query<{ topic: Topic; revision: number; summary: unknown }>(`
-      SELECT p.topic, s.revision, s.summary FROM projects.data_session s
+    const { rows: [session] } = await client.query<{ topic: Topic; revision: number; summary: unknown; last_result_id: string | null }>(`
+      SELECT p.topic, s.revision, s.summary, (
+        SELECT t.result_id FROM projects.data_session_turn t
+        WHERE t.session_id = s.id AND t.result_id IS NOT NULL ORDER BY t.revision DESC LIMIT 1
+      ) AS last_result_id FROM projects.data_session s
       JOIN projects.data_project p ON p.id = s.project_id
       WHERE p.id = $1 AND s.id = $2 AND p.access_hash = $3`, [projectId, sessionId, hash]);
     if (!session) throw new DataAgentError("PROJECT_NOT_FOUND", "无法访问此问数会话。");
@@ -55,7 +59,7 @@ export async function readDataSession(projectId: string, sessionId: string, key:
 export async function resolveDataResult(projectId: string, resultId: string, key: string | null) {
   const hash = projectHash(key);
   return runDataAgentWrite(contextWriter, async (client) => {
-    const { rows: [result] } = await client.query<{ response: object }>(`
+    const { rows: [result] } = await client.query<{ response: Awaited<ReturnType<typeof queryData>> }>(`
       SELECT r.response FROM results.data_query_result r JOIN projects.data_project p ON p.id = r.project_id
       WHERE p.id = $1 AND r.id = $2 AND p.access_hash = $3`, [projectId, resultId, hash]);
     if (!result) throw new DataAgentError("PROJECT_NOT_FOUND", "无法访问此查询结果。");
@@ -63,9 +67,11 @@ export async function resolveDataResult(projectId: string, resultId: string, key
   });
 }
 
-export async function askDataSession(topic: Topic, question: string, scope: SessionScope, key: string | null, signal: AbortSignal) {
+export async function askDataSession(
+  topic: Topic, question: string, scope: Omit<SessionScope, "revision"> & { revision?: number }, key: string | null, signal: AbortSignal,
+) {
   const session = await readDataSession(scope.project_id, scope.session_id, key);
-  if (session.topic !== topic || session.revision !== scope.revision) {
+  if (session.topic !== topic || (scope.revision !== undefined && session.revision !== scope.revision)) {
     throw new DataAgentError("SESSION_CONFLICT", "会话专题或修订号不匹配，请重新读取会话。");
   }
   const previous = dataQuerySchema.safeParse(session.summary);
@@ -79,7 +85,7 @@ export async function askDataSession(topic: Topic, question: string, scope: Sess
       UPDATE projects.data_session SET revision = revision + 1, summary = COALESCE($1::jsonb, summary)
       WHERE id = $2 AND project_id = $3 AND revision = $4 RETURNING revision`,
     ["query" in answer ? JSON.stringify({ ...answer.query, metric_code: answer.metric.metric_code }) : null,
-      scope.session_id, scope.project_id, scope.revision]);
+      scope.session_id, scope.project_id, session.revision]);
     const revision = lookup.rows[0]?.revision;
     if (revision === undefined) throw new DataAgentError("SESSION_CONFLICT", "会话已有新消息，请重新读取会话。");
     let resultId: string | null = null;

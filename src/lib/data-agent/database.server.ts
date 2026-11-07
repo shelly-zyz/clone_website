@@ -13,6 +13,18 @@ export class DataAgentError extends Error {
 
 const writePools = new Map<string, Pool>();
 
+async function connectDataAgent(pool: Pool) {
+  try {
+    return await pool.connect();
+  } catch (error) {
+    const code = error && typeof error === "object" && "code" in error ? error.code : null;
+    const disconnected = error instanceof Error && /connection (terminated|timeout)|timeout exceeded when trying to connect/i.test(error.message);
+    if (!disconnected && !["ECONNRESET", "ECONNREFUSED", "ETIMEDOUT"].includes(String(code))) throw error;
+    // Retry acquisition before BEGIN so no statement or write is replayed.
+    return pool.connect();
+  }
+}
+
 export async function runDataAgentWrite<T>(
   role: "green_agent_context" | "green_agent_review",
   run: (client: PoolClient) => Promise<T>,
@@ -26,7 +38,7 @@ export async function runDataAgentWrite<T>(
     pool.on("error", () => console.warn("Data agent lost an idle write connection."));
     writePools.set(role, pool);
   }
-  const client = await pool.connect();
+  const client = await connectDataAgent(pool);
   let discard: Error | undefined;
   try {
     await client.query("BEGIN");
@@ -52,7 +64,7 @@ export async function readDataAgent<T>(run: (client: PoolClient) => Promise<T>):
     pool.on("error", () => console.warn("Data agent lost an idle PostgreSQL connection."));
     globalForDataAgent.dataAgentPool = pool;
   }
-  const client = await globalForDataAgent.dataAgentPool.connect();
+  const client = await connectDataAgent(globalForDataAgent.dataAgentPool);
   let discard: Error | undefined;
   try {
     await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
