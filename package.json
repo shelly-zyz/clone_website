@@ -39,14 +39,17 @@
     "carbon:sync": "python scripts/sync-carbon-graced.py",
     "carbon:import": "node scripts/import-carbon-graced.mjs",
     "agent:climate-vre": "python scripts/build-climate-vre-data.py --input \"../data/VRE_gfdl-esm4_ssp126_2021_2060.mat\"",
+    "analysis:worker": "node scripts/run-analysis-worker.mjs",
     "check": "npm run lint && npm run typecheck && npm run build"
   },
   "dependencies": {
+    "@antv/g2": "5.4.8",
     "@base-ui/react": "^1.3.0",
     "@earendil-works/pi-agent-core": "1.5.0",
     "@earendil-works/pi-ai": "1.5.0",
     "@modelcontextprotocol/sdk": "1.32.2",
     "@types/d3-geo": "^3.1.0",
+    "@visactor/vchart": "2.2.1",
     "@xiaoyun/voice": "file:vendor/xiaoyun-voice-1.0.0-beta.1-power-earth.3.tgz",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -61,6 +64,7 @@
     "react-dom": "19.2.4",
     "shadcn": "^4.1.0",
     "tailwind-merge": "^3.5.0",
+    "three": "0.187.0",
     "tw-animate-css": "^1.4.0",
     "zod": "4.6.7"
   },
@@ -70,6 +74,7 @@
     "@types/pg": "^8.20.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/three": "0.185.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.1",
     "tailwindcss": "^4",

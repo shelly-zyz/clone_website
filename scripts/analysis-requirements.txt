@@ -1,0 +1,4 @@
+statsforecast==2.0.3
+scikit-learn==1.8.0
+timesfm[torch]==3.0.2
+chronos-forecasting==2.2.2

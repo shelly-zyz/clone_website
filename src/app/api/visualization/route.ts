@@ -1,6 +1,6 @@
 import { DataAgentError } from "@/lib/data-agent/database.server";
 import { authorizeDataAgent, dataAgentErrorResponse } from "@/lib/data-agent/http.server";
-import { chartTypes, visualizationRequestSchema } from "@/lib/visualization-agent/contracts";
+import { chartBackends, chartTypes, visualizationRequestSchema } from "@/lib/visualization-agent/contracts";
 import { visualizeResult } from "@/lib/visualization-agent/visualization.server";
 
 export const runtime = "nodejs";
@@ -8,7 +8,10 @@ export const runtime = "nodejs";
 export async function GET(request: Request) {
   const unauthorized = authorizeDataAgent(request);
   if (unauthorized) return unauthorized;
-  return Response.json({ renderer: "mcp-echarts", charts: chartTypes, actions: ["render", "ask"] });
+  return Response.json({
+    renderer: "mcp-echarts", chart_backends: chartBackends, charts: chartTypes, scenes: ["maplibre", "three"],
+    actions: ["render", "ask", "ask_session", "create_session", "get_session", "scene"],
+  });
 }
 
 export async function POST(request: Request) {
@@ -26,7 +29,8 @@ export async function POST(request: Request) {
 
   try {
     const reply = await visualizeResult(input.data, request.headers.get("x-data-project-key"), request.signal);
-    return Response.json(reply, { status: reply.status === "ok" ? 200 : 422, headers: { "Cache-Control": "no-store" } });
+    const status = "status" in reply && reply.status !== "ok" ? 422 : 200;
+    return Response.json(reply, { status, headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (error instanceof DataAgentError) return dataAgentErrorResponse(error);
     console.warn("Visualization request failed:", error instanceof Error ? error.message : "unknown error");

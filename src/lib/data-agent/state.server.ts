@@ -16,6 +16,15 @@ function projectHash(key: string | null) {
   return digest(key);
 }
 
+export async function assertDataProject(projectId: string, key: string | null) {
+  const hash = projectHash(key);
+  await runDataAgentWrite(contextWriter, async (client) => {
+    const { rowCount } = await client.query(
+      "SELECT 1 FROM projects.data_project WHERE id = $1 AND access_hash = $2", [projectId, hash]);
+    if (!rowCount) throw new DataAgentError("PROJECT_NOT_FOUND", "无法访问此数据项目。");
+  });
+}
+
 export async function createDataProject(topic: Topic, name: string) {
   const projectKey = randomBytes(32).toString("base64url");
   return runDataAgentWrite(contextWriter, async (client) => {
