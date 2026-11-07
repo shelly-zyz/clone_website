@@ -5,7 +5,7 @@ import { Pool, type PoolClient } from "pg";
 const globalForDataAgent = globalThis as typeof globalThis & { dataAgentPool?: Pool };
 
 export class DataAgentError extends Error {
-  constructor(readonly code: "NOT_CONFIGURED" | "VERSION_NOT_FOUND" | "BUSY", message: string) {
+  constructor(readonly code: "NOT_CONFIGURED" | "VERSION_NOT_FOUND" | "INVALID_METRIC" | "INVALID_SERIES" | "BUSY", message: string) {
     super(message);
   }
 }

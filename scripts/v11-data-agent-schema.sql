@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS catalog.dataset_version (
   UNIQUE (id, topic_id, dataset_id)
 );
 
+ALTER TABLE catalog.dataset_version ADD COLUMN IF NOT EXISTS metrics_snapshot jsonb;
+
 CREATE UNIQUE INDEX IF NOT EXISTS dataset_version_current_idx
   ON catalog.dataset_version (dataset_id) WHERE is_current;
 

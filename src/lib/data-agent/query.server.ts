@@ -2,7 +2,7 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
-import { datasets, metricSchema, powerProducts, type DataQuery, type Topic } from "./contracts";
+import { datasets, generationProducts, metricSchema, powerProducts, type DataQuery, type Topic } from "./contracts";
 import { DataAgentError, readDataAgent } from "./database.server";
 
 type VersionRow = {
@@ -13,9 +13,17 @@ type VersionRow = {
   row_count: number;
   published_at: Date;
   metric_snapshot: unknown;
+  metrics: unknown[];
 };
 
-const versionSelect = `SELECT v.id, v.topic_id, v.dataset_id, v.version, v.row_count, v.published_at, v.metric_snapshot
+const versionSelect = `SELECT v.id, v.topic_id, v.dataset_id, v.version, v.row_count, v.published_at, v.metric_snapshot,
+    ARRAY(
+      SELECT snapshot.value
+      FROM jsonb_each(COALESCE(v.metrics_snapshot, jsonb_build_object(m.metric_code, v.metric_snapshot))) snapshot
+      JOIN semantic.sem_metric approved ON approved.topic_id = v.topic_id AND approved.dataset_id = v.dataset_id
+        AND approved.metric_code = snapshot.key AND approved.review_status = 'approved'
+      ORDER BY snapshot.key
+    ) AS metrics
   FROM catalog.dataset_version v
   JOIN semantic.sem_metric m ON m.topic_id = v.topic_id AND m.dataset_id = v.dataset_id
     AND m.metric_code = v.metric_snapshot->>'metric_code' AND m.review_status = 'approved'`;
@@ -25,6 +33,7 @@ function catalogEntry(row: VersionRow) {
     topic: row.topic_id, dataset_id: row.dataset_id, version: row.version,
     published_at: row.published_at.toISOString(), row_count: row.row_count,
     metric: metricSchema.parse(row.metric_snapshot),
+    metrics: row.metrics.map((metric) => metricSchema.parse(metric)),
   };
 }
 
@@ -38,7 +47,8 @@ export async function listDataCatalog(topic?: Topic) {
     const regions = await client.query<{ code: string; name: string }>(`
       SELECT DISTINCT entity_code AS code, source_ref->>'region_name' AS name
       FROM standard.std_data_agent_fact WHERE topic_id = 'power' AND dataset_version_id = $1 ORDER BY code`, [power.id]);
-    return { datasets: catalog, region_codes: regions.rows, products: powerProducts };
+    const products = new Set(catalog[0].metrics.flatMap((metric) => metric.series_codes ?? generationProducts));
+    return { datasets: catalog, region_codes: regions.rows, products: powerProducts.filter((product) => products.has(product)) };
   });
 }
 
@@ -63,8 +73,12 @@ type Observation = {
   missing: number;
 };
 
-const dateFilters = `AND ($5::date IS NULL OR time_start >= $5::date::timestamptz)
-  AND ($6::date IS NULL OR time_start < ($6::date + 1)::timestamptz)`;
+const factFilters = `topic_id = $1 AND dataset_version_id = $2 AND metric_code = $3
+  AND entity_code = $4 AND series_code = $5
+  AND ($6::date IS NULL OR time_start >= $6::date::timestamptz)
+  AND ($7::date IS NULL OR time_start < ($7::date + 1)::timestamptz)`;
+
+const legacySeries = { power: generationProducts, meteo: ["temperature"], carbon: ["Power"] } as const;
 
 const outputSchema = [
   { name: "time_start", type: "datetime" }, { name: "issue_time", type: "datetime?" },
@@ -77,14 +91,18 @@ export async function queryData(query: DataQuery) {
   return readDataAgent(async (client) => {
     const version = await resolveVersion(client, query);
     const entry = catalogEntry(version);
+    const metric = entry.metrics.find(({ metric_code }) => metric_code === (query.metric_code ?? entry.metric.metric_code));
+    if (!metric) throw new DataAgentError("INVALID_METRIC", "该指标未在所选专题和版本发布，或当前未通过审核。");
     const entity = query.topic === "power" ? query.region_code : "global";
-    const series = query.topic === "power" ? query.product : query.topic === "carbon" ? "Power" : "temperature";
-    const filters = [query.topic, version.id, entity, series, query.start_date ?? null, query.end_date ?? null];
+    const seriesCodes: readonly string[] = metric.series_codes ?? legacySeries[query.topic];
+    const series = (query.topic === "power" ? query.product : undefined) ?? seriesCodes[0];
+    if (!seriesCodes.includes(series)) throw new DataAgentError("INVALID_SERIES", "该指标在所选版本中没有发布此产品序列。");
+    const filters = [query.topic, version.id, metric.metric_code, entity, series, query.start_date ?? null, query.end_date ?? null];
     let issueTime = query.topic === "meteo" && query.issue_time ? new Date(query.issue_time).toISOString() : null;
     if (query.topic === "meteo" && issueTime === null) {
       const latest = await client.query<{ issue_time: Date | null }>(`
         SELECT max(issue_time) AS issue_time FROM standard.std_data_agent_fact
-        WHERE topic_id = $1 AND dataset_version_id = $2 AND entity_code = $3 AND series_code = $4 ${dateFilters}`, filters);
+        WHERE ${factFilters}`, filters);
       issueTime = latest.rows[0]?.issue_time?.toISOString() ?? null;
     }
 
@@ -93,9 +111,8 @@ export async function queryData(query: DataQuery) {
         (count(*) OVER ())::integer AS matched,
         (count(*) FILTER (WHERE quality_flag = 1) OVER ())::integer AS missing
       FROM standard.std_data_agent_fact
-      WHERE topic_id = $1 AND dataset_version_id = $2 AND entity_code = $3 AND series_code = $4 ${dateFilters}
-        AND issue_time IS NOT DISTINCT FROM $7::timestamptz
-      ORDER BY time_start DESC LIMIT $8`, [...filters, issueTime, query.limit]);
+      WHERE ${factFilters} AND issue_time IS NOT DISTINCT FROM $8::timestamptz
+      ORDER BY time_start DESC LIMIT $9`, [...filters, issueTime, query.limit]);
 
     const matched = result.rows[0]?.matched ?? 0;
     const missing = result.rows[0]?.missing ?? 0;
@@ -107,17 +124,19 @@ export async function queryData(query: DataQuery) {
     const effectiveQuery = {
       topic: query.topic, version: version.version, start_date: query.start_date, end_date: query.end_date,
       limit: query.limit,
-      ...(query.topic === "power" ? { region_code: entity, product: query.product } : {}),
+      ...(query.topic === "power" ? { region_code: entity, product: series } : {}),
       ...(query.topic === "meteo" && issueTime ? { issue_time: issueTime } : {}),
+      // Keep the legacy replay hash for a version's default metric.
+      ...(metric.metric_code !== entry.metric.metric_code ? { metric_code: metric.metric_code } : {}),
     };
     const queryHash = createHash("sha256").update(JSON.stringify(effectiveQuery)).digest("hex");
     return {
       status: rows.length === 0 ? "empty" : missing === matched ? "missing" : "ok",
-      metric: entry.metric,
+      metric,
       query: effectiveQuery,
       data_ref: {
         dataset_id: version.dataset_id, version: version.version, query_hash: queryHash,
-        schema: outputSchema, units: { value: entry.metric.unit },
+        schema: outputSchema, units: { value: metric.unit },
         time_range: { start: rows[0]?.time_start ?? null, end: rows.at(-1)?.time_start ?? null },
         quality: { matched_rows: matched, returned_rows: rows.length, missing_rows: missing, truncated: rows.length < matched },
         artifact_uri: null,

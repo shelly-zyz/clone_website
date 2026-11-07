@@ -7,10 +7,12 @@ export const datasets = {
   meteo: "meteo_gfs_forecast", power: "power_nbs_monthly", carbon: "carbon_graced_power",
 } as const;
 
-export const powerProducts = ["electricity", "thermal-power", "hydro-power", "nuclear-power", "wind-power", "solar-power"] as const;
+export const generationProducts = ["electricity", "thermal-power", "hydro-power", "nuclear-power", "wind-power", "solar-power"] as const;
+export const powerProducts = [...generationProducts, "raw-coal", "crude-oil", "crude-processing", "natural-gas"] as const;
 
 const commonFilters = {
   version: z.string().regex(/^[0-9a-f]{64}$/).optional(),
+  metric_code: z.string().regex(/^[a-z][a-z0-9_]{0,79}$/).optional(),
   start_date: z.iso.date().optional(),
   end_date: z.iso.date().optional(),
   limit: z.number().int().min(1).max(120).default(31),
@@ -19,7 +21,7 @@ const commonFilters = {
 export const dataQuerySchema = z.discriminatedUnion("topic", [
   z.strictObject({ topic: z.literal("meteo"), ...commonFilters, issue_time: z.iso.datetime({ offset: true }).optional() }),
   z.strictObject({ topic: z.literal("power"), ...commonFilters,
-    region_code: z.string().regex(/^\d{12}$/).default("000000000000"), product: z.enum(powerProducts).default("electricity") }),
+    region_code: z.string().regex(/^\d{12}$/).default("000000000000"), product: z.enum(powerProducts).optional() }),
   z.strictObject({ topic: z.literal("carbon"), ...commonFilters }),
 ]).refine(({ start_date, end_date }) => !start_date || !end_date || start_date <= end_date, "起始日期必须早于或等于结束日期");
 
@@ -29,6 +31,7 @@ export const metricSchema = z.object({
   metric_code: z.string(), name: z.string(), unit: z.string(), time_grain: z.string(),
   data_identity: z.enum(["forecast", "official_statistics", "research_estimate"]),
   source_name: z.string(), definition: z.string(), review_status: z.literal("approved"),
+  series_codes: z.array(z.string()).nonempty().optional(),
 });
 
 export const dataRequestSchema = z.discriminatedUnion("action", [

@@ -8,9 +8,9 @@ import { DataAgentError } from "./database.server";
 import { listDataCatalog, queryData } from "./query.server";
 
 const topicScope: Record<Topic, string> = {
-  meteo: "GFS 已入库预报帧的全球格点平均气温。可以按起报时刻和有效日期筛选。城市、经纬度点和其他气象变量不在当前范围。",
-  power: "国家统计局发电量本期值，按单个地区和单个电源产品列出月度原值。支持使用目录中的地区编码。当前没有累计或同比、跨地区聚合。",
-  carbon: "GRACED Power 电力部门全球日帧格点排放速率合计。可按日期筛选。地区、其他部门和跨日总排放量不在当前范围。",
+  meteo: "GFS 已入库预报帧的全球格点均值，包括气温、风速、湿度、气压等。按起报和有效日期筛选。城市和经纬度点不在当前范围。",
+  power: "国家统计局能源月度原值，包括总发电量的本期、累计、同比，分电源发电量本期值及部分燃料指标。只查询目录中单个地区及对应产品。",
+  carbon: "GRACED Power 电力部门全球日帧格点排放速率合计、非零格点数和总格点数。地区、其他部门和跨日总排放量不在当前范围。",
 };
 
 const dateParameters = { start_date: { type: "string", description: "含首日，YYYY-MM-DD" },
@@ -33,8 +33,8 @@ export async function askDataAgent(topic: Topic, question: string, signal: Abort
   const trace: string[] = [];
   let context: Awaited<ReturnType<typeof listDataCatalog>> | undefined;
   let result: Awaited<ReturnType<typeof queryData>> | undefined;
-  const makeTool = (name: string, description: string, properties: Record<string, object>, execute: (args: unknown) => Promise<unknown>): AgentTool => ({
-    name, label: description, description, parameters: { type: "object", properties, additionalProperties: false },
+  const makeTool = (name: string, description: string, properties: Record<string, object>, execute: (args: unknown) => Promise<unknown>, required: string[] = []): AgentTool => ({
+    name, label: description, description, parameters: { type: "object", properties, required, additionalProperties: false },
     execute: async (_id, args) => {
       timeout.throwIfAborted();
       trace.push(name);
@@ -48,6 +48,7 @@ export async function askDataAgent(topic: Topic, question: string, signal: Abort
       return context;
     }),
     makeTool("query_approved_metric", "用固定只读模板返回指定指标，不接受 SQL 或任意聚合", {
+      metric_code: { type: "string", description: "当前专题目录中与问题口径一致的指标编码" },
       ...dateParameters,
       ...(topic === "meteo" ? { issue_time: { type: "string", description: "可选，ISO 8601 起报时刻" } } : {}),
       ...(topic === "power" ? { region_code: { type: "string" }, product: { type: "string", enum: powerProducts } } : {}),
@@ -55,9 +56,17 @@ export async function askDataAgent(topic: Topic, question: string, signal: Abort
       if (!context?.datasets[0]) return { code: "CATALOG_REQUIRED", message: "请先查询当前专题目录。" };
       const plan = dataQuerySchema.safeParse({ ...(typeof args === "object" && args ? args : {}), topic, version: context.datasets[0].version });
       if (!plan.success) return { code: "INVALID_FILTER", issues: plan.error.issues.map((issue) => issue.message) };
-      result = await queryData(plan.data);
+      if (!plan.data.metric_code) return { code: "METRIC_REQUIRED", message: "请指定目录中的指标编码。" };
+      try {
+        result = await queryData(plan.data);
+      } catch (error) {
+        if (error instanceof DataAgentError && (error.code === "INVALID_METRIC" || error.code === "INVALID_SERIES")) {
+          return { code: error.code, message: error.message };
+        }
+        throw error;
+      }
       return { status: result.status, metric: result.metric.name, quality: result.data_ref.quality };
-    }),
+    }, ["metric_code"]),
   ];
 
   // Reuses Greensystem's sequential Pi loop and per-question tool budget.
@@ -67,7 +76,7 @@ export async function askDataAgent(topic: Topic, question: string, signal: Abort
     initialState: {
       model, tools, thinkingLevel: "off",
       systemPrompt: `你是 OpenGridWorks 共用数据库智能体，本次专题固定为 ${topic}。${topicScope[topic]}
-先读取语义目录。仅当问题可以由当前模板准确回答时才调用 query_approved_metric。月度问题用该月首日作为起始日期。无日期时可用模板默认范围。对于写入、跨专题、未登记指标或不明确的范围，直接结束，禁止用近似数据替代。`,
+先读取语义目录，再从 metrics 中选定一个口径准确的 metric_code。电力的 product 必须来自所选指标的 series_codes。只有目录支持的请求才调用 query_approved_metric。指定单月时用该月首日和末日，指定单日时起止日期相同。无日期时可用模板默认范围。对于写入、跨专题、未登记指标或不明确的范围，直接结束，禁止用近似数据替代。`,
     },
     streamFn: (currentModel, context, options) => models.streamSimple(currentModel, context, { ...options, maxTokens: 650 }),
     getApiKey: (provider) => provider === "deepseek" ? apiKey : undefined,

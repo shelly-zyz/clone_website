@@ -17,7 +17,7 @@ export function authorizeDataAgent(request: Request) {
 
 export function dataAgentErrorResponse(error: unknown) {
   if (error instanceof DataAgentError) {
-    const statuses = { NOT_CONFIGURED: 503, VERSION_NOT_FOUND: 404, BUSY: 429 } as const;
+    const statuses = { NOT_CONFIGURED: 503, VERSION_NOT_FOUND: 404, INVALID_METRIC: 422, INVALID_SERIES: 422, BUSY: 429 } as const;
     return Response.json({ code: error.code, error: error.message }, { status: statuses[error.code] });
   }
   return Response.json({ code: "UNAVAILABLE", error: "数据库 Agent 暂时不可用。" }, { status: 503 });
