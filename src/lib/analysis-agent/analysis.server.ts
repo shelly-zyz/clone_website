@@ -6,7 +6,7 @@ import { advanceAgentSession, createAgentSession, getAgentSession, getAnalysisJo
 import { DataAgentError } from "@/lib/data-agent/database.server";
 import { profileDataResult } from "@/lib/data-agent/result-profile";
 import { assertDataProject, resolveDataResult } from "@/lib/data-agent/state.server";
-import { analysisSelectionSchema, forecastModels, planSchema, type analysisRequestSchema } from "./contracts";
+import { analysisSelectionSchema, forecastModels, planSchema, type AnalysisPlan, type analysisRequestSchema } from "./contracts";
 
 type Request = z.infer<typeof analysisRequestSchema>;
 
@@ -19,6 +19,49 @@ export function enabledForecastModels() {
   if (configured === undefined) return forecastModels;
   const models = new Set(configured.split(",").map(model => model.trim()));
   return forecastModels.filter(model => models.has(model));
+}
+
+export function isForecastOperation(operation: AnalysisPlan["operation"]) {
+  return operation === "forecast" || operation === "backtest" || operation === "compare";
+}
+
+function dataProblem(profile: ReturnType<typeof profileDataResult>) {
+  if (profile.invalid) return "该查询结果包含无效时间或数值。";
+  if (!profile.valid) return "该查询结果没有有效观测值。";
+}
+
+export function prepareAnalysisPlan(profile: ReturnType<typeof profileDataResult>, requested: AnalysisPlan) {
+  const inputError = dataProblem(profile);
+  if (inputError) return { error: inputError };
+  const { operation } = requested;
+  if (isForecastOperation(operation)) {
+    const model = requested.model ?? "statsforecast";
+    const horizon = requested.horizon ?? 3;
+    if (!profile.historical) {
+      return { error: "预测和回测需要日度或月度历史观测。已发布的气象预报帧可以展示或做描述统计。" };
+    }
+    if (!profile.analysis.forecast) {
+      return { error: `数据末尾只有 ${profile.continuous} 期连续观测。预测或回测至少需要 8 期连续训练数据，请查询一段连续历史。` };
+    }
+    if (operation !== "forecast" && horizon > profile.analysis.maxHoldout) {
+      const limit = profile.analysis.maxHoldout;
+      return { error: `留出 ${horizon} 期后不足 8 期训练观测。${limit > 0
+        ? `当前最多留出 ${limit} 期，可以缩短留出窗口或扩大历史范围。`
+        : "请扩大历史范围，留出后至少保留 8 期训练观测。"}` };
+    }
+    if (!enabledForecastModels().includes(model)) {
+      return { error: `当前部署未启用 ${model}，请选择已启用的模型。` };
+    }
+    return { plan: { operation, model, horizon } };
+  }
+  if (operation === "cluster") {
+    const clusters = requested.clusters ?? 3;
+    if (clusters > profile.analysis.maxClusters) {
+      return { error: `当前最多支持 ${profile.analysis.maxClusters} 组，有效的不同数值少于请求的分组数。` };
+    }
+    return { plan: { operation, clusters } };
+  }
+  return { plan: { operation } };
 }
 
 export async function runAnalysisRequest(request: Request, key: string | null, signal: AbortSignal, jobId?: string) {
@@ -44,8 +87,8 @@ export async function runAnalysisRequest(request: Request, key: string | null, s
   signal.throwIfAborted();
   const { metric, rows, data_ref } = result;
   const profile = profileDataResult(result);
-  if (profile.invalid) return invalid("该查询结果包含无效时间或数值。");
-  if (!profile.valid) return invalid("该查询结果没有有效观测值。");
+  const inputError = dataProblem(profile);
+  if (inputError) return invalid(inputError);
 
   const instruction = request.action === "ask" ? request.instruction : request.plan.operation;
   const selection = request.action === "submit" ? request.plan : await selectWithPi({
@@ -65,26 +108,9 @@ export async function runAnalysisRequest(request: Request, key: string | null, s
       previous: session.summary.selection, recent: session.recent },
   });
   if (!selection || selection.operation === "unsupported") return invalid("请指定统计、聚类、预测、回测或模型对比任务。");
-  const parsed = planSchema.parse(selection);
-  const operation = parsed.operation;
-  const predicting = operation === "forecast" || operation === "backtest" || operation === "compare";
-  if (predicting && !profile.historical) {
-    return invalid("预测和回测需要日度或月度历史观测。已发布的气象预报帧可以做描述统计。");
-  }
-  const plan = predicting ? { operation, model: parsed.model ?? "statsforecast", horizon: parsed.horizon ?? 3 }
-    : operation === "cluster" ? { operation, clusters: parsed.clusters ?? 3 } : { operation };
-  if (predicting && !profile.analysis.forecast) {
-    return invalid(`数据末尾只有 ${profile.continuous} 期连续观测。预测或回测至少需要 8 期连续训练数据，请查询一段连续历史。`);
-  }
-  if ((operation === "backtest" || operation === "compare") && (plan.horizon ?? 3) > profile.analysis.maxHoldout) {
-    return invalid(`留出 ${plan.horizon} 期后不足 8 期训练观测；当前最多留出 ${profile.analysis.maxHoldout} 期，请缩短留出窗口或扩大历史范围。`);
-  }
-  if (predicting && !enabledForecastModels().includes(plan.model ?? "statsforecast")) {
-    return invalid(`当前部署未启用 ${plan.model}，请选择已启用的模型。`);
-  }
-  if (operation === "cluster" && (plan.clusters ?? 3) > profile.analysis.maxClusters) {
-    return invalid(`当前最多支持 ${profile.analysis.maxClusters} 组，有效的不同数值少于请求的分组数。`);
-  }
+  const prepared = prepareAnalysisPlan(profile, planSchema.parse(selection));
+  if (prepared.error) return invalid(prepared.error);
+  const { plan } = prepared;
   const observations = rows.map(row => ({ date: row.time_start, value: row.value === null ? null : Number(row.value) }));
   signal.throwIfAborted();
   const saved = await advanceAgentSession(session, "analysis", { result_id: resultId, selection: plan },

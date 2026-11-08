@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { registerHooks } from "node:module";
@@ -9,18 +10,30 @@ import { deepseekProvider } from "@earendil-works/pi-ai/providers/deepseek";
 
 const fixtures = {
   topics: new Map(), results: new Map(), sessions: new Map(), jobs: new Map(),
-  steps: [], output: [], lastQuery: undefined,
+  steps: [], output: [], calls: [], lastQuery: undefined,
 };
+
+const live = process.argv.includes("--live");
+if (live && !process.env.DEEPSEEK_API_KEY?.trim()) {
+  throw new Error("运行真实模型对照需要设置 DEEPSEEK_API_KEY。");
+}
+const baselineSource = live
+  ? execFileSync("git", ["show", "a4b5b8e:src/lib/xiaoyun/supervisor.server.ts"], { encoding: "utf8" })
+  : undefined;
 
 const models = createModels();
 models.setProvider(deepseekProvider());
-const model = models.getModel("deepseek", "deepseek-flash");
+const model = models.getModel("deepseek", (live && process.env.DATA_AGENT_PI_MODEL?.trim()) || "deepseek-flash");
+assert.ok(model, "未找到配置的 DeepSeek 模型");
 fixtures.pi = {
-  model,
+  model, apiKey: live ? process.env.DEEPSEEK_API_KEY.trim() : undefined,
   models: {
-    streamSimple(currentModel, context) {
+    streamSimple(currentModel, context, options) {
+      fixtures.calls = context.messages.filter(message => message.role === "assistant")
+        .flatMap(message => message.content.filter(item => item.type === "toolCall").map(item => item.name));
       fixtures.output = context.messages.filter(message => message.role === "toolResult")
         .map(message => JSON.parse(message.content[0].text));
+      if (live) return models.streamSimple(currentModel, context, options);
       const step = fixtures.steps.shift();
       const stopReason = step ? "toolUse" : "stop";
       const message = {
@@ -47,6 +60,9 @@ const modules = {
     export function runDataAgentWrite() { throw new Error("Unexpected database call in fixture"); }
     export function readDataAgent() { throw new Error("Unexpected database call in fixture"); }`,
   "@/lib/data-agent/pi.server": `export function getPiModel() { return globalThis.xiaoyunFixture.pi; }`,
+  "@/lib/data-agent/map-assistant.server": `
+    export async function readMapAssistantThread() {}
+    export async function saveMapAssistantThread() { return "fixture-thread"; }`,
   "@/lib/agent-runtime/store": `
     import { randomUUID } from "node:crypto";
     const f = globalThis.xiaoyunFixture;
@@ -117,6 +133,7 @@ const modules = {
 
 globalThis.xiaoyunFixture = fixtures;
 const sourceRoot = new URL("../src/", import.meta.url).href;
+const baselineUrl = new URL("../src/lib/xiaoyun/supervisor.server.ts?baseline", import.meta.url).href;
 registerHooks({
   resolve(specifier, context, nextResolve) {
     const location = specifier.startsWith("@/") ? new URL("../src/" + specifier.slice(2), import.meta.url)
@@ -130,6 +147,12 @@ registerHooks({
     }
     return nextResolve(specifier, context);
   },
+  load(url, context, nextLoad) {
+    if (baselineSource && url === baselineUrl) {
+      return { format: "module-typescript", source: baselineSource, shortCircuit: true };
+    }
+    return nextLoad(url, context);
+  },
 });
 
 const { askXiaoyun } = await import("../src/lib/xiaoyun/supervisor.server.ts");
@@ -138,6 +161,7 @@ const context = { sessions: {} };
 const selection = { topic: "power", target: "current" };
 const query = ["query_data", { topic: "power", question: "查江苏每日发电量" }];
 const chart = ["render_chart", { ...selection, renderer: "vchart" }];
+const loadSkill = ["load_skill", { name: "forecast-review" }];
 
 function scope(topic) {
   const value = { project_id: randomUUID(), project_key: "x".repeat(43), session_id: randomUUID() };
@@ -145,15 +169,15 @@ function scope(topic) {
   fixtures.topics.set(topic, { scope: value, data: { topic, revision: 0, last_result_id: null } });
 }
 
-function data(topic, name, days, grain = "day", status = "ok") {
+function data(topic, name, days, grain = "day", status = "ok", metricName = "测试指标") {
   const id = randomUUID();
   const issue_time = grain === "forecast_frame" ? "2026-01-01T00:00:00.000Z" : null;
   const rows = days.map((day, i) => ({
-    time_start: new Date(Date.UTC(2026, 0, day)).toISOString(),
+    time_start: new Date(grain === "month" ? Date.UTC(2026, day - 1, 1) : Date.UTC(2026, 0, day)).toISOString(),
     issue_time, entity_code: "test", series_code: "test", value: String(i + 1), quality_flag: 0,
     source_ref: { region_name: name, url: "https://example.test/dataset" },
   }));
-  const metric = { name: "测试指标", unit: "unit", time_grain: grain, data_identity: issue_time ? "forecast" : "official_statistics",
+  const metric = { name: metricName, unit: "unit", time_grain: grain, data_identity: issue_time ? "forecast" : "official_statistics",
     source_name: "固定样例", definition: "固定指标口径" };
   const ref = { version: "v".repeat(64), dataset_id: "fixture", query_hash: id, schema: [],
     time_range: { start: rows[0]?.time_start ?? null, end: rows.at(-1)?.time_start ?? null },
@@ -163,91 +187,169 @@ function data(topic, name, days, grain = "day", status = "ok") {
   return id;
 }
 
-async function turn(steps, input = {}) {
+async function turn(steps, input = {}, ask = askXiaoyun) {
   fixtures.steps = [...steps];
   fixtures.output = [];
-  const result = await askXiaoyun({ message: "固定验收", topic: "power", context, ...input }, new AbortController().signal);
+  fixtures.calls = [];
+  const result = await ask({ message: "固定验收", topic: "power", context, ...input }, new AbortController().signal);
   if (result.session) context.sessions[result.session.topic] = result.session.scope;
   return result;
 }
 
-await test("小云按同一 DataRef 串联查数、出图、预测和来源", async () => {
-  scope("power");
-  const inputId = data("power", "江苏", Array.from({ length: 14 }, (_, i) => i + 1));
-  const predict = ["submit_analysis", { ...selection, plan: { operation: "forecast", horizon: 3 } }];
-  const requestId = randomUUID();
-  const result = await turn([query, chart, predict], { requestId });
-  assert.deepEqual(result.artifacts.map(({ kind }) => kind), ["chart", "analysis"]);
-  assert.equal(fixtures.output[1].result_id, inputId);
-  assert.equal(fixtures.jobs.get(result.artifacts[1].jobId).data_ref.query_hash, inputId);
-  const analysisSession = context.sessions.power.analysis.session_id;
-  delete context.sessions.power.analysis;
-  const replay = await turn([["inspect_data", selection], predict], { requestId });
-  assert.equal(replay.artifacts[0].jobId, result.artifacts[1].jobId);
-  assert.equal(context.sessions.power.analysis.session_id, analysisSession);
-  assert.equal(fixtures.jobs.size, 1);
-  const priorChart = result.artifacts[0].chartId;
-  const hubeiId = data("power", "湖北", [1, 2, 3]);
-  await turn([query, chart], { message: "查湖北并画图" });
-  assert.notEqual(hubeiId, inputId);
-  const selectedChart = { topic: "power", chart_id: priorChart };
-  const oldTarget = { topic: "power", target: "chart" };
-  const revised = await turn([["inspect_data", oldTarget], ["render_chart", { ...oldTarget, chart: "bar" }]], { selectedChart });
-  assert.equal(fixtures.output[1].result_id, inputId);
-  assert.match(revised.artifacts[0].title, /江苏/);
-  assert.equal(revised.artifacts[0].renderer, "vchart");
-  const sources = await turn([], { message: "展示来源", selectedChart });
-  assert.equal(sources.data.result_id, inputId);
-  await turn([["query_data", { topic: "power", question: "改成湖北", base: "chart" }]], { selectedChart });
-  assert.equal(fixtures.lastQuery.options.baseResultId, inputId);
-});
+if (live) {
+  const { askXiaoyun: askBaseline } = await import(baselineUrl);
+  const cases = [
+    {
+      name: "已有 GFS 预报",
+      topic: "meteo",
+      message: "查 GFS 2026 年 1 月 1 日起报后未来三天的全球风速预报，用 VChart 画图。",
+      seed: () => data("meteo", "全球", [1, 2, 3], "forecast_frame", "ok", "GFS 全球风速预报"),
+      correct: result => /GFS/i.test(fixtures.lastQuery?.question ?? "") &&
+        result.artifacts?.some(item => item.kind === "chart") && !fixtures.calls.includes("submit_analysis"),
+    },
+    {
+      name: "历史风速外推",
+      topic: "meteo",
+      message: "用刚查到的日度历史风速预测未来三天。",
+      seed: () => data("meteo", "全球", Array.from({ length: 14 }, (_, i) => i + 1), "day", "ok", "日度历史风速"),
+      previous: true,
+      correct: (_, id) => [...fixtures.jobs.values()].some(job =>
+        job.plan.operation === "forecast" && job.plan.horizon === 3 && job.data_ref.query_hash === id),
+    },
+    {
+      name: "十期月度数据留出三期",
+      topic: "power",
+      message: "用刚查到的这十期月度发电量回测最后三期。",
+      seed: () => data("power", "江苏", Array.from({ length: 10 }, (_, i) => i + 1), "month", "ok", "月度发电量"),
+      previous: true,
+      correct: result => !fixtures.jobs.size && /2\s*期/.test(result.summary),
+    },
+  ];
+  await test("真实模型按相同样例对照原版与技能版", async () => {
+    const failures = [];
+    for (const [variant, ask] of [["baseline", askBaseline], ["skill", askXiaoyun]]) {
+      for (const scenario of cases) {
+        for (const map of [fixtures.topics, fixtures.results, fixtures.sessions, fixtures.jobs]) map.clear();
+        context.sessions = {};
+        fixtures.lastQuery = undefined;
+        scope(scenario.topic);
+        const id = scenario.seed();
+        if (scenario.previous) fixtures.topics.get(scenario.topic).data.last_result_id = id;
+        try {
+          const reply = await turn([], { topic: scenario.topic, message: scenario.message }, ask);
+          const loaded = fixtures.output.some(item => item.name === "forecast-review" && item.instructions);
+          const correct = Boolean(scenario.correct(reply, id));
+          const preflightOnly = !fixtures.calls.includes("submit_analysis");
+          const expectedPreflight = scenario.previous ? fixtures.output.some(item => item.preflight) : true;
+          console.log(JSON.stringify({ variant, case: scenario.name, correct, loaded, preflightOnly, calls: fixtures.calls }));
+          if (variant === "skill" && !(correct && loaded && expectedPreflight)) failures.push(scenario.name);
+        } catch (error) {
+          console.log(JSON.stringify({ variant, case: scenario.name, error: error.name }));
+          failures.push(`${variant}/${scenario.name}`);
+        }
+      }
+    }
+    assert.deepEqual(failures, []);
+  });
+} else {
+  await test("小云按同一 DataRef 串联查数、出图、预测和来源", async () => {
+    scope("power");
+    const inputId = data("power", "江苏", Array.from({ length: 14 }, (_, i) => i + 1));
+    const request = { ...selection, plan: { operation: "forecast", horizon: 3 } };
+    const preflight = ["inspect_data", request];
+    const predict = ["submit_analysis", request];
+    const requestId = randomUUID();
+    const result = await turn([loadSkill, query, chart, preflight, predict], { requestId });
+    assert.deepEqual(result.artifacts.map(({ kind }) => kind), ["chart", "analysis"]);
+    assert.equal(fixtures.output[0].name, "forecast-review");
+    assert.equal(fixtures.output[2].result_id, inputId);
+    assert.equal(fixtures.output[3].preflight.plan.operation, "forecast");
+    assert.equal(fixtures.jobs.get(result.artifacts[1].jobId).data_ref.query_hash, inputId);
+    const analysisSession = context.sessions.power.analysis.session_id;
+    delete context.sessions.power.analysis;
+    const replay = await turn([loadSkill, preflight, predict], { requestId });
+    assert.equal(replay.artifacts[0].jobId, result.artifacts[1].jobId);
+    assert.equal(context.sessions.power.analysis.session_id, analysisSession);
+    assert.equal(fixtures.jobs.size, 1);
+    const priorChart = result.artifacts[0].chartId;
+    const hubeiId = data("power", "湖北", [1, 2, 3]);
+    await turn([query, chart], { message: "查湖北并画图" });
+    assert.ok(!fixtures.calls.includes("load_skill"));
+    assert.notEqual(hubeiId, inputId);
+    const selectedChart = { topic: "power", chart_id: priorChart };
+    const oldTarget = { topic: "power", target: "chart" };
+    const revised = await turn([["inspect_data", oldTarget], ["render_chart", { ...oldTarget, chart: "bar" }]], { selectedChart });
+    assert.equal(fixtures.output[1].result_id, inputId);
+    assert.match(revised.artifacts[0].title, /江苏/);
+    assert.equal(revised.artifacts[0].renderer, "vchart");
+    const sources = await turn([], { message: "展示来源", selectedChart });
+    assert.equal(sources.data.result_id, inputId);
+    await turn([["query_data", { topic: "power", question: "改成湖北", base: "chart" }]], { selectedChart });
+    assert.equal(fixtures.lastQuery.options.baseResultId, inputId);
+  });
 
-await test("GFS 预报帧可按有效时间展示，无法作为历史序列入队", async () => {
-  scope("meteo");
-  const id = data("meteo", "全球", [1, 2, 3, 4, 5, 6, 7, 8], "forecast_frame");
-  const target = { topic: "meteo", target: "current" };
-  const result = await turn([
-    ["query_data", { topic: "meteo", question: "查 GFS 风速" }],
-    ["render_chart", { ...target, renderer: "vchart" }],
-    ["submit_analysis", { ...target, plan: { operation: "forecast", horizon: 3 } }],
-  ], { topic: "meteo" });
-  assert.equal(fixtures.output[0].profile.analysis.forecast, false);
-  assert.equal(fixtures.output[1].result_id, id);
-  assert.match(result.artifacts[0].options.title.text, /GFS 起报/);
-  assert.equal(result.artifacts.length, 1);
-  assert.match(result.summary, /日度或月度历史/);
-  assert.equal(fixtures.jobs.size, 1);
-});
+  await test("GFS 预报帧可按有效时间展示，无法作为历史序列入队", async () => {
+    scope("meteo");
+    const id = data("meteo", "全球", [1, 2, 3, 4, 5, 6, 7, 8], "forecast_frame");
+    const target = { topic: "meteo", target: "current" };
+    const result = await turn([
+      loadSkill,
+      ["query_data", { topic: "meteo", question: "查 GFS 风速" }],
+      ["render_chart", { ...target, renderer: "vchart" }],
+      ["submit_analysis", { ...target, plan: { operation: "forecast", horizon: 3 } }],
+    ], { topic: "meteo" });
+    assert.equal(fixtures.output[1].profile.analysis.forecast, false);
+    assert.equal(fixtures.output[2].result_id, id);
+    assert.match(result.artifacts[0].options.title.text, /GFS 起报/);
+    assert.equal(result.artifacts.length, 1);
+    assert.match(result.summary, /日度或月度历史/);
+    assert.equal(fixtures.jobs.size, 1);
+  });
 
-await test("断档和留出训练样本不足在入队前被拒绝", async () => {
-  for (const [days, operation, horizon, expected] of [
-    [[1, 2, 3, 4, 5, 7, 8, 9, 10, 11], "forecast", 2, /只有 5 期连续观测/],
-    [[1, 2, 3, 4, 5, 6, 7, 8, 9, 10], "backtest", 3, /当前最多留出 2 期/],
-  ]) {
-    data("power", "江苏", days);
-    const result = await turn([query, ["submit_analysis", { ...selection, plan: { operation, horizon } }]]);
-    assert.match(result.summary, expected);
+  await test("断档和留出训练样本不足在入队前被拒绝", async () => {
+    for (const [days, operation, horizon, expected] of [
+      [[1, 2, 3, 4, 5, 7, 8, 9, 10, 11], "forecast", 2, /只有 5 期连续观测/],
+      [[1, 2, 3, 4, 5, 6, 7, 8, 9, 10], "backtest", 3, /当前最多留出 2 期/],
+    ]) {
+      data("power", "江苏", days);
+      const result = await turn([loadSkill, query, ["inspect_data", { ...selection, plan: { operation, horizon } }]]);
+      assert.match(result.summary, expected);
+      assert.match(fixtures.output[2].preflight.error, expected);
+      assert.equal(result.artifacts, undefined);
+    }
+    assert.equal(fixtures.jobs.size, 1);
+  });
+
+  await test("数据库澄清可恢复原任务，空结果不会沿用旧数据出图", async () => {
+    fixtures.topics.get("power").clarifyNext = true;
+    const message = "查江苏发电量然后画图";
+    const pending = await turn([query, chart], { message });
+    assert.match(pending.summary, /本期值还是累计值/);
+    assert.equal(pending.artifacts, undefined);
+    data("power", "江苏", [1, 2]);
+    const result = await turn([
+      ["query_data", { topic: "power", question: "本期值", resume: true }], chart,
+    ], { message: "本期值" });
+    assert.equal(fixtures.lastQuery.options.originalMessage, message);
+    assert.match(fixtures.lastQuery.question, /补充条件：本期值/);
+    assert.equal(result.artifacts[0].kind, "chart");
+
+    data("power", "江苏", [], "day", "empty");
+    const empty = await turn([query, chart]);
+    assert.match(empty.summary, /没有记录/);
+    assert.equal(empty.artifacts, undefined);
+  });
+
+  await test("小云预测提交前要加载技能，直接检查方案不入队", async () => {
+    const inputId = data("power", "江苏", Array.from({ length: 10 }, (_, i) => i + 1), "month", "ok", "月度发电量");
+    const plan = { operation: "forecast", horizon: 3 };
+    const result = await turn([query, ["submit_analysis", { ...selection, plan }]]);
     assert.equal(result.artifacts, undefined);
-  }
-  assert.equal(fixtures.jobs.size, 1);
-});
-
-await test("数据库澄清可恢复原任务，空结果不会沿用旧数据出图", async () => {
-  fixtures.topics.get("power").clarifyNext = true;
-  const message = "查江苏发电量然后画图";
-  const pending = await turn([query, chart], { message });
-  assert.match(pending.summary, /本期值还是累计值/);
-  assert.equal(pending.artifacts, undefined);
-  data("power", "江苏", [1, 2]);
-  const result = await turn([
-    ["query_data", { topic: "power", question: "本期值", resume: true }], chart,
-  ], { message: "本期值" });
-  assert.equal(fixtures.lastQuery.options.originalMessage, message);
-  assert.match(fixtures.lastQuery.question, /补充条件：本期值/);
-  assert.equal(result.artifacts[0].kind, "chart");
-
-  data("power", "江苏", [], "day", "empty");
-  const empty = await turn([query, chart]);
-  assert.match(empty.summary, /没有记录/);
-  assert.equal(empty.artifacts, undefined);
-});
+    assert.equal(fixtures.output.at(-1).status, "needs_skill");
+    const inspected = await turn([loadSkill, ["inspect_data", { ...selection, plan }]]);
+    assert.equal(inspected.artifacts, undefined);
+    assert.equal(fixtures.output.at(-1).result_id, inputId);
+    assert.equal(fixtures.output.at(-1).preflight.plan.horizon, 3);
+    assert.equal(fixtures.jobs.size, 1);
+  });
+}

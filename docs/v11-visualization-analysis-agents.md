@@ -15,8 +15,9 @@
 
 | 工具 | 输入与约束 |
 | --- | --- |
+| `load_skill` | 按名称加载 [预测与回测技能](../src/lib/xiaoyun/skills/forecast-review/SKILL.md)。常规查数、绘图和查看任务状态直接用相应工具。 |
 | `query_data` | 查数要求和可选基准。数据库 Agent 负责语义目录、指标口径与版本。成功返回已保存的 DataRef、质量和可用能力。 |
-| `inspect_data` | 读取本轮查询、之前的数据、原图或上次分析的输入。旧对象先检查，后执行。 |
+| `inspect_data` | 读取本轮查询、之前的数据、原图或上次分析的输入。传入 `plan` 时用提交服务同一套规则预检，并返回实际留出上限等原因，无需入队。 |
 | `render_chart` | 复用单指标折线或柱状模板。修改旧图使用原输入和未改的渲染设置。GFS 图按有效时间展示并标注起报。 |
 | `submit_analysis`、`get_analysis` | 提交或查询项目内任务。GFS 预报帧可做描述统计。预测与回测使用连续的日度或月度历史；回测留出后至少保留 8 期训练数据。 |
 | `get_sources` | 按所引用的数据、图表或分析输入追溯数据版本与来源。 |
@@ -73,7 +74,9 @@ OGW_ANALYSIS_DEVICE=cuda npm run analysis:worker
 
 ## 验证
 
-`node --test scripts/verify-v11-xiaoyun.mjs` 用固定工具回执和会话夹具验证同轮查数出图和入队、旧图输入绑定、GFS 展示、预测预检、澄清恢复及空结果。它使用实际的小云、图表配置和分析预检代码，替换了模型和 PostgreSQL 边界。
+`node --test scripts/verify-v11-xiaoyun.mjs` 使用实际的 Pi 循环、图表配置和分析预检代码，替换模型和 PostgreSQL 边界。用例覆盖技能加载、同轮查数出图和入队、旧图输入绑定、GFS 展示、预测预检、澄清恢复及空结果。
+
+配置 `DEEPSEEK_API_KEY` 后运行 `node scripts/verify-v11-xiaoyun.mjs --live`，用同一模型和固定数据对照技能版与提交 `a4b5b8e`。输出记录已有 GFS 预报、历史风速外推和十期月度数据回测三期的工具路径。对照只替换模型响应，数据和队列仍使用固定样例。
 
 `scripts/verify-v11-business-agents.mjs` 覆盖真实的项目 DataRef、MCP 调用、会话 revision、项目隔离、描述/聚类、StatsForecast 回测、TimesFM 与 Chronos-2 比较。浏览器验证确认 ECharts、VChart、AntV G2、MapLibre Globe 与 Three.js 均可渲染。
 

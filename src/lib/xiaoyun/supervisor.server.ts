@@ -1,10 +1,12 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { Agent, type AgentTool } from "@earendil-works/pi-agent-core";
 import { z } from "zod";
-import { enabledForecastModels, runAnalysisRequest } from "@/lib/analysis-agent/analysis.server";
-import { planSchema } from "@/lib/analysis-agent/contracts";
+import { enabledForecastModels, isForecastOperation, prepareAnalysisPlan, runAnalysisRequest } from "@/lib/analysis-agent/analysis.server";
+import { planSchema, type AnalysisPlan } from "@/lib/analysis-agent/contracts";
 import { topicSchema, type Topic } from "@/lib/data-agent/contracts";
 import { DataAgentError } from "@/lib/data-agent/database.server";
 import { readMapAssistantThread, saveMapAssistantThread } from "@/lib/data-agent/map-assistant.server";
@@ -19,6 +21,7 @@ import type { XiaoyunBusinessResult, XiaoyunReply, XiaoyunRequest } from "./cont
 
 const targetInput = { topic: topicSchema, target: z.enum(targets) };
 const maxToolCalls = 9;
+const forecastSkill = "forecast-review";
 const analysisStatuses = { queued: "排队中", running: "正在计算", succeeded: "已完成", failed: "执行失败" } as const;
 let active = 0;
 
@@ -31,9 +34,7 @@ const instructions = [
   "数据库返回澄清时停止依赖该查询的动作。若用户回答待澄清项，用 resume=true 恢复查数，并继续原问题要求的动作。",
   "复用旧数据前先 inspect_data。根据工具回执中的指标口径、形状、粒度、质量和候选，选择图表或分析。趋势通常用折线，数值大小比较可用柱状。",
   "当前图表模板只支持单指标时间序列。柱状图不会把单地区时间序列变成跨地区排名。空间图、多个地区和预测产物图目前没有通用模板。",
-  "GFS 是已有预报，展示按有效时间且注明起报时间；重新外推需要适用的历史序列。预测、回测、基线比较是不同操作。",
-  "只从回执列出的已启用模型中选择。默认优先 StatsForecast。用户指定的模型未启用时说明原因，禁止悄悄换模型。compare 比较一个模型与基线。",
-  "分析前检查连续期数和留出窗口。查询任务进度用 get_analysis，修改模型或期数用 target=analysis 继承数据及未改参数。",
+  "涉及查看已发布预报、新预测、回测、基线比较或修改预测时，先用 load_skill 读取 forecast-review，再决定路径。仅查看任务进度时直接用 get_analysis。",
   "只用工具回执中的真实数据与执行状态。概念、地图和工具能力问题可以直接用中文回答；涉及站点的数据范围时先看目录。",
 ].join("\n");
 
@@ -43,6 +44,11 @@ type Inspected = {
   profile: ReturnType<typeof profileDataResult>;
   chart?: ChartReference;
 };
+
+function inheritAnalysisPlan(plan: AnalysisPlan, priorSelection: unknown) {
+  const previous = planSchema.safeParse(priorSelection).data;
+  return previous?.operation === plan.operation ? { ...previous, ...plan } : plan;
+}
 
 function analysisJobId(project: string, requestId: string | undefined) {
   if (!requestId) return;
@@ -100,6 +106,7 @@ export async function askXiaoyun(input: XiaoyunRequest, requestSignal: AbortSign
   let queryUsable = false;
   let lastRoute: XiaoyunReply["lastRoute"];
   let terminal = false;
+  let forecastSkillLoaded = false;
 
   function bind(topic: Topic) {
     if (boundTopic && boundTopic !== topic) throw new XiaoyunContextError("本轮已锁定一个专题。请分开处理不同专题的操作。");
@@ -183,6 +190,15 @@ export async function askXiaoyun(input: XiaoyunRequest, requestSignal: AbortSign
   }
 
   const tools = [
+    tool("load_skill", "forecast-review 适用于查看已发布预报、历史外推、回测、基线比较和调整旧预测。", z.strictObject({
+      name: z.literal(forecastSkill),
+    }), async ({ name }) => {
+      if (forecastSkillLoaded) return { status: "ok", name, already_loaded: true };
+      const instructions = await readFile(join(process.cwd(), "src/lib/xiaoyun/skills/forecast-review/SKILL.md"), "utf8");
+      forecastSkillLoaded = true;
+      notes.delete("forecast_skill_required");
+      return { status: "ok", name, instructions };
+    }),
     tool("query_data", "让数据库 Agent 查数并保存结果。base 用于以旧结果为基准改筛选，resume 用于回答数据库的澄清。", z.strictObject({
       topic: topicSchema, question: z.string().trim().min(1).max(300),
       base: z.enum(["data", "chart", "analysis"]).optional(), latestVersion: z.boolean().optional(), resume: z.boolean().optional(),
@@ -219,11 +235,19 @@ export async function askXiaoyun(input: XiaoyunRequest, requestSignal: AbortSign
       return { status: result.status, data_ref: result.data_ref, result_id: result.result_id, revision: result.revision,
         profile, chart: original?.chart?.selection, forecastModels: profile.analysis.forecast ? enabledForecastModels() : [] };
     }),
-    tool("inspect_data", "读取目标结果的类型、单位、覆盖、质量、可用图表和预测留出上限。", z.strictObject(targetInput),
-      async ({ topic, target }) => {
+    tool("inspect_data", "读取目标数据及可用能力。提供 plan 时在不入队的情况下预检分析方案。", z.strictObject({
+      ...targetInput, plan: planSchema.optional(),
+    }),
+      async ({ topic, target, plan }) => {
         const { id, profile, result, chart } = await inspect(topic, target);
+        const prior = plan && target === "analysis" ? (await context.get(topic))?.analysis?.summary.selection : undefined;
+        const preflight = plan && prepareAnalysisPlan(profile, inheritAnalysisPlan(plan, prior));
+        if (preflight) {
+          if (preflight.error) notes.set("analysis_preflight", preflight.error);
+          else notes.delete("analysis_preflight");
+        }
         return { status: "ok", result_id: id, data_ref: result.data_ref, profile, chart: chart?.selection,
-          forecastModels: profile.analysis.forecast ? enabledForecastModels() : [] };
+          forecastModels: profile.analysis.forecast ? enabledForecastModels() : [], preflight };
       }),
     tool("render_chart", "按已检查的单指标结果生成图表。修改旧图时用 chart 目标并继承它的输入与设置。", z.strictObject({
       ...targetInput, chart: z.enum(chartTypes).optional(), renderer: z.enum(chartBackends).optional(),
@@ -252,20 +276,24 @@ export async function askXiaoyun(input: XiaoyunRequest, requestSignal: AbortSign
     tool("submit_analysis", "提交描述、聚类、预测、回测或单模型与基线对比。已入队后通过 get_analysis 看结果。", z.strictObject({
       ...targetInput, plan: planSchema,
     }), async ({ topic, target, plan }) => {
+      if (isForecastOperation(plan.operation) && !forecastSkillLoaded) {
+        return note("forecast_skill_required", "请先使用 load_skill 读取 forecast-review。", "needs_skill");
+      }
       const entry = actionable(topic, target);
       if (artifacts.some(result => result.kind === "analysis")) throw new XiaoyunContextError("本轮已提交一项分析。");
       const state = await context.get(topic);
       if (!state) throw new XiaoyunContextError("请先查询数据。");
       const session = await context.session(state, "analysis");
-      const previous = target === "analysis" ? planSchema.safeParse(session.summary.selection).data : undefined;
-      const inherited = previous?.operation === plan.operation ? { ...previous, ...plan } : plan;
+      const inherited = inheritAnalysisPlan(plan, target === "analysis" ? session.summary.selection : undefined);
       const result = await runAnalysisRequest({
         action: "submit", project_id: state.scope.project_id, session_id: session.session_id, revision: session.revision,
         result_id: entry.id, plan: inherited,
       }, state.scope.project_key, signal, analysisJobId(state.scope.project_id, input.requestId));
       if (!("status" in result) || !("job_id" in result) || !result.job_id) {
+        notes.delete("analysis_preflight");
         return note("submit_analysis", "error" in result ? result.error ?? "分析未提交。" : "分析未提交。");
       }
+      notes.delete("analysis_preflight");
       if ("reused" in result) {
         state.scope = { ...state.scope, analysis: { session_id: result.session_id } };
         const previousRef = z.object({ query_hash: z.string() }).safeParse(result.data_ref).data;
