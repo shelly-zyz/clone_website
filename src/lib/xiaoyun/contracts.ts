@@ -21,9 +21,11 @@ export const xiaoyunContextSchema = z.strictObject({
 });
 
 export const xiaoyunRequestSchema = z.strictObject({
+  requestId: z.uuid().optional(),
   message: z.string().trim().min(1).max(300),
   topic: topicSchema,
   context: xiaoyunContextSchema,
+  selectedChart: z.strictObject({ topic: topicSchema, chart_id: z.uuid() }).optional(),
 });
 
 export type XiaoyunRequest = z.infer<typeof xiaoyunRequestSchema>;
@@ -59,7 +61,7 @@ export const analysisJobSchema = z.object({
 });
 
 export type XiaoyunBusinessResult =
-  | { kind: "chart"; topic: Topic; renderer: "mcp-echarts" | "vchart" | "antv"; options: Record<string, unknown>; version: string }
+  | { kind: "chart"; topic: Topic; chartId: string; title: string; renderer: "mcp-echarts" | "vchart" | "antv"; options: Record<string, unknown>; version: string }
   | { kind: "analysis"; topic: Topic; jobId: string; projectId: string };
 
 export type XiaoyunReply = {
@@ -73,4 +75,5 @@ export type XiaoyunReply = {
   lastTopic?: Topic;
   lastRoute?: XiaoyunContext["lastRoute"];
   business?: XiaoyunBusinessResult;
+  artifacts?: XiaoyunBusinessResult[];
 };

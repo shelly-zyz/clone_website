@@ -11,6 +11,33 @@ const recentSchema = z.array(z.object({ role: z.enum(["user", "assistant"]), tex
 const hash = (threadId: string) => createHash("sha256").update(threadId).digest("hex");
 let active = 0;
 
+export async function readMapAssistantThread(threadId: string | null | undefined) {
+  if (!threadId || !/^[A-Za-z0-9_-]{43}$/.test(threadId)) return;
+  return runDataAgentWrite("green_agent_context", async (client) => {
+    const { rows } = await client.query<{ revision: number; recent: unknown }>(
+      "SELECT revision, recent FROM projects.map_assistant_thread WHERE access_hash = $1", [hash(threadId)]);
+    const previous = rows[0];
+    if (previous) return { threadId, revision: previous.revision, recent: recentSchema.parse(previous.recent) };
+  });
+}
+
+export async function saveMapAssistantThread(previous: Awaited<ReturnType<typeof readMapAssistantThread>>, message: string, reply: string) {
+  const threadId = previous?.threadId ?? randomBytes(32).toString("base64url");
+  const recent = [...(previous?.recent ?? []), { role: "user", text: message }, { role: "assistant", text: reply }].slice(-8);
+  await runDataAgentWrite("green_agent_context", async (client) => {
+    const payload = JSON.stringify(recent);
+    if (!previous) {
+      await client.query("INSERT INTO projects.map_assistant_thread (access_hash, recent) VALUES ($1,$2)", [hash(threadId), payload]);
+      return;
+    }
+    const updated = await client.query(`
+      UPDATE projects.map_assistant_thread SET recent = $2, revision = revision + 1, updated_at = now()
+      WHERE access_hash = $1 AND revision = $3`, [hash(threadId), payload, previous.revision]);
+    if (!updated.rowCount) throw new DataAgentError("SESSION_CONFLICT", "会话已有新消息，请重试。");
+  });
+  return threadId;
+}
+
 const tools: AgentTool[] = [
   {
     name: "utc_now", label: "UTC 时间", description: "返回当前 UTC 时间",
@@ -37,15 +64,8 @@ const tools: AgentTool[] = [
 export async function askMapAssistant(message: string, incomingThreadId: string | null, signal: AbortSignal) {
   if (active >= 2) throw new DataAgentError("BUSY", "地图助手正在处理其他请求，请稍后再试。");
   const { models, model, apiKey } = getPiModel();
-  const previous = incomingThreadId && /^[A-Za-z0-9_-]{43}$/.test(incomingThreadId)
-    ? await runDataAgentWrite("green_agent_context", async (client) => {
-      const { rows } = await client.query<{ revision: number; recent: unknown }>(
-        "SELECT revision, recent FROM projects.map_assistant_thread WHERE access_hash = $1", [hash(incomingThreadId)]);
-      return rows[0];
-    })
-    : undefined;
-  const threadId = previous && incomingThreadId ? incomingThreadId : randomBytes(32).toString("base64url");
-  const recent = previous ? recentSchema.parse(previous.recent) : [];
+  const previous = await readMapAssistantThread(incomingThreadId);
+  const recent = previous?.recent ?? [];
   if (active >= 2) throw new DataAgentError("BUSY", "地图助手正在处理其他请求，请稍后再试。");
   const timeout = AbortSignal.any([signal, AbortSignal.timeout(25000)]);
   let rounds = 0;
@@ -75,18 +95,7 @@ export async function askMapAssistant(message: string, incomingThreadId: string 
     const answer = last?.role === "assistant"
       ? last.content.filter((item) => item.type === "text").map(({ text }) => text).join("\n").trim() : "";
     const reply = answer || "当前没有可展示的答案，请换一种问法再试。";
-    const next = [...recent, { role: "user", text: message }, { role: "assistant", text: reply }].slice(-8);
-    await runDataAgentWrite("green_agent_context", async (client) => {
-      const payload = JSON.stringify(next);
-      if (!previous) {
-        await client.query("INSERT INTO projects.map_assistant_thread (access_hash, recent) VALUES ($1,$2)", [hash(threadId), payload]);
-        return;
-      }
-      const updated = await client.query(`
-        UPDATE projects.map_assistant_thread SET recent = $2, revision = revision + 1, updated_at = now()
-        WHERE access_hash = $1 AND revision = $3`, [hash(threadId), payload, previous.revision]);
-      if (!updated.rowCount) throw new DataAgentError("SESSION_CONFLICT", "会话已有新消息，请重试。");
-    });
+    const threadId = await saveMapAssistantThread(previous, message, reply);
     return { threadId, answer: reply };
   } finally {
     active -= 1;

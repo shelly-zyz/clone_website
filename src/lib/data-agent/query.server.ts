@@ -37,10 +37,12 @@ function catalogEntry(row: VersionRow) {
   };
 }
 
-export async function listDataCatalog(topic?: Topic) {
+export async function listDataCatalog(topic?: Topic, version?: string) {
   return readDataAgent(async (client) => {
     const versions = await client.query<VersionRow>(`${versionSelect}
-      WHERE v.is_current AND ($1::text IS NULL OR v.topic_id = $1) ORDER BY v.topic_id`, [topic ?? null]);
+      WHERE ($1::text IS NULL OR v.topic_id = $1)
+        AND (CASE WHEN $2::text IS NULL THEN v.is_current ELSE v.version = $2 END)
+      ORDER BY v.topic_id`, [topic ?? null, version ?? null]);
     const catalog = versions.rows.map(catalogEntry);
     const power = versions.rows.find((row) => row.topic_id === "power");
     if (!power || topic !== "power") return { datasets: catalog };

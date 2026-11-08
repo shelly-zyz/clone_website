@@ -1,5 +1,5 @@
-import { analysisOperations, analysisRequestSchema, forecastModels } from "@/lib/analysis-agent/contracts";
-import { runAnalysisRequest } from "@/lib/analysis-agent/analysis.server";
+import { analysisOperations, analysisRequestSchema } from "@/lib/analysis-agent/contracts";
+import { enabledForecastModels, runAnalysisRequest } from "@/lib/analysis-agent/analysis.server";
 import { authorizeDataAgent, dataAgentErrorResponse } from "@/lib/data-agent/http.server";
 
 export const runtime = "nodejs";
@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 export async function GET(request: Request) {
   const unauthorized = authorizeDataAgent(request);
   if (unauthorized) return unauthorized;
-  return Response.json({ operations: analysisOperations, models: forecastModels, execution: "queued" });
+  return Response.json({ operations: analysisOperations, models: enabledForecastModels(), execution: "queued" });
 }
 
 export async function POST(request: Request) {

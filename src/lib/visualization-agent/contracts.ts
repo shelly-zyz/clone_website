@@ -5,6 +5,10 @@ export const chartTypes = ["line", "bar"] as const;
 export type ChartType = (typeof chartTypes)[number];
 export const chartBackends = ["echarts", "vchart", "antv"] as const;
 export type ChartBackend = (typeof chartBackends)[number];
+export const chartSelectionSchema = z.strictObject({ chart: z.enum(chartTypes), renderer: z.enum(chartBackends) });
+export const chartReferenceSchema = z.strictObject({
+  chart_id: z.uuid(), result_id: z.uuid(), selection: chartSelectionSchema,
+});
 
 const resultScope = { project_id: z.uuid(), result_id: z.uuid() };
 const renderFields = { ...resultScope, chart: z.enum(chartTypes), renderer: z.enum(chartBackends).optional() };
@@ -18,6 +22,7 @@ export const sceneFields = {
 
 export const visualizationRequestSchema = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("render"), ...renderFields }),
+  z.strictObject({ action: z.literal("render_session"), ...sessionInput, ...renderFields, instruction }),
   z.strictObject({ action: z.literal("ask"), ...resultScope, instruction, renderer: z.enum(chartBackends).optional() }),
   openSessionSchema, getSessionSchema,
   z.strictObject({ action: z.literal("ask_session"), ...sessionInput, result_id: z.uuid().optional(), instruction,

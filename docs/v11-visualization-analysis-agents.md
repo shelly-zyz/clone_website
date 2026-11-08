@@ -6,10 +6,24 @@
 
 | 能力 | 设计 | 原因 |
 | --- | --- | --- |
-| 可视化 | **工具优先，Pi 仅做选图与会话追问** | 已知数据与模板时，图表配置应可复现、可校验；不需要让 LLM 自主生成图表代码。 |
-| 分析预测 | **Pi Agent + 异步 Worker** | 需要根据意图选择描述、聚类、预测、回测或比较，并处理耗时模型、任务状态与追问。 |
+| 可视化 | **小云选图，模板服务生成配置** | 根据结果类型和用户目标选择图形，已有图表按原始结果引用重绘。 |
+| 分析预测 | **小云选操作和参数，Worker 异步计算** | 入队前检查口径、连续样本与留出窗口，Worker 在锁定的数据快照上执行。 |
 
-Pi 两个入口复用数据库 Agent 的 `getPiModel()` 配置（`DATA_AGENT_PI_*`、`DEEPSEEK_API_KEY`）。模型只能调用一个严格的选择工具；选择值再由 Zod schema 解析。工具异常、超时或无效输出不会重试模型调用。
+小云运行一个有预算的 Pi 工具循环，复用数据库 Agent 的模型配置。只有自然语言查询进入数据库子 Agent。查询成功后，小云获得已保存的结果引用和数据摘要，再调用结构化图表或分析服务。已有独立 `ask` 和 MCP 入口继续复用同一业务服务。
+
+## 小云工具与会话
+
+| 工具 | 输入与约束 |
+| --- | --- |
+| `query_data` | 查数要求和可选基准。数据库 Agent 负责语义目录、指标口径与版本。成功返回已保存的 DataRef、质量和可用能力。 |
+| `inspect_data` | 读取本轮查询、之前的数据、原图或上次分析的输入。旧对象先检查，后执行。 |
+| `render_chart` | 复用单指标折线或柱状模板。修改旧图使用原输入和未改的渲染设置。GFS 图按有效时间展示并标注起报。 |
+| `submit_analysis`、`get_analysis` | 提交或查询项目内任务。GFS 预报帧可做描述统计。预测与回测使用连续的日度或月度历史；回测留出后至少保留 8 期训练数据。 |
+| `get_sources` | 按所引用的数据、图表或分析输入追溯数据版本与来源。 |
+
+小云每轮锁定一个专题。数据库澄清保存在问数会话的对应修订上，用户补充条件后可继续原任务。图表卡可选中追问，服务端从可视化会话验证图表及其输入引用。分析入队绑定输入快照，已有项目内相同请求 ID 重试时复用原任务。
+
+部署时依次应用数据会话和业务会话迁移，再用 `green_ddl` 执行 [小云会话迁移](../scripts/v11-xiaoyun-context.sql)。应用角色只读写所需的澄清列。若部署只启用了部分预测模型，可在应用环境用 `OGW_ANALYSIS_ENABLED_MODELS` 登记，例如 `statsforecast,timesfm`。Worker 仍负责检查其 Python 依赖、权重和设备。
 
 ## 可视化
 
@@ -57,7 +71,9 @@ OGW_ANALYSIS_DEVICE=cuda npm run analysis:worker
 
 会话持久化在 PostgreSQL `projects.agent_session`，异步任务持久化在 `results.analysis_job`。两张表都以 `projects.data_project` 外键约束项目归属；项目存在性、DataRef 读取和写入仍经过数据库 Agent 的访问散列校验。迁移由 `green_ddl` 执行 [`v11-business-agent-context.sql`](../scripts/v11-business-agent-context.sql)，网站运行角色不需要也不应拥有 DDL 权限。
 
-## 验证记录
+## 验证
+
+`node --test scripts/verify-v11-xiaoyun.mjs` 用固定工具回执和会话夹具验证同轮查数出图和入队、旧图输入绑定、GFS 展示、预测预检、澄清恢复及空结果。它使用实际的小云、图表配置和分析预检代码，替换了模型和 PostgreSQL 边界。
 
 `scripts/verify-v11-business-agents.mjs` 覆盖真实的项目 DataRef、MCP 调用、会话 revision、项目隔离、描述/聚类、StatsForecast 回测、TimesFM 与 Chronos-2 比较。浏览器验证确认 ECharts、VChart、AntV G2、MapLibre Globe 与 Three.js 均可渲染。
 

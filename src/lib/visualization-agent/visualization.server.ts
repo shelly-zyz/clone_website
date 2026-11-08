@@ -1,5 +1,6 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
 import type { G2Spec } from "@antv/g2";
 import type { IBarChartSpec, ILineChartSpec } from "@visactor/vchart";
 import type { EChartsOption } from "echarts";
@@ -7,15 +8,15 @@ import { z } from "zod";
 import { selectWithPi } from "@/lib/agent-runtime/pi-tool.server";
 import { advanceAgentSession, createAgentSession, getAgentSession } from "@/lib/agent-runtime/store";
 import { DataAgentError } from "@/lib/data-agent/database.server";
+import { profileDataResult } from "@/lib/data-agent/result-profile";
 import { assertDataProject, resolveDataResult } from "@/lib/data-agent/state.server";
-import { chartBackends, chartTypes, type ChartBackend, type ChartType, type visualizationRequestSchema } from "./contracts";
+import { chartBackends, chartSelectionSchema, chartTypes, type ChartBackend, type ChartType, type visualizationRequestSchema } from "./contracts";
 import { chartTools, generateChartOption } from "./echarts-mcp.server";
 import { powerScene } from "./scene.server";
 
 type Request = z.infer<typeof visualizationRequestSchema>;
 type Point = { label: string; value: number | null };
 const choiceSchema = z.strictObject({ chart: z.enum([...chartTypes, "unsupported"]), renderer: z.enum(chartBackends).optional() });
-const settingsSchema = z.strictObject({ chart: z.enum(chartTypes), renderer: z.enum(chartBackends) });
 const pointsSchema = z.array(z.strictObject({ label: z.string().min(1), value: z.number().nullable() })).min(1).max(120);
 let active = 0;
 
@@ -70,9 +71,10 @@ export async function visualizeResult(request: Request, projectKey: string | nul
   if (active >= 3) throw new DataAgentError("BUSY", "可视化服务正在处理其他请求，请稍后重试。");
   active += 1;
   try {
-    if (request.action === "ask_session") await assertDataProject(request.project_id, projectKey);
-    const session = request.action === "ask_session" ? await getAgentSession(request.project_id, request.session_id, "visualization") : undefined;
-    if (request.action === "ask_session" && (!session || session.revision !== request.revision)) {
+    const scoped = request.action === "ask_session" || request.action === "render_session";
+    if (scoped) await assertDataProject(request.project_id, projectKey);
+    const session = scoped ? await getAgentSession(request.project_id, request.session_id, "visualization") : undefined;
+    if (scoped && (!session || session.revision !== request.revision)) {
       throw new DataAgentError("SESSION_CONFLICT", "请刷新可视化会话后重试。");
     }
     const resultId = request.result_id ?? session?.summary.result_id;
@@ -80,7 +82,7 @@ export async function visualizeResult(request: Request, projectKey: string | nul
     const result = await resolveDataResult(request.project_id, resultId, projectKey);
     signal.throwIfAborted();
     const { metric, rows } = result;
-    if (!rows.some(row => row.value !== null)) return { status: "empty" as const, error: "该查询结果没有可绘制的观测值。" };
+    if (!profileDataResult(result).chart) return { status: "empty" as const, error: "该查询结果没有可绘制的有效观测值。" };
     const monthly = metric.time_grain === "month";
     const forecast = metric.time_grain === "forecast_frame";
     const timeAxis = monthly ? "月份" : forecast ? "有效时刻（UTC）" : "日期";
@@ -89,8 +91,9 @@ export async function visualizeResult(request: Request, projectKey: string | nul
       value: value === null ? null : Number(value),
     })));
 
-    const previous = settingsSchema.safeParse(session?.summary.selection).data;
-    const selection = request.action === "render" ? { chart: request.chart, renderer: request.renderer } : await selectWithPi({
+    const previous = chartSelectionSchema.safeParse(session?.summary.selection).data;
+    const direct = request.action === "render" || request.action === "render_session";
+    const selection = direct ? { chart: request.chart, renderer: request.renderer } : await selectWithPi({
       tool: "select_chart", schema: choiceSchema, signal,
       prompt: [
         "你是 OpenGridWorks 的可视化选图层。只调用一次 select_chart。使用已保存的单指标时间序列，不改数据。",
@@ -107,19 +110,22 @@ export async function visualizeResult(request: Request, projectKey: string | nul
     const chart = selection.chart;
     const renderer = request.renderer ?? selection.renderer ?? previous?.renderer ?? "echarts";
     const location = rows[0]?.source_ref.region_name;
-    const title = [typeof location === "string" ? location : "", metric.name].filter(Boolean).join(" · ");
+    const issue = rows[0]?.issue_time;
+    const title = [typeof location === "string" ? location : "", metric.name,
+      forecast && issue ? `GFS 起报 ${issue.slice(0, 16).replace("T", " ")} UTC` : ""].filter(Boolean).join(" · ");
     const spec = await renderOptions(chart, renderer, points, title, metric.unit, timeAxis, signal);
     signal.throwIfAborted();
-    const saved = session && request.action === "ask_session"
-      ? await advanceAgentSession(session, "visualization", { result_id: resultId, selection: { chart, renderer } },
-        { instruction: request.instruction, status: "ok", selection: { chart, renderer } })
+    const reference = { chart_id: randomUUID(), result_id: resultId, selection: { chart, renderer } };
+    const saved = session && scoped
+      ? await advanceAgentSession(session, "visualization", reference,
+        { instruction: request.instruction, status: "ok", selection: reference })
       : undefined;
     if (saved?.status === "conflict") throw new DataAgentError("SESSION_CONFLICT", "可视化会话已有新消息，请刷新后重试。");
     return {
-      status: "ok" as const, mode: request.action === "render" ? "direct" : "pi", ...spec, result_id: resultId,
+      status: "ok" as const, mode: direct ? "direct" : "pi", ...spec, result_id: resultId,
       template_id: `${renderer}.${chart}.time-series`, template_version: "1",
       data_ref: result.data_ref, field_mapping: { x: "time_start", y: "value" }, events: [],
-      ...(saved?.status === "saved" ? { session_id: session?.session_id, revision: saved.revision } : {}),
+      ...(saved?.status === "saved" ? { chart_id: reference.chart_id, session_id: session?.session_id, revision: saved.revision } : {}),
     };
   } finally {
     active -= 1;

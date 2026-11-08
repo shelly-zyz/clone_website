@@ -2,13 +2,21 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { VoiceAssistant } from "@xiaoyun/voice";
-import type { Topic } from "@/lib/data-agent/contracts";
+import { topicSchema, type Topic } from "@/lib/data-agent/contracts";
 import {
   analysisJobSchema, xiaoyunContextSchema, type XiaoyunBusinessResult, type XiaoyunContext, type XiaoyunReply,
 } from "@/lib/xiaoyun/contracts";
 import { XiaoyunBusinessCard } from "./XiaoyunBusinessCard";
 
 const storageKey = "og-xiaoyun-context";
+
+function newRequestId() {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("");
+  return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)].join("-");
+}
 
 function loadContext(): XiaoyunContext {
   try {
@@ -26,11 +34,14 @@ export function XiaoyunAssistant({ topic, onMapCommand }: {
   const container = useRef<HTMLDivElement>(null);
   const voice = useRef<VoiceAssistant | null>(null);
   const context = useRef<XiaoyunContext>({});
+  const selectedChart = useRef<{ topic: Topic; chart_id: string } | undefined>(undefined);
+  const retry = useRef<{ id: string; message: string; topic: Topic; chartId?: string } | undefined>(undefined);
   const page = useRef({ topic, onMapCommand });
   const token = useRef("");
   const [requiresToken, setRequiresToken] = useState(false);
   const [loadError, setLoadError] = useState(false);
-  const [business, setBusiness] = useState<{ id: number; result: XiaoyunBusinessResult }>();
+  const [business, setBusiness] = useState<XiaoyunBusinessResult[]>([]);
+  const [selectedChartId, setSelectedChartId] = useState<string>();
 
   const loadAnalysis = useCallback(async (task: Extract<XiaoyunBusinessResult, { kind: "analysis" }>, signal: AbortSignal) => {
     const scope = context.current.sessions?.[task.topic];
@@ -74,13 +85,19 @@ export function XiaoyunAssistant({ topic, onMapCommand }: {
             const commandResult = page.current.onMapCommand(message);
             if (commandResult) return { summary: commandResult };
 
+            const activeTopic = topicSchema.safeParse(snapshot.topic).data ?? page.current.topic;
+            const chart = selectedChart.current;
+            const previous = retry.current;
+            const id = previous?.message === message && previous.topic === activeTopic && previous.chartId === chart?.chart_id
+              ? previous.id : newRequestId();
+            retry.current = { id, message, topic: activeTopic, chartId: chart?.chart_id };
             const response = await fetch("/api/xiaoyun", {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
                 ...(token.current ? { Authorization: `Bearer ${token.current}` } : {}),
               },
-              body: JSON.stringify({ message, topic: snapshot.topic ?? page.current.topic, context: context.current }),
+              body: JSON.stringify({ requestId: id, message, topic: activeTopic, context: context.current, selectedChart: chart }),
               signal,
             });
             const reply: XiaoyunReply & { error?: string } = await response.json();
@@ -89,6 +106,7 @@ export function XiaoyunAssistant({ topic, onMapCommand }: {
               if (response.status === 401) setRequiresToken(true);
               throw new Error(reply.error ?? "小云暂时无法处理此请求。");
             }
+            retry.current = undefined;
 
             const updated = { ...context.current };
             if (reply.threadId) updated.threadId = reply.threadId;
@@ -100,8 +118,16 @@ export function XiaoyunAssistant({ topic, onMapCommand }: {
               // Keep the live session available if browser storage is disabled.
             }
             setRequiresToken(false);
-            const result = reply.business;
-            if (result) setBusiness((current) => ({ id: (current?.id ?? 0) + 1, result }));
+            const results = reply.artifacts ?? (reply.business ? [reply.business] : []);
+            if (results.length) setBusiness(current => {
+              const next = current.filter(item => !results.some(result => result.kind === "analysis" && item.kind === "analysis"
+                && result.topic === item.topic && result.jobId === item.jobId));
+              return [...next, ...results].slice(-4);
+            });
+            if (results.length && selectedChart.current) {
+              selectedChart.current = undefined;
+              setSelectedChartId(undefined);
+            }
             return { summary: reply.summary, markdown: reply.markdown, data: reply.data, sources: reply.sources };
           },
         },
@@ -120,7 +146,12 @@ export function XiaoyunAssistant({ topic, onMapCommand }: {
   return (
     <>
       <div ref={container} />
-      {business && <XiaoyunBusinessCard key={business.id} result={business.result} loadAnalysis={loadAnalysis} />}
+      {business.length > 0 && <XiaoyunBusinessCard results={business} loadAnalysis={loadAnalysis} selectedChartId={selectedChartId}
+        onSelectChart={chart => {
+          const next = selectedChart.current?.chart_id === chart.chartId ? undefined : { topic: chart.topic, chart_id: chart.chartId };
+          selectedChart.current = next;
+          setSelectedChartId(next?.chart_id);
+        }} />}
       {requiresToken && (
         <label className="fixed bottom-4 right-4 z-[3000] flex items-center gap-2 rounded-lg bg-slate-950 px-3 py-2 text-sm text-slate-100">
           小云访问令牌

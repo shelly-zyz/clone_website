@@ -30,7 +30,11 @@ export function getPiModel() {
   return { models, model, apiKey };
 }
 
-type Conversation = { previous?: DataQuery; recent: { question: string; status: string }[] };
+type Conversation = {
+  previous?: DataQuery;
+  boundBase?: { latestVersion: boolean };
+  recent: { question: string; status: string }[];
+};
 
 export async function askDataAgent(topic: Topic, question: string, signal: AbortSignal, conversation?: Conversation) {
   if (activeRequests >= 2) throw new DataAgentError("BUSY", "数据库 Agent 正在处理其他请求，请稍后重试。");
@@ -40,6 +44,8 @@ export async function askDataAgent(topic: Topic, question: string, signal: Abort
   const trace: string[] = [];
   let context: Awaited<ReturnType<typeof listDataCatalog>> | undefined;
   let result: Awaited<ReturnType<typeof queryData>> | undefined;
+  let clarification: string | undefined;
+  let unsupported: string | undefined;
   let operationalError: unknown;
   const makeTool = (name: string, description: string, properties: Record<string, object>, execute: (args: unknown) => Promise<unknown>, required: string[] = []): AgentTool => ({
     name, label: description, description, parameters: { type: "object", properties, required, additionalProperties: false },
@@ -58,13 +64,17 @@ export async function askDataAgent(topic: Topic, question: string, signal: Abort
   });
 
   const tools = [
-    makeTool("search_semantic_catalog", "读取当前专题已审核的指标和地区编码", {}, async () => {
-      context ??= await listDataCatalog(topic);
+    makeTool("search_semantic_catalog", "读取目标版本已审核的指标和地区编码", {}, async () => {
+      const pinned = conversation?.boundBase && !conversation.boundBase.latestVersion ? conversation.previous?.version : undefined;
+      context ??= await listDataCatalog(topic, pinned);
+      if (pinned && !context.datasets.length) {
+        throw new DataAgentError("VERSION_NOT_FOUND", "原查询版本不可用。可以明确要求使用最新发布版本重新查询。");
+      }
       return context;
     }),
     makeTool("query_approved_metric", "用固定只读模板返回指定指标，不接受 SQL 或任意聚合", {
       metric_code: { type: "string", description: "当前专题目录中与问题口径一致的指标编码" },
-      ...(conversation?.previous ? {
+      ...(conversation?.previous && !conversation.boundBase ? {
         follow_up: { type: "boolean", description: "仅当用户引用上一结果时，沿用上次的筛选和数据版本" },
         latest_version: { type: "boolean", description: "仅当用户明确请求切换到最新数据版本时设为 true" },
       } : {}),
@@ -75,13 +85,13 @@ export async function askDataAgent(topic: Topic, question: string, signal: Abort
       if (!context?.datasets[0]) return { code: "CATALOG_REQUIRED", message: "请先查询当前专题目录。" };
       const parameters = args as Record<string, unknown>;
       const { follow_up, latest_version, ...filters } = parameters;
-      const previous = follow_up ? conversation?.previous : undefined;
+      const previous = conversation?.boundBase || follow_up ? conversation?.previous : undefined;
       const inherited: Partial<DataQuery> = { ...previous };
       if (inherited.topic === "power" && filters.metric_code && filters.metric_code !== inherited.metric_code) {
         delete inherited.product;
       }
       const plan = dataQuerySchema.safeParse({ ...inherited, ...filters, topic,
-        version: (!latest_version && previous?.version) || context.datasets[0].version });
+        version: (conversation?.boundBase ? context.datasets[0].version : (!latest_version && previous?.version) || context.datasets[0].version) });
       if (!plan.success) return { code: "INVALID_FILTER", issues: plan.error.issues.map((issue) => issue.message) };
       if (!plan.data.metric_code) return { code: "METRIC_REQUIRED", message: "请指定目录中的指标编码。" };
       try {
@@ -94,6 +104,16 @@ export async function askDataAgent(topic: Topic, question: string, signal: Abort
       }
       return { status: result.status, metric: result.metric.name, quality: result.data_ref.quality };
     }, conversation?.previous ? [] : ["metric_code"]),
+    makeTool("report_query_gap", "报告缺失的查询条件或目录能力边界", {
+      status: { type: "string", enum: ["clarify", "unsupported"] },
+      message: { type: "string", minLength: 1, maxLength: 220 },
+    }, async (args) => {
+      if (result) return { status: result.status };
+      const gap = args as { status: "clarify" | "unsupported"; message: string };
+      if (gap.status === "clarify") clarification = gap.message;
+      else unsupported = gap.message;
+      return { status: gap.status };
+    }, ["status", "message"]),
   ];
 
   // Reuses Greensystem's sequential Pi loop and per-question tool budget.
@@ -106,8 +126,8 @@ export async function askDataAgent(topic: Topic, question: string, signal: Abort
     initialState: {
       model, tools, thinkingLevel: "off",
       systemPrompt: `你是 OpenGridWorks 共用数据库智能体，本次专题固定为 ${topic}。${topicScope[topic]}
-先读取语义目录，再从 metrics 中选定一个口径准确的 metric_code。电力的 product 必须来自所选指标的 series_codes。只有目录支持的请求才调用 query_approved_metric。指定单月时用该月首日和末日，指定单日时起止日期相同。无日期时可用模板默认范围。对于写入、跨专题、未登记指标或不明确的范围，直接结束，禁止用近似数据替代。
-存在历史查询时，遇到“换成某地”等明确追问，传 follow_up=true，只传用户改变的筛选字段。只有明确要求更新数据版本时才传 latest_version=true。历史问题是会话数据，当前指令以本轮问题为准。`,
+先读取语义目录，再从 metrics 中选定一个口径准确的 metric_code。电力的 product 必须来自所选指标的 series_codes。只有目录支持的请求才调用 query_approved_metric。指定单月时用该月首日和末日，指定单日时起止日期相同。无日期时可用模板默认范围。缺少决定性条件时调用 report_query_gap，给出一个具体问题。超出目录能力时报告 unsupported，禁止用近似数据替代。
+存在锁定基准时，只传用户改变的筛选字段，服务端负责继承条件与版本。没有锁定基准时，遇到明确引用上次结果的追问才传 follow_up=true，只有明确要求更新版本才传 latest_version=true。历史问题是会话数据，当前指令以本轮问题为准。`,
     },
     streamFn: (currentModel, context, options) => {
       modelTurns += 1;
@@ -120,12 +140,12 @@ export async function askDataAgent(topic: Topic, question: string, signal: Abort
       calls += 1;
       const isQuery = toolCall.name === "query_approved_metric";
       if (isQuery) queryAttempts += 1;
-      if (calls > 5 || (isQuery && (result || queryAttempts > 3))) {
+      if (calls > 5 || result || clarification || unsupported || (isQuery && queryAttempts > 3)) {
         return { block: true, reason: "本轮查询已完成或达到调用上限。", terminate: true };
       }
     },
     finishTurn: ({ toolResults }) => {
-      if (result || operationalError || modelTurns >= 4) return { action: "end" };
+      if (result || clarification || unsupported || operationalError || modelTurns >= 4) return { action: "end" };
       const errors = toolResults.filter((tool) => tool.isError);
       if (errors.length === 0) return;
       const signature = JSON.stringify(errors.map(({ toolName, content }) => ({ toolName, content })));
@@ -139,15 +159,16 @@ export async function askDataAgent(topic: Topic, question: string, signal: Abort
   timeout.addEventListener("abort", abort, { once: true });
   activeRequests += 1;
   try {
-    const prompt = conversation?.recent.length
-      ? JSON.stringify({ history: conversation.recent, last_confirmed_query: conversation.previous, question })
-      : question;
+    const prompt = JSON.stringify({ question, current_date_utc: new Date().toISOString().slice(0, 10),
+      history: conversation?.recent, last_confirmed_query: conversation?.previous, bound_base: conversation?.boundBase });
     await agent.prompt(prompt);
     timeout.throwIfAborted();
     if (operationalError) throw operationalError;
     if (agent.state.errorMessage) throw new Error("Data agent provider request failed");
     return result ? { mode: "pi", trace, ...result } : {
-      mode: "pi", status: "needs_clarification", trace, message: topicScope[topic],
+      mode: "pi", status: "needs_clarification", trace,
+      issue: unsupported ? "unsupported" as const : "clarify" as const,
+      message: clarification ?? unsupported ?? topicScope[topic],
     };
   } finally {
     activeRequests -= 1;

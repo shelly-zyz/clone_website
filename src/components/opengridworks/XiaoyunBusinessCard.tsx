@@ -182,19 +182,39 @@ function AnalysisProgress({ task, loadAnalysis }: { task: Task; loadAnalysis: Lo
   );
 }
 
-export function XiaoyunBusinessCard({ result, loadAnalysis }: { result: XiaoyunBusinessResult; loadAnalysis: LoadAnalysis }) {
+export function XiaoyunBusinessCard({ results, loadAnalysis, selectedChartId, onSelectChart }: {
+  results: XiaoyunBusinessResult[];
+  loadAnalysis: LoadAnalysis;
+  selectedChartId?: string;
+  onSelectChart: (chart: Chart) => void;
+}) {
   const [open, setOpen] = useState(true);
-  const label = result.kind === "chart" ? "可视化结果" : "分析预测";
   return (
     <aside aria-label="小云业务结果" data-astryx-theme="neutral"
       className="fixed left-3 right-3 top-16 z-[2500] max-h-[48svh] overflow-auto rounded-xl text-slate-900 shadow-xl scheme-light sm:left-auto sm:right-20 sm:top-20 sm:w-[28rem]">
       <Card padding={3}>
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold">小云 · {label} · {topics[result.topic]}</h2>
+          <h2 className="text-sm font-semibold">小云 · 业务结果</h2>
           <Button label={open ? "收起" : "展开"} size="sm" variant="secondary" aria-expanded={open}
             onClick={() => setOpen((value) => !value)} />
         </div>
-        {open && (result.kind === "chart" ? <ChartPreview chart={result} /> : <AnalysisProgress task={result} loadAnalysis={loadAnalysis} />)}
+        {open && <div className="mt-2 space-y-3">
+          {results.toReversed().map(result => result.kind === "chart" ? (
+            <section key={result.chartId} className="border-t border-slate-200 pt-2">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-medium">{result.title}</h3>
+                <Button size="sm" variant="secondary" aria-pressed={selectedChartId === result.chartId}
+                  label={selectedChartId === result.chartId ? "已选中" : "选中追问"} onClick={() => onSelectChart(result)} />
+              </div>
+              <ChartPreview chart={result} />
+            </section>
+          ) : (
+            <section key={result.jobId} className="border-t border-slate-200 pt-2">
+              <h3 className="text-sm font-medium">分析预测 · {topics[result.topic]}</h3>
+              <AnalysisProgress task={result} loadAnalysis={loadAnalysis} />
+            </section>
+          ))}
+        </div>}
       </Card>
     </aside>
   );

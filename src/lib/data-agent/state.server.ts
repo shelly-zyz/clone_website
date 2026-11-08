@@ -47,11 +47,11 @@ export async function createDataSession(projectId: string, key: string | null) {
   });
 }
 
-export async function readDataSession(projectId: string, sessionId: string, key: string | null) {
+export async function readDataSession(projectId: string, sessionId: string, key: string | null, includePending = false) {
   const hash = projectHash(key);
   return runDataAgentWrite(contextWriter, async (client) => {
-    const { rows: [session] } = await client.query<{ topic: Topic; revision: number; summary: unknown; last_result_id: string | null }>(`
-      SELECT p.topic, s.revision, s.summary, (
+    const { rows: [session] } = await client.query<{ topic: Topic; revision: number; summary: unknown; last_result_id: string | null; xiaoyun_pending?: unknown }>(`
+      SELECT p.topic, s.revision, s.summary${includePending ? ", s.xiaoyun_pending" : ""}, (
         SELECT t.result_id FROM projects.data_session_turn t
         WHERE t.session_id = s.id AND t.result_id IS NOT NULL ORDER BY t.revision DESC LIMIT 1
       ) AS last_result_id FROM projects.data_session s
@@ -78,14 +78,20 @@ export async function resolveDataResult(projectId: string, resultId: string, key
 
 export async function askDataSession(
   topic: Topic, question: string, scope: Omit<SessionScope, "revision"> & { revision?: number }, key: string | null, signal: AbortSignal,
+  xiaoyun?: { originalMessage: string; baseResultId?: string; latestVersion: boolean },
 ) {
   const session = await readDataSession(scope.project_id, scope.session_id, key);
   if (session.topic !== topic || (scope.revision !== undefined && session.revision !== scope.revision)) {
     throw new DataAgentError("SESSION_CONFLICT", "会话专题或修订号不匹配，请重新读取会话。");
   }
-  const previous = dataQuerySchema.safeParse(session.summary);
+  const base = xiaoyun?.baseResultId ? await resolveDataResult(scope.project_id, xiaoyun.baseResultId, key) : undefined;
+  const previous = dataQuerySchema.safeParse(base ? { ...base.query, metric_code: base.metric.metric_code } : session.summary);
+  if (base && (!previous.success || previous.data.topic !== topic)) {
+    throw new DataAgentError("SESSION_CONFLICT", "原查询结果与当前专题不一致。");
+  }
   const answer = await askDataAgent(topic, question, signal, {
-    previous: previous.success ? previous.data : undefined,
+    previous: previous.success && (!xiaoyun || base) ? previous.data : undefined,
+    boundBase: base && xiaoyun ? { latestVersion: xiaoyun.latestVersion } : undefined,
     recent: session.turns.map(({ question, status }) => ({ question, status })),
   });
   signal.throwIfAborted();
@@ -97,6 +103,12 @@ export async function askDataSession(
       scope.session_id, scope.project_id, session.revision]);
     const revision = lookup.rows[0]?.revision;
     if (revision === undefined) throw new DataAgentError("SESSION_CONFLICT", "会话已有新消息，请重新读取会话。");
+    if (xiaoyun) {
+      const pending = answer.status === "needs_clarification" && answer.issue === "clarify"
+        ? { ...xiaoyun, question, clarification: answer.message, revision } : null;
+      await client.query("UPDATE projects.data_session SET xiaoyun_pending=$1::jsonb WHERE id=$2",
+        [pending ? JSON.stringify(pending) : null, scope.session_id]);
+    }
     let resultId: string | null = null;
     if ("data_ref" in answer) {
       const { data_ref, metric, query, rows, status } = answer;
