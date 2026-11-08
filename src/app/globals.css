@@ -1,6 +1,10 @@
+@layer reset, theme, base, astryx-base, astryx-theme, components, utilities;
+
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "@astryxdesign/core/astryx.css";
+@import "@astryxdesign/theme-neutral/theme.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -49,6 +53,7 @@
 }
 
 :root {
+  color-scheme: normal;
   --background: #151d24;
   --foreground: #e2e8f0;
   --card: #080c18;

@@ -28,14 +28,14 @@ async function renderOptions(
       title: { visible: true, text: title }, invalidType: "break",
       axes: [{ orient: "bottom", title: { visible: true, text: axis } }, { orient: "left", title: { visible: true, text: unit } }],
     } satisfies IBarChartSpec | ILineChartSpec;
-    return { renderer, tool: "render_vchart", options };
+    return { renderer: "vchart" as const, tool: "render_vchart", options };
   }
   if (renderer === "antv") {
     const options: G2Spec = {
       type: chart === "line" ? "line" : "interval", title, data: points,
       encode: { x: "label", y: "value" }, axis: { x: { title: axis }, y: { title: unit } },
     };
-    return { renderer, tool: "render_antv", options };
+    return { renderer: "antv" as const, tool: "render_antv", options };
   }
 
   const numeric = points.flatMap(({ label, value }) => value === null ? [] : [{ label, value }]);
@@ -52,7 +52,7 @@ async function renderOptions(
       ? { type: "line", data: series, connectNulls: false }
       : { type: "bar", data: series, barMaxWidth: 40 }],
   };
-  return { renderer: "mcp-echarts", tool: chartTools[chart], options };
+  return { renderer: "mcp-echarts" as const, tool: chartTools[chart], options };
 }
 
 export async function visualizeResult(request: Request, projectKey: string | null, signal: AbortSignal) {
