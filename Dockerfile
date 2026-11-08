@@ -102,7 +102,11 @@ COPY --from=builder --chown=node:node /app/.next/standalone ./
 COPY --from=builder --chown=node:node /app/.next/static ./.next/static
 # The analysis worker is run as a separate process against the same PostgreSQL
 # queue. Keep its small, standalone runtime in the image.
-COPY --from=builder --chown=node:node /app/scripts/analysis-models.py /app/scripts/run-analysis-worker.mjs /app/scripts/analysis-requirements.txt ./scripts/
+COPY --from=builder --chown=node:node /app/scripts/analysis-models.py /app/scripts/run-analysis-worker.mjs /app/scripts/analysis-requirements.txt /app/scripts/analysis-cpu-requirements.txt ./scripts/
+COPY --from=builder --chown=node:node /app/src/lib/agent-runtime/analysis-result.ts ./src/lib/agent-runtime/analysis-result.ts
+# The standalone tracer keeps the app's CJS entry points. The separate Worker imports ESM.
+COPY --from=dependencies --chown=node:node /app/node_modules/pg ./node_modules/pg
+COPY --from=dependencies --chown=node:node /app/node_modules/zod ./node_modules/zod
 
 # If you want to persist the fetch cache generated during the build so that
 # cached responses are available immediately on startup, uncomment this line:

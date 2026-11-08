@@ -31,7 +31,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "build:china-transmission-preview": "node scripts/build-china-transmission-preview.mjs",
     "data:import": "node --max-old-space-size=4096 scripts/import-data-to-postgres.mjs",
     "validate:china-data": "node scripts/validate-china-data.mjs",
