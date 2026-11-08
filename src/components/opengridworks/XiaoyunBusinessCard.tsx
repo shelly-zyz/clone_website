@@ -15,8 +15,8 @@ type Job = z.infer<typeof analysisJobSchema>;
 type LoadAnalysis = (task: Task, signal: AbortSignal) => Promise<Job>;
 
 const topics = { power: "电源地球", meteo: "气象地球", carbon: "碳排放地球" };
-const renderers = { "mcp-echarts": "ECharts", vchart: "VChart", antv: "AntV G2" };
-const operations = { describe: "描述统计", cluster: "聚类", forecast: "预测", backtest: "回测", compare: "模型对比" };
+const renderers = { echarts: "ECharts", "mcp-echarts": "ECharts", vchart: "VChart", antv: "AntV G2" };
+const operations = { describe: "描述统计", cluster: "聚类", forecast: "预测", backtest: "回测", compare: "模型对比", select_model: "滚动回测选模" };
 const models = { statsforecast: "StatsForecast", timesfm: "TimesFM", chronos2: "Chronos-2" };
 const statuses = { queued: "排队中", running: "计算中", succeeded: "已完成", failed: "任务失败" };
 const formatNumber = new Intl.NumberFormat("zh-CN", { maximumSignificantDigits: 8 });
@@ -71,7 +71,7 @@ function ChartPreview({ chart }: { chart: Chart }) {
 
   return (
     <div className="mt-2">
-      <div ref={container} role="img" aria-label={`${renderers[chart.renderer]} 时间序列图`} className="h-60 w-full" />
+      <div ref={container} role="img" aria-label={`${renderers[chart.renderer]} 图表`} className="h-60 w-full" />
       {failed && <p role="alert" className="text-sm text-red-700">图表渲染失败，请重新生成。</p>}
       <p className="mt-2 text-xs text-slate-600">{renderers[chart.renderer]} · 数据版本 {chart.version.slice(0, 12)}</p>
     </div>
@@ -81,7 +81,7 @@ function ChartPreview({ chart }: { chart: Chart }) {
 function AnalysisDetails({ job }: { job: Job }) {
   const { result } = job;
   if (!result) return null;
-  const { points, evaluation, baseline, summary, groups } = result;
+  const { points, evaluation, baseline, summary, groups, model, model_selection: modelSelection } = result;
   const hasActual = points?.some(({ actual }) => actual !== undefined);
   const hasInterval = points?.some(({ p10, p90 }) => p10 !== undefined && p90 !== undefined);
   const metrics = summary && [
@@ -92,6 +92,21 @@ function AnalysisDetails({ job }: { job: Job }) {
     <div className="space-y-2 text-sm">
       <p className="font-medium">{result.metric}（{result.unit}）</p>
       <p className="text-slate-600">有效观测 {result.observed_rows} 条 · 缺测 {result.missing_rows} 条</p>
+      {model && <p>模型 {model.method ?? model.name} · 版本 {model.version}</p>}
+      {modelSelection && (
+        <div>
+          <p>按 MAE 选择 {modelSelection.selected_method === "baseline" ? modelSelection.baseline_method : modelSelection.selected_method}
+            （{modelSelection.folds} 个回测窗口，每个 {modelSelection.horizon} 期）</p>
+          {modelSelection.refit_fallback && <p>全样本拟合未完成，预测改用 {modelSelection.refit_fallback}。</p>}
+          <ul>
+            {modelSelection.candidates.map(candidate => (
+              <li key={candidate.method}>{candidate.method === "baseline" ? modelSelection.baseline_method : candidate.method}
+                {candidate.mae === undefined ? "：未能计算" : `：MAE ${formatNumber.format(candidate.mae)}`}
+                {candidate.rmse === undefined ? "" : ` · RMSE ${formatNumber.format(candidate.rmse)}`}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       {evaluation && <p>回测误差 MAE {formatNumber.format(evaluation.mae)} · RMSE {formatNumber.format(evaluation.rmse)}</p>}
       {baseline && <p>基线误差 MAE {formatNumber.format(baseline.mae)} · RMSE {formatNumber.format(baseline.rmse)}</p>}
       {metrics && (
@@ -167,7 +182,7 @@ function AnalysisProgress({ task, loadAnalysis }: { task: Task; loadAnalysis: Lo
     <div className="mt-2 space-y-2">
       <p role="status" className="text-sm">
         {job ? `${operations[job.plan.operation]} · ${statuses[job.status]}` : "正在读取任务状态…"}
-        {job?.plan.model && ` · ${models[job.plan.model]}`}
+        {job?.plan.model && job.plan.operation !== "select_model" && ` · ${models[job.plan.model]}`}
       </p>
       {job?.status === "failed" && <p role="alert" className="text-sm text-red-700">{job.error ?? "分析任务未完成。"}</p>}
       {job?.status === "succeeded" && <AnalysisDetails job={job} />}

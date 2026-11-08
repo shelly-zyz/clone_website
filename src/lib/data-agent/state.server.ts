@@ -1,5 +1,6 @@
 import "server-only";
 
+import { appendBusinessAudit, withBusinessAction } from "@/lib/agent-runtime/policy.server";
 import { createHash, randomBytes } from "node:crypto";
 import { dataQuerySchema, type Topic, type SessionScope } from "./contracts";
 import { DataAgentError, runDataAgentWrite } from "./database.server";
@@ -50,8 +51,8 @@ export async function createDataSession(projectId: string, key: string | null) {
 export async function readDataSession(projectId: string, sessionId: string, key: string | null, includePending = false) {
   const hash = projectHash(key);
   return runDataAgentWrite(contextWriter, async (client) => {
-    const { rows: [session] } = await client.query<{ topic: Topic; revision: number; summary: unknown; last_result_id: string | null; xiaoyun_pending?: unknown }>(`
-      SELECT p.topic, s.revision, s.summary${includePending ? ", s.xiaoyun_pending" : ""}, (
+    const { rows: [session] } = await client.query<{ topic: Topic; revision: number; summary: unknown; last_result_id: string | null; xiaoyun_pending?: unknown; xiaoyun_analysis_pending?: unknown }>(`
+      SELECT p.topic, s.revision, s.summary${includePending ? ", s.xiaoyun_pending, s.xiaoyun_analysis_pending" : ""}, (
         SELECT t.result_id FROM projects.data_session_turn t
         WHERE t.session_id = s.id AND t.result_id IS NOT NULL ORDER BY t.revision DESC LIMIT 1
       ) AS last_result_id FROM projects.data_session s
@@ -78,9 +79,36 @@ export async function resolveDataResult(projectId: string, resultId: string, key
 
 export async function askDataSession(
   topic: Topic, question: string, scope: Omit<SessionScope, "revision"> & { revision?: number }, key: string | null, signal: AbortSignal,
-  xiaoyun?: { originalMessage: string; baseResultId?: string; latestVersion: boolean },
+  xiaoyun?: { originalMessage: string; baseResultId?: string; latestVersion: boolean; requestId?: string; resume?: boolean; resumedFromPending?: boolean },
 ) {
+  return withBusinessAction("data", "session_query", () => executeDataSession(topic, question, scope, key, signal, xiaoyun), scope.project_id);
+}
+
+async function executeDataSession(topic: Topic, question: string, scope: Omit<SessionScope, "revision"> & { revision?: number },
+  key: string | null, signal: AbortSignal, xiaoyun: Parameters<typeof askDataSession>[5]) {
   const session = await readDataSession(scope.project_id, scope.session_id, key);
+  if (session.topic === topic && xiaoyun?.requestId) {
+    const prior = await runDataAgentWrite(contextWriter, async client => {
+      const { rows: [turn] } = await client.query<{ revision: number; status: string; result_id: string | null }>(
+        "SELECT revision,status,result_id FROM projects.data_session_turn WHERE session_id=$1 AND xiaoyun_request_id=$2",
+        [scope.session_id, xiaoyun.requestId]);
+      return turn;
+    });
+    if (prior) {
+      if (prior.revision !== session.revision) throw new DataAgentError("SESSION_CONFLICT", "重试请求对应的会话已有更新。");
+      if (prior.result_id) {
+        const result = await resolveDataResult(scope.project_id, prior.result_id, key);
+        return { ...result, revision: prior.revision, result_id: prior.result_id };
+      }
+      const saved = await readDataSession(scope.project_id, scope.session_id, key, true);
+      const pending = saved.xiaoyun_pending as { clarification?: string } | null;
+      return { status: "needs_clarification" as const, revision: prior.revision, result_id: null,
+        issue: pending ? "clarify" as const : "unsupported" as const, message: pending?.clarification ?? "此查询超出当前数据范围。" };
+    }
+  }
+  if (xiaoyun?.resume && !xiaoyun.resumedFromPending) {
+    throw new DataAgentError("SESSION_CONFLICT", "当前没有待澄清的查询。");
+  }
   if (session.topic !== topic || (scope.revision !== undefined && session.revision !== scope.revision)) {
     throw new DataAgentError("SESSION_CONFLICT", "会话专题或修订号不匹配，请重新读取会话。");
   }
@@ -105,7 +133,7 @@ export async function askDataSession(
     if (revision === undefined) throw new DataAgentError("SESSION_CONFLICT", "会话已有新消息，请重新读取会话。");
     if (xiaoyun) {
       const pending = answer.status === "needs_clarification" && answer.issue === "clarify"
-        ? { ...xiaoyun, question, clarification: answer.message, revision } : null;
+        ? { originalMessage: xiaoyun.originalMessage, baseResultId: xiaoyun.baseResultId, latestVersion: xiaoyun.latestVersion, question, clarification: answer.message, revision } : null;
       await client.query("UPDATE projects.data_session SET xiaoyun_pending=$1::jsonb WHERE id=$2",
         [pending ? JSON.stringify(pending) : null, scope.session_id]);
     }
@@ -120,9 +148,18 @@ export async function askDataSession(
         "SELECT id FROM results.data_query_result WHERE project_id = $1 AND query_hash = $2", [scope.project_id, data_ref.query_hash]);
       resultId = result.id;
     }
-    await client.query(`
-      INSERT INTO projects.data_session_turn (session_id, revision, question, status, result_id, trace)
-      VALUES ($1,$2,$3,$4,$5,$6)`, [scope.session_id, revision, question, answer.status, resultId, JSON.stringify(answer.trace)]);
+    const fields = [scope.session_id, revision, question, answer.status, resultId, JSON.stringify(answer.trace)];
+    if (xiaoyun?.requestId) {
+      await client.query(`
+        INSERT INTO projects.data_session_turn (session_id, revision, question, status, result_id, trace, xiaoyun_request_id)
+        VALUES ($1,$2,$3,$4,$5,$6,$7)`, [...fields, xiaoyun.requestId]);
+    } else {
+      await client.query(`
+        INSERT INTO projects.data_session_turn (session_id, revision, question, status, result_id, trace)
+        VALUES ($1,$2,$3,$4,$5,$6)`, fields);
+    }
+    await appendBusinessAudit(client, { actor: "data", action: "save_query", outcome: answer.status,
+      project_id: scope.project_id, result_id: resultId ?? undefined });
     return { ...answer, revision, result_id: resultId };
   });
 }

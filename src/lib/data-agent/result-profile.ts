@@ -14,8 +14,9 @@ function nextDate(time: number, grain: string) {
 }
 
 export function profileDataResult({ metric, rows, data_ref, query }: DataResult) {
-  const historical = metric.data_identity !== "forecast" && ["day", "month"].includes(metric.time_grain);
-  const shape = rows.length <= 1 ? "scalar" : "time_series";
+  const category = data_ref.shape === "category" || ("province_comparison" in query && query.province_comparison === true);
+  const historical = !category && metric.data_identity !== "forecast" && ["day", "month"].includes(metric.time_grain);
+  const shape = category ? "category" : rows.length === 1 ? "scalar" : "time_series";
   const values = new Set<number>();
   let valid = 0;
   let continuous = 0;
@@ -40,9 +41,10 @@ export function profileDataResult({ metric, rows, data_ref, query }: DataResult)
   const hasValues = !invalid && valid > 0;
   const forecast = hasValues && historical && continuous >= 8;
   return {
-    shape, metric, query, coverage: data_ref.time_range, quality: data_ref.quality,
+    shape, dimensions: { x: category ? "entity_code" : "time_start", value: "value", timeGrain: metric.time_grain },
+    metric, query, coverage: data_ref.time_range, quality: data_ref.quality,
     valid, invalid, continuous: historical ? continuous : null, historical,
-    chart: hasValues ? { types: valid > 1 ? ["line", "bar"] : ["bar", "line"], default: valid > 1 ? "line" as const : "bar" as const } : null,
+    chart: hasValues ? category ? { types: ["bar"], default: "bar" as const } : { types: valid > 1 ? ["line", "bar"] : ["bar", "line"], default: valid > 1 ? "line" as const : "bar" as const } : null,
     analysis: {
       describe: hasValues,
       maxClusters: hasValues ? Math.min(5, values.size) : 0,

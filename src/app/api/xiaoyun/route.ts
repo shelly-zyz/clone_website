@@ -1,4 +1,3 @@
-import { DataAgentError } from "@/lib/data-agent/database.server";
 import { authorizeDataAgent, dataAgentErrorResponse } from "@/lib/data-agent/http.server";
 import { xiaoyunRequestSchema } from "@/lib/xiaoyun/contracts";
 import { askXiaoyun } from "@/lib/xiaoyun/supervisor.server";
@@ -20,9 +19,6 @@ export async function POST(request: Request) {
   try {
     return Response.json(await askXiaoyun(input.data, request.signal), { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
-    if (!(error instanceof DataAgentError) && !request.signal.aborted) {
-      console.error("Xiaoyun request failed:", error instanceof Error ? error.message : "unknown error");
-    }
     return dataAgentErrorResponse(error);
   }
 }

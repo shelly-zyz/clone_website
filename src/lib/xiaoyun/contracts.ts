@@ -1,3 +1,4 @@
+import { analysisResultSchema } from "@/lib/agent-runtime/analysis-result";
 import { z } from "zod";
 import type { TaskSource } from "@xiaoyun/voice";
 import { topicSchema, type Topic } from "@/lib/data-agent/contracts";
@@ -40,31 +41,17 @@ export const analysisJobSchema = z.object({
     model: z.enum(forecastModels).optional(),
     horizon: z.number().optional(),
   }),
-  result: z.object({
-    metric: z.string(),
-    unit: z.string(),
-    observed_rows: z.number(),
-    missing_rows: z.number(),
-    points: z.array(z.object({
-      date: z.string(), value: z.number(), actual: z.number().optional(),
-      p10: z.number().optional(), p50: z.number().optional(), p90: z.number().optional(),
-    })).optional(),
-    summary: z.object({
-      mean: z.number(), median: z.number(), min: z.number(), max: z.number(), stddev: z.number(),
-    }).optional(),
-    groups: z.array(z.object({ group: z.number(), center: z.number(), count: z.number() })).optional(),
-    evaluation: z.object({ mae: z.number(), rmse: z.number() }).optional(),
-    baseline: z.object({ mae: z.number(), rmse: z.number() }).optional(),
-  }).nullable(),
+  result: analysisResultSchema.nullable(),
   error: z.string().nullable(),
   data_ref: z.object({ version: z.string() }),
 });
 
 export type XiaoyunBusinessResult =
-  | { kind: "chart"; topic: Topic; chartId: string; title: string; renderer: "mcp-echarts" | "vchart" | "antv"; options: Record<string, unknown>; version: string }
+  | { kind: "chart"; topic: Topic; chartId: string; title: string; renderer: "echarts" | "mcp-echarts" | "vchart" | "antv"; options: Record<string, unknown>; version: string }
   | { kind: "analysis"; topic: Topic; jobId: string; projectId: string };
 
 export type XiaoyunReply = {
+  runId?: string;
   route: "data" | "general" | "sources" | "clarify" | "visualization" | "analysis";
   summary: string;
   markdown?: string;

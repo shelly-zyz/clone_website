@@ -120,8 +120,9 @@ export function XiaoyunAssistant({ topic, onMapCommand }: {
             setRequiresToken(false);
             const results = reply.artifacts ?? (reply.business ? [reply.business] : []);
             if (results.length) setBusiness(current => {
-              const next = current.filter(item => !results.some(result => result.kind === "analysis" && item.kind === "analysis"
-                && result.topic === item.topic && result.jobId === item.jobId));
+              const next = current.filter(item => !results.some(result => result.topic === item.topic && (
+                result.kind === "analysis" && item.kind === "analysis" && result.jobId === item.jobId
+                || result.kind === "chart" && item.kind === "chart" && result.chartId === item.chartId)));
               return [...next, ...results].slice(-4);
             });
             if (results.length && selectedChart.current) {

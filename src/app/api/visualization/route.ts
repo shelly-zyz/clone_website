@@ -33,7 +33,6 @@ export async function POST(request: Request) {
     return Response.json(reply, { status, headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (error instanceof DataAgentError) return dataAgentErrorResponse(error);
-    console.warn("Visualization request failed:", error instanceof Error ? error.message : "unknown error");
     return Response.json({ code: "UNAVAILABLE", error: "暂时无法生成图表，请稍后重试。" }, { status: 503 });
   }
 }

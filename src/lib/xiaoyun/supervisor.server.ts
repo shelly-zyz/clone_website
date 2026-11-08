@@ -1,11 +1,13 @@
 import "server-only";
 
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Agent, type AgentTool } from "@earendil-works/pi-agent-core";
 import { z } from "zod";
+import { currentAuditRunId, withAgentRun, type AgentGuard } from "@/lib/agent-runtime/policy.server";
 import { enabledForecastModels, isForecastOperation, prepareAnalysisPlan, runAnalysisRequest } from "@/lib/analysis-agent/analysis.server";
+import { readyAnalysisCapabilities } from "@/lib/agent-runtime/store";
 import { planSchema, type AnalysisPlan } from "@/lib/analysis-agent/contracts";
 import { topicSchema, type Topic } from "@/lib/data-agent/contracts";
 import { DataAgentError } from "@/lib/data-agent/database.server";
@@ -20,10 +22,8 @@ import { chartReference, createTurnContext, targets, XiaoyunContextError, type C
 import type { XiaoyunBusinessResult, XiaoyunReply, XiaoyunRequest } from "./contracts";
 
 const targetInput = { topic: topicSchema, target: z.enum(targets) };
-const maxToolCalls = 9;
 const forecastSkill = "forecast-review";
 const analysisStatuses = { queued: "排队中", running: "正在计算", succeeded: "已完成", failed: "执行失败" } as const;
-let active = 0;
 
 const instructions = [
   "你是 OpenGridWorks 小云，负责在同一轮完成用户提出的多个相关动作。",
@@ -33,7 +33,9 @@ const instructions = [
   "改图形或渲染器时用 target=chart，继承图表输入与其余设置。改地区或时段时先查数，query_data 的 base 选被修改对象。",
   "数据库返回澄清时停止依赖该查询的动作。若用户回答待澄清项，用 resume=true 恢复查数，并继续原问题要求的动作。",
   "复用旧数据前先 inspect_data。根据工具回执中的指标口径、形状、粒度、质量和候选，选择图表或分析。趋势通常用折线，数值大小比较可用柱状。",
-  "当前图表模板只支持单指标时间序列。柱状图不会把单地区时间序列变成跨地区排名。空间图、多个地区和预测产物图目前没有通用模板。",
+  "各省同月排名交给 query_data 申请省级同口径比较，拿到 category 数据使用柱状图。单地区时间序列不会变成排名。空间数据仍需要已有地图能力。",
+  "用户回答上一轮分析澄清时，使用 pending_analysis 指向待续办输入，保留原任务及未改条件。新的分析不使用此目标。",
+  "用户指定天或月时 plan.horizonUnit 使用 day 或 month；只说多少期用 period。只要求找更准模型用 select_model，要求用更准模型预测用 forecast 且 strategy=auto，两者都不传 model。指定模型与基线对比用 compare。",
   "涉及查看已发布预报、新预测、回测、基线比较或修改预测时，先用 load_skill 读取 forecast-review，再决定路径。仅查看任务进度时直接用 get_analysis。",
   "只用工具回执中的真实数据与执行状态。概念、地图和工具能力问题可以直接用中文回答；涉及站点的数据范围时先看目录。",
 ].join("\n");
@@ -50,13 +52,20 @@ function inheritAnalysisPlan(plan: AnalysisPlan, priorSelection: unknown) {
   return previous?.operation === plan.operation ? { ...previous, ...plan } : plan;
 }
 
-function analysisJobId(project: string, requestId: string | undefined) {
+function artifactId(kind: "analysis" | "chart", project: string, requestId: string | undefined) {
   if (!requestId) return;
-  const bytes = createHash("sha256").update(`xiaoyun-analysis/${project}/${requestId}`).digest().subarray(0, 16);
+  const bytes = createHash("sha256").update(`xiaoyun-${kind}/${project}/${requestId}`).digest().subarray(0, 16);
   bytes[6] = (bytes[6] & 0x0f) | 0x80;
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
   const hex = bytes.toString("hex");
   return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)].join("-");
+}
+
+function horizonReply(text: string) {
+  const match = /^(?:那就|那改成|改成|就|用)?(1[0-2]|[1-9一二两三四五六七八九十]|十一|十二)期(?:吧)?$/.exec(text);
+  if (!match) return;
+  const numerals = ["", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "十一", "十二"];
+  return match[1] === "两" ? 2 : Number(match[1]) || numerals.indexOf(match[1]);
 }
 
 function plainMarkdown(text: string) {
@@ -74,7 +83,8 @@ function describeResult(result: DataResult, resultId: string | null, route: "dat
   const { metric, rows, data_ref } = result;
   const formatTime = (date: string) => metric.time_grain === "month" ? date.slice(0, 7)
     : metric.time_grain === "forecast_frame" ? date.replace("T", " ").slice(0, 16) + " UTC" : date.slice(0, 10);
-  const location = rows[0]?.source_ref.region_name;
+  const category = profileDataResult(result).shape === "category";
+  const location = category ? "各省" : rows[0]?.source_ref.region_name;
   const heading = `${typeof location === "string" ? location : ""}${metric.name}`;
   const source = `数据来自${metric.source_name}，版本为 ${data_ref.version.slice(0, 12)}。`;
   const first = rows[0];
@@ -83,7 +93,7 @@ function describeResult(result: DataResult, resultId: string | null, route: "dat
       : rows.length === 1 && first.value !== null ? `${formatTime(first.time_start)}，${heading}为 ${first.value} ${metric.unit}。`
         : `${heading}返回 ${rows.length} 条记录${data_ref.quality.missing_rows ? `，查询范围内有 ${data_ref.quality.missing_rows} 条缺测` : ""}。`;
   const preview = route === "data" && rows.length > 0
-    ? rows.slice(0, 12).map((row) => `- ${formatTime(row.time_start)} · ${row.value ?? "缺测"} ${plainMarkdown(metric.unit)}`)
+    ? rows.slice(0, 12).map((row) => `- ${category ? plainMarkdown(String(row.source_ref.region_name || row.entity_code)) : formatTime(row.time_start)} · ${row.value ?? "缺测"} ${plainMarkdown(metric.unit)}`)
     : [];
   return {
     route, summary,
@@ -94,8 +104,13 @@ function describeResult(result: DataResult, resultId: string | null, route: "dat
 }
 
 export async function askXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal): Promise<XiaoyunReply> {
-  if (active >= 4) throw new DataAgentError("BUSY", "小云正在处理其他请求，请稍后重试。");
-  const signal = AbortSignal.any([requestSignal, AbortSignal.timeout(55_000)]);
+  return withAgentRun("xiaoyun", requestSignal, async guard => ({
+    ...await runXiaoyun(input, requestSignal, guard), runId: currentAuditRunId(),
+  }), input.requestId);
+}
+
+async function runXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal, guard: AgentGuard): Promise<XiaoyunReply> {
+  const { signal } = guard;
   const context = createTurnContext(input);
   const inspected = new Map<string, Inspected>();
   const artifacts: XiaoyunBusinessResult[] = [];
@@ -133,7 +148,8 @@ export async function askXiaoyun(input: XiaoyunRequest, requestSignal: AbortSign
     const state = await context.get(topic);
     if (!state) throw new XiaoyunContextError("当前专题还没有可用的数据，请先查数。");
     const chart = target === "chart" ? chartReference(state, context.selected(topic)) : undefined;
-    const id = target === "chart" ? chart?.result_id : target === "analysis" ? state.analysis?.summary.result_id : state.data.last_result_id;
+    const pending = target === "pending_analysis" ? context.pendingAnalysis(state) : undefined;
+    const id = target === "pending_analysis" ? pending?.resultId : target === "chart" ? chart?.result_id : target === "analysis" ? state.analysis?.summary.result_id : state.data.last_result_id;
     if (!id) throw new XiaoyunContextError("没有找到所引用的结果，请指定数据或先查数。");
     const result = await resolveDataResult(state.scope.project_id, id, state.scope.project_key);
     return remember(topic, target, id, result, chart);
@@ -171,6 +187,7 @@ export async function askXiaoyun(input: XiaoyunRequest, requestSignal: AbortSign
       name, label: name, description, parameters: { ...parameters, type: "object" },
       execute: async (_id, args) => {
         signal.throwIfAborted();
+        const start = Date.now();
         let value: object;
         try {
           value = await run(schema.parse(args));
@@ -179,11 +196,11 @@ export async function askXiaoyun(input: XiaoyunRequest, requestSignal: AbortSign
           if (error instanceof XiaoyunContextError || error instanceof DataAgentError) {
             value = note(name, error.message, error instanceof DataAgentError ? error.code : "needs_input");
           } else {
-            console.error("Xiaoyun tool failed:", name, error instanceof Error ? error.name : "unknown");
             value = note(name, "此步骤暂时无法完成。", "unavailable");
           }
         }
         if ("status" in value && ["ok", "queued", "running", "succeeded"].includes(String(value.status))) notes.delete(name);
+        guard.record(name, start, value);
         return { content: [{ type: "text", text: JSON.stringify(value) }], details: undefined };
       },
     };
@@ -208,7 +225,7 @@ export async function askXiaoyun(input: XiaoyunRequest, requestSignal: AbortSign
       const state = await context.get(topic, !resume && !base);
       if (!state) throw new XiaoyunContextError("当前专题没有可以继续的查询。");
       const pending = resume ? state.pending : undefined;
-      if (resume && !pending) throw new XiaoyunContextError("没有待澄清的查询。");
+      if (resume && !pending && !input.requestId) throw new XiaoyunContextError("没有待澄清的查询。");
       const original = base ? await inspect(topic, base) : undefined;
       const baseline = pending?.baseResultId ?? original?.id;
       queryAttempted = true;
@@ -221,7 +238,10 @@ export async function askXiaoyun(input: XiaoyunRequest, requestSignal: AbortSign
           originalMessage: pending?.originalMessage ?? input.message,
           baseResultId: baseline,
           latestVersion: latestVersion ?? pending?.latestVersion ?? false,
+          requestId: input.requestId,
+          resume, resumedFromPending: Boolean(pending),
         });
+      state.data.revision = result.revision;
       if (!("data_ref" in result) || !result.result_id) {
         const issue = "issue" in result && result.issue === "unsupported" ? "unsupported" : "needs_clarification";
         terminal = true;
@@ -240,14 +260,23 @@ export async function askXiaoyun(input: XiaoyunRequest, requestSignal: AbortSign
     }),
       async ({ topic, target, plan }) => {
         const { id, profile, result, chart } = await inspect(topic, target);
-        const prior = plan && target === "analysis" ? (await context.get(topic))?.analysis?.summary.selection : undefined;
-        const preflight = plan && prepareAnalysisPlan(profile, inheritAnalysisPlan(plan, prior));
-        if (preflight) {
-          if (preflight.error) notes.set("analysis_preflight", preflight.error);
-          else notes.delete("analysis_preflight");
+        const state = await context.get(topic);
+        const pending = state && target === "pending_analysis" ? context.pendingAnalysis(state) : undefined;
+        const prior = pending?.plan ?? (target === "analysis" ? state?.analysis?.summary.selection : undefined);
+        if (plan && pending && plan.operation !== pending.plan.operation) {
+          return note("inspect_data", "请保留待续办的操作，或明确开始新任务。", "needs_input");
         }
+        const inherited = plan && inheritAnalysisPlan(plan, prior);
+        const ready = profile.analysis.forecast || plan ? await readyAnalysisCapabilities() : [];
+        const preflight = inherited && prepareAnalysisPlan(profile, inherited, ready);
+        if (preflight?.error && inherited && state && isForecastOperation(inherited.operation)) {
+          bind(topic);
+          notes.set("analysis_preflight", preflight.error);
+          await context.savePending(state, { token: randomUUID(), revision: state.data.revision,
+            resultId: id, plan: inherited, reason: preflight.error, expiresAt: Date.now() + 30 * 60_000 });
+        } else if (preflight) notes.delete("analysis_preflight");
         return { status: "ok", result_id: id, data_ref: result.data_ref, profile, chart: chart?.selection,
-          forecastModels: profile.analysis.forecast ? enabledForecastModels() : [], preflight };
+          forecastModels: profile.analysis.forecast ? enabledForecastModels().filter(model => ready.includes(model)) : [], preflight };
       }),
     tool("render_chart", "按已检查的单指标结果生成图表。修改旧图时用 chart 目标并继承它的输入与设置。", z.strictObject({
       ...targetInput, chart: z.enum(chartTypes).optional(), renderer: z.enum(chartBackends).optional(),
@@ -262,12 +291,12 @@ export async function askXiaoyun(input: XiaoyunRequest, requestSignal: AbortSign
         action: "render_session", project_id: state.scope.project_id, session_id: session.session_id, revision: session.revision,
         result_id: entry.id, instruction: input.message, chart: chart ?? entry.chart?.selection.chart ?? entry.profile.chart.default,
         renderer: renderer ?? entry.chart?.selection.renderer ?? "echarts",
-      }, state.scope.project_key, signal);
+      }, state.scope.project_key, signal, artifactId("chart", state.scope.project_id, input.requestId));
       if (!("status" in output) || output.status !== "ok" || !("chart_id" in output) || !output.chart_id) {
         return note("render_chart", "error" in output ? output.error ?? "暂时无法生成图表。" : "暂时无法生成图表。");
       }
       lastRoute = "visualization";
-      const region = entry.result.rows[0]?.source_ref.region_name;
+      const region = entry.profile.shape === "category" ? "各省" : entry.result.rows[0]?.source_ref.region_name;
       const title = [typeof region === "string" ? region : "", entry.result.metric.name].filter(Boolean).join(" · ");
       artifacts.push({ kind: "chart", chartId: output.chart_id, topic, title,
         renderer: output.renderer, options: output.options, version: output.data_ref.version });
@@ -284,11 +313,15 @@ export async function askXiaoyun(input: XiaoyunRequest, requestSignal: AbortSign
       const state = await context.get(topic);
       if (!state) throw new XiaoyunContextError("请先查询数据。");
       const session = await context.session(state, "analysis");
-      const inherited = inheritAnalysisPlan(plan, target === "analysis" ? session.summary.selection : undefined);
+      const pending = target === "pending_analysis" ? context.pendingAnalysis(state) : undefined;
+      if (pending && pending.plan.operation !== plan.operation) {
+        return note("submit_analysis", "请保留待续办的操作，或明确开始新任务。", "needs_input");
+      }
+      const inherited = inheritAnalysisPlan(plan, pending?.plan ?? (target === "analysis" ? session.summary.selection : undefined));
       const result = await runAnalysisRequest({
         action: "submit", project_id: state.scope.project_id, session_id: session.session_id, revision: session.revision,
         result_id: entry.id, plan: inherited,
-      }, state.scope.project_key, signal, analysisJobId(state.scope.project_id, input.requestId));
+      }, state.scope.project_key, signal, artifactId("analysis", state.scope.project_id, input.requestId));
       if (!("status" in result) || !("job_id" in result) || !result.job_id) {
         notes.delete("analysis_preflight");
         return note("submit_analysis", "error" in result ? result.error ?? "分析未提交。" : "分析未提交。");
@@ -299,6 +332,11 @@ export async function askXiaoyun(input: XiaoyunRequest, requestSignal: AbortSign
         const previousRef = z.object({ query_hash: z.string() }).safeParse(result.data_ref).data;
         if (previousRef?.query_hash !== entry.result.data_ref.query_hash) {
           notes.set("reused_analysis", "该请求已有分析任务，仍使用首次提交的数据快照。");
+        }
+      }
+      if (context.pendingAnalysis(state)?.resultId === entry.id) {
+        try { await context.savePending(state, null); } catch (error) {
+          if (!(error instanceof DataAgentError) || error.code !== "SESSION_CONFLICT") throw error;
         }
       }
       lastRoute = "analysis";
@@ -338,27 +376,57 @@ export async function askXiaoyun(input: XiaoyunRequest, requestSignal: AbortSign
     tool("utc_now", "读取当前 UTC 时间。", z.strictObject({}), () => ({ status: "ok", time: new Date().toISOString() })),
   ];
 
-  let calls = 0;
-  let turns = 0;
+  const horizon = horizonReply(normalized);
+  if (horizon && !input.selectedChart) {
+    const topic = input.context.lastTopic ?? input.topic;
+    const state = await context.get(topic);
+    if (state && !state.pending) {
+      const pending = context.pendingAnalysis(state);
+      const jobId = artifactId("analysis", state.scope.project_id, input.requestId);
+      const existing = jobId && await runAnalysisRequest({ action: "get_job", project_id: state.scope.project_id, job_id: jobId },
+        state.scope.project_key, signal).catch(error => {
+        if (!(error instanceof DataAgentError) || error.code !== "PROJECT_NOT_FOUND") throw error;
+      });
+      if (existing && typeof existing === "object" && "job_id" in existing && jobId) {
+        const business = { kind: "analysis" as const, topic, jobId, projectId: state.scope.project_id };
+        return { route: "analysis", summary: "分析任务可在结果卡查看。", business, artifacts: [business],
+          session: { topic, scope: state.scope }, lastTopic: topic, lastRoute: "analysis" };
+      }
+      if (pending) {
+        const args = { topic, target: "pending_analysis", plan: { ...pending.plan, horizon } };
+        for (const [name, parameters] of [["load_skill", { name: forecastSkill }], ["inspect_data", args], ["submit_analysis", args]] as const) {
+          if (name === "submit_analysis" && (notes.has("analysis_preflight") || notes.has("inspect_data"))) break;
+          const registered = tools.find(tool => tool.name === name);
+          if (!registered || guard.tool(name)) break;
+          await registered.execute(randomUUID(), parameters, signal);
+        }
+        const business = artifacts.at(-1);
+        return { route: business ? "analysis" : "clarify",
+          summary: [...notes.values()].join(" ") || (business ? "分析任务可在结果卡查看。" : "未能继续该分析。"),
+          session: { topic, scope: state.scope }, lastTopic: topic, lastRoute, business, artifacts: business ? artifacts : undefined };
+      }
+    }
+  }
+
   const { models, model, apiKey } = getPiModel();
   const agent = new Agent({
     initialState: { model, tools, thinkingLevel: "off", systemPrompt: instructions },
     streamFn: (currentModel, modelContext, options) => {
-      turns++;
+      guard.model();
       return models.streamSimple(currentModel, modelContext, { ...options, maxTokens: 650, maxRetries: 0 });
     },
     getApiKey: provider => provider === "deepseek" ? apiKey : undefined,
     toolExecution: "sequential",
-    beforeToolCall: async () => {
-      if (terminal || ++calls > maxToolCalls) return { block: true, reason: "本轮已结束或达到调用上限。", terminate: true };
-    },
-    finishTurn: () => terminal || turns >= 7 ? { action: "end" } : undefined,
+    beforeToolCall: async ({ toolCall }) => guard.tool(toolCall.name, !terminal),
+    finishTurn: () => terminal || guard.done() ? { action: "end" } : undefined,
   });
 
   const abort = () => agent.abort();
   signal.throwIfAborted();
   signal.addEventListener("abort", abort, { once: true });
-  active++;
+  const unsubscribe = agent.subscribe(event => {
+    if (event.type === "message_end" && event.message.role === "assistant") guard.usage(event.message);
+  });
   try {
     const topics = [...new Set([input.topic, input.selectedChart?.topic, input.context.lastTopic])]
       .filter((topic): topic is Topic => Boolean(topic));
@@ -398,7 +466,7 @@ export async function askXiaoyun(input: XiaoyunRequest, requestSignal: AbortSign
     if (error instanceof XiaoyunContextError) return { route: "clarify", summary: error.message };
     throw error;
   } finally {
-    active--;
+    unsubscribe();
     signal.removeEventListener("abort", abort);
   }
 }

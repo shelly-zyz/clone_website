@@ -27,12 +27,22 @@ export async function POST(request: Request) {
       inputSchema: z.strictObject({ ...scope, clusters: z.number().int().min(2).max(5) }),
     }, ({ clusters, ...args }) => mcpResult(() => runAnalysisRequest({ action: "submit", ...args, plan: { operation: "cluster", clusters } }, key, request.signal)));
 
-    const parameters = z.strictObject({ ...scope, model: z.enum(forecastModels), horizon: z.number().int().min(1).max(12) });
-    for (const [tool, operation] of [["run_forecast", "forecast"], ["run_backtest", "backtest"], ["compare_models", "compare"]] as const) {
+    const forecastFields = { ...scope, model: z.enum(forecastModels).optional(),
+      horizon: z.number().int().min(1).max(12), horizonUnit: z.enum(["day", "month", "period"]).optional() };
+    server.registerTool("run_forecast", {
+      description: "用指定模型或轻量基线预测；strategy=auto 先用滚动回测选择统计模型。",
+      inputSchema: z.strictObject({ ...forecastFields, strategy: z.literal("auto").optional() }),
+    }, ({ model, horizon, horizonUnit, strategy, ...args }) => mcpResult(() => runAnalysisRequest({
+      action: "submit", ...args, plan: { operation: "forecast", model, horizon, horizonUnit, strategy },
+    }, key, request.signal)));
+    for (const [tool, operation] of [["run_backtest", "backtest"], ["compare_models", "compare"]] as const) {
       server.registerTool(tool, {
-        description: "在授权的历史数据上排队预测或时间顺序回测任务。", inputSchema: parameters,
-      }, ({ model, horizon, ...args }) => mcpResult(() => runAnalysisRequest({
-        action: "submit", ...args, plan: { operation, model, horizon },
+        description: operation === "compare" ? "指定模型与基线对比；省略模型时滚动比较统计候选。"
+          : "在同一时间序列上按时间顺序留出回测。",
+        inputSchema: z.strictObject(forecastFields),
+      }, ({ model, horizon, horizonUnit, ...args }) => mcpResult(() => runAnalysisRequest({
+        action: "submit", ...args, plan: { operation: operation === "compare" && !model ? "select_model" : operation,
+          model, horizon, horizonUnit },
       }, key, request.signal)));
     }
   });

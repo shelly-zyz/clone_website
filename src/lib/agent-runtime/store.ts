@@ -1,5 +1,8 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
+
+import { appendBusinessAudit, businessLimits } from "./policy.server";
 import { runDataAgentWrite } from "@/lib/data-agent/database.server";
 
 export type AgentKind = "analysis" | "visualization";
@@ -14,11 +17,15 @@ type JobRow = {
   data_ref: unknown; result: unknown | null; error: string | null; created_at: Date; updated_at: Date;
 };
 
-export async function createAgentSession(projectId: string, kind: AgentKind) {
+export async function createAgentSession(projectId: string, kind: AgentKind, stableId: string = randomUUID()) {
   return runDataAgentWrite("green_agent_context", async client => {
-    const { rows } = await client.query<{ id: string }>(
-      "INSERT INTO projects.agent_session(project_id,kind) VALUES($1,$2) RETURNING id", [projectId, kind]);
-    return { session_id: rows[0].id, project_id: projectId, revision: 0 };
+    await client.query(
+      "INSERT INTO projects.agent_session(id,project_id,kind) VALUES($1,$2,$3) ON CONFLICT (id) DO NOTHING", [stableId, projectId, kind]);
+    const { rows: [row] } = await client.query<SessionRow>(
+      "SELECT id,project_id,revision,summary,recent FROM projects.agent_session WHERE id=$1 AND project_id=$2 AND kind=$3",
+      [stableId, projectId, kind]);
+    if (!row) throw new Error("Agent session identity conflict.");
+    return { session_id: row.id, project_id: row.project_id, revision: row.revision, summary: row.summary, recent: row.recent };
   });
 }
 
@@ -44,9 +51,10 @@ export async function advanceAgentSession(
       if (prior.rowCount) return { status: "reused" as const, job_id: task.job_id };
     }
     if (task) {
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended('ogw.analysis.queue.v1', 0))");
       const pending = await client.query<{ total: string }>(
         "SELECT count(*)::text AS total FROM results.analysis_job WHERE status IN ('queued','running')");
-      if (Number(pending.rows[0].total) >= 32) return { status: "busy" as const };
+      if (Number(pending.rows[0].total) >= businessLimits.queuedAnalysis) return { status: "busy" as const };
     }
     const revision = session.revision + 1;
     const changed = await client.query<{ id: string }>(`
@@ -57,7 +65,11 @@ export async function advanceAgentSession(
     `, [revision, JSON.stringify(summary), JSON.stringify([...session.recent, turn].slice(-4)),
       session.session_id, session.project_id, kind, session.revision]);
     if (!changed.rowCount) return { status: "conflict" as const };
-    if (!task) return { status: "saved" as const, revision };
+    if (!task) {
+      await appendBusinessAudit(client, { actor: kind, action: "save_chart", outcome: "ok",
+        project_id: session.project_id, result_id: summary.result_id, chart_id: summary.chart_id });
+      return { status: "saved" as const, revision };
+    }
     const job = await client.query<{ id: string }>(`
       INSERT INTO results.analysis_job(project_id,plan,input,data_ref,id)
       VALUES($1,$2::jsonb,$3::jsonb,$4::jsonb,COALESCE($5::uuid,gen_random_uuid())) RETURNING id
@@ -65,6 +77,8 @@ export async function advanceAgentSession(
     await client.query("UPDATE projects.agent_session SET summary=$1::jsonb WHERE id=$2", [
       JSON.stringify({ ...summary, job_id: job.rows[0].id }), session.session_id,
     ]);
+    await appendBusinessAudit(client, { actor: kind, action: "submit_job", outcome: "queued",
+      project_id: session.project_id, result_id: summary.result_id, job_id: job.rows[0].id });
     return { status: "saved" as const, revision, job_id: job.rows[0].id };
   });
 }
@@ -81,5 +95,14 @@ export async function getAnalysisJob(projectId: string, id: string) {
       analysis_session_id: row.analysis_session_id,
       result: row.result, error: row.error, created_at: row.created_at.getTime(), updated_at: row.updated_at.getTime(),
     };
+  });
+}
+
+export async function readyAnalysisCapabilities() {
+  return runDataAgentWrite("green_agent_context", async client => {
+    const { rows } = await client.query<{ capability: string }>(`
+      SELECT DISTINCT unnest(capabilities) AS capability FROM results.analysis_worker WHERE ready_until > now()
+    `);
+    return rows.map(row => row.capability);
   });
 }

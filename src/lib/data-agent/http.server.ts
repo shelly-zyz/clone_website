@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createHash, timingSafeEqual } from "node:crypto";
+import { auditBusiness } from "@/lib/agent-runtime/policy.server";
 import { DataAgentError } from "./database.server";
 
 const loopbackHosts = ["localhost", "127.0.0.1", "[::1]"];
@@ -16,17 +17,20 @@ function matchesRequestHost(origin: string, host: string | null, requestUrl: URL
 }
 
 export function authorizeDataAgent(request: Request, reviewer = false) {
+  const denied = (reason: string) => auditBusiness({ actor: reviewer ? "review" : "business-api", action: "authorize", outcome: "denied", reason });
   const token = (reviewer ? process.env.DATA_AGENT_REVIEW_TOKEN : process.env.DATA_AGENT_TOKEN)?.trim();
   const url = new URL(request.url);
   const origin = request.headers.get("origin");
   if (origin && origin !== url.origin && !matchesRequestHost(origin, request.headers.get("host"), url)) {
+    denied("origin");
     return Response.json({ error: "来源不受信任。" }, { status: 403 });
   }
   if (!reviewer && !token && process.env.NODE_ENV !== "production" && loopbackHosts.includes(url.hostname)) return null;
   const supplied = request.headers.get("authorization");
   const hash = (value: string) => createHash("sha256").update(value).digest();
   if (token && supplied && timingSafeEqual(hash(supplied), hash(`Bearer ${token}`))) return null;
-  return Response.json({ error: "数据库 Agent 需要服务端授权。" }, { status: 401 });
+  denied("credential");
+  return Response.json({ error: "业务接口需要服务端授权。" }, { status: 401 });
 }
 
 export function dataAgentErrorResponse(error: unknown) {

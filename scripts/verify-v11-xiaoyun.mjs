@@ -10,7 +10,7 @@ import { deepseekProvider } from "@earendil-works/pi-ai/providers/deepseek";
 
 const fixtures = {
   topics: new Map(), results: new Map(), sessions: new Map(), jobs: new Map(),
-  steps: [], output: [], calls: [], lastQuery: undefined,
+  steps: [], output: [], calls: [], lastQuery: undefined, capabilities: ["statsforecast", "describe", "cluster"],
 };
 
 const live = process.argv.includes("--live");
@@ -66,11 +66,13 @@ const modules = {
   "@/lib/agent-runtime/store": `
     import { randomUUID } from "node:crypto";
     const f = globalThis.xiaoyunFixture;
-    export async function createAgentSession(project_id, kind) {
-      const session_id = randomUUID();
+    export async function createAgentSession(project_id, kind, session_id = randomUUID()) {
+      const existing = f.sessions.get(session_id);
+      if (existing) return structuredClone(existing);
       const snapshot = { session_id, project_id, revision: 0 };
-      f.sessions.set(session_id, { ...snapshot, kind, recent: [], summary: {} });
-      return snapshot;
+      const full = { ...snapshot, kind, recent: [], summary: {} };
+      f.sessions.set(session_id, full);
+      return structuredClone(full);
     }
     export async function getAgentSession(project, id, kind) {
       const value = f.sessions.get(id);
@@ -88,9 +90,19 @@ const modules = {
       f.sessions.set(session.session_id, { ...old, revision, summary: { ...summary, job_id }, recent: [...old.recent, turn].slice(-4) });
       return { status: "saved", revision, job_id };
     }
+    export async function readyAnalysisCapabilities() { return f.capabilities; }
     export async function getAnalysisJob(project, id) {
       const job = f.jobs.get(id);
       if (job?.project === project) return job;
+    }`,
+  "@/lib/xiaoyun/pending.server": `
+    import { z } from ${JSON.stringify(import.meta.resolve("zod"))};
+    const f = globalThis.xiaoyunFixture;
+    export const pendingAnalysisSchema = z.object({ token: z.string(), resultId: z.string(), revision: z.number(), expiresAt: z.number(), plan: z.unknown(), reason: z.string() });
+    export async function updatePendingAnalysis(scope, revision, token, pending) {
+      const state = f.topics.get([...f.topics].find(([, value]) => value.scope.session_id === scope.session_id)?.[0]);
+      if (!state || state.data.revision !== revision || state.data.xiaoyun_analysis_pending?.token !== token) throw Error("Stale pending");
+      state.data.xiaoyun_analysis_pending = structuredClone(pending);
     }`,
   "@/lib/data-agent/state.server": `
     const f = globalThis.xiaoyunFixture;
@@ -114,6 +126,8 @@ const modules = {
     export async function askDataSession(topic, question, scope, key, signal, options) {
       const state = match(scope.project_id, key);
       if (state.data.topic !== topic || state.data.revision !== scope.revision) throw new Error("Invalid fixture scope");
+      state.requests ??= new Map();
+      if (options?.requestId && state.requests.has(options.requestId)) return state.requests.get(options.requestId);
       f.lastQuery = { question, options };
       const revision = ++state.data.revision;
       if (state.clarifyNext) {
@@ -125,7 +139,9 @@ const modules = {
       state.data.xiaoyun_pending = null;
       const id = state.nextResult;
       state.data.last_result_id = id;
-      return { ...f.results.get(id), result_id: id, revision };
+      const result = { ...f.results.get(id), result_id: id, revision };
+      if (options?.requestId) state.requests.set(options.requestId, result);
+      return result;
     }
     export function createDataProject() { throw new Error("Unexpected fixture project creation"); }
     export function createDataSession() { throw new Error("Unexpected fixture session creation"); }`,
@@ -351,5 +367,93 @@ if (live) {
     assert.equal(fixtures.output.at(-1).result_id, inputId);
     assert.equal(fixtures.output.at(-1).preflight.plan.horizon, 3);
     assert.equal(fixtures.jobs.size, 1);
+  });
+}
+
+if (!live) {
+  await test("预测预检记录目标；那就两期只继续同一份回测；网络重试拿到同一个任务", async () => {
+    scope("power");
+    fixtures.jobs.clear();
+    const original = data("power", "江苏", Array.from({ length: 10 }, (_, i) => i + 1), "month");
+    const state = fixtures.topics.get("power");
+    state.data.last_result_id = original;
+    const plan = { operation: "backtest", model: "statsforecast", horizon: 3, horizonUnit: "month" };
+    const rejected = await turn([loadSkill, ["inspect_data", { ...selection, plan }]], { message: "回测最近三个月" });
+    assert.match(rejected.summary, /2 期/);
+    assert.equal(fixtures.jobs.size, 0);
+    assert.equal(state.data.xiaoyun_analysis_pending.resultId, original);
+    state.data.last_result_id = data("power", "另一份结果", [1, 2, 3]);
+    const requestId = randomUUID();
+    const continuation = await turn([], { requestId, message: "那就两期" });
+    const job = fixtures.jobs.get(continuation.business.jobId);
+    assert.equal(job.data_ref.query_hash, original);
+    assert.deepEqual(job.plan, { operation: "backtest", model: "statsforecast", horizon: 2, horizonUnit: "month" });
+    assert.equal(state.data.xiaoyun_analysis_pending, null);
+    const replay = await turn([], { requestId, message: "那就两期" });
+    assert.equal(replay.business.jobId, job.job_id);
+    assert.equal(fixtures.jobs.size, 1);
+  });
+
+  await test("同一请求重试不重复执行已保存的查数和图表步骤", async () => {
+    scope("power");
+    data("power", "江苏", [1, 2, 3]);
+    const requestId = randomUUID();
+    const first = await turn([query, chart], { requestId });
+    const state = fixtures.topics.get("power");
+    const chartSession = context.sessions.power.visualization.session_id;
+    delete context.sessions.power.visualization;
+    const replay = await turn([query, chart], { requestId });
+    assert.equal(replay.business.chartId, first.business.chartId);
+    assert.equal(state.data.revision, 1);
+    assert.equal(fixtures.sessions.get(chartSession).revision, 1);
+  });
+
+  await test("省级截面使用类别轴；预测期单位不匹配或没有 Worker 时不入队", async () => {
+    scope("power");
+    const id = data("power", "江苏", [1, 2], "month");
+    const category = fixtures.results.get(id);
+    category.data_ref.shape = "category";
+    category.rows[1] = { ...category.rows[1], time_start: category.rows[0].time_start, entity_code: "330000000000", source_ref: { region_name: "浙江" } };
+    const result = await turn([query, chart]);
+    assert.equal(result.business.options.type, "bar");
+    assert.deepEqual(result.business.options.data[0].values.map(point => point.label), ["江苏", "浙江"]);
+
+    const next = data("power", "江苏", Array.from({ length: 12 }, (_, i) => i + 1), "month");
+    fixtures.topics.get("power").data.last_result_id = next;
+    const plan = { operation: "forecast", horizon: 3, horizonUnit: "day" };
+    const rejected = await turn([loadSkill, ["inspect_data", { ...selection, plan }]], { message: "预测未来三天" });
+    assert.match(rejected.summary, /单位不一致/);
+    fixtures.capabilities = ["describe"];
+    try {
+      const unavailable = await turn([loadSkill, ["inspect_data", { ...selection, plan: { ...plan, horizonUnit: "month" } }]], { message: "预测未来三个月" });
+      assert.match(unavailable.summary, /没有可运行/);
+    } finally { fixtures.capabilities = ["statsforecast", "describe", "cluster"]; }
+  });
+}
+
+if (!live) {
+  await test("父子 Pi 共用运行编号和调用预算，子 Agent 无权提交分析", async () => {
+    const { withAgentRun } = await import("../src/lib/agent-runtime/policy.server.ts");
+    const signal = new AbortController().signal;
+    const requestId = randomUUID();
+    const events = [];
+    const log = console.info;
+    console.info = line => events.push(JSON.parse(line));
+    try {
+      await withAgentRun("xiaoyun", signal, async parent => {
+        assert.equal(parent.tool("query_data"), undefined);
+        for (let i = 0; i < 2; i++) await withAgentRun("data", parent.signal, async child => {
+          assert.equal(child.tool("submit_analysis").block, true);
+          for (let j = 0; j < 5; j++) assert.equal(child.tool("search_semantic_catalog"), undefined);
+          assert.equal(child.tool("search_semantic_catalog").block, true);
+        });
+        for (let j = 0; j < 3; j++) assert.equal(parent.tool("inspect_data"), undefined);
+        assert.equal(parent.tool("inspect_data").block, true);
+      }, requestId);
+    } finally { console.info = log; }
+    const parent = events.find(event => event.actor === "xiaoyun" && event.action === "run");
+    assert.ok(events.every(event => event.run_id === requestId));
+    assert.ok(events.filter(event => event.actor === "data").every(event => event.parent_span_id === parent.span_id));
+    assert.ok(events.some(event => event.reason === "capability"));
   });
 }

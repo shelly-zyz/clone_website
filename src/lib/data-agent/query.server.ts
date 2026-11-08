@@ -1,5 +1,6 @@
 import "server-only";
 
+import { withBusinessAction } from "@/lib/agent-runtime/policy.server";
 import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
 import { datasets, generationProducts, metricSchema, powerProducts, type DataQuery, type Topic } from "./contracts";
@@ -75,8 +76,9 @@ type Observation = {
   missing: number;
 };
 
-const factFilters = `topic_id = $1 AND dataset_version_id = $2 AND metric_code = $3
-  AND entity_code = $4 AND series_code = $5
+const factFilters = (comparison = false) => `topic_id = $1 AND dataset_version_id = $2 AND metric_code = $3
+  AND ${comparison ? "($4::text = '000000000000' AND entity_code ~ '^[1-9][0-9]0{10}$')" : "entity_code = $4"}
+  AND series_code = $5
   AND ($6::date IS NULL OR time_start >= $6::date::timestamptz)
   AND ($7::date IS NULL OR time_start < ($7::date + 1)::timestamptz)`;
 
@@ -90,11 +92,19 @@ const outputSchema = [
 ];
 
 export async function queryData(query: DataQuery) {
+  return withBusinessAction("data", "query_published", () => executeDataQuery(query));
+}
+
+async function executeDataQuery(query: DataQuery) {
   return readDataAgent(async (client) => {
     const version = await resolveVersion(client, query);
     const entry = catalogEntry(version);
     const metric = entry.metrics.find(({ metric_code }) => metric_code === (query.metric_code ?? entry.metric.metric_code));
     if (!metric) throw new DataAgentError("INVALID_METRIC", "该指标未在所选专题和版本发布，或当前未通过审核。");
+    const comparison = query.topic === "power" && query.province_comparison === true;
+    if (comparison && metric.time_grain !== "month") {
+      throw new DataAgentError("INVALID_METRIC", "省级比较仅支持同一月份、同一口径的月度指标。");
+    }
     const entity = query.topic === "power" ? query.region_code : "global";
     if (query.topic === "power" && entity !== "000000000000") {
       const region = await client.query(`
@@ -110,7 +120,7 @@ export async function queryData(query: DataQuery) {
     if (query.topic === "meteo" && issueTime === null) {
       const latest = await client.query<{ issue_time: Date | null }>(`
         SELECT max(issue_time) AS issue_time FROM standard.std_data_agent_fact
-        WHERE ${factFilters}`, filters);
+        WHERE ${factFilters()}`, filters);
       issueTime = latest.rows[0]?.issue_time?.toISOString() ?? null;
     }
 
@@ -119,12 +129,17 @@ export async function queryData(query: DataQuery) {
         (count(*) OVER ())::integer AS matched,
         (count(*) FILTER (WHERE quality_flag = 1) OVER ())::integer AS missing
       FROM standard.std_data_agent_fact
-      WHERE ${factFilters} AND issue_time IS NOT DISTINCT FROM $8::timestamptz
-      ORDER BY time_start DESC LIMIT $9`, [...filters, issueTime, query.limit]);
+      WHERE ${factFilters(comparison)}
+        AND issue_time IS NOT DISTINCT FROM $8::timestamptz
+        ${comparison ? "AND time_start = $6::date::timestamptz" : ""}
+      ORDER BY ${comparison ? "std_data_agent_fact.value DESC NULLS LAST, entity_code ASC" : "time_start DESC"} LIMIT $9`, [...filters, issueTime, query.limit]);
 
     const matched = result.rows[0]?.matched ?? 0;
     const missing = result.rows[0]?.missing ?? 0;
-    const rows = result.rows.reverse().map((row) => ({
+    if (comparison && new Set(result.rows.map(row => row.entity_code)).size !== result.rows.length) {
+      throw new DataAgentError("INVALID_REGION", "发布版本含重复省级记录，无法生成同口径比较。");
+    }
+    const rows = (comparison ? result.rows : result.rows.reverse()).map((row) => ({
       time_start: row.time_start.toISOString(), issue_time: row.issue_time?.toISOString() ?? null,
       entity_code: row.entity_code, series_code: row.series_code, value: row.value,
       quality_flag: row.quality_flag, source_ref: row.source_ref,
@@ -132,7 +147,7 @@ export async function queryData(query: DataQuery) {
     const effectiveQuery = {
       topic: query.topic, version: version.version, start_date: query.start_date, end_date: query.end_date,
       limit: query.limit,
-      ...(query.topic === "power" ? { region_code: entity, product: series } : {}),
+      ...(query.topic === "power" ? { region_code: entity, product: series, ...(comparison ? { province_comparison: true as const } : {}) } : {}),
       ...(query.topic === "meteo" && issueTime ? { issue_time: issueTime } : {}),
       // Keep the legacy replay hash for a version's default metric.
       ...(metric.metric_code !== entry.metric.metric_code ? { metric_code: metric.metric_code } : {}),
@@ -145,6 +160,8 @@ export async function queryData(query: DataQuery) {
       data_ref: {
         dataset_id: version.dataset_id, version: version.version, query_hash: queryHash,
         schema: outputSchema, units: { value: metric.unit },
+        shape: comparison ? "category" as const : "time_series" as const,
+        dimensions: { x: comparison ? "entity_code" : "time_start", series: "series_code", time_grain: metric.time_grain },
         time_range: { start: rows[0]?.time_start ?? null, end: rows.at(-1)?.time_start ?? null },
         quality: { matched_rows: matched, returned_rows: rows.length, missing_rows: missing, truncated: rows.length < matched },
         artifact_uri: null,

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { createAgentSession, getAgentSession, type AgentKind, type Snapshot } from "@/lib/agent-runtime/store";
 import { planSchema } from "@/lib/analysis-agent/contracts";
@@ -7,10 +8,11 @@ import type { Topic } from "@/lib/data-agent/contracts";
 import { DataAgentError } from "@/lib/data-agent/database.server";
 import { createDataProject, createDataSession, readDataSession, resolveDataResult } from "@/lib/data-agent/state.server";
 import { chartReferenceSchema, chartSelectionSchema } from "@/lib/visualization-agent/contracts";
+import { pendingAnalysisSchema, updatePendingAnalysis, type PendingAnalysis } from "./pending.server";
 import type { XiaoyunRequest, XiaoyunSession } from "./contracts";
 
 export const topicNames = { power: "电源地球", meteo: "气象地球", carbon: "碳排放地球" } as const;
-export const targets = ["current", "data", "chart", "analysis"] as const;
+export const targets = ["current", "data", "chart", "analysis", "pending_analysis"] as const;
 export type Target = (typeof targets)[number];
 export type ChartReference = Omit<z.infer<typeof chartReferenceSchema>, "chart_id"> & { chart_id?: string };
 
@@ -30,7 +32,8 @@ async function openTopic(scope: XiaoyunSession, topic: Topic) {
   };
   const [visualization, analysis] = await Promise.all([readBusiness("visualization"), readBusiness("analysis")]);
   const pending = pendingSchema.safeParse(data.xiaoyun_pending).data;
-  return { scope, data, visualization, analysis, pending: pending?.revision === data.revision ? pending : undefined };
+  const analysisPending = pendingAnalysisSchema.safeParse(data.xiaoyun_analysis_pending).data;
+  return { scope, data, visualization, analysis, analysisPending, pending: pending?.revision === data.revision ? pending : undefined };
 }
 
 type TopicState = Awaited<ReturnType<typeof openTopic>>;
@@ -72,11 +75,23 @@ export function createTurnContext(input: XiaoyunRequest) {
     const existing = state[kind];
     if (existing) return existing;
     const { project_id } = state.scope;
-    const created = await createAgentSession(project_id, kind);
-    const snapshot = { ...created, summary: {}, recent: [] };
-    state.scope = { ...state.scope, [kind]: { session_id: created.session_id } };
+    // A retry may not have received the session ID from the first response.
+    const hex = createHash("sha256").update(`xiaoyun-session/${state.scope.session_id}/${kind}`).digest("hex");
+    const stableId = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-8${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+    const snapshot = await createAgentSession(project_id, kind, stableId);
+    state.scope = { ...state.scope, [kind]: { session_id: snapshot.session_id } };
     state[kind] = snapshot;
     return snapshot;
+  }
+
+  function pendingAnalysis(state: TopicState) {
+    const pending = state.analysisPending;
+    return pending && pending.expiresAt > Date.now() && pending.revision === state.data.revision ? pending : undefined;
+  }
+
+  async function savePending(state: TopicState, pending: PendingAnalysis | null) {
+    await updatePendingAnalysis(state.scope, state.data.revision, state.analysisPending?.token, pending);
+    state.analysisPending = pending ?? undefined;
   }
 
   function selected(topic: Topic) {
@@ -87,20 +102,22 @@ export function createTurnContext(input: XiaoyunRequest) {
     const state = await get(topic);
     if (!state) return { topic };
     const { data, analysis, pending, scope } = state;
+    const analysisPending = pendingAnalysis(state);
     const chart = chartReference(state, selected(topic));
-    const references = await Promise.all([...new Set([data.last_result_id, chart?.result_id, analysis?.summary.result_id])]
+    const references = await Promise.all([...new Set([data.last_result_id, chart?.result_id, analysis?.summary.result_id, analysisPending?.resultId])]
       .filter((id): id is string => Boolean(id)).map(async id => {
         const result = await resolveDataResult(scope.project_id, id, scope.project_key);
         return [id, { metric: result.metric.name, region: result.rows[0]?.source_ref.region_name,
           coverage: result.data_ref.time_range, query: result.query, status: result.status }] as const;
       }));
     const describeRef = (id?: string | null) => id ? references.find(([ref]) => ref === id)?.[1] : undefined;
-    return { topic, pending: pending && { originalMessage: pending.originalMessage, clarification: pending.clarification },
+    return { topic, pendingAnalysis: analysisPending && { input: describeRef(analysisPending.resultId),
+      plan: analysisPending.plan, clarification: analysisPending.reason }, pending: pending && { originalMessage: pending.originalMessage, clarification: pending.clarification },
       data: describeRef(data.last_result_id),
       chart: chart && { ...chart.selection, selected: Boolean(selected(topic)), input: describeRef(chart.result_id) },
       analysis: analysis?.summary.job_id ? { input: describeRef(analysis.summary.result_id),
         plan: planSchema.safeParse(analysis.summary.selection).data } : undefined };
   }
 
-  return { get, session, selected, describe };
+  return { get, session, selected, describe, pendingAnalysis, savePending };
 }

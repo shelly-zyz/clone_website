@@ -23,9 +23,12 @@ const commonFilters = {
 export const dataQuerySchema = z.discriminatedUnion("topic", [
   z.strictObject({ topic: z.literal("meteo"), ...commonFilters, issue_time: issueTime.optional() }),
   z.strictObject({ topic: z.literal("power"), ...commonFilters,
+    province_comparison: z.literal(true).optional(),
     region_code: z.string().regex(/^\d{12}$/).default("000000000000"), product: z.enum(powerProducts).optional() }),
   z.strictObject({ topic: z.literal("carbon"), ...commonFilters }),
-]).refine(({ start_date, end_date }) => !start_date || !end_date || start_date <= end_date, "起始日期必须早于或等于结束日期");
+]).refine(({ start_date, end_date }) => !start_date || !end_date || start_date <= end_date, "起始日期必须早于或等于结束日期").refine(query =>
+  query.topic !== "power" || !query.province_comparison || (query.region_code === "000000000000" && query.start_date?.endsWith("-01") &&
+    query.end_date && query.start_date.slice(0, 7) === query.end_date.slice(0, 7)), "省级比较须指定同一月份，起始日为当月首日且不限定单一地区。");
 
 export type DataQuery = z.infer<typeof dataQuerySchema>;
 

@@ -1,11 +1,13 @@
 import { z } from "zod";
 import { getSessionSchema, openSessionSchema, sessionInput } from "@/lib/agent-runtime/context";
 
-export const analysisOperations = ["describe", "cluster", "forecast", "backtest", "compare"] as const;
+export const analysisOperations = ["describe", "cluster", "forecast", "backtest", "compare", "select_model"] as const;
 export const forecastModels = ["statsforecast", "timesfm", "chronos2"] as const;
 const planFields = {
   model: z.enum(forecastModels).optional(),
   horizon: z.number().int().min(1).max(12).optional(),
+  strategy: z.literal("auto").optional(),
+  horizonUnit: z.enum(["day", "month", "period"]).optional(),
   clusters: z.number().int().min(2).max(5).optional(),
 };
 export const planSchema = z.strictObject({ operation: z.enum(analysisOperations), ...planFields });

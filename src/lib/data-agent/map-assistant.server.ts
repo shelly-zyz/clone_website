@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createHash, randomBytes } from "node:crypto";
+import { withAgentRun } from "@/lib/agent-runtime/policy.server";
 import { Agent, type AgentTool } from "@earendil-works/pi-agent-core";
 import { z } from "zod";
 import { DataAgentError, runDataAgentWrite } from "./database.server";
@@ -9,7 +10,6 @@ import { listDataCatalog } from "./query.server";
 
 const recentSchema = z.array(z.object({ role: z.enum(["user", "assistant"]), text: z.string() })).max(8);
 const hash = (threadId: string) => createHash("sha256").update(threadId).digest("hex");
-let active = 0;
 
 export async function readMapAssistantThread(threadId: string | null | undefined) {
   if (!threadId || !/^[A-Za-z0-9_-]{43}$/.test(threadId)) return;
@@ -62,43 +62,50 @@ const tools: AgentTool[] = [
 ];
 
 export async function askMapAssistant(message: string, incomingThreadId: string | null, signal: AbortSignal) {
-  if (active >= 2) throw new DataAgentError("BUSY", "地图助手正在处理其他请求，请稍后再试。");
-  const { models, model, apiKey } = getPiModel();
-  const previous = await readMapAssistantThread(incomingThreadId);
-  const recent = previous?.recent ?? [];
-  if (active >= 2) throw new DataAgentError("BUSY", "地图助手正在处理其他请求，请稍后再试。");
-  const timeout = AbortSignal.any([signal, AbortSignal.timeout(25000)]);
-  let rounds = 0;
-  const agent = new Agent({
-    initialState: {
-      model, tools, thinkingLevel: "off",
-      systemPrompt: "你是 OpenGridWorks 地图助手。用中文回答地图、图层、能源设施和数据口径相关问题。涉及实际数据库观测时，指引用户通过对应专题的数据库问数接口取数。仅在需要当前时间或核对已发布数据范围时使用相应工具。工具失败时简要说明。不要把未经核实的数值说成站点数据。历史消息仅作为参考，回答当前问题。",
-    },
-    streamFn: (currentModel, context, options) => {
-      rounds += 1;
-      return models.streamSimple(currentModel, context, { ...options, maxTokens: 650, maxRetries: 0 });
-    },
-    getApiKey: (provider) => provider === "deepseek" ? apiKey : undefined,
-    finishTurn: ({ toolResults }) => {
-      if (rounds >= 3 || toolResults.some((tool) => tool.isError)) return { action: "end" };
-    },
-  });
-  const abort = () => agent.abort();
-  timeout.throwIfAborted();
-  timeout.addEventListener("abort", abort, { once: true });
-  active += 1;
-  try {
-    await agent.prompt(recent.length ? JSON.stringify({ recent, message }) : message);
+
+  return withAgentRun("map", signal, async guard => {
+    const { models, model, apiKey } = getPiModel();
+    const previous = await readMapAssistantThread(incomingThreadId);
+    const recent = previous?.recent ?? [];
+    const timeout = guard.signal;
+    const agent = new Agent({
+      initialState: {
+        model, tools, thinkingLevel: "off",
+        systemPrompt: "你是 OpenGridWorks 地图助手。用中文回答地图、图层、能源设施和数据口径相关问题。涉及实际数据库观测时，指引用户通过对应专题的数据库问数接口取数。仅在需要当前时间或核对已发布数据范围时使用相应工具。工具失败时简要说明。不要把未经核实的数值说成站点数据。历史消息仅作为参考，回答当前问题。",
+      },
+      streamFn: (currentModel, context, options) => {
+        guard.model();
+        return models.streamSimple(currentModel, context, { ...options, maxTokens: 650, maxRetries: 0 });
+      },
+      getApiKey: (provider) => provider === "deepseek" ? apiKey : undefined,
+      toolExecution: "sequential",
+      beforeToolCall: async ({ toolCall }) => guard.tool(toolCall.name),
+      finishTurn: ({ toolResults }) => {
+        if (guard.done() || toolResults.some((tool) => tool.isError)) return { action: "end" };
+      },
+    });
+    const abort = () => agent.abort();
     timeout.throwIfAborted();
-    if (agent.state.errorMessage) throw new Error("Map assistant provider failed");
-    const last = agent.state.messages.at(-1);
-    const answer = last?.role === "assistant"
-      ? last.content.filter((item) => item.type === "text").map(({ text }) => text).join("\n").trim() : "";
-    const reply = answer || "当前没有可展示的答案，请换一种问法再试。";
-    const threadId = await saveMapAssistantThread(previous, message, reply);
-    return { threadId, answer: reply };
-  } finally {
-    active -= 1;
-    timeout.removeEventListener("abort", abort);
-  }
+    timeout.addEventListener("abort", abort, { once: true });
+    const unsubscribe = agent.subscribe(event => {
+      if (event.type === "message_end" && event.message.role === "assistant") guard.usage(event.message);
+      if (event.type === "tool_execution_end" && event.durationMs !== undefined) {
+        guard.record(event.toolName, Date.now() - event.durationMs, { status: event.isError ? "unavailable" : "ok" });
+      }
+    });
+    try {
+      await agent.prompt(recent.length ? JSON.stringify({ recent, message }) : message);
+      timeout.throwIfAborted();
+      if (agent.state.errorMessage) throw new Error("Map assistant provider failed");
+      const last = agent.state.messages.at(-1);
+      const answer = last?.role === "assistant"
+        ? last.content.filter((item) => item.type === "text").map(({ text }) => text).join("\n").trim() : "";
+      const reply = answer || "当前没有可展示的答案，请换一种问法再试。";
+      const threadId = await saveMapAssistantThread(previous, message, reply);
+      return { threadId, answer: reply };
+    } finally {
+      unsubscribe();
+      timeout.removeEventListener("abort", abort);
+    }
+  });
 }
