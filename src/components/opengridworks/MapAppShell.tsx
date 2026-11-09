@@ -3,6 +3,7 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import maplibregl, {
   type ExpressionSpecification,
@@ -4063,9 +4064,9 @@ function NavRail({
 }) {
   return (
     <nav className="og-nav-rail" aria-label="主导航">
-      <a className="og-logo-link" href="#" aria-label="OpenGridWorks 首页">
+      <Link className="og-logo-link" href="/" aria-label="OpenGridWorks 首页" prefetch={false}>
         <Image src="/images/opengridworks/logo-dark.webp" alt="" width={48} height={48} priority />
-      </a>
+      </Link>
       <button
         className={`og-nav-item og-nav-item-power ${activeProject === "power" ? "og-nav-item-active" : ""}`}
         type="button"
@@ -6099,8 +6100,8 @@ function MobileWeatherSheet({
   );
 }
 
-export function MapAppShell() {
-  const [activeProject, setActiveProject] = useState<ProjectMode>("power");
+export function MapAppShell({ initialProject = "power" }: { initialProject?: ProjectMode }) {
+  const [activeProject, setActiveProject] = useState<ProjectMode>(initialProject);
   const [visibleTechnologies, setVisibleTechnologies] = useState(hiddenTechnologyState);
   const [visibleLayers, setVisibleLayers] = useState(hiddenLayerState);
   const [visibleCustomLayers, setVisibleCustomLayers] = useState<BooleanRecord<CustomLayerKey>>({
@@ -6119,7 +6120,7 @@ export function MapAppShell() {
     pitch: defaultRegion.pitch,
     bearing: defaultRegion.bearing,
   });
-  const [activeMapTheme, setActiveMapTheme] = useState<MapThemeKey>("nasa");
+  const [activeMapTheme, setActiveMapTheme] = useState<MapThemeKey>(initialProject === "weather" ? "goes" : "nasa");
   const [activeSizeMin, setActiveSizeMin] = useState<number | null>(null);
   const [generationFrame, setGenerationFrame] = useState<GenerationFrame>(defaultGenerationFrame);
   const [generationManifest, setGenerationManifest] = useState<ClimateVreManifest | null>(null);
