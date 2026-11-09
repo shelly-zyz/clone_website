@@ -408,12 +408,12 @@ async function runXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal, gua
     }
   }
 
-  const { models, model, apiKey } = getPiModel();
+  const { models, model, apiKey, thinkingLevel = "off" } = getPiModel();
   const agent = new Agent({
-    initialState: { model, tools, thinkingLevel: "off", systemPrompt: instructions },
+    initialState: { model, tools, thinkingLevel, systemPrompt: instructions },
     streamFn: (currentModel, modelContext, options) => {
       guard.model();
-      return models.streamSimple(currentModel, modelContext, { ...options, maxTokens: 650, maxRetries: 0 });
+      return models.streamSimple(currentModel, modelContext, { ...options, maxTokens: thinkingLevel === "off" ? 650 : 2048, maxRetries: 0 });
     },
     getApiKey: provider => provider === "deepseek" ? apiKey : undefined,
     toolExecution: "sequential",

@@ -70,16 +70,42 @@ export function XiaoyunAssistant({ topic, onMapCommand }: {
     let disposed = false;
     context.current = loadContext();
 
-    void import("@xiaoyun/voice").then(({ createVoiceAssistant }) => {
+    async function voiceRequest(action: "transcribe" | "synthesize", body: ArrayBuffer | string, signal: AbortSignal) {
+      const response = await fetch(`/api/xiaoyun/voice?action=${action}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": action === "transcribe" ? "application/octet-stream" : "application/json",
+          ...(token.current ? { Authorization: `Bearer ${token.current}` } : {}),
+        },
+        body, signal,
+      });
+      if (response.status === 401) setRequiresToken(true);
+      const payload: { audio?: string; text?: string; error?: string } = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "千问语音暂时不可用。");
+      return payload;
+    }
+    const capability = fetch("/api/xiaoyun/voice", { cache: "no-store" })
+      .then(response => response.ok ? response.json() as Promise<{ enabled?: boolean }> : null)
+      .catch(() => null);
+
+    void Promise.all([import("@xiaoyun/voice"), capability]).then(([{ createVoiceAssistant }, config]) => {
       if (disposed || !container.current) return;
       voice.current = createVoiceAssistant({
         container: container.current,
         projectId: "opengridworks",
         mode: "live",
-        assetBaseUrl: "/",
+        assetBaseUrl: "/xiaoyun-audio/",
         context: { topic: page.current.topic },
         ui: { theme: "power-earth", position: { right: 18, bottom: 90 } },
         browserAdapter: {
+          audio: config?.enabled ? {
+            async transcribe(pcm, signal) { return (await voiceRequest("transcribe", pcm, signal)).text ?? ""; },
+            async synthesize(text, signal) {
+              const audio = (await voiceRequest("synthesize", JSON.stringify({ text: text.slice(0, 500) }), signal)).audio;
+              if (!audio) throw new Error("千问未返回播报音频。");
+              return audio;
+            },
+          } : undefined,
           async submit(message, snapshot, signal) {
             signal.throwIfAborted();
             const commandResult = page.current.onMapCommand(message);

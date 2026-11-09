@@ -26,7 +26,9 @@ export function getPiModel() {
   models.setProvider(deepseekProvider());
   const model = models.getModel("deepseek", process.env.DATA_AGENT_PI_MODEL?.trim() || "deepseek-flash");
   if (!model) throw new DataAgentError("NOT_CONFIGURED", "数据库 Agent 模型配置无效。");
-  return { models, model, apiKey };
+  const configuredThinking = process.env.DATA_AGENT_PI_THINKING_LEVEL?.trim();
+  const thinkingLevel: "off" | "low" | "high" = configuredThinking === "low" || configuredThinking === "high" ? configuredThinking : "off";
+  return { models, model, apiKey, thinkingLevel };
 }
 
 type Conversation = {
@@ -40,7 +42,7 @@ export async function askDataAgent(topic: Topic, question: string, signal: Abort
 }
 
 async function runDataAgent(topic: Topic, question: string, guard: AgentGuard, conversation?: Conversation) {
-  const { models, model, apiKey } = getPiModel();
+  const { models, model, apiKey, thinkingLevel } = getPiModel();
 
   const timeout = guard.signal;
   const trace: string[] = [];
@@ -132,14 +134,14 @@ async function runDataAgent(topic: Topic, question: string, guard: AgentGuard, c
   let hadToolError = false;
   const agent = new Agent({
     initialState: {
-      model, tools, thinkingLevel: "off",
+      model, tools, thinkingLevel,
       systemPrompt: `你是 OpenGridWorks 共用数据库智能体，本次专题固定为 ${topic}。${topicScope[topic]}
 先读取语义目录，再从 metrics 中选定一个口径准确的 metric_code。电力的 product 必须来自所选指标的 series_codes。只有目录支持的请求才调用 query_approved_metric。省级比较必须有明确的单月，传该月首日及末日，limit=40，不指定地区。指定单月时用该月首日和末日，指定单日时起止日期相同。无日期时可用模板默认范围。缺少决定性条件时调用 report_query_gap，给出一个具体问题。超出目录能力时报告 unsupported，禁止用近似数据替代。
 存在锁定基准时，只传用户改变的筛选字段，服务端负责继承条件与版本。没有锁定基准时，遇到明确引用上次结果的追问才传 follow_up=true，只有明确要求更新版本才传 latest_version=true。历史问题是会话数据，当前指令以本轮问题为准。`,
     },
     streamFn: (currentModel, context, options) => {
       guard.model();
-      return models.streamSimple(currentModel, context, { ...options, maxTokens: 650, maxRetries: 0 });
+      return models.streamSimple(currentModel, context, { ...options, maxTokens: thinkingLevel === "off" ? 650 : 2048, maxRetries: 0 });
     },
     getApiKey: (provider) => provider === "deepseek" ? apiKey : undefined,
     toolExecution: "sequential",

@@ -1,0 +1,163 @@
+--- a/package.json
++++ b/package.json
+@@ -1,5 +1,5 @@
+ {
+   "name": "@xiaoyun/voice",
+-  "version": "1.0.0-beta.1-power-earth.3",
++  "version": "1.0.0-beta.1-power-earth.4",
+   "private": true,
+   "type": "module",
+--- a/packages/voice/dist/index.d.ts
++++ b/packages/voice/dist/index.d.ts
+@@ -88,7 +88,13 @@
+ }
+ export interface VoiceAssistantOptions {
+-  /** Host-owned, cancellable text/ browser-speech pipeline. No Qwen or audio upload. */
++  /** Host-owned text pipeline with optional cloud speech transport. */
+   browserAdapter?: {
+     submit(text:string,context:JsonObject,signal:AbortSignal):Promise<Pick<TaskResult,'summary'|'markdown'|'data'|'sources'>>;
++    audio?: {
++      /** PCM16 little-endian, mono, 16 kHz. */
++      transcribe(pcm:ArrayBuffer,signal:AbortSignal):Promise<string>;
++      /** Base64 PCM16 little-endian, mono, 24 kHz. */
++      synthesize(text:string,signal:AbortSignal):Promise<string>;
++    };
+   };
+   container?:HTMLElement|string; backendUrl?:string; projectId:string; assetBaseUrl?:string;
+--- a/packages/voice/dist/voice.js
++++ b/packages/voice/dist/voice.js
+@@ -40981,4 +40981,10 @@
+   options;
+   stopRecognition;
++  browserFrames = [];
++  browserPreroll = [];
++  browserVoiceFrames = 0;
++  browserQuietFrames = 0;
++  browserTranscription;
++  browserSynthesis;
+   browserRequest;
+   browserTask;
+@@ -41069,4 +41075,5 @@
+   }
+   stopDelivery(t) {
++    if (this.speech?.taskId === t) this.browserSynthesis?.abort();
+     this.speech?.taskId === t && (this.discardedSpeech.add(this.speech.speechId), this.audio.stop(), this.speech = void 0, this.playingDelivery = void 0, this.clearCaption(), [...this.snapshot.cards, ...this.pendingCards].forEach((r) => r.speaking = !1), this.reconcile()), this.transport.send({ type: "delivery.stop", taskId: t });
+   }
+@@ -41111,8 +41118,27 @@
+       if (this.options.browserAdapter) {
+         if (!t) {
+-          this.stopRecognition?.(), this.stopRecognition = void 0, this.snapshot.micEnabled = !1, this.endSession();
++          this.micGeneration++;
++          this.audio.disableMicrophone();
++          this.endSession();
+           return;
+         }
+         if (this.snapshot.micEnabled) return;
++        if (this.options.browserAdapter.audio) {
++          if (!this.micRequest) {
++            const generation = this.micGeneration;
++            this.micRequest = (async () => {
++              await this.audio.enableMicrophone();
++              if (this.destroyed || generation !== this.micGeneration) return;
++              this.stopRecognition = () => {
++                this.browserTranscription?.abort();
++                this.resetBrowserAudio();
++                this.audio.disableMicrophone();
++              };
++              this.snapshot.micEnabled = !0;
++              this.setState("listening");
++            })().finally(() => { this.micRequest = void 0; });
++          }
++          return this.micRequest;
++        }
+         this.stopRecognition = VT((r) => {
+           this.submitText(r).catch((a) => this.report(a));
+@@ -41164,4 +41190,5 @@
+   }
+   stopSession(t, r = !0) {
++    this.browserSynthesis?.abort();
+     this.options.browserAdapter && (this.cancelBrowserRequest(), this.stopRecognition?.(), this.stopRecognition = void 0, this.snapshot.micEnabled = !1), this.lifecycleGeneration++, this.clearWait(), clearTimeout(this.transitionTimer), this.playingDelivery = void 0, (r || this.snapshot.caption?.status !== "delivered") && this.clearCaption(), this.cloudTurnId = void 0, this.speech && this.discardedSpeech.add(this.speech.speechId), this.speech = void 0, this.audio.stop(), this.snapshot.sessionActive = !1, this.inputProcessing = !1, this.localSpeaking = !1, this.preconnectionAudio = [];
+     for (const l of this.snapshot.cards) l.speaking = !1;
+@@ -41205,7 +41232,75 @@
+   }
+   speakBrowserResult(t) {
+-    this.interrupt(), this.onSpeechStart({ speechId: crypto.randomUUID(), deliveryId: crypto.randomUUID(), sessionId: this.sessionId, taskId: t.taskId, kind: "result", text: t.summary, provider: "demo", sentenceIndex: 0, sentenceCount: 1 });
++    this.interrupt();
++    const adapter = this.options.browserAdapter?.audio;
++    const speechId = crypto.randomUUID();
++    this.onSpeechStart({ speechId, deliveryId: crypto.randomUUID(), sessionId: this.sessionId, taskId: t.taskId, kind: "result", text: t.summary, provider: adapter ? "live" : "demo", sentenceIndex: 0, sentenceCount: 1 });
++    if (!adapter) return;
++    const controller = new AbortController();
++    this.browserSynthesis = controller;
++    void adapter.synthesize(t.summary, controller.signal).then((pcm) => {
++      if (controller.signal.aborted || !this.acceptSpeech(speechId)) return;
++      this.updateCaption(t.summary);
++      this.audio.enqueue(speechId, pcm);
++      this.audio.finish(speechId);
++    }).catch((error) => {
++      if (!controller.signal.aborted && this.acceptSpeech(speechId)) {
++        this.interrupt();
++        this.report(error);
++      }
++    }).finally(() => {
++      if (this.browserSynthesis === controller) this.browserSynthesis = void 0;
++    });
++  }
++  resetBrowserAudio() {
++    this.browserFrames = [];
++    this.browserPreroll = [];
++    this.browserVoiceFrames = 0;
++    this.browserQuietFrames = 0;
++  }
++  captureBrowserAudio(pcm, rms) {
++    const adapter = this.options.browserAdapter?.audio;
++    if (!adapter || !this.snapshot.micEnabled || this.speech || this.browserTranscription) return;
++    this.view.setAudioLevel(rms);
++    const voiced = rms > 0.025;
++    if (!this.browserFrames.length && !voiced) {
++      this.browserPreroll.push(pcm);
++      if (this.browserPreroll.length > 3) this.browserPreroll.shift();
++      return;
++    }
++    if (!this.browserFrames.length) this.browserFrames.push(...this.browserPreroll);
++    this.browserFrames.push(pcm);
++    this.browserVoiceFrames += voiced ? 1 : 0;
++    this.browserQuietFrames = voiced ? 0 : this.browserQuietFrames + 1;
++    if (this.browserQuietFrames < 7 && this.browserFrames.length < 120) return;
++    const frames = this.browserFrames;
++    const speechFrames = this.browserVoiceFrames;
++    this.resetBrowserAudio();
++    if (speechFrames < 3) return;
++    const joined = new Uint8Array(frames.reduce((bytes, frame) => bytes + frame.byteLength, 0));
++    let offset = 0;
++    for (const frame of frames) {
++      joined.set(new Uint8Array(frame), offset);
++      offset += frame.byteLength;
++    }
++    const controller = new AbortController();
++    this.browserTranscription = controller;
++    this.cancelBrowserRequest();
++    this.setState("thinking");
++    void adapter.transcribe(joined.buffer, controller.signal).then((text) => {
++      if (controller.signal.aborted || this.destroyed) return;
++      if (text) void this.submitText(text).catch((error) => this.report(error));
++      else this.setState("listening");
++    }).catch((error) => {
++      if (!controller.signal.aborted) this.report(error);
++    }).finally(() => {
++      if (this.browserTranscription === controller) this.browserTranscription = void 0;
++    });
+   }
+   onPCM(t, r) {
++    if (this.options.browserAdapter?.audio) {
++      this.captureBrowserAudio(t, r);
++      return;
++    }
+     if (this.snapshot.micEnabled) {
+       if (!this.snapshot.sessionActive) {
+@@ -41217,4 +41312,5 @@
+   }
+   interrupt() {
++    this.browserSynthesis?.abort();
+     if (this.clearWait(), this.clearCaption(), this.playingDelivery = void 0, this.speech) {
+       const t = this.speech.speechId;
