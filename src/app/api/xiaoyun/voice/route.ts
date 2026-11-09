@@ -53,18 +53,20 @@ function pcmFromWave(wave: Buffer) {
   if (wave.length < 44 || wave.toString("ascii", 0, 4) !== "RIFF" || wave.toString("ascii", 8, 12) !== "WAVE") {
     throw new Error("Invalid Qwen audio format");
   }
+  // DashScope uses placeholder chunk lengths for streamed WAV output.
+  const streaming = wave.readUInt32LE(4) === 0x7fffffbf;
   let validFormat = false;
   for (let offset = 12; offset + 8 <= wave.length;) {
     const kind = wave.toString("ascii", offset, offset + 4);
     const size = wave.readUInt32LE(offset + 4);
     const start = offset + 8;
-    const end = start + size;
+    const end = streaming && kind === "data" && size === 0x7fffff9b ? wave.length : start + size;
     if (end > wave.length) break;
     if (kind === "fmt " && size >= 16) {
       validFormat = wave.readUInt16LE(start) === 1 && wave.readUInt16LE(start + 2) === 1
         && wave.readUInt32LE(start + 4) === 24_000 && wave.readUInt16LE(start + 14) === 16;
     }
-    if (kind === "data" && validFormat && size > 0 && size % 2 === 0) return wave.subarray(start, end);
+    if (kind === "data" && validFormat && end > start && (end - start) % 2 === 0) return wave.subarray(start, end);
     offset = end + (size % 2);
   }
   throw new Error("Unsupported Qwen audio format");
