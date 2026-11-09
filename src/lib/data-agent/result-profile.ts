@@ -1,4 +1,5 @@
 import type { queryData } from "./query.server";
+import { withMetricRules } from "./metric-rules";
 
 export type DataResult = Awaited<ReturnType<typeof queryData>>;
 
@@ -13,7 +14,8 @@ function nextDate(time: number, grain: string) {
   return date.getTime();
 }
 
-export function profileDataResult({ metric, rows, data_ref, query }: DataResult) {
+export function profileDataResult({ metric: snapshot, rows, data_ref, query }: DataResult) {
+  const metric = withMetricRules(data_ref.dataset_id, snapshot);
   const category = data_ref.shape === "category" || ("province_comparison" in query && query.province_comparison === true);
   const historical = !category && metric.data_identity !== "forecast" && ["day", "month"].includes(metric.time_grain);
   const shape = category ? "category" : rows.length === 1 ? "scalar" : "time_series";
@@ -39,7 +41,7 @@ export function profileDataResult({ metric, rows, data_ref, query }: DataResult)
     last = time;
   }
   const hasValues = !invalid && valid > 0;
-  const forecast = hasValues && historical && continuous >= 8;
+  const forecast = hasValues && historical && metric.rules?.forecast !== "unsupported" && continuous >= 8;
   return {
     shape, dimensions: { x: category ? "entity_code" : "time_start", value: "value", timeGrain: metric.time_grain },
     metric, query, coverage: data_ref.time_range, quality: data_ref.quality,

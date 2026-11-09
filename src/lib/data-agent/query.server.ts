@@ -5,6 +5,8 @@ import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
 import { datasets, generationProducts, metricSchema, powerProducts, type DataQuery, type Topic } from "./contracts";
 import { DataAgentError, readDataAgent } from "./database.server";
+import { withMetricRules } from "./metric-rules";
+import type { QueryDiagnosis } from "./query-diagnosis";
 
 type VersionRow = {
   id: string;
@@ -33,8 +35,8 @@ function catalogEntry(row: VersionRow) {
   return {
     topic: row.topic_id, dataset_id: row.dataset_id, version: row.version,
     published_at: row.published_at.toISOString(), row_count: row.row_count,
-    metric: metricSchema.parse(row.metric_snapshot),
-    metrics: row.metrics.map((metric) => metricSchema.parse(metric)),
+    metric: withMetricRules(row.dataset_id, metricSchema.parse(row.metric_snapshot)),
+    metrics: row.metrics.map((metric) => withMetricRules(row.dataset_id, metricSchema.parse(metric))),
   };
 }
 
@@ -76,11 +78,35 @@ type Observation = {
   missing: number;
 };
 
-const factFilters = (comparison = false) => `topic_id = $1 AND dataset_version_id = $2 AND metric_code = $3
+const seriesFilters = (comparison: boolean) => `topic_id = $1 AND dataset_version_id = $2 AND metric_code = $3
   AND ${comparison ? "($4::text = '000000000000' AND entity_code ~ '^[1-9][0-9]0{10}$')" : "entity_code = $4"}
-  AND series_code = $5
+  AND series_code = $5`;
+
+const factFilters = (comparison = false) => `${seriesFilters(comparison)}
   AND ($6::date IS NULL OR time_start >= $6::date::timestamptz)
   AND ($7::date IS NULL OR time_start < ($7::date + 1)::timestamptz)`;
+
+async function diagnoseQuery(client: PoolClient, query: DataQuery, filters: unknown[], issueTime: string | null,
+  comparison: boolean, timeGrain: string, status: "empty" | "missing"): Promise<QueryDiagnosis> {
+  // Only coverage metadata may extend beyond the requested dates. Keep all other filters fixed.
+  const { rows: [coverage] } = await client.query<{ start: string | null; end: string | null; nearest: string | null }>(`
+    SELECT (min(time_start)::date)::text AS start, (max(time_start)::date)::text AS "end",
+      COALESCE(max(time_start) FILTER (WHERE time_start < $6::date::timestamptz),
+        min(time_start) FILTER (WHERE time_start >= ($7::date + 1)::timestamptz))::date::text AS nearest
+    FROM standard.std_data_agent_fact
+    WHERE ${seriesFilters(comparison)} AND quality_flag = 0
+      AND (${query.topic === "meteo" ? "$8::timestamptz IS NULL OR " : ""}issue_time IS NOT DISTINCT FROM $8::timestamptz)`,
+  [...filters, issueTime]);
+  const nearest = coverage.nearest;
+  const monthEnd = nearest && timeGrain === "month" ? new Date(`${nearest}T00:00:00Z`) : null;
+  if (monthEnd) monthEnd.setUTCMonth(monthEnd.getUTCMonth() + 1, 0);
+  const end = monthEnd?.toISOString().slice(0, 10) ?? nearest;
+  return {
+    reason: status === "missing" ? "all_values_missing" : "no_matching_rows",
+    available_range: coverage.start && coverage.end ? { start: coverage.start, end: coverage.end } : null,
+    suggested_range: nearest && end ? { start_date: nearest, end_date: end } : null,
+  };
+}
 
 const legacySeries = { power: generationProducts, meteo: ["temperature"], carbon: ["Power"] } as const;
 
@@ -153,8 +179,11 @@ async function executeDataQuery(query: DataQuery) {
       ...(metric.metric_code !== entry.metric.metric_code ? { metric_code: metric.metric_code } : {}),
     };
     const queryHash = createHash("sha256").update(JSON.stringify(effectiveQuery)).digest("hex");
+    const status = rows.length === 0 ? "empty" : missing === matched ? "missing" : "ok";
+    const diagnosis = status === "ok" ? undefined : await diagnoseQuery(client, query, filters, issueTime, comparison, metric.time_grain, status);
     return {
-      status: rows.length === 0 ? "empty" : missing === matched ? "missing" : "ok",
+      status,
+      ...(diagnosis ? { diagnosis } : {}),
       metric,
       query: effectiveQuery,
       data_ref: {

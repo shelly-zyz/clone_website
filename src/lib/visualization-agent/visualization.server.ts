@@ -108,10 +108,11 @@ async function executeVisualization(request: Request, projectKey: string | null,
       prompt: [
         "你是 OpenGridWorks 的可视化选图层。只调用一次 select_chart。使用已保存的查询结果。类别比较只能画柱状图。",
         "趋势或折线图选 line，数值比较或柱状图选 bar。要求改数据、其他图种或不明意图选 unsupported。",
+        "图表只使用发布原值。用户要求跨期汇总、换单位或变更指标口径时选 unsupported。",
         "用户明确指定 ECharts、VChart、AntV 时选择对应 renderer。未指定时省略 renderer。",
         "若只要求切换渲染器，保留 previous.chart。其他追问保留未改动的图表设置。",
       ].join("\n"),
-      context: { instruction: request.instruction, metric: { name: metric.name, grain: metric.time_grain },
+      context: { instruction: request.instruction, metric: { name: metric.name, grain: metric.time_grain, rules: profile.metric.rules },
         points: points.length, shape: profile.shape, previous, recent: session?.recent },
     }));
     if (!selection || selection.chart === "unsupported") {

@@ -19,6 +19,7 @@ export type ChartReference = Omit<z.infer<typeof chartReferenceSchema>, "chart_i
 const pendingSchema = z.object({
   originalMessage: z.string(), question: z.string(), clarification: z.string(), revision: z.number(),
   baseResultId: z.uuid().optional(), latestVersion: z.boolean(),
+  suggestedRange: z.object({ start_date: z.iso.date(), end_date: z.iso.date() }).optional(),
 });
 
 export class XiaoyunContextError extends Error {}

@@ -44,6 +44,9 @@ export function prepareAnalysisPlan(profile: ReturnType<typeof profileDataResult
     if (!profile.historical) {
       return { error: "预测和回测需要日度或月度历史观测。已发布的气象预报帧可以展示或做描述统计。" };
     }
+    if (profile.metric.rules?.forecast === "unsupported") {
+      return { error: "该指标使用跨年重置的累计口径。当前预测和回测工具仅支持本期发电量或本期同比等可直接建模的序列。" };
+    }
     if (requested.horizonUnit && requested.horizonUnit !== "period" && requested.horizonUnit !== profile.metric.time_grain) {
       return { error: `所选数据是${profile.metric.time_grain === "month" ? "月度" : "日度"}序列，与要求的预测期数单位不一致。` };
     }
@@ -119,7 +122,7 @@ async function executeAnalysisRequest(request: Request, key: string | null, sign
       "用户追问时沿用 previous 中未改动的 operation、model、horizon 或 clusters。",
       "任务超出所选数据范围、多变量聚类、要求重查原表、或意图不明时，选 unsupported。",
     ].join("\n"),
-    context: { instruction, series: { name: metric.name, grain: metric.time_grain, available: profile.valid,
+    context: { instruction, series: { name: metric.name, grain: metric.time_grain, rules: profile.metric.rules, available: profile.valid,
       continuous: profile.continuous, capabilities: profile.analysis },
       enabledModels: enabledForecastModels().filter(model => ready.includes(model)),
       previous: session.summary.selection, recent: session.recent },

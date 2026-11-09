@@ -1,11 +1,13 @@
 import "server-only";
 
-import { appendBusinessAudit, withBusinessAction } from "@/lib/agent-runtime/policy.server";
+import { appendBusinessAudit, withAgentRun, withBusinessAction } from "@/lib/agent-runtime/policy.server";
 import { createHash, randomBytes } from "node:crypto";
-import { dataQuerySchema, type Topic, type SessionScope } from "./contracts";
+import { dataQuerySchema, type QueryRange, type Topic, type SessionScope } from "./contracts";
 import { DataAgentError, runDataAgentWrite } from "./database.server";
+import { withMetricRules } from "./metric-rules";
 import { askDataAgent } from "./pi.server";
-import type { queryData } from "./query.server";
+import { describeQueryDiagnosis } from "./query-diagnosis";
+import { queryData } from "./query.server";
 
 const contextWriter = "green_agent_context";
 const digest = (key: string) => createHash("sha256").update(key).digest("hex");
@@ -73,13 +75,15 @@ export async function resolveDataResult(projectId: string, resultId: string, key
       SELECT r.response FROM results.data_query_result r JOIN projects.data_project p ON p.id = r.project_id
       WHERE p.id = $1 AND r.id = $2 AND p.access_hash = $3`, [projectId, resultId, hash]);
     if (!result) throw new DataAgentError("PROJECT_NOT_FOUND", "无法访问此查询结果。");
-    return result.response;
+    const response = result.response;
+    return { ...response, metric: withMetricRules(response.data_ref.dataset_id, response.metric) };
   });
 }
 
 export async function askDataSession(
   topic: Topic, question: string, scope: Omit<SessionScope, "revision"> & { revision?: number }, key: string | null, signal: AbortSignal,
-  xiaoyun?: { originalMessage: string; baseResultId?: string; latestVersion: boolean; requestId?: string; resume?: boolean; resumedFromPending?: boolean },
+  xiaoyun?: { originalMessage: string; baseResultId?: string; latestVersion: boolean; requestId?: string; resume?: boolean;
+    resumedFromPending?: boolean; confirmedRange?: QueryRange },
 ) {
   return withBusinessAction("data", "session_query", () => executeDataSession(topic, question, scope, key, signal, xiaoyun), scope.project_id);
 }
@@ -117,11 +121,18 @@ async function executeDataSession(topic: Topic, question: string, scope: Omit<Se
   if (base && (!previous.success || previous.data.topic !== topic)) {
     throw new DataAgentError("SESSION_CONFLICT", "原查询结果与当前专题不一致。");
   }
-  const answer = await askDataAgent(topic, question, signal, {
-    previous: previous.success && (!xiaoyun || base) ? previous.data : undefined,
-    boundBase: base && xiaoyun ? { latestVersion: xiaoyun.latestVersion } : undefined,
-    recent: session.turns.map(({ question, status }) => ({ question, status })),
-  });
+  const confirmedRange = xiaoyun?.confirmedRange;
+  const answer = confirmedRange && xiaoyun.resumedFromPending && base && previous.success
+    ? await withAgentRun("data", signal, async guard => {
+      if (guard.tool("query_approved_metric")) throw new DataAgentError("BUSY", "本轮查询预算已用完，请重试。");
+      return { mode: "direct", trace: ["confirm_suggested_range"],
+        ...await queryData(dataQuerySchema.parse({ ...previous.data, ...confirmedRange })) };
+    })
+    : await askDataAgent(topic, question, signal, {
+      previous: previous.success && (!xiaoyun || base) ? previous.data : undefined,
+      boundBase: base && xiaoyun ? { latestVersion: xiaoyun.latestVersion } : undefined,
+      recent: session.turns.map(({ question, status }) => ({ question, status })),
+    });
   signal.throwIfAborted();
   return runDataAgentWrite(contextWriter, async (client) => {
     const lookup = await client.query<{ revision: number }>(`
@@ -131,22 +142,28 @@ async function executeDataSession(topic: Topic, question: string, scope: Omit<Se
       scope.session_id, scope.project_id, session.revision]);
     const revision = lookup.rows[0]?.revision;
     if (revision === undefined) throw new DataAgentError("SESSION_CONFLICT", "会话已有新消息，请重新读取会话。");
-    if (xiaoyun) {
-      const pending = answer.status === "needs_clarification" && answer.issue === "clarify"
-        ? { originalMessage: xiaoyun.originalMessage, baseResultId: xiaoyun.baseResultId, latestVersion: xiaoyun.latestVersion, question, clarification: answer.message, revision } : null;
-      await client.query("UPDATE projects.data_session SET xiaoyun_pending=$1::jsonb WHERE id=$2",
-        [pending ? JSON.stringify(pending) : null, scope.session_id]);
-    }
     let resultId: string | null = null;
     if ("data_ref" in answer) {
-      const { data_ref, metric, query, rows, status } = answer;
-      const payload = { data_ref, metric, query, rows, status };
+      const { data_ref, metric, query, rows, status, diagnosis } = answer;
+      const payload = { data_ref, metric, query, rows, status, diagnosis };
       await client.query(`
         INSERT INTO results.data_query_result (project_id, query_hash, response) VALUES ($1,$2,$3)
         ON CONFLICT (project_id, query_hash) DO NOTHING`, [scope.project_id, data_ref.query_hash, JSON.stringify(payload)]);
       const { rows: [result] } = await client.query<{ id: string }>(
         "SELECT id FROM results.data_query_result WHERE project_id = $1 AND query_hash = $2", [scope.project_id, data_ref.query_hash]);
       resultId = result.id;
+    }
+    if (xiaoyun) {
+      const { originalMessage, baseResultId, latestVersion } = xiaoyun;
+      const suggestedRange = "diagnosis" in answer ? answer.diagnosis?.suggested_range : undefined;
+      const pending = answer.status === "needs_clarification" && "issue" in answer && answer.issue === "clarify"
+        ? { originalMessage, baseResultId, latestVersion, question, clarification: answer.message, revision }
+        : resultId && "diagnosis" in answer && answer.diagnosis && suggestedRange
+          ? { originalMessage, baseResultId: resultId, latestVersion: false, question, revision, suggestedRange,
+            clarification: describeQueryDiagnosis(answer.diagnosis) }
+          : null;
+      await client.query("UPDATE projects.data_session SET xiaoyun_pending=$1::jsonb WHERE id=$2",
+        [pending ? JSON.stringify(pending) : null, scope.session_id]);
     }
     const fields = [scope.session_id, revision, question, answer.status, resultId, JSON.stringify(answer.trace)];
     if (xiaoyun?.requestId) {

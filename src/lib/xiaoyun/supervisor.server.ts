@@ -1,5 +1,7 @@
 import "server-only";
 
+import { describeQueryDiagnosis } from "@/lib/data-agent/query-diagnosis";
+
 import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -32,6 +34,7 @@ const instructions = [
   "target=current 指本轮查询结果；未查新数据时指当前专题最近的查询。target=data 指之前的查询，chart 指原图输入，analysis 指上次任务输入。",
   "改图形或渲染器时用 target=chart，继承图表输入与其余设置。改地区或时段时先查数，query_data 的 base 选被修改对象。",
   "数据库返回澄清时停止依赖该查询的动作。若用户回答待澄清项，用 resume=true 恢复查数，并继续原问题要求的动作。",
+  "空结果或全缺测的备选日期仅供选择。用户明确确认或给出替代日期后才 resume。不要自行扩大筛选。图表和预测维持数据库返回的口径与单位，不能把速率、累计或同比重新加总。",
   "复用旧数据前先 inspect_data。根据工具回执中的指标口径、形状、粒度、质量和候选，选择图表或分析。趋势通常用折线，数值大小比较可用柱状。",
   "各省同月排名交给 query_data 申请省级同口径比较，拿到 category 数据使用柱状图。单地区时间序列不会变成排名。空间数据仍需要已有地图能力。",
   "用户回答上一轮分析澄清时，使用 pending_analysis 指向待续办输入，保留原任务及未改条件。新的分析不使用此目标。",
@@ -89,7 +92,8 @@ function describeResult(result: DataResult, resultId: string | null, route: "dat
   const source = `数据来自${metric.source_name}，版本为 ${data_ref.version.slice(0, 12)}。`;
   const first = rows[0];
   const summary = route === "sources" ? `上一条结果的${source}`
-    : result.status === "empty" ? `${heading}在所选范围内没有记录。`
+    : result.diagnosis ? heading + describeQueryDiagnosis(result.diagnosis)
+      : result.status === "empty" ? `${heading}在所选范围内没有记录。`
       : rows.length === 1 && first.value !== null ? `${formatTime(first.time_start)}，${heading}为 ${first.value} ${metric.unit}。`
         : `${heading}返回 ${rows.length} 条记录${data_ref.quality.missing_rows ? `，查询范围内有 ${data_ref.quality.missing_rows} 条缺测` : ""}。`;
   const preview = route === "data" && rows.length > 0
@@ -97,9 +101,10 @@ function describeResult(result: DataResult, resultId: string | null, route: "dat
     : [];
   return {
     route, summary,
-    markdown: [`**${plainMarkdown(heading)}**`, ...preview, plainMarkdown(source), plainMarkdown(metric.definition)].join("\n\n"),
+    markdown: [`**${plainMarkdown(heading)}**`, ...preview, plainMarkdown(source), plainMarkdown(metric.rules?.interpretation ?? metric.definition)].join("\n\n"),
     sources: resultSources(result),
-    data: { result_id: resultId, data_ref, query: result.query },
+    data: { result_id: resultId, data_ref, query: result.query,
+      ...(metric.rules ? { metric_rules: metric.rules } : {}), ...(result.diagnosis ? { diagnosis: result.diagnosis } : {}) },
   };
 }
 
@@ -224,9 +229,11 @@ async function runXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal, gua
       if (queryAttempted || artifacts.length) throw new XiaoyunContextError("本轮只执行一次新的查询，且应在出图和提交分析之前执行。");
       const state = await context.get(topic, !resume && !base);
       if (!state) throw new XiaoyunContextError("当前专题没有可以继续的查询。");
-      const pending = resume ? state.pending : undefined;
+      const confirmedRange = /^(好|好的|可以|同意|确认|就查这个|改查这个|按建议查)$/.test(normalized)
+        ? state.pending?.suggestedRange : undefined;
+      const pending = resume || confirmedRange ? state.pending : undefined;
       if (resume && !pending && !input.requestId) throw new XiaoyunContextError("没有待澄清的查询。");
-      const original = base ? await inspect(topic, base) : undefined;
+      const original = base && !confirmedRange ? await inspect(topic, base) : undefined;
       const baseline = pending?.baseResultId ?? original?.id;
       queryAttempted = true;
       inspected.delete(`${topic}:current`);
@@ -237,9 +244,9 @@ async function runXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal, gua
         state.scope.project_key, signal, {
           originalMessage: pending?.originalMessage ?? input.message,
           baseResultId: baseline,
-          latestVersion: latestVersion ?? pending?.latestVersion ?? false,
+          latestVersion: confirmedRange ? false : latestVersion ?? pending?.latestVersion ?? false,
           requestId: input.requestId,
-          resume, resumedFromPending: Boolean(pending),
+          resume: resume || Boolean(confirmedRange), resumedFromPending: Boolean(pending), confirmedRange,
         });
       state.data.revision = result.revision;
       if (!("data_ref" in result) || !result.result_id) {
@@ -253,7 +260,8 @@ async function runXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal, gua
       queryUsable = result.status === "ok" && profile.valid > 0 && !profile.invalid;
       if (!queryUsable) terminal = true;
       return { status: result.status, data_ref: result.data_ref, result_id: result.result_id, revision: result.revision,
-        profile, chart: original?.chart?.selection, forecastModels: profile.analysis.forecast ? enabledForecastModels() : [] };
+        profile, diagnosis: result.diagnosis, chart: original?.chart?.selection,
+        forecastModels: profile.analysis.forecast ? enabledForecastModels() : [] };
     }),
     tool("inspect_data", "读取目标数据及可用能力。提供 plan 时在不入队的情况下预检分析方案。", z.strictObject({
       ...targetInput, plan: planSchema.optional(),
@@ -370,7 +378,7 @@ async function runXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal, gua
       async ({ topic }) => {
         const { datasets } = await listDataCatalog(topic);
         return { status: "ok", datasets: datasets.map(({ topic, dataset_id, metrics }) => ({
-          topic, dataset_id, metrics: metrics.map(({ name, unit, definition }) => ({ name, unit, definition })),
+          topic, dataset_id, metrics: metrics.map(({ name, unit, definition, rules }) => ({ name, unit, definition, rules })),
         })) };
       }),
     tool("utc_now", "读取当前 UTC 时间。", z.strictObject({}), () => ({ status: "ok", time: new Date().toISOString() })),
