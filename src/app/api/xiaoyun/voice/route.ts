@@ -123,9 +123,12 @@ export async function POST(request: Request) {
     const audioUrl = answer.output?.audio?.url;
     if (typeof audioUrl !== "string") throw new Error("Missing Qwen audio");
     const url = new URL(audioUrl);
-    if (url.origin !== "https://dashscope-result-bj.oss-cn-beijing.aliyuncs.com" || url.username || url.password) {
+    if (url.host !== "dashscope-result-bj.oss-cn-beijing.aliyuncs.com" || url.username || url.password
+      || (url.protocol !== "https:" && url.protocol !== "http:")) {
       throw new Error("Unexpected Qwen audio location");
     }
+    // DashScope can return an HTTP-formatted OSS URL. Fetch the signed object over HTTPS.
+    url.protocol = "https:";
     const audio = await fetch(url, { signal, redirect: "error" });
     if (!audio.ok) throw new Error("Qwen audio download failed");
     const pcm = pcmFromWave(await readBounded(audio, maxAudioBytes));
