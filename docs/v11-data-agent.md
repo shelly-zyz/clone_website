@@ -43,6 +43,7 @@ GRACED 速率和统计局发电量的指标规则与查询数据版本一起返�
 
 - `create_project` 返回项目编号与访问密钥。后续 `create_session`、`get_session`、`resolve_result` 和带 `session` 的 `ask` 用 `X-Data-Project-Key` 提供该密钥。状态连接使用 `green_agent_context`。会话按修订号写入，复用上次查询条件的追问默认固定到上次版本。保存结果可由 HTTP 或 MCP 读取，项目密钥由调用方保管。
 - `/api/data/vector-tiles/postgis/{z}/{x}/{y}.pbf` 读取 PostGIS 动态瓦片。当前图层 `osm_power_points` 使用现有 OpenStreetMap 电力点，范围为 7 至 15 级，每瓦片最多 5,000 个点。更新源表后执行 `REFRESH MATERIALIZED VIEW CONCURRENTLY derived.osm_power_point`。调用地图时显示 OpenStreetMap 署名。
+- SSH 预览的碳帧、电力资产和旧版地图图层通过服务端 `DATABASE_URL` 读取。管理员在 `zyz` 执行 [预览地图只读授权](../scripts/v11-map-preview.sql) 后，预览启动器可以用现有 `green_v11_web_query` 登录建立地图连接，并在该连接的 URL `options` 参数中设置 `-c role=green_v11_web_map -c default_transaction_read_only=on -c statement_timeout=20000`。地图角色只读现有地图 API 使用的表，数据 Agent 查询仍以 `green_agent_ro` 执行。重启预览后用 `/api/database/health`、`/api/data/map-assets` 和 `/api/carbon-earth?request=manifest` 检查。
 - 查询结果保留 V11 的 `dataset_id`、`version`、`query_hash`、字段、单位、时间范围与质量信息。本期项目结果为限行内联数据，`artifact_uri` 为 `null`。语义 embedding 索引、Wren MDL、SQLGlot、SeaweedFS Parquet 与其他专题的定时源更新属于后续接入。
 
 ## 可视化交接
