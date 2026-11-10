@@ -33,6 +33,27 @@ export function authorizeDataAgent(request: Request, reviewer = false) {
   return Response.json({ error: "业务接口需要服务端授权。" }, { status: 401 });
 }
 
+// This preview listener is bound to IPv4 loopback and reached through authenticated SSH.
+// The exact origin and Fetch Metadata keep other browser origins outside that trust boundary.
+export function isXiaoyunSshPreviewRequest(request: Request) {
+  const port = process.env.PORT;
+  if (process.env.OGW_XIAOYUN_SSH_PREVIEW !== "true" || process.env.HOSTNAME !== "127.0.0.1"
+    || !port || request.method !== "POST" || request.headers.has("authorization")) return false;
+
+  const host = `127.0.0.1:${port}`;
+  const url = new URL(request.url);
+  return url.protocol === "http:" && url.port === port && loopbackHosts.includes(url.hostname)
+    && request.headers.get("host") === host && request.headers.get("origin") === `http://${host}`
+    && request.headers.get("sec-fetch-site") === "same-origin"
+    && request.headers.get("x-forwarded-host") === host
+    && request.headers.get("x-forwarded-proto") === "http"
+    && request.headers.get("x-forwarded-for") === "127.0.0.1";
+}
+
+export function authorizeXiaoyun(request: Request) {
+  return isXiaoyunSshPreviewRequest(request) ? null : authorizeDataAgent(request);
+}
+
 export function dataAgentErrorResponse(error: unknown) {
   if (error instanceof DataAgentError) {
     const statuses = { NOT_CONFIGURED: 503, VERSION_NOT_FOUND: 404, INVALID_METRIC: 422, INVALID_SERIES: 422,

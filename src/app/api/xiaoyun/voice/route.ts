@@ -1,4 +1,4 @@
-import { authorizeDataAgent } from "@/lib/data-agent/http.server";
+import { authorizeXiaoyun } from "@/lib/data-agent/http.server";
 
 export const runtime = "nodejs";
 
@@ -77,7 +77,7 @@ export function GET() {
 }
 
 export async function POST(request: Request) {
-  const unauthorized = authorizeDataAgent(request);
+  const unauthorized = authorizeXiaoyun(request);
   if (unauthorized) return unauthorized;
   const key = process.env.DASHSCOPE_API_KEY?.trim();
   if (!key) return Response.json({ error: "千问语音尚未配置。" }, { status: 503 });

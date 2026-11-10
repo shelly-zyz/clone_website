@@ -1,6 +1,6 @@
 import { analysisOperations, analysisRequestSchema } from "@/lib/analysis-agent/contracts";
 import { enabledForecastModels, runAnalysisRequest } from "@/lib/analysis-agent/analysis.server";
-import { authorizeDataAgent, dataAgentErrorResponse } from "@/lib/data-agent/http.server";
+import { authorizeDataAgent, dataAgentErrorResponse, isXiaoyunSshPreviewRequest } from "@/lib/data-agent/http.server";
 
 export const runtime = "nodejs";
 
@@ -11,8 +11,11 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const unauthorized = authorizeDataAgent(request);
-  if (unauthorized) return unauthorized;
+  const preview = isXiaoyunSshPreviewRequest(request);
+  if (!preview) {
+    const unauthorized = authorizeDataAgent(request);
+    if (unauthorized) return unauthorized;
+  }
   if (!request.headers.get("content-type")?.startsWith("application/json")) {
     return Response.json({ error: "请求必须使用 JSON。" }, { status: 415 });
   }
@@ -22,6 +25,10 @@ export async function POST(request: Request) {
   try { body = JSON.parse(raw); } catch { return Response.json({ error: "无效 JSON。" }, { status: 400 }); }
   const parsed = analysisRequestSchema.safeParse(body);
   if (!parsed.success) return Response.json({ code: "INVALID_REQUEST", issues: parsed.error.issues }, { status: 400 });
+  if (preview && parsed.data.action !== "get_job") {
+    const unauthorized = authorizeDataAgent(request);
+    if (unauthorized) return unauthorized;
+  }
   try {
     const reply = await runAnalysisRequest(parsed.data, request.headers.get("x-data-project-key"), request.signal);
     const status = "status" in reply && reply.status === "unsupported" ? 422

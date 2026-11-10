@@ -1,11 +1,11 @@
-import { authorizeDataAgent, dataAgentErrorResponse } from "@/lib/data-agent/http.server";
+import { authorizeXiaoyun, dataAgentErrorResponse } from "@/lib/data-agent/http.server";
 import { xiaoyunRequestSchema } from "@/lib/xiaoyun/contracts";
 import { askXiaoyun } from "@/lib/xiaoyun/supervisor.server";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  const unauthorized = authorizeDataAgent(request);
+  const unauthorized = authorizeXiaoyun(request);
   if (unauthorized) return unauthorized;
   if (!request.headers.get("content-type")?.startsWith("application/json")) {
     return Response.json({ error: "请求必须使用 JSON。" }, { status: 415 });
