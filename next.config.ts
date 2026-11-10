@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: process.cwd(),
   async headers() {
     return [{
-      source: "/intro/world-v1.json",
+      source: "/intro/graced-night-v1.:format(mp4|webp)",
       headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
     }];
   },

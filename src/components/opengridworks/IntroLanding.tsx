@@ -1,11 +1,12 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, ArrowUpRight, Compass, Play, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpRight, Compass, Pause, Play, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { IntroGlobe } from "./IntroGlobe";
 import styles from "./IntroLanding.module.css";
+
+const filmUrl = "/intro/graced-night-v1.mp4";
 
 const chapters = [
   { topic: "weather", label: "气象地球", english: "WEATHER", title: "追踪全球风场",
@@ -18,10 +19,45 @@ const chapters = [
 
 export function IntroLanding() {
   const [step, setStep] = useState<number | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const film = useRef<HTMLVideoElement>(null);
+  const pausedByUser = useRef(false);
   const startButton = useRef<HTMLButtonElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const restoreFocus = useRef(false);
   const chapter = step === null ? undefined : chapters[step];
+
+  useEffect(() => {
+    const video = film.current;
+    if (!video) return;
+    const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+    function syncPlayback() {
+      if (!video) return;
+      if (motion.matches) {
+        if (video.hasAttribute("src")) {
+          video.removeAttribute("src");
+          video.load();
+        }
+        return;
+      }
+      if (document.hidden || pausedByUser.current) {
+        video.pause();
+        return;
+      }
+      if (!video.hasAttribute("src")) video.src = filmUrl;
+      void video.play().catch(() => {});
+    }
+
+    motion.addEventListener("change", syncPlayback);
+    document.addEventListener("visibilitychange", syncPlayback);
+    syncPlayback();
+    return () => {
+      motion.removeEventListener("change", syncPlayback);
+      document.removeEventListener("visibilitychange", syncPlayback);
+      video.pause();
+    };
+  }, []);
 
   useEffect(() => {
     if (step !== null) {
@@ -36,6 +72,18 @@ export function IntroLanding() {
     setStep(null);
   }
 
+  function toggleFilm() {
+    const video = film.current;
+    if (!video) return;
+    pausedByUser.current = !video.paused;
+    if (video.paused) {
+      if (!video.hasAttribute("src")) video.src = filmUrl;
+      void video.play().catch(() => {});
+    } else {
+      video.pause();
+    }
+  }
+
   return (
     <main className={styles.landing} aria-label="OpenGridWorks 开屏"
       onKeyDown={event => {
@@ -43,7 +91,8 @@ export function IntroLanding() {
       }}>
       <div aria-hidden="true" className={styles.space}>
         <div className={styles.planet}>
-          <IntroGlobe scene={chapter?.topic ?? "overview"} />
+          <video ref={film} muted loop playsInline preload="none" poster="/intro/graced-night-v1.webp"
+            onPlaying={() => setPlaying(true)} onPause={() => setPlaying(false)} onEmptied={() => setPlaying(false)} />
         </div>
         <div className={styles.veil} />
       </div>
@@ -53,9 +102,15 @@ export function IntroLanding() {
           <Image className={styles.logo} src="/images/opengridworks/logo-dark.webp" alt="" width={36} height={36} />
           <span className={styles.wordmark}>OpenGridWorks</span>
         </div>
-        {chapter
-          ? <button type="button" className={styles.headerAction} onClick={closeTour}><X size={15} aria-hidden="true" />退出导览</button>
-          : <span className={styles.headerLabel}>地球数据观测</span>}
+        <div className="flex items-center gap-2 sm:gap-4">
+          {chapter
+            ? <button type="button" className={styles.headerAction} onClick={closeTour}><X size={15} aria-hidden="true" />退出导览</button>
+            : <span className={styles.headerLabel}>地球数据观测</span>}
+          <button type="button" className={`${styles.headerAction} ${styles.filmControl}`} onClick={toggleFilm}
+            aria-label={playing ? "暂停开屏动画" : "播放开屏动画"}>
+            {playing ? <Pause size={15} aria-hidden="true" /> : <Play size={15} aria-hidden="true" />}
+          </button>
+        </div>
       </header>
 
       {chapter && step !== null ? (
@@ -107,15 +162,19 @@ export function IntroLanding() {
               <ArrowUpRight className={styles.choiceArrow} size={16} aria-hidden="true" />
             </Link>
           </div>
+          <p className={styles.sample}>
+            <span>GRACED POWER · 2025.08.15</span>
+            <span>电力排放格点样本 · 区域汇集演示</span>
+          </p>
         </section>
       )}
 
       <footer className={styles.footer}>
-        <span className={styles.footerIndex}>OPEN GRID WORKS</span>
+        <span className={styles.footerIndex}>NASA GIBS · VIIRS 2012</span>
         <ul className={styles.legend} aria-label="地球专题">
           {chapters.map(item => <li key={item.topic} data-topic={item.topic}><span />{item.label}</li>)}
         </ul>
-        <span className={styles.footerIndex}>EARTH / 01</span>
+        <span className={styles.footerIndex}>GRACED POWER · 2025.08.15</span>
       </footer>
     </main>
   );
