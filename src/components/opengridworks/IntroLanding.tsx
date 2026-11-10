@@ -2,7 +2,6 @@
 
 import { ArrowLeft, ArrowRight, ArrowUpRight, Compass, Pause, Play, X } from "lucide-react";
 import Image from "next/image";
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import styles from "./IntroLanding.module.css";
 
@@ -135,11 +134,11 @@ export function IntroLanding() {
                 <ArrowLeft size={17} aria-hidden="true" />上一幕
               </button>
               {step === chapters.length - 1
-                ? <Link className={styles.textAction} href={`/workspace?topic=${chapter.topic}`} prefetch={false}>进入平台<ArrowUpRight size={17} aria-hidden="true" /></Link>
+                ? <a className={styles.textAction} href={`/workspace?topic=${chapter.topic}`}>进入平台<ArrowUpRight size={17} aria-hidden="true" /></a>
                 : <button type="button" className={styles.textAction} onClick={() => setStep(step + 1)}>下一幕<ArrowRight size={17} aria-hidden="true" /></button>}
             </div>
             {step !== chapters.length - 1 && (
-              <Link className={styles.skip} href={`/workspace?topic=${chapter.topic}`} prefetch={false}>进入平台<ArrowUpRight size={14} aria-hidden="true" /></Link>
+              <a className={styles.skip} href={`/workspace?topic=${chapter.topic}`}>进入平台<ArrowUpRight size={14} aria-hidden="true" /></a>
             )}
           </div>
         </section>
@@ -156,11 +155,11 @@ export function IntroLanding() {
               <span className={styles.choiceText}><strong>观看导览</strong><small>认识三个地球专题</small></span>
               <ArrowRight className={styles.choiceArrow} size={16} aria-hidden="true" />
             </button>
-            <Link className={`${styles.choice} ${styles.primary}`} href="/workspace" prefetch={false}>
+            <a className={`${styles.choice} ${styles.primary}`} href="/workspace">
               <span className={styles.choiceIcon}><Compass size={23} strokeWidth={1.5} aria-hidden="true" /></span>
               <span className={styles.choiceText}><strong>进入平台</strong><small>打开地球工作区</small></span>
               <ArrowUpRight className={styles.choiceArrow} size={16} aria-hidden="true" />
-            </Link>
+            </a>
           </div>
           <p className={styles.sample}>
             <span>GRACED POWER · 2025.08.15</span>
