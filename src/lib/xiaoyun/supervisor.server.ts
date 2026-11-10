@@ -31,6 +31,7 @@ const instructions = [
   "你是 OpenGridWorks 小云，负责在同一轮完成用户提出的多个相关动作。",
   "用户明确的专题优先。新问题默认当前地球。旧对象优先使用已选中的卡片，然后是相关专题的同类型对象。",
   "真实数值、新指标、新地区、新时段交给 query_data。只传查数要求。用户要求查数再画图或预测时，拿到数据后继续调用相应工具。",
+  "用户只问数值时，query_data 成功后直接结束。绘图、提交分析和查来源需要用户提出相应要求。",
   "target=current 指本轮查询结果；未查新数据时指当前专题最近的查询。target=data 指之前的查询，chart 指原图输入，analysis 指上次任务输入。",
   "改图形或渲染器时用 target=chart，继承图表输入与其余设置。改地区或时段时先查数，query_data 的 base 选被修改对象。",
   "数据库返回澄清时停止依赖该查询的动作。若用户回答待澄清项，用 resume=true 恢复查数，并继续原问题要求的动作。",
@@ -161,6 +162,7 @@ async function runXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal, gua
   }
 
   const normalized = input.message.replace(/[，。！？,.!?\s]/g, "");
+  const lookupOnly = /(?:只要|只报|仅返回)(?:数字|数值)(?:和单位)?$/.test(normalized);
   if (/^(请)?(展示|显示|查看|给我看|告诉我)(一下)?(刚才|上一条|上一个|这个|这组)?的?(数据)?来源$/.test(normalized)) {
     try {
       const topic = input.selectedChart?.topic ?? input.context.lastTopic ?? input.topic;
@@ -258,7 +260,7 @@ async function runXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal, gua
       reply = describeResult(result, result.result_id, "data");
       const { profile } = remember(topic, "current", result.result_id, result, original?.chart);
       queryUsable = result.status === "ok" && profile.valid > 0 && !profile.invalid;
-      if (!queryUsable) terminal = true;
+      if (!queryUsable || lookupOnly) terminal = true;
       return { status: result.status, data_ref: result.data_ref, result_id: result.result_id, revision: result.revision,
         profile, diagnosis: result.diagnosis, chart: original?.chart?.selection,
         forecastModels: profile.analysis.forecast ? enabledForecastModels() : [] };
@@ -371,8 +373,9 @@ async function runXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal, gua
       async ({ topic, target }) => {
         bind(topic);
         const entry = await inspect(topic, target);
-        reply = describeResult(entry.result, entry.id, "sources");
-        return { status: "ok", data_ref: entry.result.data_ref, sources: reply.sources };
+        const sourceReply = describeResult(entry.result, entry.id, "sources");
+        if (reply?.route !== "data" || reply.data?.result_id !== entry.id) reply = sourceReply;
+        return { status: "ok", data_ref: entry.result.data_ref, sources: sourceReply.sources };
       }),
     tool("list_available_datasets", "查看本站已发布数据和指标口径。", z.strictObject({ topic: topicSchema.optional() }),
       async ({ topic }) => {
