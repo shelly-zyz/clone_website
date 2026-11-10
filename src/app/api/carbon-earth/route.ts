@@ -1,5 +1,6 @@
 import { gunzipSync } from "node:zlib";
 import { queryDatabase } from "@/lib/db";
+import { mapJsonResponse } from "@/lib/map-json-response";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -55,8 +56,8 @@ export async function GET(request: Request) {
 
   try {
     if (requestType === "manifest") {
-      return Response.json(await readManifest(), {
-        headers: { "Cache-Control": "public, max-age=60, stale-while-revalidate=300" },
+      return mapJsonResponse(request, await readManifest(), {
+        "Cache-Control": "public, max-age=60, stale-while-revalidate=300",
       });
     }
 

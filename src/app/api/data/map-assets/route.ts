@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { queryDatabase } from "@/lib/db";
+import { mapJsonResponse } from "@/lib/map-json-response";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,7 +32,7 @@ type DataCenterRow = {
   properties: Record<string, unknown>;
 };
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const [assets, centers] = await Promise.all([
       queryDatabase<EnergyAssetRow>(
@@ -42,7 +43,7 @@ export async function GET() {
       ),
     ]);
 
-    return NextResponse.json({
+    return mapJsonResponse(request, {
       energyAssets: assets.rows.map((row) => ({
         id: row.id,
         name: row.name,
