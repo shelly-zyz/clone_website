@@ -12,15 +12,30 @@ preview_origin="http://127.0.0.1:$preview_port"
 preview_url="$preview_origin/workspace"
 preview_socket="$HOME/.ssh/opengridworks-preview-$preview_port.sock"
 
-if ! ssh -S "$preview_socket" -O check "$preview_host" >/dev/null 2>&1; then
+check_preview_health() {
+  curl -s --noproxy 127.0.0.1 --max-time 12 -o /dev/null -w '%{http_code}' \
+    "$preview_origin/api/database/health"
+}
+
+health_status=
+if ssh -S "$preview_socket" -O check "$preview_host" >/dev/null 2>&1; then
+  if ! health_status=$(check_preview_health); then
+    printf '预览隧道无响应，正在重连。\n' >&2
+    ssh -S "$preview_socket" -O exit "$preview_host" >/dev/null 2>&1 || true
+    health_status=
+  fi
+fi
+
+if [[ -z $health_status ]]; then
   ssh -fNT -M -S "$preview_socket" \
     -o BatchMode=yes -o IdentitiesOnly=yes -o PreferredAuthentications=publickey \
     -o ConnectTimeout=15 -o ExitOnForwardFailure=yes \
     -o ServerAliveInterval=20 -o ServerAliveCountMax=3 \
     -L "127.0.0.1:$preview_port:127.0.0.1:$preview_port" "$preview_host"
+  health_status=$(check_preview_health) || health_status=
 fi
 
-if ! curl -fsS --noproxy 127.0.0.1 --max-time 12 "$preview_origin/api/database/health" >/dev/null; then
+if [[ $health_status != 200 ]]; then
   printf 'SSH 隧道已建立，服务器上的 OpenGridWorks 预览或数据库暂不可用。\n' >&2
   exit 1
 fi
