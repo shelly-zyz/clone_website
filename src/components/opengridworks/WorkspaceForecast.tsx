@@ -24,7 +24,8 @@ function ForecastTask({ task, loadAnalysis }: { task: XiaoyunAnalysisArtifact; l
   const cutoff = job?.data_ref.time_range?.end;
   return (
     <section className={styles.result} aria-label="预测结果">
-      <h3>{result?.metric ?? "预测结果"}</h3>
+      <h3>预测结果</h3>
+      {result && <p className={styles.muted}>{result.metric}</p>}
       <p className={styles.muted} role="status">
         {job ? jobStatus[job.status] : "正在读取任务…"}
         {cutoff && ` · 数据截至 ${formatForecastDate(cutoff, grain)}`}
@@ -71,6 +72,7 @@ export function WorkspaceForecast({ topic, loadOverview, task, loadAnalysis, onR
   const config = settings[topic];
   const latest = overview?.points.findLast(({ value }) => value !== null);
   const training = overview?.training;
+  const historicalWindow = Boolean(training && training.end !== latest?.date);
   const grain = topic === "power" ? "month" : "day";
   const horizon = topic === "power" ? settings.power.horizon : settings.carbon.horizon;
   const weather = topic === "weather";
@@ -107,7 +109,7 @@ export function WorkspaceForecast({ topic, loadOverview, task, loadAnalysis, onR
             训练窗口 {formatForecastDate(training.start, grain)} 至 {formatForecastDate(training.end, grain)}
           </p>
           <button className={styles.action} type="button" disabled={pending || !ready} onClick={run}>
-            {pending ? "正在提交预测…" : `预测 ${horizon}`}
+            {pending ? "正在提交预测…" : `${historicalWindow ? "历史外推" : "预测"} ${horizon}`}
           </button>
           {!ready && <p className={styles.muted}>小云连接后可提交预测。</p>}
         </> : (
