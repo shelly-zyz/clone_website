@@ -1,0 +1,145 @@
+.region {
+  --forecast-accent: #f6d252;
+  color-scheme: dark;
+}
+
+.region[data-topic="weather"] { --forecast-accent: #50d7e7; }
+.region[data-topic="carbon"] { --forecast-accent: #9be365; }
+.region[data-topic="economy"] { --forecast-accent: #ffa383; }
+
+.panel {
+  position: absolute;
+  z-index: 45;
+  top: 64px;
+  right: 16px;
+  width: var(--og-forecast-width);
+  max-height: calc(100% - var(--og-globe-nav-space) - 72px);
+  display: flex;
+  flex-direction: column;
+  color: #edf0f2;
+  background: #080b0e;
+}
+
+.region:is([data-topic="weather"], [data-topic="economy"]) .panel { top: 16px; }
+
+.header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-height: 51px;
+  padding: 12px 14px 7px;
+  color: var(--forecast-accent);
+}
+
+.header h2 {
+  color: inherit;
+  font-size: 17px;
+  font-weight: 650;
+}
+
+.content {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  padding: 4px 14px 15px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.content h3 {
+  margin-bottom: 3px;
+  font-size: 14px;
+  font-weight: 620;
+}
+
+.content :is(button, a, select):focus-visible,
+.region > button:focus-visible,
+.close:focus-visible {
+  outline: 2px solid var(--forecast-accent);
+  outline-offset: -2px;
+}
+
+.muted,
+.source {
+  color: #aebbc1;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.source { margin-top: 10px; }
+.source a { color: var(--forecast-accent); }
+.source a:hover { text-decoration: underline; }
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 40px;
+  margin-top: 10px;
+  padding: 6px 8px;
+  color: #10171a;
+  background: var(--forecast-accent);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.action:disabled {
+  color: #d7dee1;
+  background: #242c30;
+}
+
+.status { margin-top: 8px; }
+.error { color: #ffb7ab; }
+.result { margin-top: 14px; }
+
+.series { margin-top: 8px; }
+.chart { display: block; width: 100%; max-height: 88px; }
+.chart path { fill: none; }
+.guide { stroke: #293236; stroke-width: 1; }
+.observed { stroke: #b3c3ce; stroke-width: 1.8; }
+.predicted { stroke: var(--forecast-accent); stroke-width: 2; stroke-dasharray: 5 4; }
+.observedPoint { fill: #b3c3ce; }
+.predictedPoint { fill: var(--forecast-accent); }
+
+.values { display: grid; gap: 4px; margin-top: 4px; }
+.values > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 8px; }
+.values dt { color: #aebbc1; font-size: 11px; }
+.values dd { color: #f1f5f7; font-size: 12px; font-variant-numeric: tabular-nums; }
+
+.trigger, .close { display: none; }
+
+@media (max-width: 900px) {
+  .trigger, .close {
+    display: flex;
+    min-height: 44px;
+    align-items: center;
+    gap: 6px;
+    padding: 0 10px;
+    color: var(--forecast-accent);
+    background: #141b20;
+    font-size: 13px;
+  }
+
+  .trigger {
+    position: absolute;
+    z-index: 46;
+    top: max(12px, env(safe-area-inset-top));
+    right: 12px;
+  }
+
+  .close { justify-content: center; width: 44px; margin-left: auto; }
+
+  .region .panel,
+  .region:is([data-topic="weather"], [data-topic="economy"]) .panel {
+    inset: 0 0 0 auto;
+    z-index: 77;
+    width: min(310px, calc(100% - 44px));
+    max-height: none;
+    padding-block: env(safe-area-inset-top) env(safe-area-inset-bottom);
+  }
+
+  .panel[data-open="false"] { display: none; }
+}

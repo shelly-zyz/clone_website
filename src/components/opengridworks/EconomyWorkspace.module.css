@@ -7,13 +7,13 @@
 
 .map {
   position: absolute;
-  inset: 0 0 var(--og-globe-nav-space) calc(var(--og-sidebar-width) + 30px);
+  inset: 0 calc(var(--og-forecast-width) + 30px) var(--og-globe-nav-space) calc(var(--og-sidebar-width) + 30px);
 }
 
 .mapStatus {
   position: absolute;
   top: 42%;
-  left: calc(50% + var(--og-sidebar-width) / 2);
+  left: calc(50% + (var(--og-sidebar-width) - var(--og-forecast-width)) / 2);
   transform: translateX(-50%);
   color: #e7d9c7;
   text-align: center;

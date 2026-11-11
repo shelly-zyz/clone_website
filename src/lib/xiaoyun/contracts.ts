@@ -43,12 +43,25 @@ export const analysisJobSchema = z.object({
   }),
   result: analysisResultSchema.nullable(),
   error: z.string().nullable(),
-  data_ref: z.object({ version: z.string() }),
+  data_ref: z.object({
+    version: z.string(),
+    time_range: z.object({ start: z.string().nullable(), end: z.string().nullable() }).optional(),
+  }),
 });
+
+export const xiaoyunAnalysisArtifactSchema = z.object({
+  kind: z.literal("analysis"),
+  topic: topicSchema,
+  jobId: z.uuid(),
+  projectId: z.uuid(),
+  operation: z.enum(analysisOperations).optional(),
+});
+
+export type XiaoyunAnalysisArtifact = z.infer<typeof xiaoyunAnalysisArtifactSchema>;
 
 export type XiaoyunBusinessResult =
   | { kind: "chart"; topic: Topic; chartId: string; title: string; renderer: "echarts" | "mcp-echarts" | "vchart" | "antv"; options: Record<string, unknown>; version: string }
-  | { kind: "analysis"; topic: Topic; jobId: string; projectId: string };
+  | XiaoyunAnalysisArtifact;
 
 export type XiaoyunReply = {
   runId?: string;

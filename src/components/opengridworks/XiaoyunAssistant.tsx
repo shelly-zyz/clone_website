@@ -3,12 +3,36 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { VoiceAssistant } from "@xiaoyun/voice";
 import { topicSchema, type Topic } from "@/lib/data-agent/contracts";
+import { forecastOverviewSchema } from "@/lib/globe-forecast";
 import {
-  analysisJobSchema, xiaoyunContextSchema, type XiaoyunBusinessResult, type XiaoyunContext, type XiaoyunReply,
+  analysisJobSchema, xiaoyunAnalysisArtifactSchema, xiaoyunContextSchema,
+  type XiaoyunAnalysisArtifact, type XiaoyunBusinessResult, type XiaoyunContext, type XiaoyunReply,
 } from "@/lib/xiaoyun/contracts";
+import { WorkspaceForecast, type LoadForecastOverview } from "./WorkspaceForecast";
 import { XiaoyunBusinessCard } from "./XiaoyunBusinessCard";
 
 const storageKey = "og-xiaoyun-context";
+const forecastStorageKey = "og-xiaoyun-forecasts";
+type Forecasts = Partial<Record<Topic, XiaoyunAnalysisArtifact>>;
+
+function isWorkspaceForecast(result: XiaoyunBusinessResult): result is XiaoyunAnalysisArtifact {
+  return result.kind === "analysis" && result.operation === "forecast" && result.topic !== "meteo";
+}
+
+function loadForecasts(): Forecasts {
+  try {
+    const saved: unknown = JSON.parse(sessionStorage.getItem(forecastStorageKey) ?? "[]");
+    if (!Array.isArray(saved)) return {};
+    const forecasts: Forecasts = {};
+    for (const item of saved) {
+      const task = xiaoyunAnalysisArtifactSchema.safeParse(item).data;
+      if (task && isWorkspaceForecast(task)) forecasts[task.topic] = task;
+    }
+    return forecasts;
+  } catch {
+    return {};
+  }
+}
 
 function newRequestId() {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
@@ -36,11 +60,17 @@ export function XiaoyunAssistant({ topic, onMapCommand }: {
   const context = useRef<XiaoyunContext>({});
   const selectedChart = useRef<{ topic: Topic; chart_id: string } | undefined>(undefined);
   const retry = useRef<{ id: string; message: string; topic: Topic; chartId?: string } | undefined>(undefined);
+  const forecastRequest = useRef<{ topic: Topic; message: string; answered: boolean } | null>(null);
+  const forecastRefs = useRef<Forecasts>({});
   const page = useRef({ topic, onMapCommand });
   const token = useRef("");
   const [requiresToken, setRequiresToken] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  const [ready, setReady] = useState(false);
   const [business, setBusiness] = useState<XiaoyunBusinessResult[]>([]);
+  const [forecasts, setForecasts] = useState<Forecasts>({});
+  const [pendingForecast, setPendingForecast] = useState<Topic>();
+  const [forecastNotice, setForecastNotice] = useState<{ topic: Topic; message: string }>();
   const [selectedChartId, setSelectedChartId] = useState<string>();
 
   const loadAnalysis = useCallback(async (task: Extract<XiaoyunBusinessResult, { kind: "analysis" }>, signal: AbortSignal) => {
@@ -61,6 +91,37 @@ export function XiaoyunAssistant({ topic, onMapCommand }: {
     return analysisJobSchema.parse(await response.json());
   }, []);
 
+  const loadForecastOverview = useCallback<LoadForecastOverview>(async (forecastTopic, signal) => {
+    const response = await fetch("/api/xiaoyun/forecast-overview", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token.current ? { Authorization: `Bearer ${token.current}` } : {}),
+      },
+      body: JSON.stringify({ topic: forecastTopic }),
+      signal,
+    });
+    if (response.status === 401) throw new Error("请从已授权的业务预览读取预测数据。");
+    if (!response.ok) throw new Error("预测数据暂不可用。");
+    return forecastOverviewSchema.parse(await response.json());
+  }, []);
+
+  function runForecast(message: string) {
+    const assistant = voice.current;
+    if (!assistant || forecastRequest.current) return;
+    const request = { topic, message, answered: false };
+    forecastRequest.current = request;
+    setPendingForecast(topic);
+    setForecastNotice(undefined);
+    assistant.updateContext({ topic });
+    void assistant.submitText(message).catch(() => {}).finally(() => {
+      if (forecastRequest.current !== request) return;
+      forecastRequest.current = null;
+      setPendingForecast(undefined);
+      if (!request.answered) setForecastNotice({ topic, message: "预测尚未提交，请重试。" });
+    });
+  }
+
   useEffect(() => {
     page.current = { topic, onMapCommand };
     voice.current?.updateContext({ topic });
@@ -69,6 +130,10 @@ export function XiaoyunAssistant({ topic, onMapCommand }: {
   useEffect(() => {
     let disposed = false;
     context.current = loadContext();
+    forecastRefs.current = loadForecasts();
+    void Promise.resolve().then(() => {
+      if (!disposed) setForecasts(forecastRefs.current);
+    });
 
     async function voiceRequest(action: "transcribe" | "synthesize", body: ArrayBuffer | string, signal: AbortSignal) {
       const response = await fetch(`/api/xiaoyun/voice?action=${action}`, {
@@ -112,7 +177,9 @@ export function XiaoyunAssistant({ topic, onMapCommand }: {
             if (commandResult) return { summary: commandResult };
 
             const activeTopic = topicSchema.safeParse(snapshot.topic).data ?? page.current.topic;
-            const chart = selectedChart.current;
+            const pending = forecastRequest.current;
+            const fromSidebar = pending?.topic === activeTopic && pending.message === message;
+            const chart = fromSidebar ? undefined : selectedChart.current;
             const previous = retry.current;
             const id = previous?.message === message && previous.topic === activeTopic && previous.chartId === chart?.chart_id
               ? previous.id : newRequestId();
@@ -130,6 +197,10 @@ export function XiaoyunAssistant({ topic, onMapCommand }: {
             signal.throwIfAborted();
             if (!response.ok) {
               if (response.status === 401) setRequiresToken(true);
+              if (fromSidebar) {
+                pending.answered = true;
+                setForecastNotice({ topic: activeTopic, message: reply.error ?? "暂时无法提交预测。" });
+              }
               throw new Error(reply.error ?? "小云暂时无法处理此请求。");
             }
             retry.current = undefined;
@@ -145,13 +216,30 @@ export function XiaoyunAssistant({ topic, onMapCommand }: {
             }
             setRequiresToken(false);
             const results = reply.artifacts ?? (reply.business ? [reply.business] : []);
-            if (results.length) setBusiness(current => {
-              const next = current.filter(item => !results.some(result => result.topic === item.topic && (
+            const sidebarResults = results.filter(isWorkspaceForecast);
+            if (sidebarResults.length) {
+              const next = { ...forecastRefs.current };
+              for (const task of sidebarResults) next[task.topic] = task;
+              forecastRefs.current = next;
+              setForecasts(next);
+              try { sessionStorage.setItem(forecastStorageKey, JSON.stringify(Object.values(next))); } catch {
+                // The forecast remains visible in this tab when storage is disabled.
+              }
+            }
+            if (fromSidebar) {
+              pending.answered = true;
+              if (!sidebarResults.some(task => task.topic === activeTopic)) {
+                setForecastNotice({ topic: activeTopic, message: reply.summary });
+              }
+            }
+            const floatingResults = results.filter(result => !isWorkspaceForecast(result) || result.topic !== page.current.topic);
+            if (floatingResults.length) setBusiness(current => {
+              const next = current.filter(item => !floatingResults.some(result => result.topic === item.topic && (
                 result.kind === "analysis" && item.kind === "analysis" && result.jobId === item.jobId
                 || result.kind === "chart" && item.kind === "chart" && result.chartId === item.chartId)));
-              return [...next, ...results].slice(-4);
+              return [...next, ...floatingResults].slice(-4);
             });
-            if (results.length && selectedChart.current) {
+            if (results.length && chart && selectedChart.current === chart) {
               selectedChart.current = undefined;
               setSelectedChartId(undefined);
             }
@@ -159,21 +247,28 @@ export function XiaoyunAssistant({ topic, onMapCommand }: {
           },
         },
       });
+      setReady(true);
     }).catch(() => {
       if (!disposed) setLoadError(true);
     });
 
     return () => {
       disposed = true;
+      forecastRequest.current = null;
       voice.current?.destroy();
       voice.current = null;
     };
   }, []);
 
+  const visibleBusiness = business.filter(result => !isWorkspaceForecast(result) || result.topic !== topic);
   return (
     <>
       <div ref={container} />
-      {business.length > 0 && <XiaoyunBusinessCard results={business} loadAnalysis={loadAnalysis} selectedChartId={selectedChartId}
+      <WorkspaceForecast key={topic} topic={topic === "meteo" ? "weather" : topic}
+        loadOverview={loadForecastOverview} loadAnalysis={loadAnalysis} task={forecasts[topic]}
+        ready={ready} pending={pendingForecast !== undefined} onRun={runForecast}
+        notice={forecastNotice?.topic === topic ? forecastNotice.message : undefined} />
+      {visibleBusiness.length > 0 && <XiaoyunBusinessCard results={visibleBusiness} loadAnalysis={loadAnalysis} selectedChartId={selectedChartId}
         onSelectChart={chart => {
           const next = selectedChart.current?.chart_id === chart.chartId ? undefined : { topic: chart.topic, chart_id: chart.chartId };
           selectedChart.current = next;

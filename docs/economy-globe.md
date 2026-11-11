@@ -12,4 +12,6 @@
 
 运行 `node scripts/update-economy-globe-data.mjs` 可用 `curl` 从世界银行 Indicators API 重新生成快照。工作区直接读取站内文件。
 
+右栏展示世界银行 2026 年 6 月版 [全球经济展望](https://www.worldbank.org/en/publication/global-economic-prospects) 的实际 GDP 年增速预测。站内 [GEP 快照](../public/data/economy/gep.json) 从该版 `GEP_CSV.zip` 的 `GEPCSV.csv` 取指标 `NYGDPMKTPKDZ` 和 2026–2028 年列，按 WDI 国家编码匹配，并保留世界银行成员全球合计 `WLT`。缺测保留为空，快照登记原压缩包 SHA-256。数据许可为 CC BY 4.0。[世界银行数据目录](https://datacatalog.worldbank.org/search/dataset/0037888/global-economic-prospects)
+
 底部缩略图取自各专题的地球渲染。碳排放缩略图取自 [GRACED 实帧截图](pr-evidence/carbon-earth-latest.png)。

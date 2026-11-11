@@ -145,6 +145,7 @@
   height: 100vh;
   height: 100svh;
   --og-sidebar-width: clamp(224px, 17vw, 256px);
+  --og-forecast-width: clamp(240px, 19vw, 286px);
   --og-globe-nav-space: calc(108px + env(safe-area-inset-bottom, 0px));
   overflow: hidden;
   color: #e2e8f0;
@@ -3466,6 +3467,7 @@
 
 .og-app-shell.is-cinematic .og-globe-navigation,
 .og-app-shell.is-cinematic .og-workspace-sidebar,
+.og-app-shell.is-cinematic .og-forecast-region,
 .og-app-shell.is-cinematic .og-workspace-mobile-header,
 .og-app-shell.is-cinematic .og-workspace-scrim,
 .og-app-shell.is-cinematic .og-top-toolbar,

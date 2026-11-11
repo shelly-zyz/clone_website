@@ -4,8 +4,10 @@ import { ArrowUpRight } from "lucide-react";
 import maplibregl, { type ExpressionSpecification, type Map as MapLibreMap } from "maplibre-gl";
 import type { FeatureCollection, Point } from "geojson";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ForecastSeries, ForecastSidebar } from "./ForecastSidebar";
 import { WorkspaceFilterSelect, WorkspaceSidebar } from "./WorkspaceSidebar";
 import styles from "./EconomyWorkspace.module.css";
+import forecastStyles from "./ForecastSidebar.module.css";
 
 const indicators = {
   "NY.GDP.MKTP.CD": { label: "GDP", min: 1e8, max: 3e13, unit: "美元" },
@@ -30,6 +32,12 @@ type EconomySnapshot = {
 };
 
 type CountryValue = { country: Country; value: number | null };
+type EconomicOutlook = {
+  edition: string;
+  sourceUrl: string;
+  years: number[];
+  values: Record<string, (number | null)[] | undefined>;
+};
 
 const globeCenter: [number, number] = [79, 22];
 const formatter = new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 2 });
@@ -238,6 +246,46 @@ export function EconomyWorkspace() {
           </div>
         </section>
       </WorkspaceSidebar>
+      <EconomyForecast country={selected?.country} />
     </>
+  );
+}
+
+function EconomyForecast({ country }: { country?: Country }) {
+  const [outlook, setOutlook] = useState<EconomicOutlook | null>();
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch("/data/economy/gep.json", { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error("Economic outlook is unavailable");
+        return response.json() as Promise<EconomicOutlook>;
+      })
+      .then((data) => { if (!controller.signal.aborted) setOutlook(data); })
+      .catch(() => { if (!controller.signal.aborted) setOutlook(null); });
+    return () => controller.abort();
+  }, []);
+
+  const values = outlook?.values[country?.code ?? "WLT"];
+  const points = outlook && values
+    ? outlook.years.map((year, index) => ({ date: `${year}-01-01`, value: values[index] ?? null }))
+    : [];
+  return (
+    <ForecastSidebar topic="economy">
+      <h3>{country?.label ?? "全球"}实际 GDP 增速</h3>
+      <p className={forecastStyles.muted}>世界银行发布预测 · 按不变价计算</p>
+      {points.some(({ value }) => value !== null) ? (
+        <ForecastSeries points={points} unit="%" grain="year" label="实际 GDP 年增速预测" />
+      ) : (
+        <p className={forecastStyles.status} role="status">
+          {outlook === undefined ? "正在读取增长展望…" : outlook ? "该地区暂无已发布的增长预测。" : "增长展望暂不可用。"}
+        </p>
+      )}
+      {outlook && (
+        <p className={forecastStyles.source}>
+          <a href={outlook.sourceUrl} target="_blank" rel="noreferrer">世界银行 · 全球经济展望</a>
+          {" · "}{outlook.edition} 版
+        </p>
+      )}
+    </ForecastSidebar>
   );
 }

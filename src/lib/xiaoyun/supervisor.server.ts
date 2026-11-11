@@ -350,7 +350,8 @@ async function runXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal, gua
         }
       }
       lastRoute = "analysis";
-      artifacts.push({ kind: "analysis", topic, jobId: result.job_id, projectId: state.scope.project_id });
+      artifacts.push({ kind: "analysis", topic, jobId: result.job_id, projectId: state.scope.project_id,
+        operation: planSchema.safeParse(result.plan).data?.operation });
       return { status: result.status, job_id: result.job_id, plan: result.plan };
     }),
     tool("get_analysis", "读取该专题已有任务的实际状态。", z.strictObject({ topic: topicSchema }), async ({ topic }) => {
@@ -364,7 +365,8 @@ async function runXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal, gua
       if (!("status" in result) || !("job_id" in result)) return note("get_analysis", "暂时无法读取任务。");
       lastRoute = "analysis";
       if (!artifacts.some(item => item.kind === "analysis")) {
-        artifacts.push({ kind: "analysis", topic, jobId, projectId: state.scope.project_id });
+        artifacts.push({ kind: "analysis", topic, jobId, projectId: state.scope.project_id,
+          operation: planSchema.safeParse(result.plan).data?.operation });
       }
       notes.set("analysis_status", `分析任务${analysisStatuses[result.status]}。`);
       return { status: result.status, job_id: jobId };
@@ -399,7 +401,8 @@ async function runXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal, gua
         if (!(error instanceof DataAgentError) || error.code !== "PROJECT_NOT_FOUND") throw error;
       });
       if (existing && typeof existing === "object" && "job_id" in existing && jobId) {
-        const business = { kind: "analysis" as const, topic, jobId, projectId: state.scope.project_id };
+        const business = { kind: "analysis" as const, topic, jobId, projectId: state.scope.project_id,
+          operation: planSchema.safeParse(existing.plan).data?.operation };
         return { route: "analysis", summary: "分析任务可在结果卡查看。", business, artifacts: [business],
           session: { topic, scope: state.scope }, lastTopic: topic, lastRoute: "analysis" };
       }

@@ -6,13 +6,10 @@ import type { G2Spec } from "@antv/g2";
 import type { IBarChartSpec, ILineChartSpec } from "@visactor/vchart";
 import type { EChartsOption } from "echarts";
 import { useEffect, useRef, useState } from "react";
-import type { z } from "zod";
-import type { analysisJobSchema, XiaoyunBusinessResult } from "@/lib/xiaoyun/contracts";
+import { useAnalysisJob, type AnalysisJob, type LoadAnalysis } from "@/hooks/use-analysis-job";
+import type { XiaoyunAnalysisArtifact, XiaoyunBusinessResult } from "@/lib/xiaoyun/contracts";
 
 type Chart = Extract<XiaoyunBusinessResult, { kind: "chart" }>;
-type Task = Extract<XiaoyunBusinessResult, { kind: "analysis" }>;
-type Job = z.infer<typeof analysisJobSchema>;
-type LoadAnalysis = (task: Task, signal: AbortSignal) => Promise<Job>;
 
 const topics = { power: "电源地球", meteo: "气象地球", carbon: "碳排放地球" };
 const renderers = { echarts: "ECharts", "mcp-echarts": "ECharts", vchart: "VChart", antv: "AntV G2" };
@@ -78,7 +75,7 @@ function ChartPreview({ chart }: { chart: Chart }) {
   );
 }
 
-function AnalysisDetails({ job }: { job: Job }) {
+function AnalysisDetails({ job }: { job: AnalysisJob }) {
   const { result } = job;
   if (!result) return null;
   const { points, evaluation, baseline, summary, groups, model, model_selection: modelSelection } = result;
@@ -151,32 +148,8 @@ function AnalysisDetails({ job }: { job: Job }) {
   );
 }
 
-function AnalysisProgress({ task, loadAnalysis }: { task: Task; loadAnalysis: LoadAnalysis }) {
-  const [job, setJob] = useState<Job>();
-  const [notice, setNotice] = useState("");
-  const [refresh, setRefresh] = useState(0);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const deadline = Date.now() + 400_000;
-    let timer: ReturnType<typeof setTimeout>;
-    async function poll() {
-      try {
-        const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]);
-        const next = await loadAnalysis(task, signal);
-        if (controller.signal.aborted) return;
-        setJob(next);
-        setNotice("");
-        if (next.status === "succeeded" || next.status === "failed") return;
-        if (Date.now() < deadline) timer = setTimeout(poll, 2500);
-        else setNotice("任务仍在等待，稍后可刷新状态。");
-      } catch {
-        if (!controller.signal.aborted) setNotice("读取任务状态失败，可手动刷新。");
-      }
-    }
-    void poll();
-    return () => { controller.abort(); clearTimeout(timer); };
-  }, [task, loadAnalysis, refresh]);
+function AnalysisProgress({ task, loadAnalysis }: { task: XiaoyunAnalysisArtifact; loadAnalysis: LoadAnalysis }) {
+  const { job, notice, retry } = useAnalysisJob(task, loadAnalysis);
 
   return (
     <div className="mt-2 space-y-2">
@@ -189,7 +162,7 @@ function AnalysisProgress({ task, loadAnalysis }: { task: Task; loadAnalysis: Lo
       {notice && (
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <span>{notice}</span>
-          <Button label="刷新状态" size="sm" variant="secondary" onClick={() => { setNotice(""); setRefresh((n) => n + 1); }} />
+          <Button label="刷新状态" size="sm" variant="secondary" onClick={retry} />
         </div>
       )}
       {job && <p className="text-xs text-slate-600">数据版本 {job.data_ref.version.slice(0, 12)}</p>}
