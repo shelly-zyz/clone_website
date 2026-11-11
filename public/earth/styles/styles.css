@@ -194,6 +194,26 @@ body {
     color: #475569;
 }
 
+.ogw-workspace #details {
+    top: auto;
+    right: 146px;
+    bottom: 16px;
+    left: auto;
+    width: min(280px, calc(100% - 162px));
+}
+
+.ogw-workspace #earth,
+.ogw-workspace #menu,
+.ogw-workspace #status {
+    position: absolute;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.ogw-workspace #menu {
+    width: 220px;
+}
+
 #show-menu {
     color: #f8fafc;
 }

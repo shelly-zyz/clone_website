@@ -660,9 +660,10 @@
         if (!field) return;
 
         var ctx = d3.select("#overlay").node().getContext("2d"), grid = (gridAgent.value() || {}).overlayGrid;
+        var colorBar = d3.select("#scale"), c = colorBar.node();
 
         µ.clearCanvas(d3.select("#overlay").node());
-        µ.clearCanvas(d3.select("#scale").node());
+        µ.clearCanvas(c);
         if (overlayType) {
             if (overlayType !== "off") {
                 ctx.putImageData(field.overlay, 0, 0);
@@ -672,8 +673,8 @@
 
         if (grid) {
             // Draw color bar for reference.
-            var colorBar = d3.select("#scale"), scale = grid.scale, bounds = scale.bounds;
-            var c = colorBar.node(), g = c.getContext("2d"), n = c.width - 1;
+            var scale = grid.scale, bounds = scale.bounds;
+            var g = c.getContext("2d"), n = c.width - 1;
             for (var i = 0; i <= n; i++) {
                 var rgb = scale.gradient(µ.spread(i / n, bounds[0], bounds[1]), 1);
                 g.fillStyle = "rgb(" + rgb[0] + "," + rgb[1] + "," + rgb[2] + ")";
@@ -689,6 +690,9 @@
                 var units = createUnitToggle(elementId, grid).value();
                 colorBar.attr("title", µ.formatScalar(value, units) + " " + units.label);
             });
+        }
+        if (document.documentElement.classList.contains("ogw-workspace")) {
+            c.dispatchEvent(new Event("weather-scale-change"));
         }
     }
 

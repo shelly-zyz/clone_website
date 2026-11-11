@@ -17,6 +17,11 @@
     <link rel="apple-touch-icon" sizes="120x120" href="/earth/iphone-icon.png"/>
     <link rel="apple-touch-icon" sizes="152x152" href="/earth/ipad-icon.png"/>
     <link rel="stylesheet" type="text/css" href="/earth/styles/styles.css"/>
+    <script>
+        if (new URLSearchParams(location.search).has("workspace")) {
+            document.documentElement.classList.add("ogw-workspace");
+        }
+    </script>
 
     <link rel="alternate" hreflang="x-default" href="http://earth.nullschool.net/"/>
     <link rel="alternate" hreflang="ja" href="http://earth.nullschool.net/jp/"/>
