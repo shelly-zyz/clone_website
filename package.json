@@ -28,6 +28,7 @@
   },
   "scripts": {
     "dev": "next dev --webpack",
+    "preview:ssh": "bash scripts/open-ssh-preview.sh",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
