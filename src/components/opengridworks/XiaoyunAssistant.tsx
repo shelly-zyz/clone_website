@@ -96,7 +96,7 @@ export function XiaoyunAssistant({ topic, onMapCommand }: {
         mode: "live",
         assetBaseUrl: "/xiaoyun-audio/",
         context: { topic: page.current.topic },
-        ui: { theme: "power-earth", position: { right: 18, bottom: 90 } },
+        ui: { theme: "power-earth", position: { right: 18, bottom: 112 } },
         browserAdapter: {
           audio: config?.enabled ? {
             async transcribe(pcm, signal) { return (await voiceRequest("transcribe", pcm, signal)).text ?? ""; },

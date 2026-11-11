@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowDown, ArrowLeft, Maximize2 } from "lucide-react";
+import { resolveWorkspaceTopic, workspaceHref } from "@/lib/globe-topics";
 import styles from "./page.module.css";
 
 export const metadata: Metadata = {
@@ -46,9 +47,7 @@ export default async function VisualizationPage({ searchParams }: {
   searchParams: Promise<{ topic?: string | string[] }>;
 }) {
   const { topic } = await searchParams;
-  const workspace = topic === "weather" || topic === "carbon"
-    ? { pathname: "/workspace", query: { topic } }
-    : "/workspace";
+  const workspace = workspaceHref(resolveWorkspaceTopic(topic));
 
   return (
     <main className={styles.page}>

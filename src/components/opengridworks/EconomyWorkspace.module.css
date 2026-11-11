@@ -1,0 +1,90 @@
+.viewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #090a0e;
+}
+
+.map {
+  position: absolute;
+  inset: 0 0 var(--og-globe-nav-space) calc(var(--og-sidebar-width) + 30px);
+}
+
+.mapStatus {
+  position: absolute;
+  top: 42%;
+  left: calc(50% + var(--og-sidebar-width) / 2);
+  transform: translateX(-50%);
+  color: #e7d9c7;
+  text-align: center;
+}
+
+.filters {
+  display: grid;
+  gap: 15px;
+  padding-top: 12px;
+  border-top: 1px solid #242b2f;
+}
+
+.value,
+.legend,
+.source {
+  display: grid;
+  gap: 6px;
+  padding-top: 12px;
+  border-top: 1px solid #242b2f;
+  color: #aebbc1;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.value strong {
+  color: #ffdfa3;
+  font-size: 19px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.scale {
+  height: 6px;
+  background: linear-gradient(90deg, #302822, #67422e, #c88443);
+}
+
+.range {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 10px;
+}
+
+.missing,
+.source a {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.missing span {
+  width: 8px;
+  height: 8px;
+  background: #25262a;
+}
+
+.source a {
+  width: fit-content;
+  color: #ebcf9c;
+}
+
+.source a:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 900px) {
+  .map {
+    inset: 40px 0 var(--og-globe-nav-space);
+  }
+
+  .mapStatus {
+    left: 50%;
+  }
+}

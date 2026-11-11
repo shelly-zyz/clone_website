@@ -202,6 +202,15 @@ body {
     width: min(280px, calc(100% - 162px));
 }
 
+@media (max-width: 900px) {
+    .ogw-workspace #details {
+        right: auto;
+        bottom: 12px;
+        left: 12px;
+        width: min(220px, calc(100% - 24px));
+    }
+}
+
 .ogw-workspace #earth,
 .ogw-workspace #menu,
 .ogw-workspace #status {

@@ -3,6 +3,8 @@
 import { ArrowLeft, ArrowRight, ArrowUpRight, Compass, Pause, Play, X } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
+import { workspaceHref } from "@/lib/globe-topics";
+import { GlobeNavigation } from "./GlobeNavigation";
 import styles from "./IntroLanding.module.css";
 
 const filmUrl = "/intro/graced-night-v1.mp4";
@@ -14,6 +16,8 @@ const chapters = [
     description: "在地图上查找电源与电网设施，结合月度能源统计观察发电量和电源结构。" },
   { topic: "carbon", label: "碳排放地球", english: "CARBON", title: "观察碳排放的分布",
     description: "浏览 GRACED 日尺度排放估算，观察全球电力部门碳排放的空间分布及其变化。" },
+  { topic: "economy", label: "经济地球", english: "ECONOMY", title: "比较各地的经济指标",
+    description: "按国家或地区与年份浏览世界银行的 GDP、人均 GDP 和商品与服务出口额。" },
 ] as const;
 
 export function IntroLanding() {
@@ -134,11 +138,11 @@ export function IntroLanding() {
                 <ArrowLeft size={17} aria-hidden="true" />上一幕
               </button>
               {step === chapters.length - 1
-                ? <a className={styles.textAction} href={`/workspace?topic=${chapter.topic}`}>进入平台<ArrowUpRight size={17} aria-hidden="true" /></a>
+                ? <a className={styles.textAction} href={workspaceHref(chapter.topic)}>进入平台<ArrowUpRight size={17} aria-hidden="true" /></a>
                 : <button type="button" className={styles.textAction} onClick={() => setStep(step + 1)}>下一幕<ArrowRight size={17} aria-hidden="true" /></button>}
             </div>
             {step !== chapters.length - 1 && (
-              <a className={styles.skip} href={`/workspace?topic=${chapter.topic}`}>进入平台<ArrowUpRight size={14} aria-hidden="true" /></a>
+              <a className={styles.skip} href={workspaceHref(chapter.topic)}>进入平台<ArrowUpRight size={14} aria-hidden="true" /></a>
             )}
           </div>
         </section>
@@ -147,12 +151,12 @@ export function IntroLanding() {
           <div className={styles.scene}>
             <p className={styles.eyebrow}><span />EARTH OBSERVATORY<span /></p>
             <h1 className={styles.title}>看见地球的变化</h1>
-            <p className={styles.description}>在同一张地球上，探索气象、电力与碳排放数据。</p>
+            <p className={styles.description}>从四个地球专题探索电力、气象、碳排放与经济数据。</p>
           </div>
           <div className={styles.choices}>
             <button ref={startButton} type="button" className={styles.choice} onClick={() => setStep(0)}>
               <span className={styles.choiceIcon}><Play size={20} strokeWidth={1.55} aria-hidden="true" /></span>
-              <span className={styles.choiceText}><strong>观看导览</strong><small>认识三个地球专题</small></span>
+              <span className={styles.choiceText}><strong>观看导览</strong></span>
               <ArrowRight className={styles.choiceArrow} size={16} aria-hidden="true" />
             </button>
             <a className={`${styles.choice} ${styles.primary}`} href="/workspace">
@@ -170,9 +174,7 @@ export function IntroLanding() {
 
       <footer className={styles.footer}>
         <span className={styles.footerIndex}>NASA GIBS · VIIRS 2012</span>
-        <ul className={styles.legend} aria-label="地球专题">
-          {chapters.map(item => <li key={item.topic} data-topic={item.topic}><span />{item.label}</li>)}
-        </ul>
+        <GlobeNavigation />
         <span className={styles.footerIndex}>GRACED POWER · 2025.08.15</span>
       </footer>
     </main>

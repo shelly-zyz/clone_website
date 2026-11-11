@@ -1,9 +1,9 @@
 import { MapAppShell } from "@/components/opengridworks/MapAppShell";
+import { resolveWorkspaceTopic } from "@/lib/globe-topics";
 
 export default async function Workspace({ searchParams }: {
   searchParams: Promise<{ topic?: string | string[] }>;
 }) {
   const { topic } = await searchParams;
-  const initialProject = topic === "weather" || topic === "carbon" ? topic : "power";
-  return <MapAppShell initialProject={initialProject} />;
+  return <MapAppShell initialProject={resolveWorkspaceTopic(topic)} />;
 }

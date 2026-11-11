@@ -145,6 +145,7 @@
   height: 100vh;
   height: 100svh;
   --og-sidebar-width: clamp(224px, 17vw, 256px);
+  --og-globe-nav-space: calc(108px + env(safe-area-inset-bottom, 0px));
   overflow: hidden;
   color: #e2e8f0;
   background: #151d24;
@@ -321,33 +322,61 @@
   pointer-events: none;
 }
 
-.og-workspace-topics {
+.og-globe-navigation {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 2px;
-  margin: 8px 0 13px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 3px;
+  width: min(100%, 420px);
 }
 
-.og-workspace-topics button {
+.og-globe-navigation.is-docked {
+  position: absolute;
+  z-index: 48;
+  right: auto;
+  bottom: max(10px, env(safe-area-inset-bottom));
+  left: calc(50% + (var(--og-sidebar-width) + 16px) / 2);
+  width: min(420px, calc(100% - var(--og-sidebar-width) - 42px));
+  transform: translateX(-50%);
+}
+
+.og-globe-navigation :is(button, a) {
+  --topic-color: #7cb0f0;
   display: grid;
+  min-width: 0;
   justify-items: center;
   align-content: center;
-  gap: 6px;
-  min-height: 64px;
-  padding: 5px 2px;
-  color: #aebac0;
-  background: #101519;
-  font-size: 11px;
+  gap: 4px;
+  padding: 4px 2px 6px;
+  border-bottom: 2px solid color-mix(in srgb, var(--topic-color) 48%, #171c21);
+  color: #d6e1e6;
+  background: #0b1015;
+  font-size: 12px;
+  white-space: nowrap;
+  transition: background-color 160ms ease, border-color 160ms ease;
 }
 
-.og-workspace-topics button:hover {
-  background: #1b2328;
+.og-globe-navigation [data-topic="weather"] { --topic-color: #7de7d0; }
+.og-globe-navigation [data-topic="carbon"] { --topic-color: #b8db66; }
+.og-globe-navigation [data-topic="economy"] { --topic-color: #edb671; }
+
+.og-globe-navigation img {
+  display: block;
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  mask-image: radial-gradient(circle closest-side, #000 94%, transparent 100%);
 }
 
-.og-workspace-topics button[aria-pressed="true"] {
-  color: #d0f4ec;
-  background: #16282b;
-  box-shadow: inset 0 -2px #80ccbb;
+.og-globe-navigation :is(button, a):hover,
+.og-globe-navigation button[aria-pressed="true"] {
+  border-color: var(--topic-color);
+  color: #f7fbfc;
+  background: color-mix(in srgb, var(--topic-color) 12%, #0b1015);
+}
+
+.og-globe-navigation :is(button, a):focus-visible {
+  outline: 2px solid var(--topic-color);
+  outline-offset: -2px;
 }
 
 .og-workspace-visualization-link {
@@ -1171,7 +1200,6 @@
 }
 
 .og-mobile-controls,
-.og-bottom-sheet,
 .og-mobile-generation-sheet {
   display: none;
 }
@@ -1218,9 +1246,24 @@
   }
 }
 
+@media (min-width: 901px) and (max-width: 1200px) {
+  .og-layer-cards { bottom: calc(var(--og-globe-nav-space) + 12px); }
+}
+
 @media (max-width: 900px) {
   .og-app-shell {
+    --og-globe-nav-space: calc(92px + env(safe-area-inset-bottom, 0px));
     min-height: 100svh;
+  }
+
+  .og-globe-navigation.is-docked {
+    left: 50%;
+    width: min(420px, calc(100% - 20px));
+  }
+
+  .og-globe-navigation img {
+    width: 49px;
+    height: 49px;
   }
 
   .og-top-toolbar {
@@ -1393,54 +1436,24 @@
 
   .og-scale {
     right: 12px;
-    bottom: 118px;
+    bottom: calc(var(--og-globe-nav-space) + 46px);
     gap: 10px;
   }
 
   .og-beta-badge {
     right: 44px;
-    bottom: 80px;
-  }
-
-  .og-bottom-sheet {
-    position: absolute;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    z-index: 45;
-    display: grid;
-    place-items: center;
-    height: 50px;
-    color: #aeb8c8;
-    background: rgba(15, 23, 42, 0.86);
-    border-top: 1px solid rgba(51, 65, 85, 0.55);
-    border-radius: 18px 18px 0 0;
-    font-size: 13px;
-  }
-
-  .og-bottom-sheet span {
-    position: absolute;
-    top: 12px;
-    width: 39px;
-    height: 5px;
-    border-radius: 999px;
-    background: rgba(203, 213, 225, 0.46);
-  }
-
-  .og-bottom-sheet strong {
-    margin-top: 14px;
-    font-weight: 800;
+    bottom: calc(var(--og-globe-nav-space) + 10px);
   }
 
   .og-info-button {
     right: 12px;
-    bottom: 80px;
+    bottom: calc(var(--og-globe-nav-space) + 7px);
   }
 
   .og-mobile-generation-sheet {
     position: absolute;
     right: 12px;
-    bottom: 58px;
+    bottom: calc(var(--og-globe-nav-space) + 8px);
     left: 12px;
     z-index: 44;
     display: block;
@@ -1688,12 +1701,16 @@
   height: 100%;
 }
 
+.og-app-shell.is-earth-project,
+.og-earth-project {
+  background: #000005;
+}
+
 .og-earth-project {
   position: absolute;
-  inset: 0;
+  inset: 0 0 var(--og-globe-nav-space);
   z-index: 1;
   overflow: hidden;
-  background: #000;
 }
 
 .og-earth-project-frame {
@@ -3399,7 +3416,7 @@
 .og-toast {
   position: absolute;
   right: 24px;
-  bottom: 24px;
+  bottom: calc(var(--og-globe-nav-space) + 12px);
   z-index: 60;
   max-width: 320px;
   padding: 10px 13px;
@@ -3435,6 +3452,7 @@
   font-weight: 800;
 }
 
+.og-app-shell.is-cinematic .og-globe-navigation,
 .og-app-shell.is-cinematic .og-workspace-sidebar,
 .og-app-shell.is-cinematic .og-workspace-mobile-header,
 .og-app-shell.is-cinematic .og-workspace-scrim,
@@ -3497,71 +3515,8 @@
   .og-cards-drawer {
     top: 86px;
     right: 12px;
-    bottom: 74px;
+    bottom: calc(var(--og-globe-nav-space) + 8px);
     left: 12px;
     width: auto;
-  }
-
-  .og-bottom-sheet {
-    display: block;
-    height: auto;
-    min-height: 54px;
-    overflow: hidden;
-    place-items: initial;
-  }
-
-  .og-bottom-sheet > button {
-    position: relative;
-    display: grid;
-    width: 100%;
-    height: 54px;
-    place-items: center;
-    color: #aeb8c8;
-  }
-
-  .og-bottom-sheet > button > span {
-    position: absolute;
-    top: 10px;
-    width: 39px;
-    height: 5px;
-    border-radius: 999px;
-    background: rgba(203, 213, 225, 0.46);
-  }
-
-  .og-bottom-sheet > button > strong {
-    margin-top: 14px;
-    font-size: 13px;
-    font-weight: 800;
-  }
-
-  .og-bottom-sheet-content {
-    display: none;
-    gap: 7px;
-    padding: 0 12px 14px;
-  }
-
-  .og-bottom-sheet.is-open .og-bottom-sheet-content {
-    display: grid;
-  }
-
-  .og-bottom-sheet-content button {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    min-height: 36px;
-    padding: 0 12px;
-    color: #e2e8f0;
-    background: rgba(15, 23, 42, 0.62);
-    border: 1px solid rgba(51, 65, 85, 0.7);
-    border-radius: 8px;
-    font-size: 12px;
-  }
-
-  .og-bottom-sheet-content button span {
-    position: static;
-    width: auto;
-    height: auto;
-    border-radius: 0;
-    background: transparent;
   }
 }

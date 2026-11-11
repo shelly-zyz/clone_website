@@ -2,16 +2,9 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowUpRight, ChevronDown, CloudSun, Leaf, Play, Search, SlidersHorizontal, X, Zap } from "lucide-react";
+import { ArrowUpRight, ChevronDown, Play, Search, SlidersHorizontal, X } from "lucide-react";
 import { useId, useRef, useState, type ReactNode } from "react";
-
-const topics = {
-  power: { title: "电源地球", label: "电力", icon: Zap },
-  weather: { title: "气象地球", label: "气象", icon: CloudSun },
-  carbon: { title: "碳排放地球", label: "碳排放", icon: Leaf },
-};
-
-export type WorkspaceTopic = keyof typeof topics;
+import { globeTopics, type WorkspaceTopic } from "@/lib/globe-topics";
 
 export type WorkspaceFilterOption = { value: string; label: string; disabled?: boolean };
 
@@ -37,12 +30,11 @@ export function WorkspaceFilterSelect({ label, options, value, onChange }: {
   );
 }
 
-export function WorkspaceSidebar({ topic, summary, leadingFilter, children, onTopicChange, onSearch }: {
+export function WorkspaceSidebar({ topic, summary, leadingFilter, children, onSearch }: {
   topic: WorkspaceTopic;
   summary: string;
   leadingFilter?: ReactNode;
   children: ReactNode;
-  onTopicChange: (topic: WorkspaceTopic) => void;
   onSearch?: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -69,7 +61,7 @@ export function WorkspaceSidebar({ topic, summary, leadingFilter, children, onTo
           }}
         >
           <SlidersHorizontal size={16} aria-hidden="true" />
-          <span>{topics[topic].title}筛选</span>
+          <span>{globeTopics[topic].title}筛选</span>
         </button>
       </div>
       {open ? <button className="og-workspace-scrim" type="button" aria-label="关闭筛选" tabIndex={-1} onClick={close} /> : null}
@@ -85,13 +77,13 @@ export function WorkspaceSidebar({ topic, summary, leadingFilter, children, onTo
         <button ref={closeButton} className="og-workspace-close" type="button" aria-label="关闭筛选侧栏" onClick={close}>
           <X size={18} aria-hidden="true" />
         </button>
-        <div className="og-workspace-sidebar-content">
+        <div className="og-workspace-sidebar-content" key={topic}>
           <header className="og-workspace-heading">
             <Link href="/" className="og-workspace-brand" aria-label="OpenGridWorks 首页" prefetch={false}>
               <Image src="/images/opengridworks/logo-dark.webp" alt="" width={24} height={24} />
               <span>OpenGridWorks</span>
             </Link>
-            <h1>{topics[topic].title}</h1>
+            <h1>{globeTopics[topic].title}</h1>
             <p>{summary}</p>
           </header>
           <Link className="og-workspace-action" href="/" prefetch={false}>
@@ -99,17 +91,6 @@ export function WorkspaceSidebar({ topic, summary, leadingFilter, children, onTo
             播放开场
           </Link>
           {leadingFilter}
-          <nav className="og-workspace-topics" aria-label="地球专题">
-            {(Object.keys(topics) as WorkspaceTopic[]).map((key) => {
-              const { icon: Icon, label, title } = topics[key];
-              return (
-                <button key={key} type="button" aria-label={title} aria-pressed={topic === key} onClick={() => onTopicChange(key)}>
-                  <Icon size={26} strokeWidth={1.45} aria-hidden="true" />
-                  <span>{label}</span>
-                </button>
-              );
-            })}
-          </nav>
           {onSearch ? (
             <button className="og-workspace-action" type="button" onClick={() => {
               setOpen(false);

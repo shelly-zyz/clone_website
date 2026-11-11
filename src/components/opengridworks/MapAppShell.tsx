@@ -2,6 +2,7 @@
 
 import "maplibre-gl/dist/maplibre-gl.css";
 
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import maplibregl, {
@@ -41,9 +42,11 @@ import {
   Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { GlobeNavigation } from "@/components/opengridworks/GlobeNavigation";
 import { WeatherSidebarFilters } from "@/components/opengridworks/WeatherSidebarFilters";
-import { WorkspaceFilterSelect, WorkspaceSidebar, type WorkspaceTopic } from "@/components/opengridworks/WorkspaceSidebar";
+import { WorkspaceFilterSelect, WorkspaceSidebar } from "@/components/opengridworks/WorkspaceSidebar";
 import { XiaoyunAssistant } from "@/components/opengridworks/XiaoyunAssistant";
+import { globeTopicOrder, globeTopics, type WorkspaceTopic } from "@/lib/globe-topics";
 import {
   buildCarbonHeatCollection,
   carbonColor,
@@ -107,7 +110,8 @@ import type {
 
 type BooleanRecord<T extends string> = Record<T, boolean>;
 
-type ProjectMode = WorkspaceTopic;
+type ProjectMode = Exclude<WorkspaceTopic, "economy">;
+const EconomyWorkspace = dynamic(() => import("@/components/opengridworks/EconomyWorkspace").then((module) => module.EconomyWorkspace));
 type MapProperties = Record<string, string | number | boolean>;
 type PointCollection = FeatureCollection<Point, MapProperties>;
 type LineCollection = FeatureCollection<LineString, MapProperties>;
@@ -5565,35 +5569,6 @@ function Toast({ message }: { message: string | null }) {
   return <div className="og-toast" role="status">{message}</div>;
 }
 
-function MobileBottomSheet({
-  open,
-  onToggle,
-  visibleLayers,
-  onToggleLayer,
-}: {
-  open: boolean;
-  onToggle: () => void;
-  visibleLayers: BooleanRecord<LayerKey>;
-  onToggleLayer: (key: LayerKey) => void;
-}) {
-  return (
-    <div className={`og-bottom-sheet ${open ? "is-open" : ""}`} aria-label="电源项目抽屉">
-      <button type="button" onClick={onToggle}>
-        <span />
-        <strong>电源项目</strong>
-      </button>
-      <div className="og-bottom-sheet-content">
-        {layerGroups.slice(0, 7).map((layer) => (
-          <button type="button" key={layer.key} onClick={() => onToggleLayer(layer.key)}>
-            <span>{layer.label}</span>
-            <TogglePill enabled={visibleLayers[layer.key]} />
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function MobileGenerationSheet({
   open,
   heatmapEnabled,
@@ -5642,8 +5617,8 @@ function MobileGenerationSheet({
   );
 }
 
-export function MapAppShell({ initialProject = "power" }: { initialProject?: ProjectMode }) {
-  const [activeProject, setActiveProject] = useState<ProjectMode>(initialProject);
+export function MapAppShell({ initialProject = "power" }: { initialProject?: WorkspaceTopic }) {
+  const [activeProject, setActiveProject] = useState<WorkspaceTopic>(initialProject);
   const [visibleTechnologies, setVisibleTechnologies] = useState(hiddenTechnologyState);
   const [visibleLayers, setVisibleLayers] = useState(hiddenLayerState);
   const [visibleCustomLayers, setVisibleCustomLayers] = useState<BooleanRecord<CustomLayerKey>>({
@@ -5696,7 +5671,6 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Pro
   const [screenshotRequest, setScreenshotRequest] = useState(0);
   const [cinematic, setCinematic] = useState(false);
   const [cardsOpen, setCardsOpen] = useState(false);
-  const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const generationLoadStartedRef = useRef(false);
@@ -5918,8 +5892,12 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Pro
     showToast("已切换到中国发电量热力图视图；其它图层已暂时隐藏，可手动重新打开。");
   }, [requestFocus, showToast]);
 
-  const switchProject = useCallback((project: ProjectMode) => {
+  const switchProject = useCallback((project: WorkspaceTopic) => {
     if (project === activeProject) return;
+    const url = new URL(window.location.href);
+    if (project === "power") url.searchParams.delete("topic");
+    else url.searchParams.set("topic", project);
+    window.history.replaceState(null, "", url);
     setActiveProject(project);
     setFocusedRegion(defaultRegion.id);
     setWeatherDocument(null);
@@ -5927,6 +5905,13 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Pro
     setHoverTooltip(null);
     setCardsOpen(false);
     setActivePanel(null);
+    setCinematic(false);
+
+    if (project === "economy") {
+      setGenerationPlaying(false);
+      setCarbonPlaying(false);
+      return;
+    }
 
     if (project === "carbon") {
       setVisibleTechnologies(hiddenTechnologyState());
@@ -5993,11 +5978,12 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Pro
 
   const handleXiaoyunMapCommand = useCallback((message: string) => {
     const command = message.trim().replace(/[。！!]+$/, "").replace(/\s/g, "");
-    const project = command.match(/^(?:请)?(?:切换到|切到|打开)(电源地球|气象地球|碳排放地球|碳地球)$/)?.[1];
-    if (project) {
-      const next = project === "电源地球" ? "power" : project === "气象地球" ? "weather" : "carbon";
-      if (next !== activeProject) switchProject(next);
-      return `已打开${project}。`;
+    const project = command.match(/^(?:请)?(?:切换到|切到|打开)(.+地球)$/)?.[1];
+    const next = project === "碳地球" ? "carbon" : globeTopicOrder.find((topic) =>
+      globeTopics[topic].title === project || globeTopics[topic].label === project);
+    if (next) {
+      switchProject(next);
+      return `已打开${globeTopics[next].title}。`;
     }
 
     const layer = command.match(/^(?:请)?(打开|显示|关闭|隐藏)风电图层$/)?.[1];
@@ -6136,6 +6122,7 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Pro
 
   const shareMap = () => {
     const params = new URLSearchParams();
+    if (activeProject !== "power") params.set("topic", activeProject);
     params.set("layers", Object.entries(visibleLayers).filter(([, enabled]) => enabled).map(([key]) => key).join(","));
     params.set("tech", Object.entries(visibleTechnologies).filter(([, enabled]) => enabled).map(([key]) => key).join(","));
     params.set("labels", labelSettings.preset);
@@ -6153,6 +6140,15 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Pro
     }
   };
 
+  if (activeProject === "economy") {
+    return (
+      <main className="og-app-shell is-economy-project">
+        <GlobeNavigation activeTopic={activeProject} onTopicChange={switchProject} />
+        <EconomyWorkspace />
+      </main>
+    );
+  }
+
   const activeCleanEnergy = technologies
     .filter((item) => ["solar", "wind", "offshore", "storage"].includes(item.key))
     .some((item) => visibleTechnologies[item.key]);
@@ -6165,6 +6161,7 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Pro
   }[activeProject];
   return (
     <main className={`og-app-shell ${cinematic ? "is-cinematic" : ""} ${activeProject === "weather" ? "is-earth-project" : ""} ${activeProject === "carbon" ? "is-carbon-project" : ""}`}>
+      <GlobeNavigation activeTopic={activeProject} onTopicChange={switchProject} />
       {activeProject === "weather" ? (
         <EarthProjectViewport onLoad={setWeatherDocument} />
       ) : (
@@ -6219,7 +6216,6 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Pro
       <WorkspaceSidebar
         topic={activeProject}
         summary={sidebarSummary}
-        onTopicChange={switchProject}
         onSearch={activeProject === "power" ? () => togglePanel("search") : undefined}
         leadingFilter={activeProject === "power" ? (
           <WorkspaceFilterSelect
@@ -6406,27 +6402,19 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Pro
         <Info size={18} />
       </button>
       {activeProject === "power" ? (
-        <>
-          <MobileBottomSheet
-            open={mobileSheetOpen}
-            onToggle={() => setMobileSheetOpen((state) => !state)}
-            visibleLayers={visibleLayers}
-            onToggleLayer={toggleLayer}
-          />
-          <MobileGenerationSheet
-            open={openLegendSections.generation}
-            heatmapEnabled={generationHeatmapEnabled}
-            frame={generationFrame}
-            manifest={generationManifest}
-            data={generationHeatmapData}
-            loading={generationLoading}
-            error={generationError}
-            playing={generationPlaying}
-            onHeatmapToggle={toggleGenerationHeatmap}
-            onPlayingChange={setGenerationPlaying}
-            onFrameChange={setGenerationFrame}
-          />
-        </>
+        <MobileGenerationSheet
+          open={openLegendSections.generation}
+          heatmapEnabled={generationHeatmapEnabled}
+          frame={generationFrame}
+          manifest={generationManifest}
+          data={generationHeatmapData}
+          loading={generationLoading}
+          error={generationError}
+          playing={generationPlaying}
+          onHeatmapToggle={toggleGenerationHeatmap}
+          onPlayingChange={setGenerationPlaying}
+          onFrameChange={setGenerationFrame}
+        />
       ) : null}
     </main>
   );
