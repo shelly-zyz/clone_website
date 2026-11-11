@@ -340,24 +340,24 @@
 }
 
 .og-globe-navigation :is(button, a) {
-  --topic-color: #7cb0f0;
+  --topic-color: #f6cd2c;
   display: grid;
   min-width: 0;
   justify-items: center;
   align-content: center;
   gap: 4px;
-  padding: 4px 2px 6px;
-  border-bottom: 2px solid color-mix(in srgb, var(--topic-color) 48%, #171c21);
+  padding: 4px 2px 3px;
+  border-bottom: 5px solid var(--topic-color);
   color: #d6e1e6;
   background: #0b1015;
   font-size: 12px;
   white-space: nowrap;
-  transition: background-color 160ms ease, border-color 160ms ease;
+  transition: background-color 160ms ease;
 }
 
-.og-globe-navigation [data-topic="weather"] { --topic-color: #7de7d0; }
-.og-globe-navigation [data-topic="carbon"] { --topic-color: #b8db66; }
-.og-globe-navigation [data-topic="economy"] { --topic-color: #edb671; }
+.og-globe-navigation [data-topic="weather"] { --topic-color: #24c8db; }
+.og-globe-navigation [data-topic="carbon"] { --topic-color: #78d449; }
+.og-globe-navigation [data-topic="economy"] { --topic-color: #ff7547; }
 
 .og-globe-navigation img {
   display: block;
@@ -369,9 +369,12 @@
 
 .og-globe-navigation :is(button, a):hover,
 .og-globe-navigation button[aria-pressed="true"] {
-  border-color: var(--topic-color);
   color: #f7fbfc;
-  background: color-mix(in srgb, var(--topic-color) 12%, #0b1015);
+  background: color-mix(in srgb, var(--topic-color) 18%, #0b1015);
+}
+
+.og-globe-navigation button[aria-pressed="true"] {
+  font-weight: 650;
 }
 
 .og-globe-navigation :is(button, a):focus-visible {
