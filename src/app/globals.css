@@ -391,15 +391,24 @@
   min-height: 52px;
   margin-top: 9px;
   padding: 10px 11px;
-  color: #f3f8f7;
-  background: linear-gradient(90deg, #83c9bd 55%, #9aaabf 55% 80%, #d7b77f 80%) left bottom / 100% 2px no-repeat #17262a;
-  font-size: 16px;
-  font-weight: 600;
+  color: #9cedde;
+  background-color: #17262a;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
   transition: background-color 160ms ease;
 }
 
 .og-workspace-visualization-link:hover {
   background-color: #203a3f;
+}
+
+@media (forced-colors: none) {
+  .og-workspace-visualization-link > span {
+    color: transparent;
+    background-image: linear-gradient(100deg, #7fecd9, #ffe17b);
+    background-clip: text;
+  }
 }
 
 .og-workspace-sidebar :is(button, a, select):focus-visible,

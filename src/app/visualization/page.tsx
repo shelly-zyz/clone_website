@@ -6,7 +6,7 @@ import { resolveWorkspaceTopic, workspaceHref } from "@/lib/globe-topics";
 import styles from "./page.module.css";
 
 export const metadata: Metadata = {
-  title: "可视化分析 | OpenGridWorks",
+  title: "专题分析 | OpenGridWorks",
   description: "浏览 OpenGridWorks 的图表与地球场景模板。",
 };
 
@@ -64,7 +64,7 @@ export default async function VisualizationPage({ searchParams }: {
         </header>
         <section className={styles.heroContent} aria-labelledby="visualization-title">
           <div className={styles.heroCopy}>
-            <h1 id="visualization-title">可视化分析</h1>
+            <h1 id="visualization-title">专题分析</h1>
             <p>用统计图表比较数据，用地球场景查看空间分布。</p>
             <a className={styles.browseLink} href="#templates">浏览模板 <ArrowDown size={16} aria-hidden="true" /></a>
           </div>

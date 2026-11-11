@@ -103,7 +103,7 @@ export function WorkspaceSidebar({ topic, summary, leadingFilter, children, onSe
           {children}
         </div>
         <Link href={{ pathname: "/visualization", query: { topic } }} className="og-workspace-visualization-link">
-          <span>可视化分析</span>
+          <span>专题分析</span>
           <ArrowUpRight size={17} aria-hidden="true" />
         </Link>
       </aside>
