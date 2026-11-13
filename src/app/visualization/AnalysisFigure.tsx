@@ -1,6 +1,6 @@
 "use client";
 
-import { Table2 } from "lucide-react";
+import { ChevronDown, Table2 } from "lucide-react";
 import { useState } from "react";
 import { formatAnalysisValue, type AnalysisChartSpec } from "@/lib/topic-analysis/model";
 import { AnalysisPlot } from "./AnalysisPlot";
@@ -26,7 +26,10 @@ function AnalysisTable({ spec }: { spec: AnalysisChartSpec }) {
     });
   return (
     <details className={styles.chartData} onToggle={event => setExpanded(event.currentTarget.open)}>
-      <summary><Table2 size={14} aria-hidden="true" />查看数值</summary>
+      <summary className={styles.disclosure}>
+        <Table2 size={14} strokeWidth={1.8} aria-hidden="true" />
+        查看数值 <ChevronDown className={styles.chevron} size={14} strokeWidth={1.8} aria-hidden="true" />
+      </summary>
       {expanded && (
         <div className={styles.tableScroll}>
           <table aria-label={spec.title + " 数值"}>

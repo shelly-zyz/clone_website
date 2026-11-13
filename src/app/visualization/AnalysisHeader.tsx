@@ -14,7 +14,7 @@ export function AnalysisHeader({ topic, detail = false }: { topic: WorkspaceTopi
       <nav className={styles.topLinks} aria-label="专题分析导航">
         {detail && <Link href={"/visualization?topic=" + topic}>全部专题</Link>}
         <Link className={styles.returnLink} href={workspaceHref(topic)} prefetch={false}>
-          <ArrowLeft size={16} aria-hidden="true" />
+          <ArrowLeft size={16} strokeWidth={1.8} aria-hidden="true" />
           返回地球
         </Link>
       </nav>

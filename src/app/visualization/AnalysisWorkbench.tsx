@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import {
-  ArrowRight, ChartArea, ChartBar, ChartColumn, ChartLine, ChartScatter, ChevronDown, Compass,
+  ArrowRight, ChartArea, ChartBar, ChartColumn, ChartLine, ChartScatter, Check, ChevronDown, ChevronRight, Compass,
   Grid3X3, LayoutGrid, Map as MapIcon, RotateCw, Wind,
 } from "lucide-react";
-import { useCallback, useEffect, useState, useSyncExternalStore, type MouseEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import type { VreTechnology } from "@/lib/climate-vre";
 import { analysisGroups, analysisHref, analysisTopics, type AnalysisTopic } from "@/lib/topic-analysis/catalog";
 import { buildCarbonAnalysis, buildRenewableAnalysis, buildWeatherAnalysis, carbonDates, weatherRegions } from "@/lib/topic-analysis/climate";
@@ -19,6 +19,7 @@ import {
 } from "@/lib/topic-analysis/history";
 import type { Analysis, AnalysisChartSpec } from "@/lib/topic-analysis/model";
 import { AnalysisFigure, hasChartValues } from "./AnalysisFigure";
+import { useAnalysisAnchor } from "./useAnalysisAnchor";
 import styles from "./page.module.css";
 
 const chartIcons = {
@@ -47,21 +48,10 @@ function useResource<T>(url: string | null) {
   return { data: current?.data ?? null, pending: Boolean(url && !current), retry: () => setAttempt(value => value + 1) };
 }
 
-function subscribeToView(onChange: () => void) {
-  window.addEventListener("hashchange", onChange);
-  window.addEventListener("popstate", onChange);
-  return () => {
-    window.removeEventListener("hashchange", onChange);
-    window.removeEventListener("popstate", onChange);
-  };
-}
-
-const readView = () => window.location.hash.slice(1);
-
 function selectView(event: MouseEvent<HTMLAnchorElement>, id: string) {
   if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
   event.preventDefault();
-  if (readView() !== id) {
+  if (window.location.hash.slice(1) !== id) {
     window.history.pushState(null, "", id ? "#" + id : window.location.pathname + window.location.search);
     window.dispatchEvent(new HashChangeEvent("hashchange"));
   }
@@ -76,7 +66,7 @@ function AnalysisFilter({ label, value, onChange, children }: {
       <span>{label}</span>
       <span className={styles.selectField}>
         <select value={value} onChange={event => onChange(event.target.value)}>{children}</select>
-        <ChevronDown size={15} aria-hidden="true" />
+        <ChevronDown className={styles.chevron} size={15} strokeWidth={1.8} aria-hidden="true" />
       </span>
     </label>
   );
@@ -85,14 +75,18 @@ function AnalysisFilter({ label, value, onChange, children }: {
 function TopicSwitcher({ topic }: { topic: AnalysisTopic }) {
   return (
     <details className={styles.topicSwitcher}>
-      <summary>切换专题 <ChevronDown size={16} aria-hidden="true" /></summary>
+      <summary className={styles.disclosure}>
+        切换专题 <ChevronDown className={styles.chevron} size={15} strokeWidth={1.8} aria-hidden="true" />
+      </summary>
       <nav aria-label="切换分析专题" className={styles.topicMenu}>
         {analysisGroups.map(group => (
           <div key={group.id}>
             <strong>{group.label}</strong>
             {group.topics.map(item => (
               <Link key={item} href={analysisHref(item)} aria-current={item === topic ? "page" : undefined} prefetch={false}>
-                {analysisTopics[item].label}
+                <span>{analysisTopics[item].label}</span>
+                {item === topic ? <Check size={15} strokeWidth={2} aria-hidden="true" />
+                  : <ChevronRight size={14} strokeWidth={1.8} aria-hidden="true" />}
               </Link>
             ))}
           </div>
@@ -126,7 +120,7 @@ export function AnalysisWorkbench({ topic }: { topic: AnalysisTopic }) {
   const [economyYear, setEconomyYear] = useState(latestEconomyYear);
   const [economyIndicator, setEconomyIndicator] = useState<EconomyIndicator>("perCapita");
   const [outlookYear, setOutlookYear] = useState(outlookYears[0]);
-  const view = useSyncExternalStore(subscribeToView, readView, () => "");
+  const view = useAnalysisAnchor();
 
   const published = useResource<PublishedHistory>(publishedAnalysisTopics.some(item => item === topic) ? api + topic : null);
   const scenario = useResource<RenewableScenario>(topic === "renewables" ? api + topic : null);
@@ -300,7 +294,9 @@ export function AnalysisWorkbench({ topic }: { topic: AnalysisTopic }) {
             {scenario.data && <span className={styles.scenarioDate}>情景数据生成于 {scenario.data.generatedAt.slice(0, 10)}</span>}
             {history && (
               <details className={styles.release}>
-                <summary>数据版本</summary>
+                <summary className={styles.disclosure}>
+                  数据版本 <ChevronDown className={styles.chevron} size={14} strokeWidth={1.8} aria-hidden="true" />
+                </summary>
                 <dl>
                   <div><dt>数据集</dt><dd>{history.dataset}</dd></div>
                   <div><dt>发布于</dt><dd>{history.publishedAt.slice(0, 10)} UTC</dd></div>

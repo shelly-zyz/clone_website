@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowDown, ArrowUpRight, ChartArea, ChartNoAxesCombined, CloudSun, Factory, Zap } from "lucide-react";
+import { ArrowUpRight, ChartArea, ChevronDown } from "lucide-react";
 import { resolveWorkspaceTopic } from "@/lib/globe-topics";
 import { analysisGroups, analysisHref, analysisTopics, type AnalysisTopic } from "@/lib/topic-analysis/catalog";
 import { buildCarbonAnalysis, buildRenewableAnalysis, buildWeatherAnalysis, carbonDates } from "@/lib/topic-analysis/climate";
 import { buildEconomyAnalysis, buildOutlookAnalysis, buildTradeAnalysis, latestEconomyYear, outlookYears } from "@/lib/topic-analysis/economics";
 import { buildFuelAnalysis, buildGenerationAnalysis, buildPowerAnalysis, powerYears } from "@/lib/topic-analysis/energy";
 import { archivedRenewableScenario } from "@/lib/topic-analysis/scenario.server";
+import { AnalysisGroupNav } from "./AnalysisGroupNav";
 import { AnalysisHeader } from "./AnalysisHeader";
 import { AnalysisPlot } from "./AnalysisPlot";
 import styles from "./page.module.css";
@@ -17,7 +18,6 @@ export const metadata: Metadata = {
   description: "交互探索电力与能源、风光气候情景、碳排放和经济与贸易数据。",
 };
 
-const groupIcons = { energy: Zap, climate: CloudSun, emissions: Factory, economics: ChartNoAxesCombined };
 const periods: Record<AnalysisTopic, string> = {
   power: "2020–2025 年度统计",
   generation: "月度发电统计",
@@ -57,7 +57,9 @@ export default async function VisualizationPage({ searchParams }: {
           <div className={styles.heroCopy}>
             <h1 id="visualization-title">专题分析</h1>
             <p>从发电与气候到排放与贸易，用多年数据看清结构、地域与季节变化。</p>
-            <a className={styles.browseLink} href="#energy">浏览专题 <ArrowDown size={16} aria-hidden="true" /></a>
+            <a className={styles.browseLink} href="#energy">
+              浏览专题 <ChevronDown size={17} strokeWidth={1.8} aria-hidden="true" />
+            </a>
           </div>
           <div className={styles.heroVisual}>
             <div className={styles.orbit} aria-hidden="true" />
@@ -73,14 +75,7 @@ export default async function VisualizationPage({ searchParams }: {
           </div>
         </section>
       </div>
-      <nav className={styles.groupBar} aria-label="专题分类">
-        <div>
-          {analysisGroups.map(group => {
-            const Icon = groupIcons[group.id];
-            return <a key={group.id} href={"#" + group.id}><Icon size={19} strokeWidth={1.7} aria-hidden="true" />{group.label}</a>;
-          })}
-        </div>
-      </nav>
+      <AnalysisGroupNav />
       <div className={styles.gallery}>
         {analysisGroups.map(group => (
           <section key={group.id} id={group.id} className={styles.group} aria-labelledby={group.id + "-title"}>
@@ -93,7 +88,7 @@ export default async function VisualizationPage({ searchParams }: {
                   <Link key={key} href={analysisHref(key)} className={styles.topicCard} data-topic={key} prefetch={false}>
                     <div className={styles.cardTitle}>
                       <h3>{config.title}</h3>
-                      <ArrowUpRight size={19} aria-hidden="true" />
+                      <span className={styles.cardArrow} aria-hidden="true"><ArrowUpRight size={17} strokeWidth={1.8} /></span>
                     </div>
                     <p>{config.description}</p>
                     <div className={styles.cardChart}>
