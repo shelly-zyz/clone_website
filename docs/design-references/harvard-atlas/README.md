@@ -29,11 +29,17 @@
 | [产品空间](atlas-product-space.jpg) | 关系网络显示产品所需能力的相似程度，节点可选，图例解释节点大小与颜色。[原页](https://atlas.hks.harvard.edu/explore/productspace) |
 | [国家档案](atlas-country-analysis.jpg) | 左侧围绕出口篮子、增长、市场份额和多样化推进叙事。右侧将统计说明、参数、气泡图和进一步探索入口放在一起。[原页](https://atlas.hks.harvard.edu/countries/340/growth-dynamics) |
 
-OpenGridWorks 用四个专题入口和独立分析页对应这两层。分析页顶部显示数据范围和筛选项，侧栏可跳到不同分析问题，正文并列展示可悬停、切换和展开读数的图表。图表标题写明分析对象，来源和口径随图标注。
-
 ## 专题图表的数据
 
-- **电力**采用 2024 和 2025 年全国统计，装机以 GW、发电量以 TWh 显示。装机构成矩形按公开列出的五类电源绘制，年末装机总量沿用公报原值。[2024 年装机](https://www.nea.gov.cn/20250121/097bfd7c1cd3498897639857d86d5dac/c.html) · [2024 年发电量](https://www.stats.gov.cn/sj/zxfb/202502/t20250228_1958817.html) · [2025 年公报](https://www.stats.gov.cn/sj/zxfb/202602/t20260228_1962662.html)
+- **电力**采用 2020–2025 年全国统计公报，装机以 GW、发电量以 TWh 显示。装机矩形按公开列出的五类电源绘制，年末装机总量沿用公报原值。[全国统计公报](https://www.stats.gov.cn/sj/tjgb/ndtjgb/qgndtjgb/index.html)
 - **气象**使用项目归档的 GFS 1°、10 米风场。以 U、V 分量计算风速，用格点中心纬度余弦近似面积权重。八方位分布按风的来向统计，风速低于 0.5 m/s 的格点从该图的分母中排除。[NOAA GFS](https://www.ncei.noaa.gov/products/weather-climate-models/global-forecast)
 - **碳排放**使用 GRACED Power 的 2025 年 8 月日度网格，聚合全球速率、纬度带速率和非零格点数。风场和碳排放的汇总都登记原文件 SHA-256，可用 `python scripts/build-topic-analysis.py --graced <GRACED Power NetCDF>` 重建。GRACED 方法见 Dou 等人发表于 *Scientific Data* 的研究。[GRACED 数据](https://carbonmonitor-graced.com/datasets.html) · [研究论文](https://www.nature.com/articles/s41597-023-01963-0)
 - **经济**使用站内 2015–2024 年 WDI 快照及世界银行 2026 年 6 月版 GEP。WDI 的 GDP 和出口是现价美元，GEP 展示实际 GDP 增速预测，缺测值保持为空。[WDI](https://datacatalog.worldbank.org/search/dataset/0037712/world-development-indicators) · [全球经济展望](https://www.worldbank.org/en/publication/global-economic-prospects)
+
+## 专题工作区
+
+专题首页使用深蓝总览、分类导航与实时图表预览。专题页的左侧导航切换主图，顶部控制年份、指标和地区，概览保留同专题的配套图表。图例、色标、悬停详情和数值表用于核对图形编码。四个原专题地址继续可用，新增月度发电、煤油气、风光资源、贸易和增长展望。
+
+月度发电、煤油气及 GRACED 历史图通过 `GET /api/topic-analysis` 读取固定的公开统计指标。接口以 `DATA_AGENT_DATABASE_URL` 的只读角色查询已审核发布版本。省际图随全国月度数据的版本及月份读取，GRACED 月值为有值日帧的平均速率并保留日帧计数。风光情景优先读取 `DATABASE_URL` 对应的现有情景文档，使用 GFDL-ESM4 / SSP126 情景。页面标出来源和版本。
+
+本地预览可使用 2020–2025 年国家统计局年度公报、2024 年 9 月至 2026 年 9 月间 21 期规模以上工业生产月报、站内气候及碳归档，以及世界银行 WDI 和 GEP 快照。月报选录保留来源地址及原始月度单位，1–2 月合报留空。年度公报与规模以上工业月报使用各自发布口径。分省发电和多年 GRACED 视图在发布库暂不可用时标明数据状态。月度和年度样本的逐期出处见 `src/lib/topic-analysis/nbs-monthly.json` 和 `src/lib/topic-analysis/nbs-annual.json`。
