@@ -9,9 +9,8 @@
   --control-radius: 9px;
   --control-surface: #edf4f5;
   --control-hover: #e7f0f3;
-  --control-selected: #def2ef;
-  --control-selected-ink: #176864;
-  --rail-selected-ink: #74e3d4;
+  --control-selected: #77e0d0;
+  --control-selected-ink: #142d38;
   height: 100svh;
   overflow: hidden auto;
   scroll-behavior: smooth;
@@ -88,8 +87,8 @@
   margin-top: 25px;
   padding: 8px 14px;
   border-radius: var(--control-radius);
-  color: #142d38;
-  background: #77e0d0;
+  color: var(--control-selected-ink);
+  background: var(--control-selected);
   font-size: 14px;
   font-weight: 700;
 }
@@ -162,14 +161,13 @@
 .groupBar a[aria-current="location"] {
   background: var(--control-selected);
   color: var(--control-selected-ink);
-  box-shadow: inset 0 0 0 1px #1768642b;
   font-weight: 730;
 }
-.groupBar a:focus-visible { outline-offset: -2px; }
 .groupBar a:nth-child(1) svg { color: #ac6122; }
 .groupBar a:nth-child(2) svg { color: #087c78; }
 .groupBar a:nth-child(3) svg { color: #b05045; }
 .groupBar a:nth-child(4) svg { color: #6050a3; }
+.groupBar a:is([aria-current="location"], :focus-visible) svg { color: currentColor; }
 
 .gallery {
   max-width: 1430px;
@@ -226,7 +224,9 @@
   transition: background-color 160ms ease;
 }
 .cardArrow svg { transition: transform 160ms ease; }
-.topicCard:is(:hover, :focus-visible) .cardArrow { background: color-mix(in srgb, var(--accent) 18%, white); }
+.page .topicCard:focus-visible { outline: none; }
+.topicCard:focus-visible .cardTitle h3 { text-decoration: underline; text-underline-offset: 3px; }
+.topicCard:is(:hover, :focus-visible) .cardArrow { background: var(--control-selected); color: var(--control-selected-ink); }
 .topicCard:is(:hover, :focus-visible) .cardArrow svg { transform: translate(1px, -1px); }
 .topicCard > p { color: var(--muted); font-size: 13px; line-height: 1.55; }
 .cardChart { min-width: 0; background: #f5f8f9; padding: 9px; }
@@ -261,6 +261,8 @@
 
 .chartNav { display: grid; gap: 4px; padding-inline: 7px; }
 .chartNav a {
+  --control-focus: #dce6eb;
+  --control-focus-ink: var(--ink);
   display: grid;
   min-height: 62px;
   place-content: center;
@@ -276,12 +278,11 @@
 .chartNav a svg { color: #b9d1dc; }
 .chartNav a:hover { background: #2b4355; }
 .chartNav a[aria-current="location"] {
-  color: var(--rail-selected-ink);
-  background: color-mix(in srgb, var(--rail-selected-ink) 15%, var(--navy));
+  background: var(--control-selected);
+  color: var(--control-selected-ink);
   font-weight: 710;
 }
-.chartNav a[aria-current="location"] svg { color: currentColor; }
-.chartNav a:focus-visible { outline-offset: -4px; }
+.chartNav a:is([aria-current="location"], :focus-visible) svg { color: currentColor; }
 
 .workbenchBody { min-width: 0; }
 .topicHeading {
@@ -329,7 +330,6 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 8px;
-  border: 1px solid var(--rule);
   border-radius: 12px;
   background: #fff;
   box-shadow: 0 6px 24px #152c3d32;
@@ -348,7 +348,6 @@
 }
 .topicMenu a:hover { background: var(--control-hover); }
 .topicMenu a[aria-current="page"] { background: var(--control-selected); color: var(--control-selected-ink); font-weight: 700; }
-.topicMenu a:focus-visible { outline-offset: -2px; }
 .topicMenu a svg { flex: none; }
 
 .filters {
@@ -375,18 +374,17 @@
   min-height: 39px;
   appearance: none;
   padding: 6px 29px 6px 10px;
-  border: 1px solid #d6e2e7;
   border-radius: var(--control-radius);
   color: #1d3747;
-  background: #fff;
+  background: var(--control-surface);
   font-size: 13px;
   font-weight: 570;
   color-scheme: light;
   cursor: pointer;
 }
-.filter select:hover { background: var(--control-surface); }
-.selectField:focus-within .chevron { color: var(--control-selected-ink); }
-.selectField:has(select:open) .chevron { transform: rotate(180deg); }
+.filter select:hover { background: var(--control-hover); }
+.filter select:open { background: var(--control-selected); color: var(--control-selected-ink); }
+.selectField:has(select:open) .chevron { color: var(--control-selected-ink); transform: rotate(180deg); }
 
 .dataStatus { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; min-width: 0; color: var(--muted); font-size: 11px; }
 .dataStatus > span { padding: 6px 9px; background: #eff3f6; font-weight: 650; }
@@ -462,6 +460,22 @@
 .moreViews svg { width: 16px; height: 16px; }
 .pending { min-height: 110px; padding: 24px; color: var(--muted); }
 .pending button { display: inline-flex; align-items: center; gap: 4px; margin-left: 10px; color: var(--accent); cursor: pointer; }
+
+.page :is(.browseLink, .groupBar a, .chartNav a, .topicMenu a, .disclosure, .filter select, .moreViews a):focus-visible {
+  outline: none;
+  background: var(--control-focus, #176864);
+  color: var(--control-focus-ink, #f3f8fa);
+}
+.page :is(
+  .browseLink, .groupBar a[aria-current], .chartNav a[aria-current], .topicMenu a[aria-current],
+  details[open] > .disclosure, .filter select:open
+):focus-visible {
+  --control-focus: var(--control-selected);
+  --control-focus-ink: var(--control-selected-ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.selectField:has(select:focus-visible:not(:open)) .chevron { color: #f3f8fa; }
 
 @media (min-width: 1320px) {
   .heroContent { gap: 70px; }
