@@ -4,6 +4,8 @@ import { ArrowUpRight } from "lucide-react";
 import maplibregl, { type ExpressionSpecification, type Map as MapLibreMap } from "maplibre-gl";
 import type { FeatureCollection, Point } from "geojson";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { applyRasterBasemap } from "@/lib/raster-basemap";
+import type { MapTheme } from "@/types/opengridworks";
 import { ForecastSeries, ForecastSidebar } from "./ForecastSidebar";
 import { WorkspaceFilterSelect, WorkspaceSidebar } from "./WorkspaceSidebar";
 import styles from "./EconomyWorkspace.module.css";
@@ -74,11 +76,13 @@ function mapLayers(values: CountryValue[], indicator: Indicator) {
     ? ["match", ["get", "ADM0_A3"], first[0], first[1], ...rest.flat(), -1]
     : ["literal", -1];
   const fill: ExpressionSpecification = ["interpolate", ["linear"], levelByCountry,
-    -1, "#25262a", 0, "#302822", 0.5, "#67422e", 1, "#c88443"];
+    -1, "#25262a", 0, "#513727", 0.5, "#a05a36", 1, "#e9a04f"];
   return { fill, points };
 }
 
-function EconomyGlobe({ values, indicator, selected, onSelect }: {
+function EconomyGlobe({ basemap, onBasemapError, values, indicator, selected, onSelect }: {
+  basemap: MapTheme;
+  onBasemapError: () => void;
   values: CountryValue[];
   indicator: Indicator;
   selected: Country | undefined;
@@ -102,17 +106,26 @@ function EconomyGlobe({ values, indicator, selected, onSelect }: {
         maxZoom: 6,
         dragRotate: false,
         touchPitch: false,
-        attributionControl: false,
+        attributionControl: { compact: true },
         style: {
           version: 8,
           projection: { type: "globe" },
+          sky: {
+            "sky-color": "#101821",
+            "horizon-color": "#1e293b",
+            "fog-color": "#0f172a",
+            "atmosphere-blend": 0.28,
+          },
           sources: {
             countries: { type: "geojson", data: "/data/natural-earth/ne_50m_admin_0_countries.geojson" },
             indicators: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
           },
           layers: [
-            { id: "oceans", type: "background", paint: { "background-color": "#17191d" } },
-            { id: "countries", type: "fill", source: "countries", paint: { "fill-color": "#25262a" } },
+            { id: "background", type: "background", paint: { "background-color": "#020711" } },
+            { id: "countries", type: "fill", source: "countries", paint: {
+              "fill-color": "#25262a",
+              "fill-opacity": 0.42,
+            } },
             { id: "borders", type: "line", source: "countries", paint: { "line-color": "#8e735b", "line-opacity": 0.38, "line-width": 0.7 } },
             { id: "selected-country", type: "line", source: "countries", filter: ["==", ["get", "ADM0_A3"], ""],
               paint: { "line-color": "#ffdb96", "line-width": 2, "line-opacity": 0.96 } },
@@ -140,6 +153,17 @@ function EconomyGlobe({ values, indicator, selected, onSelect }: {
       view.remove();
     };
   }, []);
+
+  useEffect(() => {
+    const view = map.current;
+    if (!view || status !== "ready") return;
+    applyRasterBasemap(view, basemap, "countries");
+
+    if (basemap.key !== "nasa") return;
+    const source = view.getSource<maplibregl.RasterTileSource>("basemap-raster");
+    source?.once("error", onBasemapError);
+    return () => { source?.off("error", onBasemapError); };
+  }, [basemap, onBasemapError, status]);
 
   useEffect(() => {
     const view = map.current;
@@ -179,7 +203,7 @@ function EconomyGlobe({ values, indicator, selected, onSelect }: {
   );
 }
 
-export function EconomyWorkspace() {
+export function EconomyWorkspace({ basemap, onBasemapError }: { basemap: MapTheme; onBasemapError: () => void }) {
   const [snapshot, setSnapshot] = useState<EconomySnapshot | null>(null);
   const [failed, setFailed] = useState(false);
   const [indicator, setIndicator] = useState<Indicator>("NY.GDP.MKTP.CD");
@@ -215,7 +239,14 @@ export function EconomyWorkspace() {
 
   return (
     <>
-      <EconomyGlobe values={values} indicator={indicator} selected={selected?.country} onSelect={setCountryId} />
+      <EconomyGlobe
+        basemap={basemap}
+        onBasemapError={onBasemapError}
+        values={values}
+        indicator={indicator}
+        selected={selected?.country}
+        onSelect={setCountryId}
+      />
       <WorkspaceSidebar topic="economy" summary="世界银行 WDI · 全球经济指标">
         <section className={styles.filters} aria-label="经济数据筛选">
           <WorkspaceFilterSelect label="国家或地区" options={countryOptions} value={countryId} onChange={setCountryId} />

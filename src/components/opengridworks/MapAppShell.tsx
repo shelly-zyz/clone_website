@@ -84,6 +84,7 @@ import {
   type WeatherField,
   type WeatherMetricKey,
 } from "@/lib/weather-earth";
+import { applyRasterBasemap } from "@/lib/raster-basemap";
 import countryCenters from "@/lib/country-centers.generated.json";
 import type {
   Coordinates,
@@ -208,6 +209,21 @@ const {
 const bubbleScale = 1;
 const defaultRegion = regions[0];
 const defaultMapTheme = mapThemes.find((theme) => theme.key === "nasa") ?? mapThemes[0];
+const economyMapThemes: MapTheme[] = [
+  ...mapThemes.filter(({ key }) => key === "nasa" || key === "cartoDark" || key === "satellite"),
+  {
+    key: "hillshade",
+    label: "暗色地形",
+    description: "Esri 地貌晕渲",
+    tileUrls: ["https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade_Dark/MapServer/tile/{z}/{y}/{x}"],
+    attribution: "Esri, Vantor, Airbus DS, USGS, NGA, NASA, CGIAR and the GIS User Community",
+    background: "#0b111a",
+    rasterOpacity: 0.9,
+    rasterSaturation: -1,
+    rasterContrast: 0.12,
+    rasterBrightnessMax: 0.72,
+  },
+];
 const globeSpinStepDurationMs = 1000;
 const globeSpinSecondsPerCycle = 240;
 const globeSpinMaxZoom = 2.5;
@@ -1109,45 +1125,9 @@ function voltageClassFilter(visibleClasses: BooleanRecord<VoltageClass>): Filter
 }
 
 function applyMapTheme(map: Map, theme: MapTheme) {
-  if (!map.isStyleLoaded()) {
-    return;
+  if (map.isStyleLoaded()) {
+    applyRasterBasemap(map, theme, map.getLayer("grid-lines-glow") ? "grid-lines-glow" : undefined);
   }
-
-  if (map.getLayer("basemap-raster")) {
-    map.removeLayer("basemap-raster");
-  }
-
-  if (map.getSource("basemap-raster")) {
-    map.removeSource("basemap-raster");
-  }
-
-  map.setPaintProperty("background", "background-color", theme.background);
-  if (theme.tileUrls.length === 0) {
-    return;
-  }
-
-  map.addSource("basemap-raster", {
-    type: "raster",
-    tiles: theme.tileUrls,
-    tileSize: 256,
-    maxzoom: theme.maxzoom,
-    attribution: theme.attribution,
-  });
-  map.addLayer(
-    {
-      id: "basemap-raster",
-      type: "raster",
-      source: "basemap-raster",
-      paint: {
-        "raster-opacity": theme.rasterOpacity,
-        "raster-saturation": theme.rasterSaturation,
-        "raster-contrast": theme.rasterContrast,
-        "raster-brightness-min": theme.rasterBrightnessMin ?? 0,
-        "raster-brightness-max": theme.rasterBrightnessMax ?? 1,
-      },
-    },
-    map.getLayer("grid-lines-glow") ? "grid-lines-glow" : undefined,
-  );
 }
 
 function buildEnergyCollection(
@@ -5259,11 +5239,18 @@ function CustomLayersPanel({
   );
 }
 
+const mapThemeThumbnails: Partial<Record<MapThemeKey, string>> = {
+  nasa: "/images/opengridworks/map-type-thumb-nasa.png",
+  satellite: "/images/opengridworks/map-type-thumb-satellite.png",
+};
+
 function MapTypePanel({
+  themes = mapThemes,
   activeMapTheme,
   onTheme,
   onClose,
 }: {
+  themes?: MapTheme[];
   activeMapTheme: MapThemeKey;
   onTheme: (theme: MapThemeKey) => void;
   onClose: () => void;
@@ -5277,19 +5264,22 @@ function MapTypePanel({
         </button>
       </header>
       <div className="og-maptype-strip">
-        {mapThemes.map((theme) => (
-          <button
-            type="button"
-            key={theme.key}
-            className={`og-maptype-card og-maptype-${theme.key} ${activeMapTheme === theme.key ? "is-active" : ""}`}
-            onClick={() => onTheme(theme.key)}
-          >
-            {theme.key === "nasa" ? <Image src="/images/opengridworks/map-type-thumb-nasa.png" alt="" width={92} height={66} /> : null}
-            {theme.key === "satellite" ? <Image src="/images/opengridworks/map-type-thumb-satellite.png" alt="" width={92} height={66} /> : null}
-            <span>{theme.label}</span>
-            <small>{theme.description}</small>
-          </button>
-        ))}
+        {themes.map((theme) => {
+          const thumbnail = mapThemeThumbnails[theme.key];
+          return (
+            <button
+              type="button"
+              key={theme.key}
+              className={`og-maptype-card og-maptype-${theme.key} ${activeMapTheme === theme.key ? "is-active" : ""}`}
+              aria-pressed={activeMapTheme === theme.key}
+              onClick={() => onTheme(theme.key)}
+            >
+              {thumbnail ? <Image src={thumbnail} alt="" width={92} height={66} /> : null}
+              <span>{theme.label}</span>
+              <small>{theme.description}</small>
+            </button>
+          );
+        })}
       </div>
     </section>
   );
@@ -5360,6 +5350,29 @@ function SourcesPanel({ onClose }: { onClose: () => void }) {
   );
 }
 
+function BasemapButton({ theme, expanded, onClick }: {
+  theme: MapThemeKey;
+  expanded: boolean;
+  onClick: () => void;
+}) {
+  const thumbnail = mapThemeThumbnails[theme];
+  return (
+    <button
+      type="button"
+      className={`og-layer-card og-maptype-${theme} ${expanded ? "is-active" : ""}`}
+      aria-label="底图"
+      aria-expanded={expanded}
+      onClick={onClick}
+    >
+      {thumbnail ? <Image src={thumbnail} alt="" width={76} height={76} /> : null}
+      <span>
+        <MapIcon size={15} />
+        底图
+      </span>
+    </button>
+  );
+}
+
 function LayerCards({
   activePanel,
   activeMapTheme,
@@ -5369,10 +5382,6 @@ function LayerCards({
   activeMapTheme: MapThemeKey;
   onOpenPanel: (panel: NonNullable<ToolbarPanel>) => void;
 }) {
-  const activeMapThemeThumb = activeMapTheme === "satellite"
-    ? "/images/opengridworks/map-type-thumb-satellite.png"
-    : "/images/opengridworks/map-type-thumb-nasa.png";
-
   return (
     <div className="og-layer-cards" aria-label="图层控制">
       <button
@@ -5394,17 +5403,11 @@ function LayerCards({
         <Image src="/images/opengridworks/map-type-thumb-satellite.png" alt="" width={76} height={76} />
         <span>自定义图层</span>
       </button>
-      <button
-        type="button"
-        className={`og-layer-card ${activePanel === "mapType" ? "is-active" : ""}`}
+      <BasemapButton
+        theme={mapThemeThumbnails[activeMapTheme] ? activeMapTheme : "nasa"}
+        expanded={activePanel === "mapType"}
         onClick={() => onOpenPanel("mapType")}
-      >
-        <Image src={activeMapThemeThumb} alt="" width={76} height={76} />
-        <span>
-          <MapIcon size={15} />
-          底图
-        </span>
-      </button>
+      />
     </div>
   );
 }
@@ -5637,6 +5640,7 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Wor
     pitch: defaultRegion.pitch,
     bearing: defaultRegion.bearing,
   });
+  const [economyMapTheme, setEconomyMapTheme] = useState<MapThemeKey>("nasa");
   const [activeMapTheme, setActiveMapTheme] = useState<MapThemeKey>(initialProject === "weather" ? "goes" : "nasa");
   const [activeSizeMin, setActiveSizeMin] = useState<number | null>(null);
   const [generationFrame, setGenerationFrame] = useState<GenerationFrame>(defaultGenerationFrame);
@@ -5841,6 +5845,10 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Wor
 
   const togglePanel = useCallback((panel: NonNullable<ToolbarPanel>) => {
     setActivePanel((currentPanel) => currentPanel === panel ? null : panel);
+  }, []);
+
+  const fallbackEconomyBasemap = useCallback(() => {
+    setEconomyMapTheme((key) => key === "nasa" ? "cartoDark" : key);
   }, []);
 
   const requestFocus = useCallback((center: Coordinates, zoom: number, pitch = 38, bearing = 0) => {
@@ -6144,7 +6152,21 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Wor
     return (
       <main className="og-app-shell is-economy-project">
         <GlobeNavigation activeTopic={activeProject} onTopicChange={switchProject} />
-        <EconomyWorkspace />
+        <EconomyWorkspace
+          basemap={economyMapThemes.find(({ key }) => key === economyMapTheme) ?? defaultMapTheme}
+          onBasemapError={fallbackEconomyBasemap}
+        />
+        <div className="og-layer-cards" aria-label="经济地球底图控制">
+          <BasemapButton theme={economyMapTheme} expanded={activePanel === "mapType"} onClick={() => togglePanel("mapType")} />
+        </div>
+        {activePanel === "mapType" ? (
+          <MapTypePanel
+            themes={economyMapThemes}
+            activeMapTheme={economyMapTheme}
+            onTheme={setEconomyMapTheme}
+            onClose={() => setActivePanel(null)}
+          />
+        ) : null}
       </main>
     );
   }

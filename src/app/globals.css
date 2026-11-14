@@ -2966,6 +2966,61 @@
   width: min(650px, calc(100vw - 384px));
 }
 
+.is-economy-project .og-maptype-panel {
+  right: calc(var(--og-forecast-width) + 30px);
+  bottom: calc(var(--og-globe-nav-space) + 52px);
+  width: min(460px, calc(100% - var(--og-sidebar-width) - var(--og-forecast-width) - 60px));
+}
+
+.is-economy-project .maplibregl-ctrl-bottom-right {
+  right: 0;
+  bottom: 0;
+}
+
+.is-economy-project .maplibregl-ctrl-attrib.maplibregl-compact {
+  box-sizing: border-box;
+  max-width: min(340px, calc(100vw - 88px));
+  color: #cbd5e1;
+  background-color: rgba(8, 12, 24, 0.9);
+}
+
+.is-economy-project .maplibregl-ctrl-attrib-button {
+  filter: invert(1);
+}
+
+@media (max-width: 900px) {
+  .is-economy-project .og-layer-cards {
+    top: auto;
+    bottom: calc(var(--og-globe-nav-space) + 12px);
+    left: 12px;
+    right: auto;
+  }
+
+  .is-economy-project .og-layer-card span {
+    display: flex;
+  }
+
+  .is-economy-project .og-layer-card svg {
+    display: none;
+  }
+
+  .is-economy-project .og-maptype-panel {
+    inset: auto 12px calc(var(--og-globe-nav-space) + 70px);
+    width: auto;
+  }
+
+  .is-economy-project .og-maptype-strip {
+    gap: 6px;
+    padding-inline: 8px;
+  }
+
+  .is-economy-project .og-maptype-card {
+    flex: 1 1 0;
+    min-width: 0;
+    padding-inline: 5px;
+  }
+}
+
 .og-sources-panel {
   right: 18px;
   bottom: 48px;
@@ -3100,6 +3155,7 @@
 .og-maptype-deepOcean { background: radial-gradient(circle at 45% 38%, #173b4a, #06131f 70%); }
 .og-maptype-cartoDark { background: linear-gradient(135deg, #111827, #020617); }
 .og-maptype-eox { background: linear-gradient(135deg, #1d3a2c, #0a1712); }
+.og-maptype-hillshade { background: radial-gradient(ellipse at 36% 18%, #626973, #252e38 62%, #0b111a); }
 .og-maptype-goes { background: radial-gradient(circle at 42% 36%, #2f476b, #07111e 72%); }
 .og-maptype-black { background: linear-gradient(135deg, #000, #0b0f18); }
 

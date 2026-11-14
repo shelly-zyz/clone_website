@@ -33,6 +33,7 @@ export type MapThemeKey =
   | "deepOcean"
   | "eox"
   | "satellite"
+  | "hillshade"
   | "goes"
   | "black";
 

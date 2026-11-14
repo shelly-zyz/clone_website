@@ -2,7 +2,7 @@
   position: absolute;
   inset: 0;
   overflow: hidden;
-  background: #090a0e;
+  background: radial-gradient(ellipse at 50% 42%, #19232f 0%, #0d131c 56%, #080b10 100%);
 }
 
 .map {
@@ -47,7 +47,7 @@
 
 .scale {
   height: 6px;
-  background: linear-gradient(90deg, #302822, #67422e, #c88443);
+  background: linear-gradient(90deg, #513727, #a05a36, #e9a04f);
 }
 
 .range {
