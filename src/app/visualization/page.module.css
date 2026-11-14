@@ -539,3 +539,101 @@
   .page { scroll-behavior: auto; }
   .page :is(.topicCard, .groupBar a, .chartNav a, .cardArrow, .cardArrow svg, .disclosure, .chevron) { transition: none; }
 }
+
+.comparison {
+  --comparison-rule: #cbd6d6;
+  padding: clamp(16px, 2.4vw, 34px);
+  color: #233237;
+  background: #f7f7f4;
+  border: 1px solid #dde4e1;
+  border-radius: 14px;
+}
+
+.comparisonHeader,
+.comparisonFooter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+}
+
+.comparisonHeader { padding-bottom: 18px; }
+.comparisonHeader h2 { color: #172b32; font-size: clamp(20px, 2.1vw, 29px); font-weight: 730; }
+.comparisonHeader p,
+.comparisonSide p { margin-top: 5px; color: #52676e; font-size: 13px; line-height: 1.55; }
+.comparisonColumns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.comparisonSide { min-width: 0; padding: 16px clamp(10px, 2.4vw, 30px) 18px; border-top: 1px solid var(--comparison-rule); }
+.comparisonSide:first-child { padding-left: 0; border-right: 1px solid var(--comparison-rule); }
+.comparisonSide:last-child { padding-right: 0; }
+.comparisonSide h3 { display: flex; align-items: center; gap: 10px; color: #253e43; font-size: 14px; font-weight: 650; }
+.comparisonSide h3 span {
+  display: grid;
+  width: 29px;
+  height: 29px;
+  place-items: center;
+  border: 1px solid #c3d2d1;
+  border-radius: 50%;
+  font-variant-numeric: tabular-nums;
+}
+.comparisonSide .filter { margin-top: 12px; }
+.comparisonSide select { max-width: 100%; border: 1px solid #cbd7d7; background: #fff; }
+.comparisonValue {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 3px 8px;
+  margin-top: 15px;
+  padding: 8px 0 11px;
+  border-bottom: 1px solid var(--comparison-rule);
+  font-variant-numeric: tabular-nums;
+}
+.comparisonValue strong { font-size: clamp(21px, 4vw, 52px); line-height: 1; letter-spacing: -0.05em; overflow-wrap: anywhere; }
+.comparisonValue span { color: #426168; font-size: 12px; }
+.comparisonFooter { padding-top: 13px; border-top: 1px solid var(--comparison-rule); }
+.comparisonFooter > div { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 12px; font-size: 12px; }
+.comparisonFooter strong { color: #0f6054; font-size: 14px; }
+.comparisonFooter a:not(.compareAction) { color: #315e67; }
+.comparisonFooter a:hover { text-decoration: underline; }
+.compareAction { display: inline-flex; min-height: 33px; align-items: center; gap: 7px; padding: 5px 9px; border-radius: var(--control-radius); color: #23474e; background: #e7eeeb; font-size: 12px; font-weight: 690; cursor: pointer; }
+.compareAction:hover { background: #dce9e6; }
+.comparisonBelow { margin-top: 14px; }
+
+.primaryChart[data-active-view="true"],
+.comparison { animation: chartViewIn 180ms ease-out both; }
+@keyframes chartViewIn {
+  from { opacity: 0.55; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 490px) {
+  .comparison { padding: 13px; border-radius: 10px; }
+  .comparisonHeader { padding-bottom: 12px; }
+  .comparisonSide { padding: 11px 8px 13px; }
+  .comparisonSide h3 { gap: 5px; font-size: 12px; }
+  .comparisonSide h3 span { width: 23px; height: 23px; }
+  .comparisonSide .selectField { min-width: 0; }
+  .comparisonSide select { padding-left: 6px; font-size: 11px; }
+  .comparisonValue { padding-bottom: 6px; margin-top: 12px; }
+  .comparisonValue strong { font-size: clamp(16px, 5.1vw, 25px); }
+  .comparisonSide p { font-size: 11px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .primaryChart[data-active-view="true"], .comparison { animation: none; }
+}
+
+.chartControls { display: flex; flex-wrap: wrap; gap: 7px 12px; margin: 12px 0 17px; }
+.dataStatus > .pinRelease { min-width: 0; padding: 5px 8px; }
+.comparisonBelow > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: var(--control-radius);
+  color: #245766;
+  background: #e4efef;
+  font-size: 13px;
+  font-weight: 680;
+}
+.comparisonBelow > a:hover { background: #d6e8e7; }
+.comparisonBelow > a svg { width: 17px; height: 17px; }

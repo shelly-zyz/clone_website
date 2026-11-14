@@ -38,7 +38,7 @@ function loadWorld() {
 export function AnalysisPlot({ spec, compact = false, onCategory }: {
   spec: AnalysisChartSpec;
   compact?: boolean;
-  onCategory?: (label: string) => void;
+  onCategory?: (label: string, row?: string) => void;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const chart = useRef<EChartsType | null>(null);
@@ -77,8 +77,15 @@ export function AnalysisPlot({ spec, compact = false, onCategory }: {
     if (!instance) return;
     if (spec.kind !== "map") {
       instance.setOption(chartOptions(spec, compact), { notMerge: true });
-      if (!onCategory || compact || (spec.kind !== "bubble" && spec.kind !== "calendar")) return;
-      const onClick = (event: ECElementEvent) => onCategory(event.name);
+      if (!onCategory || compact) return;
+      const onClick = (event: ECElementEvent) => {
+        if (spec.kind === "heatmap" && Array.isArray(event.value)) {
+          const [column, row] = event.value;
+          const label = typeof column === "number" ? spec.labels[column] : undefined;
+          const group = typeof row === "number" ? spec.series[row]?.name : undefined;
+          if (label && group) onCategory(label, group);
+        } else if (event.name) onCategory(event.name);
+      };
       instance.on("click", onClick);
       return () => { instance.off("click", onClick); };
     }

@@ -65,8 +65,15 @@ function heatmap(spec: AnalysisChartSpec, compact: boolean, tooltip: TooltipComp
   const first = focusRow < 0 ? latestStart : Math.max(0, Math.min(latestStart, focusRow - Math.floor(visibleRows / 2)));
   const last = Math.min(numberOfYears, first + visibleRows);
   const rows = compact ? spec.series.slice(first, last) : spec.series;
-  const values = rows.flatMap((series, y) => series.values.flatMap((value, x) => value === null ? [] : [[x, y, value]]));
-  const numbers = values.map(item => item[2]);
+  const values = rows.flatMap((series, y) => series.values.flatMap((value, x) => {
+    if (value === null) return [];
+    const selected = spec.focusCell?.[0] === x && spec.focusCell[1] === (compact ? y + first : y);
+    return [{
+      value: [x, y, value],
+      ...(selected && { itemStyle: { borderColor: ink, borderWidth: 2.2 } }),
+    }];
+  }));
+  const numbers = values.map(item => item.value[2]);
   const min = numbers.length ? Math.min(...numbers) : 0;
   const max = numbers.length ? Math.max(...numbers) : 1;
   const zoom = !compact && latestStart > 0;

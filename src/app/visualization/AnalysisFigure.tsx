@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown, Table2 } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { formatAnalysisValue, type AnalysisChartSpec } from "@/lib/topic-analysis/model";
 import { AnalysisPlot } from "./AnalysisPlot";
 import styles from "./page.module.css";
@@ -56,19 +56,21 @@ function AnalysisTable({ spec }: { spec: AnalysisChartSpec }) {
   );
 }
 
-export function AnalysisFigure({ spec, primary, empty, onCategory }: {
+export function AnalysisFigure({ spec, primary, empty, onCategory, controls }: {
   spec: AnalysisChartSpec;
   primary?: boolean;
   empty?: string;
-  onCategory?: (label: string) => void;
+  controls?: ReactNode;
+  onCategory?: (label: string, row?: string) => void;
 }) {
   const hasValues = hasChartValues(spec);
   return (
-    <figure id={spec.id} className={primary ? styles.primaryChart : styles.chartCard} aria-labelledby={spec.id + "-title"}>
+    <figure id={spec.id} className={primary ? styles.primaryChart : styles.chartCard} data-active-view={primary || undefined} aria-labelledby={spec.id + "-title"}>
       <div className={styles.chartHead}>
         <h2 id={spec.id + "-title"}>{spec.title}</h2>
         <span className={styles.chartUnit}>{spec.kind === "bubble" ? "交互气泡图" : spec.unit}</span>
       </div>
+      {controls && <div className={styles.chartControls} role="group" aria-label="对比筛选">{controls}</div>}
       {hasValues ? <AnalysisPlot spec={spec} onCategory={onCategory} />
         : <p className={styles.chartEmpty}>{empty ?? "当前筛选范围暂无已发布数值。"}</p>}
       <figcaption className={styles.chartCaption}>{spec.caption}</figcaption>

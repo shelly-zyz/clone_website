@@ -6,7 +6,7 @@ import monthly from "./nbs-monthly.json";
 
 const officialAnnual = { label: "国家统计局 · 年度统计公报", href: "https://www.stats.gov.cn/sj/tjgb/ndtjgb/qgndtjgb/index.html" };
 const officialMonthly = { label: "国家统计局 · 国家数据月度库", href: "https://data.stats.gov.cn/easyquery.htm?cn=A01" };
-const officialProvincial = { label: "国家统计局 · 国家数据分省月度库", href: "https://data.stats.gov.cn/easyquery.htm?cn=E0101" };
+export const officialProvincial = { label: "国家统计局 · 国家数据分省月度库", href: "https://data.stats.gov.cn/easyquery.htm?cn=E0101" };
 const mix = generationSeries.slice(1);
 const otherCapacity = { name: "其他及口径差额", color: "#668391" };
 const annualLabels = annual.map(row => String(row.year));
@@ -15,7 +15,7 @@ export const monthLabels = Array.from({ length: 12 }, (_, index) => `${index + 1
 export type GenerationProduct = typeof generationSeries[number]["id"];
 export type Fuel = typeof fuelSeries[number]["id"];
 
-const monthKey = (year: string, index: number) => `${year}-${String(index + 1).padStart(2, "0")}`;
+export const monthKey = (year: string, index: number) => `${year}-${String(index + 1).padStart(2, "0")}`;
 const sortedDates = (dates: string[]) => [...new Set(dates)].sort();
 
 export function observationMonths(facts: PublishedFact[], series: string) {
@@ -143,11 +143,12 @@ export function buildGenerationAnalysis(
   selectedMonth: string,
   history: PublishedHistory | null,
   regional: RegionalGeneration | null,
+  selectedRegion?: string,
 ): Analysis {
   const selected = generationSeries.find(item => item.id === product) ?? generationSeries[0];
   const facts = history?.facts ?? monthlyFacts;
   const dates = generationMonths(history, product);
-  const date = dates.includes(selectedMonth) ? selectedMonth : dates.at(-1) ?? "";
+  const date = selectedMonth || dates.at(-1) || "";
   const axis = monthAxis(dates);
   const monthData = new Map(facts.filter(row => row.month === date).map(row => [row.series, row.value]));
   const current = monthData.get(product) ?? null;
@@ -162,7 +163,10 @@ export function buildGenerationAnalysis(
     { label: "国家统计局 · 工业生产月报索引", href: "https://www.stats.gov.cn/sj/zxfb/" },
   ];
   const unit = "亿千瓦时";
-  const regions = regional?.month === date ? regional.regions.slice(0, 12) : [];
+  const matchingRegions = regional?.month === date ? regional.regions : [];
+  const regions = matchingRegions.slice(0, 12);
+  const selectedProvince = matchingRegions.find(row => row.code === selectedRegion);
+  if (selectedProvince && !regions.includes(selectedProvince)) regions.push(selectedProvince);
   const breakdown = mix.map(item => ({
     name: item.name, color: item.color, value: monthData.get(item.id) ?? null,
     renewable: item.id === "hydro-power" || item.id === "wind-power" || item.id === "solar-power",
@@ -200,7 +204,8 @@ export function buildGenerationAnalysis(
       },
       {
         id: "generation-seasonal", label: "月度热力图", title: `${selected.name}的季节分布`, focus: date.slice(0, 4),
-        caption: "每格对应一个月份。留空表示没有可用的单月数据，1–2 月合报不拆分。",
+        focusCell: date ? [Number(date.slice(5)) - 1, [...new Set(dates.map(month => month.slice(0, 4)))].indexOf(date.slice(0, 4))] : undefined,
+        caption: "点击有值的格子，联动分电源构成、省际排行和数值表。留空表示没有可用的单月数据，1–2 月合报不拆分。",
         kind: "heatmap", labels: monthLabels, unit, color: selected.color,
         series: seasonalSeries(facts, product, dates), sources,
       },
@@ -217,11 +222,11 @@ export function buildGenerationAnalysis(
         series: [{ name: "当月发电量", values: mix.map(item => monthData.get(item.id) ?? null) }], sources,
       },
       {
-        id: "province-ranking", label: "省际比较", title: `${date || "所选月"} 各省发电量`,
-        caption: "按同一发布版本、同一月的各省发电量合计排序。最多显示前 12 个省级地区，来源缺测保留为空。",
+        id: "province-ranking", label: "省际排行", title: `${date || "所选月"} 各省${selected.name}`,
+        caption: "按同一发布版本、同一月份和指标排序。展示前 12 名及选中地区，来源缺测保留为空。",
         kind: "horizontal", labels: regions.map(row => row.name),
-        unit, color: selected.color,
-        series: [{ name: "发电量合计", values: regions.map(row => row.value) }],
+        unit, color: selected.color, categoryColors: regions.map(row => row.code === selectedRegion ? "#ba641d" : selected.color),
+        series: [{ name: selected.name, values: regions.map(row => row.value) }],
         sources: [officialProvincial],
       },
     ],

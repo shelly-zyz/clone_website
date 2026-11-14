@@ -14,6 +14,7 @@ export type AnalysisChartSpec = {
   color: string;
   categoryColors?: readonly string[];
   focus?: string;
+  focusCell?: readonly [column: number, row: number];
   forecast?: boolean;
   zoom?: boolean;
 } & (

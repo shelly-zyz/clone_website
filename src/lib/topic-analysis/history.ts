@@ -10,11 +10,14 @@ export type PublishedFact = {
   coverage: number;
 };
 
+export type PublishedDay = Omit<PublishedFact, "month"> & { date: string };
+
 export type PublishedHistory = {
   dataset: string;
   version: string;
   publishedAt: string;
   facts: PublishedFact[];
+  days?: PublishedDay[];
 };
 
 export type RegionalGeneration = {

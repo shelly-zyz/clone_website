@@ -2,7 +2,7 @@ import gep from "../../../public/data/economy/gep.json";
 import wdi from "../../../public/data/economy/wdi.json";
 import { analysisTopics } from "./catalog";
 import { distribution } from "./distribution";
-import { metric, type Analysis, type Source, type Value } from "./model";
+import { metric, relativeIndex, type Analysis, type AnalysisChartSpec, type Source, type Value } from "./model";
 
 const GDP = "NY.GDP.MKTP.CD";
 const PER_CAPITA = "NY.GDP.PCAP.CD";
@@ -29,19 +29,24 @@ export const outlookYears = gep.years;
 export const outlookCountries = economyCountries.filter(({ code }) => forecasts[code]?.some(value => value !== null));
 export const economyIndicators = { total: "GDP 总量", perCapita: "人均 GDP" };
 export type EconomyIndicator = keyof typeof economyIndicators;
+export type EconomyComparisonMode = "value" | "growth" | "index";
+export const economyComparisonModes = {
+  value: "原值", growth: "同比变化", index: "起始年 = 100",
+} as const;
 
 function countryAt(code: string) {
   return wdi.countries.find(item => item.code === code) ?? wdi.countries[0];
 }
 
-function historicalYears(year: number) {
+function historicalYears(year: number, startYear = wdi.years[0]) {
   const index = wdi.years.indexOf(year);
-  return { index, labels: wdi.years.slice(0, index + 1).map(String) };
+  const start = Math.max(0, wdi.years.indexOf(startYear));
+  return { index, start, labels: wdi.years.slice(start, index + 1).map(String) };
 }
 
-export function buildEconomyAnalysis(code: string, year: number, view: EconomyIndicator): Analysis {
+export function buildEconomyAnalysis(code: string, year: number, view: EconomyIndicator, startYear?: number): Analysis {
   const country = countryAt(code);
-  const { index, labels } = historicalYears(year);
+  const { index, start, labels } = historicalYears(year, startYear);
   const color = analysisTopics.economy.color;
   const name = economyIndicators[view];
   const isTotal = view === "total";
@@ -53,11 +58,11 @@ export function buildEconomyAnalysis(code: string, year: number, view: EconomyIn
   }));
   const ranking = economies.filter(item => item.value !== null).toSorted((a, b) => (b.value ?? 0) - (a.value ?? 0)).slice(0, 10);
   return {
-    scope: `${country.label} · 世界银行 WDI · ${wdi.years[0]}–${year} 年 · 现价美元`,
+    scope: `${country.label} · 世界银行 WDI · ${wdi.years[start]}–${year} 年 · 现价美元`,
     metrics: [
       metric(`${year} 年 GDP`, hundredMillionUsd(country.values[GDP][index]), "亿美元"),
       metric(`${year} 年人均 GDP`, country.values[PER_CAPITA][index], "美元/人"),
-      metric("本年该指标有值经济体", economies.filter(item => item.value !== null).length, "个"),
+      metric(`${year} 年商品和服务出口`, hundredMillionUsd(country.values[EXPORTS][index]), "亿美元"),
     ],
     charts: [
       {
@@ -69,7 +74,7 @@ export function buildEconomyAnalysis(code: string, year: number, view: EconomyIn
       },
       {
         id: "gdp-ranking", label: "规模排行", title: `${year} 年${name}最高的经济体`,
-        caption: "展示站内 WDI 快照中该指标有值的前十个国家或地区。",
+        caption: "展示站内 WDI 快照中该指标有值的前十个国家或地区。点击排行可切换国家档案。",
         kind: "horizontal", labels: ranking.map(item => item.label), unit, color,
         categoryColors: ranking.map(item => item.code === country.code ? "#d38a38" : color),
         series: [{ name, values: ranking.map(item => item.value) }], sources: [indicatorSource],
@@ -78,21 +83,21 @@ export function buildEconomyAnalysis(code: string, year: number, view: EconomyIn
         id: "gdp-trend", label: "GDP 走势", title: `${country.label}的 GDP 总量`,
         caption: "采用现价美元。曲线包含价格和汇率变动的影响。",
         kind: "area", labels, unit: "亿美元", color,
-        series: [{ name: "GDP", values: country.values[GDP].slice(0, index + 1).map(hundredMillionUsd) }], sources: [gdpSource],
+        series: [{ name: "GDP", values: country.values[GDP].slice(start, index + 1).map(hundredMillionUsd) }], sources: [gdpSource],
       },
       {
         id: "gdp-per-capita", label: "人均走势", title: `${country.label}的人均 GDP`,
         caption: "现价 GDP 按人口折算。",
         kind: "line", labels, unit: "美元/人", color,
-        series: [{ name: "人均 GDP", values: country.values[PER_CAPITA].slice(0, index + 1) }], sources: [perCapitaSource],
+        series: [{ name: "人均 GDP", values: country.values[PER_CAPITA].slice(start, index + 1) }], sources: [perCapitaSource],
       },
     ],
   };
 }
 
-export function buildTradeAnalysis(code: string, year: number): Analysis {
+export function buildTradeAnalysis(code: string, year: number, startYear?: number): Analysis {
   const country = countryAt(code);
-  const { index, labels } = historicalYears(year);
+  const { index, start, labels } = historicalYears(year, startYear);
   const color = analysisTopics.trade.color;
   const economies = wdi.countries.flatMap(item => {
     const exports = item.values[EXPORTS][index];
@@ -106,7 +111,7 @@ export function buildTradeAnalysis(code: string, year: number): Analysis {
     return value !== null && value > 0 ? [{ label: item.label, value: value / 1e8 }] : [];
   }).toSorted((a, b) => b.value - a.value).slice(0, 12);
   return {
-    scope: `${country.label} · 世界银行 WDI · ${wdi.years[0]}–${year} 年 · 商品与服务出口`,
+    scope: `${country.label} · 世界银行 WDI · ${wdi.years[start]}–${year} 年 · 商品与服务出口`,
     metrics: [
       metric(`${year} 年出口额`, hundredMillionUsd(country.values[EXPORTS][index]), "亿美元"),
       metric("出口额占 GDP", percentOf(country.values[EXPORTS][index], country.values[GDP][index]), "%"),
@@ -127,7 +132,7 @@ export function buildTradeAnalysis(code: string, year: number): Analysis {
       },
       {
         id: "exports-mix", label: "出口规模格局", title: `${year} 年主要出口经济体`,
-        caption: "面积表示出口额，展示站内快照中出口额有值的前 12 个经济体。",
+        caption: "面积表示出口额，展示站内快照中出口额有值的前 12 个经济体。点击方块可切换经济体。",
         kind: "treemap", labels: top.map(item => item.label), unit: "亿美元", color,
         categoryColors: top.map((item, index) => item.label === country.label ? "#f6c751" : exportPalette[index % exportPalette.length]),
         series: [{ name: "商品与服务出口额", values: top.map(item => item.value) }], sources: [exportSource],
@@ -136,14 +141,14 @@ export function buildTradeAnalysis(code: string, year: number): Analysis {
         id: "exports-trend", label: "出口历史", title: `${country.label}的历年出口规模`,
         caption: "商品与服务出口额按现价美元计。",
         kind: "area", labels, unit: "亿美元", color,
-        series: [{ name: "出口额", values: country.values[EXPORTS].slice(0, index + 1).map(hundredMillionUsd) }], sources: [exportSource],
+        series: [{ name: "出口额", values: country.values[EXPORTS].slice(start, index + 1).map(hundredMillionUsd) }], sources: [exportSource],
       },
       {
         id: "exports-share", label: "开放度走势", title: `${country.label}的出口占 GDP 比重`,
         caption: "以同年、同币种的商品与服务出口额除以 GDP。",
         kind: "line", labels, unit: "%", color,
-        series: [{ name: "出口占 GDP", values: country.values[EXPORTS].slice(0, index + 1)
-          .map((value, item) => percentOf(value, country.values[GDP][item])) }],
+        series: [{ name: "出口占 GDP", values: country.values[EXPORTS].slice(start, index + 1)
+          .map((value, item) => percentOf(value, country.values[GDP][start + item])) }],
         sources: [exportSource, gdpSource],
       },
     ],
@@ -153,10 +158,44 @@ export function buildTradeAnalysis(code: string, year: number): Analysis {
 const exportPalette = ["#21afa7", "#649be7", "#a18aeb", "#e87260", "#e9b749", "#77b56e"];
 const forecastComparison = ["CHN", "USA", "IND", "DEU", "BRA"];
 
-export function buildOutlookAnalysis(code: string, year: number): Analysis {
+export function buildEconomicComparison(codes: readonly string[], startYear: number, endYear: number,
+  indicator: "gdp" | "perCapita" | "exports", mode: EconomyComparisonMode,
+): AnalysisChartSpec {
+  const { index, start, labels } = historicalYears(endYear, startYear);
+  const metricCode = indicator === "gdp" ? GDP : indicator === "exports" ? EXPORTS : PER_CAPITA;
+  const source = wdiSource(metricCode);
+  const name = indicator === "gdp" ? "GDP" : indicator === "exports" ? "商品和服务出口额" : "人均 GDP";
+  const unit = mode === "growth" ? "%" : mode === "index" ? "指数" : indicator === "perCapita" ? "美元/人" : "亿美元";
+  const valuesFor = (values: Value[]) => values.slice(start, index + 1).map((value, offset) => {
+    if (mode === "index") return relativeIndex(value, values[start] ?? null);
+    if (mode === "growth") {
+      const base = values[start + offset - 1];
+      return value === null || base == null || base <= 0 ? null : (value / base - 1) * 100;
+    }
+    return indicator === "perCapita" ? value : hundredMillionUsd(value);
+  });
+  return {
+    id: "economic-comparison", label: "经济体对比", title: name + " · " + economyComparisonModes[mode],
+    caption: mode === "growth" ? "同一 WDI 快照的现价美元同比，包含价格和汇率变化。缺测或上年为零时留空。"
+      : mode === "index" ? `各经济体以 ${startYear} 年为 100。基期缺测或为零时该序列留空。`
+      : "同一 WDI 快照的现价美元数据，缺测保留断线。",
+    unit, color: "#246591", labels, kind: "line",
+    series: codes.map((code, index) => {
+      const country = countryAt(code);
+      return { name: country.label, values: valuesFor(country.values[metricCode]), color: comparisonColors[index] };
+    }),
+    sources: [source],
+  };
+}
+
+const comparisonColors = ["#246591", "#b86134", "#217e66"];
+
+export function buildOutlookAnalysis(code: string, year: number, compared?: readonly string[]): Analysis {
   const country = countryAt(code);
   const index = gep.years.indexOf(year);
   const color = analysisTopics.outlook.color;
+  const edition = gep.edition.replace(/^(\d{4})-0?(\d{1,2})$/, "$1 年 $2 月");
+  const comparison = [...new Set([country.code, ...(compared ?? forecastComparison)])];
   const projections = forecasts[country.code] ?? gep.years.map(() => null);
   const world = globalForecast[index] ?? null;
   const value = projections[index] ?? null;
@@ -166,7 +205,7 @@ export function buildOutlookAnalysis(code: string, year: number): Analysis {
   }).toSorted((a, b) => b.current - a.current).slice(0, 10);
   const distributions = gep.years.map((_, offset) => distribution(outlookCountries.map(item => forecasts[item.code]?.[offset])));
   return {
-    scope: `${country.label} · 世界银行全球经济展望 2026 年 6 月版 · ${gep.years[0]}–${gep.years.at(-1)} 年预测`,
+    scope: `${country.label} · 世界银行全球经济展望 ${edition}版 · ${gep.years[0]}–${gep.years.at(-1)} 年预测`,
     metrics: [
       metric(`${year} 年${country.label}预测增速`, value, "%"),
       metric("同期全球预测增速", world, "%"),
@@ -195,16 +234,17 @@ export function buildOutlookAnalysis(code: string, year: number): Analysis {
       },
       {
         id: "growth-comparison", label: "经济体对照", title: "主要经济体的增长预测对照",
-        caption: "选定经济体与中国、美国、印度、德国和巴西的预测比较。所选经济体排在首行。",
+        caption: "同一发布批次的实际 GDP 增速预测。所选经济体排在首行，全球值为世界银行发布的世界汇总。",
         kind: "heatmap", labels: gep.years.map(item => item + " 年"), unit: "%", color,
-        series: [...new Set([country.code, ...forecastComparison])].map(item => ({
-          name: countryAt(item).label, values: forecasts[item] ?? gep.years.map(() => null),
-        })),
+        series: [
+          ...comparison.map(item => ({ name: countryAt(item).label, values: forecasts[item] ?? gep.years.map(() => null) })),
+          { name: "全球", values: globalForecast },
+        ],
         sources: [forecastSource],
       },
       {
         id: "growth-ranking", label: "预测排行", title: `${year} 年预测增速最高的经济体`,
-        caption: "按此版预测值排序，展示有国家或地区标识的前十名。",
+        caption: "按此版预测值排序，展示有国家或地区标识的前十名。点击排行可切换增长路径。",
         kind: "horizontal", labels: ranking.map(item => item.label), unit: "%", color,
         categoryColors: ranking.map(item => item.code === country.code ? "#d38a38" : color),
         series: [{ name: "实际 GDP 增速预测", values: ranking.map(item => item.current) }], sources: [forecastSource],
