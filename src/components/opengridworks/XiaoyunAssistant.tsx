@@ -266,7 +266,7 @@ export function XiaoyunAssistant({ topic, onMapCommand }: {
   const visibleBusiness = business.filter(result => !isWorkspaceForecast(result) || result.topic !== topic);
   return (
     <>
-      <div ref={container} />
+      <div ref={container} className="og-assistant-mount" />
       <WorkspaceForecast key={topic} topic={topic === "meteo" ? "weather" : topic}
         loadOverview={loadForecastOverview} loadAnalysis={loadAnalysis} task={forecasts[topic]}
         ready={ready} pending={pendingForecast !== undefined} onRun={runForecast}

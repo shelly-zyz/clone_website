@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-import { workspaceHref, type WorkspaceTopic } from "@/lib/globe-topics";
+import type { WorkspaceTopic } from "@/lib/globe-topics";
+import { ReturnToGlobe } from "./ReturnToGlobe";
 import styles from "./page.module.css";
 
 export function AnalysisHeader({ topic, detail = false }: { topic: WorkspaceTopic; detail?: boolean }) {
@@ -13,10 +13,7 @@ export function AnalysisHeader({ topic, detail = false }: { topic: WorkspaceTopi
       </Link>
       <nav className={styles.topLinks} aria-label="专题分析导航">
         {detail && <Link href={"/visualization?topic=" + topic}>全部专题</Link>}
-        <Link className={styles.returnLink} href={workspaceHref(topic)} prefetch={false}>
-          <ArrowLeft size={16} strokeWidth={1.8} aria-hidden="true" />
-          返回地球
-        </Link>
+        <ReturnToGlobe topic={topic} className={styles.returnLink} />
       </nav>
     </header>
   );

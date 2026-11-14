@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { GlobeHandoff } from "@/components/opengridworks/GlobeHandoff";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -16,7 +17,7 @@ export default function RootLayout({
       lang="zh-CN"
       className="h-full antialiased"
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">{children}<GlobeHandoff /></body>
     </html>
   );
 }

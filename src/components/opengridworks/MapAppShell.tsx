@@ -4,7 +4,8 @@ import "maplibre-gl/dist/maplibre-gl.css";
 
 import dynamic from "next/dynamic";
 import Image from "next/image";
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import maplibregl, {
   type ExpressionSpecification,
   type FilterSpecification,
@@ -17,9 +18,9 @@ import maplibregl, {
 import type { Feature, FeatureCollection, LineString, Point } from "geojson";
 import {
   Activity,
-  Bookmark,
   Camera,
   CalendarDays,
+  ArrowUpRight,
   Check,
   Circle,
   Database,
@@ -42,6 +43,17 @@ import {
   Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { CarbonAtlasControls } from "./CarbonAtlasControls";
+import { PowerRegionPanel, PowerViews } from "./PowerRegionPanel";
+import { useCarbonAtlas } from "@/hooks/use-carbon-atlas";
+import { useReportedGeneration } from "@/hooks/use-reported-generation";
+import { useWorkspaceSelection, type WorkspaceSelection } from "@/hooks/use-workspace-selection";
+import { chinaProvinces, findChinaProvince } from "@/lib/china-provinces";
+import { beginGlobeHandoff, finishGlobeHandoff } from "@/lib/globe-handoff";
+import {
+  analysisContextHref, readGridPoint, readWorkspaceCamera, replaceWorkspaceContext, type WorkspaceContext,
+} from "@/lib/workspace-context";
+import { generationSeries } from "@/lib/topic-analysis/history";
 import { GlobeNavigation } from "@/components/opengridworks/GlobeNavigation";
 import { WeatherReplayPlayer } from "@/app/visualization/weather-replay/WeatherReplayPlayer";
 import { replayViews, type WeatherScene } from "@/lib/weather-replay/views";
@@ -53,11 +65,11 @@ import { globeTopicOrder, globeTopics, type WorkspaceTopic } from "@/lib/globe-t
 import {
   buildCarbonHeatCollection,
   carbonColor,
+  carbonFrameColorMax,
+  carbonGridPoint,
   carbonSectorLabels,
   formatCarbonTotal,
   formatCarbonValue,
-  loadCarbonFrame,
-  loadCarbonManifest,
   sampleCarbonFrame,
   type CarbonFrame,
   type CarbonManifest,
@@ -115,6 +127,46 @@ import type {
 type BooleanRecord<T extends string> = Record<T, boolean>;
 
 type ProjectMode = Exclude<WorkspaceTopic, "economy">;
+type PowerView = NonNullable<WorkspaceContext["powerView"]>;
+const WeatherResourceScene = dynamic(() => import("./WeatherResourceScene").then(module => module.WeatherResourceScene));
+const emptyProvinceFrame: { code: string; value: number | null }[] = [];
+const atlasWorldZoom = () => Math.max(0, Math.min(1.55, Math.log2(window.innerWidth / 500)));
+const mapModes = { facilities: "电源设施", generation: "月度发电", capacity: "全国装机" } as const;
+function switchList<T extends string>(state: BooleanRecord<T>, items: string | undefined) {
+  if (items === undefined) return state;
+  const enabled = new Set(items.split(","));
+  for (const key of Object.keys(state) as T[]) state[key] = enabled.has(key);
+  return state;
+}
+
+function encodeCamera(camera: MapCameraState) {
+  const [lng, lat] = camera.center;
+  return [((lng + 180) % 360 + 360) % 360 - 180, lat, camera.zoom, camera.pitch, camera.bearing]
+    .map(value => Number(value.toFixed(4))).join(",");
+}
+
+function contextCamera(topic: WorkspaceTopic, context: WorkspaceContext): MapCameraState | undefined {
+  const camera = readWorkspaceCamera(context.camera);
+  if (camera) return camera;
+  const province = findChinaProvince(context.region);
+  if (topic === "power" && province) return { center: province.center, zoom: 5.25, pitch: 0, bearing: 0 };
+  if (topic === "power" && ["capacity", "generation"].includes(context.powerView ?? "")) {
+    return { center: [104, 35], zoom: 3.65, pitch: 0, bearing: 0 };
+  }
+  if (topic === "carbon" && context.projection === "map") {
+    const place = carbonTargets.find(item => item.id === context.region);
+    return { center: place && place.id !== "global" ? place.center : [6, 19], zoom: place && place.id !== "global" ? place.zoom : 1.08, pitch: 0, bearing: 0 };
+  }
+  const region = regionTargets.find(item => item.id !== "global" && item.id === context.region);
+  return region ? { center: region.center, zoom: region.zoom, pitch: region.pitch, bearing: region.bearing } : undefined;
+}
+
+function themeForContext(context: WorkspaceContext, topic: WorkspaceTopic): MapThemeKey {
+  if (topic === "weather") return "goes";
+  const themes = topic === "economy" ? economyMapThemes : mapThemes;
+  return themes.find(theme => theme.key === context.basemap)?.key
+    ?? (topic === "carbon" && context.projection === "map" ? "satellite" : "nasa");
+}
 const EconomyWorkspace = dynamic(() => import("@/components/opengridworks/EconomyWorkspace").then((module) => module.EconomyWorkspace));
 type MapProperties = Record<string, string | number | boolean>;
 type PointCollection = FeatureCollection<Point, MapProperties>;
@@ -227,6 +279,26 @@ const economyMapThemes: MapTheme[] = [
     rasterBrightnessMax: 0.72,
   },
 ];
+const carbonTargets = [
+  { id: "global", label: "全球", center: defaultRegion.center, zoom: defaultRegion.zoom },
+  ...Object.entries({ CHN: "中国", USA: "美国", IND: "印度", JPN: "日本", DEU: "德国", BRA: "巴西", FRA: "法国", GBR: "英国", AUS: "澳大利亚", ZAF: "南非", CAN: "加拿大", MEX: "墨西哥", IDN: "印度尼西亚", KOR: "韩国", RUS: "俄罗斯", SAU: "沙特阿拉伯", ESP: "西班牙", ITA: "意大利" })
+    .flatMap(([id, label]) => {
+      const point = countryCenters.find(country => country.code === id);
+      return point ? [{ id, label, center: point.center as Coordinates, zoom: 3.7 }] : [];
+    }),
+  ...chinaProvinces.map(province => ({ id: province.code, label: province.name, center: province.center, zoom: 5.25 })),
+];
+const generationTechnologies = (product: string): TechnologyKey[] => {
+  switch (product) {
+    case "wind-power": return ["wind", "offshore"];
+    case "solar-power": return ["solar"];
+    case "hydro-power": return ["hydro"];
+    case "nuclear-power": return ["nuclear"];
+    case "thermal-power": return ["coal", "gas", "oil", "biomass"];
+    default: return [];
+  }
+};
+
 const globeSpinStepDurationMs = 1000;
 const globeSpinSecondsPerCycle = 240;
 const globeSpinMaxZoom = 2.5;
@@ -248,6 +320,7 @@ const generationModeLabels: Record<GenerationTimeMode, string> = {
   monthly: "月度",
 };
 
+const labelPresetKeys = ["zoom-v2", "zoom-v1", "lines-only", "no-labels", "bleed"] as const satisfies readonly LabelPreset[];
 const initialLabelSettings: LabelSettings = {
   preset: "zoom-v2",
   showLabels: true,
@@ -856,10 +929,10 @@ const initiallyHiddenBusinessLayerIds = [
 const openInfraAttribution = "OpenStreetMap contributors";
 const naturalEarthAttribution = "Natural Earth";
 const naturalEarthSources = {
-  countries: "/api/data/geojson?path=/data/natural-earth/ne_50m_admin_0_countries.geojson",
-  countryLines: "/api/data/geojson?path=/data/natural-earth/ne_50m_admin_0_boundary_lines_land.geojson",
-  admin1Polygons: "/api/data/geojson?path=/data/natural-earth/ne_50m_admin_1_states_provinces.geojson",
-  admin1Lines: "/api/data/geojson?path=/data/natural-earth/ne_50m_admin_1_states_provinces_lines.geojson",
+  countries: "/data/natural-earth/ne_50m_admin_0_countries.geojson",
+  countryLines: "/data/natural-earth/ne_50m_admin_0_boundary_lines_land.geojson",
+  admin1Polygons: "/data/natural-earth/ne_50m_admin_1_states_provinces.geojson",
+  admin1Lines: "/data/natural-earth/ne_50m_admin_1_states_provinces_lines.geojson",
 };
 
 function localPowerTileUrl() {
@@ -1662,6 +1735,8 @@ function addDiamondImage(map: Map, id: string, fill: string, frame: string, glow
   map.addImage(id, context.getImageData(0, 0, canvas.width, canvas.height), { pixelRatio });
 }
 
+const countryFillOpacity: ExpressionSpecification = ["interpolate", ["linear"], ["zoom"], 1, 0.32, 2.4, 0.38, 5.5, 0.22];
+
 function addInteractiveLayers(map: Map) {
   map.addSource("energy-assets", { type: "geojson", data: emptyPointCollection() });
   map.addSource("carbon-emissions", { type: "geojson", data: emptyPointCollection() });
@@ -1965,8 +2040,20 @@ function addInteractiveLayers(map: Map) {
         "#123a43",
         ["match", ["get", "MAPCOLOR9"], 1, "#101820", 2, "#121c24", 3, "#151b22", 4, "#102027", 5, "#151a25", 6, "#121f20", 7, "#151f2a", 8, "#111b24", 9, "#16202a", "#101720"],
       ],
-      "fill-opacity": ["interpolate", ["linear"], ["zoom"], 1, 0.32, 2.4, 0.38, 5.5, 0.22],
+      "fill-opacity": countryFillOpacity,
       "fill-outline-color": "rgba(255, 255, 255, 0.12)",
+    },
+  });
+
+  map.addLayer({
+    id: "carbon-atlas-ocean", type: "background", layout: { visibility: "none" },
+    paint: { "background-color": "#5c686d", "background-opacity": .97 },
+  });
+  map.addLayer({
+    id: "carbon-atlas-land", type: "fill", source: "ne-countries", layout: { visibility: "none" },
+    paint: {
+      "fill-color": ["match", ["get", "MAPCOLOR9"], 1, "#525c3d", 2, "#58603f", 4, "#5c6445", 6, "#505c43", "#545f45"],
+      "fill-outline-color": "#424f41", "fill-opacity": .98,
     },
   });
 
@@ -2042,6 +2129,39 @@ function addInteractiveLayers(map: Map) {
     layout: {
       visibility: "none",
     },
+  });
+
+  const hotspotColor: ExpressionSpecification = [
+    "interpolate", ["linear"], ["get", "weight"],
+    0, "#319d70", .25, "#8ec565", .55, "#eac94b", .8, "#fa8a4a", 1, "#ffdd9c",
+  ];
+  map.addLayer({
+    id: "carbon-hotspot-glow", type: "circle", source: "carbon-emissions",
+    layout: { visibility: "none" },
+    paint: {
+      "circle-color": hotspotColor, "circle-opacity": .29, "circle-blur": .88,
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 0, 2, 3, 4, 6, 11],
+    },
+  });
+  map.addLayer({
+    id: "carbon-hotspots", type: "circle", source: "carbon-emissions",
+    layout: { visibility: "none" },
+    paint: {
+      "circle-color": hotspotColor,
+      "circle-opacity": ["interpolate", ["linear"], ["get", "weight"], 0, .22, .4, .59, 1, .94],
+      "circle-radius": ["interpolate", ["linear"], ["zoom"],
+        0, ["+", .55, ["*", 1.55, ["get", "weight"]]], 6, ["+", .8, ["*", 5, ["get", "weight"]]]],
+    },
+  });
+  map.addLayer({
+    id: "reported-generation-fill", type: "fill", source: "ne-admin1-polygons",
+    filter: ["==", ["get", "adm0_a3"], "CHN"], layout: { visibility: "none" },
+    paint: { "fill-color": "#39474f", "fill-opacity": .8, "fill-outline-color": "#84b5b4" },
+  });
+  map.addLayer({
+    id: "reported-generation-selection", type: "line", source: "ne-admin1-polygons",
+    filter: ["==", ["get", "iso_3166_2"], ""], layout: { visibility: "none" },
+    paint: { "line-color": "#fff2b5", "line-width": 2 },
   });
 
   map.addLayer({
@@ -2738,6 +2858,25 @@ function carbonCanvasColor(value: number, scaleMax: number) {
   return `rgba(${red}, ${green}, ${blue}, ${alpha / 255})`;
 }
 
+function carbonFeature(frame: CarbonFrame, lng: number, lat: number, colorMax: number): SelectedFeature {
+  const point = carbonGridPoint(frame, lng, lat);
+  const coordinates: Coordinates = point ? [point.longitude, point.latitude] : [lng, lat];
+  const value = point?.value;
+  const rate = value == null ? "缺测" : formatCarbonValue(value);
+  return {
+    id: `carbon-${frame.sector}-${frame.date}-${coordinates.join(",")}`, kind: "carbon",
+    title: `${carbonSectorLabels[frame.sector] ?? frame.sector} · 排放格点`, subtitle: `${rate} · ${frame.date}`,
+    coordinates, color: value ? carbonCanvasColor(value, colorMax) : "#acc2b4",
+    rows: [
+      { label: "日期", value: frame.date },
+      { label: "网格排放", value: rate },
+      { label: "格点中心", value: coordinates.map(number => number.toFixed(2) + "°").join(", ") },
+      { label: "空间分辨率", value: `${frame.grid.dx}° × ${frame.grid.dy}°` },
+    ],
+    source: "GRACED / Carbon Monitor",
+  };
+}
+
 function createWeatherScreenField(
   map: Map,
   width: number,
@@ -2944,12 +3083,13 @@ function animateWeatherParticles(
   context.restore();
 }
 
-function EarthProjectViewport({ onLoad }: { onLoad: (document: Document | null) => void }) {
+function EarthProjectViewport({ initialHash, onLoad }: { initialHash?: string; onLoad: (document: Document | null) => void }) {
+  const [source] = useState(() => "/earth/index.html?workspace" + (initialHash ? "#" + initialHash : ""));
   return (
     <section className="og-earth-project" aria-label="earth 原版气象项目">
       <iframe
         title="earth 原版气象可视化"
-        src="/earth/index.html?workspace"
+        src={source}
         className="og-earth-project-frame"
         loading="eager"
         onLoad={(event) => onLoad(event.currentTarget.contentDocument)}
@@ -2981,6 +3121,13 @@ function MapViewport({
   weatherParticlesEnabled,
   weatherHighDefinition,
   carbonFrame,
+  carbonScale,
+  carbonPlanar,
+  provinceFrame,
+  selectedProvince,
+  onSelectProvince,
+  onReady,
+  initialCamera,
   focusRequest,
   screenshotRequest,
   cinematic,
@@ -3012,6 +3159,13 @@ function MapViewport({
   weatherParticlesEnabled: boolean;
   weatherHighDefinition: boolean;
   carbonFrame: CarbonFrame | null;
+  carbonScale: number;
+  carbonPlanar: boolean;
+  provinceFrame: { code: string; value: number | null }[] | undefined;
+  selectedProvince?: string;
+  onSelectProvince: (code: string) => void;
+  onReady: () => void;
+  initialCamera?: MapCameraState;
   focusRequest: FocusRequest | null;
   screenshotRequest: number;
   cinematic: boolean;
@@ -3038,6 +3192,13 @@ function MapViewport({
   const weatherMetricRef = useRef(weatherMetric);
   const weatherFieldRef = useRef(weatherField);
   const carbonFrameRef = useRef(carbonFrame);
+  const carbonScaleRef = useRef(carbonScale);
+  const carbonPlanarRef = useRef(carbonPlanar);
+  const provinceFrameRef = useRef(provinceFrame);
+  const provinceRef = useRef(onSelectProvince);
+  const readyRef = useRef(onReady);
+  const initialView = useRef(initialCamera ?? defaultRegion);
+  const [mapUnavailable, setMapUnavailable] = useState(false);
   const chinaTransmissionPreviewLoadedRef = useRef(false);
   const chinaTransmissionDetailLoadedRef = useRef(false);
   const [ready, setReady] = useState(false);
@@ -3057,25 +3218,39 @@ function MapViewport({
     weatherMetricRef.current = weatherMetric;
     weatherFieldRef.current = weatherField;
     carbonFrameRef.current = carbonFrame;
-  }, [activeProject, carbonFrame, generationFrame, generationHeatmapActive, generationHeatmapData, onCameraChange, onHoverTooltip, onRegionHover, onScreenshotComplete, onSelectFeature, weatherField, weatherMetric]);
+    carbonScaleRef.current = carbonScale;
+    carbonPlanarRef.current = carbonPlanar;
+    provinceFrameRef.current = provinceFrame;
+    provinceRef.current = onSelectProvince;
+    readyRef.current = onReady;
+  }, [carbonScale, carbonPlanar, provinceFrame, onSelectProvince, onReady, activeProject, carbonFrame, generationFrame, generationHeatmapActive, generationHeatmapData, onCameraChange, onHoverTooltip, onRegionHover, onScreenshotComplete, onSelectFeature, weatherField, weatherMetric]);
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) {
       return;
     }
 
-    const map = new maplibregl.Map({
-      container: mapContainerRef.current,
-      style: baseMapStyle,
-      center: defaultRegion.center,
-      zoom: defaultRegion.zoom,
-      pitch: defaultRegion.pitch,
-      bearing: defaultRegion.bearing,
-      attributionControl: false,
-      canvasContextAttributes: {
-        preserveDrawingBuffer: true,
-      },
-    });
+    let map: Map;
+    const camera = initialView.current;
+    const atlasOverview = carbonPlanarRef.current && camera.zoom === 1.08 && camera.center[0] === 6 && camera.center[1] === 19;
+    try {
+      map = new maplibregl.Map({
+        container: mapContainerRef.current,
+        style: baseMapStyle,
+        center: camera.center,
+        zoom: atlasOverview ? atlasWorldZoom() : camera.zoom,
+        pitch: camera.pitch,
+        bearing: camera.bearing,
+        attributionControl: false,
+        canvasContextAttributes: { preserveDrawingBuffer: true },
+      });
+    } catch {
+      const fallback = requestAnimationFrame(() => {
+        setMapUnavailable(true);
+        readyRef.current();
+      });
+      return () => cancelAnimationFrame(fallback);
+    }
 
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl({ showCompass: true, showZoom: true }), "bottom-right");
@@ -3085,7 +3260,7 @@ function MapViewport({
         top: 0,
         right: 0,
         bottom: 0,
-        left: window.innerWidth >= 900 ? 360 : 0,
+        left: !carbonPlanarRef.current && window.innerWidth > 900 ? 360 : 0,
       });
     };
 
@@ -3105,7 +3280,7 @@ function MapViewport({
     ];
 
     map.on("load", () => {
-      map.setProjection({ type: "globe" });
+      map.setProjection({ type: carbonPlanarRef.current ? "mercator" : "globe" });
       applyViewportPadding();
       map.setSky({
         "sky-color": "#101821",
@@ -3116,7 +3291,12 @@ function MapViewport({
       applyMapTheme(map, defaultMapTheme);
       addInteractiveLayers(map);
       initiallyHiddenBusinessLayerIds.forEach((layerId) => setLayerVisibility(map, layerId, false));
-      window.requestAnimationFrame(() => map.resize());
+      window.requestAnimationFrame(() => {
+        if (mapRef.current !== map) return;
+        map.resize();
+        map.once("render", () => readyRef.current());
+        map.triggerRepaint();
+      });
       setReady(true);
       cameraRef.current({
         center: [map.getCenter().lng, map.getCenter().lat],
@@ -3140,7 +3320,7 @@ function MapViewport({
             y: event.point.y,
             title: `${carbonSectorLabels[activeCarbonFrame.sector] ?? activeCarbonFrame.sector}排放`,
             subtitle: `${formatCarbonValue(value)} · ${activeCarbonFrame.date}`,
-            color: carbonCanvasColor(value, Math.max(activeCarbonFrame.stats.p99, 1)),
+            color: carbonCanvasColor(value, carbonPlanarRef.current ? carbonScaleRef.current : carbonFrameColorMax(activeCarbonFrame)),
           });
         } else {
           map.getCanvas().style.cursor = "";
@@ -3225,26 +3405,9 @@ function MapViewport({
     const handleClick = (event: MapMouseEvent) => {
       if (activeProjectRef.current === "carbon") {
         const activeCarbonFrame = carbonFrameRef.current;
-        const value = activeCarbonFrame
-          ? sampleCarbonFrame(activeCarbonFrame, event.lngLat.lng, event.lngLat.lat)
-          : 0;
-        if (activeCarbonFrame && value > 0) {
-          selectRef.current({
-            id: `carbon-${activeCarbonFrame.sector}-${activeCarbonFrame.date}-${event.lngLat.lng.toFixed(2)}-${event.lngLat.lat.toFixed(2)}`,
-            kind: "carbon",
-            title: `${carbonSectorLabels[activeCarbonFrame.sector] ?? activeCarbonFrame.sector}排放`,
-            subtitle: `${formatCarbonValue(value)} · ${activeCarbonFrame.date}`,
-            coordinates: [event.lngLat.lng, event.lngLat.lat],
-            color: carbonCanvasColor(value, Math.max(activeCarbonFrame.stats.p99, 1)),
-            rows: [
-              { label: "日期", value: activeCarbonFrame.date },
-              { label: "部门", value: carbonSectorLabels[activeCarbonFrame.sector] ?? activeCarbonFrame.sector },
-              { label: "网格排放", value: formatCarbonValue(value) },
-              { label: "经纬度", value: `${event.lngLat.lat.toFixed(2)}°, ${event.lngLat.lng.toFixed(2)}°` },
-              { label: "空间分辨率", value: "0.1° × 0.1°" },
-            ],
-            source: "GRACED / Carbon Monitor",
-          });
+        const point = activeCarbonFrame ? carbonGridPoint(activeCarbonFrame, event.lngLat.lng, event.lngLat.lat) : null;
+        if (activeCarbonFrame && point) {
+          selectRef.current(carbonFeature(activeCarbonFrame, point.longitude, point.latitude, carbonScaleRef.current));
         }
         return;
       }
@@ -3272,6 +3435,15 @@ function MapViewport({
           });
         }
         return;
+      }
+      if (provinceFrameRef.current && map.getLayer("reported-generation-fill")) {
+        const features = map.queryRenderedFeatures(event.point, { layers: ["reported-generation-fill"] });
+        const iso = features[0]?.properties?.iso_3166_2;
+        const province = typeof iso === "string" ? findChinaProvince(iso) : undefined;
+        if (province) {
+          provinceRef.current(province.code);
+          return;
+        }
       }
       if (generationActiveRef.current) {
         const heatFeatures = getQueryableLayers(map, ["generation-heat-fill"]).length > 0
@@ -3382,10 +3554,42 @@ function MapViewport({
 
     const heatmapVisible = activeProject === "carbon" && Boolean(carbonFrame);
     getGeoJsonSource(map, "carbon-emissions")?.setData(
-      carbonFrame ? buildCarbonHeatCollection(carbonFrame) : emptyPointCollection(),
+      heatmapVisible && carbonFrame
+        ? buildCarbonHeatCollection(carbonFrame, carbonPlanar ? carbonScale : undefined)
+        : emptyPointCollection(),
     );
-    setLayerVisibility(map, "carbon-emissions-heatmap", heatmapVisible);
-  }, [activeProject, carbonFrame, ready]);
+    setLayerVisibility(map, "carbon-emissions-heatmap", heatmapVisible && !carbonPlanar);
+    setLayerVisibility(map, "carbon-hotspot-glow", heatmapVisible && carbonPlanar);
+    setLayerVisibility(map, "carbon-hotspots", heatmapVisible && carbonPlanar);
+    setLayerVisibility(map, "carbon-atlas-ocean", carbonPlanar);
+    setLayerVisibility(map, "carbon-atlas-land", carbonPlanar);
+  }, [activeProject, carbonFrame, carbonPlanar, carbonScale, ready]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    map.setProjection({ type: carbonPlanar ? "mercator" : "globe" });
+    map.setRenderWorldCopies(!carbonPlanar);
+    map.setPadding({ top: 0, right: 0, bottom: 0, left: !carbonPlanar && window.innerWidth > 900 ? 360 : 0 });
+  }, [carbonPlanar, ready]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    const entries = new globalThis.Map(provinceFrame?.map(row => [row.code, row.value]));
+    const values = [...entries.values()].filter((value): value is number => value !== null);
+    const maximum = Math.max(...values, 1);
+    const colors = chinaProvinces.flatMap(({ iso, code }) => {
+      const value = entries.get(code);
+      const color = value == null ? "#39474f" : generationHeatColor(Math.sqrt(value / maximum));
+      return [iso, color];
+    });
+    const color = ["match", ["get", "iso_3166_2"], ...colors, "#39474f"] as unknown as ExpressionSpecification;
+    map.setPaintProperty("reported-generation-fill", "fill-color", color);
+    setLayerVisibility(map, "reported-generation-fill", Boolean(provinceFrame));
+    setLayerVisibility(map, "reported-generation-selection", Boolean(provinceFrame && selectedProvince));
+    map.setFilter("reported-generation-selection", ["==", ["get", "iso_3166_2"], findChinaProvince(selectedProvince)?.iso ?? ""]);
+  }, [provinceFrame, ready, selectedProvince]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -3393,12 +3597,12 @@ function MapViewport({
       return;
     }
 
-    const heatmapVisible = generationHeatmapActive && Boolean(generationHeatmapData?.entries.length);
+    const heatmapVisible = activeProject === "power" && generationHeatmapActive && Boolean(generationHeatmapData?.entries.length);
     setLayerVisibility(map, "generation-heat-fill", heatmapVisible);
     setLayerVisibility(map, "generation-heat-border", heatmapVisible);
     setLayerVisibility(map, "generation-heat-hover", heatmapVisible);
     map.setPaintProperty("generation-heat-fill", "fill-color", generationHeatColorExpression(generationHeatmapData));
-  }, [generationHeatmapActive, generationHeatmapData, ready]);
+  }, [activeProject, generationHeatmapActive, generationHeatmapData, ready]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -3623,20 +3827,19 @@ function MapViewport({
       return;
     }
 
-    map.flyTo({
+    map.stop();
+    map.easeTo({
       center: focusRequest.center,
       zoom: focusRequest.zoom,
       pitch: focusRequest.pitch ?? 35,
       bearing: focusRequest.bearing ?? map.getBearing(),
-      speed: 0.65,
-      curve: 1.35,
-      essential: true,
+      duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 390,
     });
   }, [focusRequest, ready]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !ready || cinematic) {
+    if (!map || !ready || cinematic || carbonPlanar || selectedProvince) {
       return;
     }
 
@@ -3649,7 +3852,7 @@ function MapViewport({
     let wheelResumeTimer = 0;
 
     const spinGlobe = () => {
-      if (pointerIsDown || wheelResumeTimer || map.isMoving() || map.getZoom() > globeSpinMaxZoom) {
+      if (document.hidden || pointerIsDown || wheelResumeTimer || map.isMoving() || map.getZoom() > globeSpinMaxZoom) {
         return;
       }
 
@@ -3685,6 +3888,7 @@ function MapViewport({
     window.addEventListener("pointerup", resumeAfterPointer);
     window.addEventListener("pointercancel", resumeAfterPointer);
     map.on("moveend", spinGlobe);
+    document.addEventListener("visibilitychange", spinGlobe);
     spinGlobe();
 
     return () => {
@@ -3693,10 +3897,11 @@ function MapViewport({
       window.removeEventListener("pointerup", resumeAfterPointer);
       window.removeEventListener("pointercancel", resumeAfterPointer);
       map.off("moveend", spinGlobe);
+      document.removeEventListener("visibilitychange", spinGlobe);
       window.clearTimeout(wheelResumeTimer);
       map.stop();
     };
-  }, [cinematic, ready]);
+  }, [carbonPlanar, cinematic, ready, selectedProvince]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -3893,9 +4098,10 @@ function MapViewport({
   }, [cinematic, ready]);
 
   return (
-    <div className="og-map-viewport" aria-label={activeProject === "carbon" ? "交互式碳排放地球" : "交互式电源项目地图"}>
+    <div className="og-map-viewport" aria-label={activeProject === "carbon" ? "交互式碳排放地球" : "交互式电源项目地图"} data-map-ready={ready}>
       <div className="og-starfield" aria-hidden="true" />
       <div ref={mapContainerRef} className="og-maplibre-container" />
+      {mapUnavailable ? <p className="og-map-unavailable" role="status">当前浏览器无法绘制地图，仍可使用专题分析。</p> : null}
       <canvas
         ref={weatherOverlayRef}
         className={`og-weather-canvas og-weather-overlay ${activeProject === "weather" ? "is-active" : ""}`}
@@ -4250,6 +4456,7 @@ function CarbonLegendPanel({
   onDateChange,
   onSectorChange,
   onPlayingChange,
+  onRetry,
 }: {
   manifest: CarbonManifest | null;
   activeDate: string;
@@ -4261,6 +4468,7 @@ function CarbonLegendPanel({
   onDateChange: (date: string) => void;
   onSectorChange: (sector: string) => void;
   onPlayingChange: (playing: boolean) => void;
+  onRetry: () => void;
 }) {
   const [openSections, setOpenSections] = useState({
     time: true,
@@ -4360,7 +4568,7 @@ function CarbonLegendPanel({
             {loading ? (
               <span>正在读取碳排放栅格...</span>
             ) : error ? (
-              <span>{error}</span>
+              <span>{error} <button type="button" onClick={onRetry}>重试</button></span>
             ) : frame ? (
               <>
                 <strong>{formatCarbonTotal(frame.stats.sumKgCPerHour)}</strong>
@@ -4742,13 +4950,8 @@ function TopToolbar({
 
   return (
     <div className="og-top-toolbar" aria-label="地图工具栏">
-      <div className="og-live-users">
-        <span />
-        <strong>525</strong>
-        <span>{weatherMode ? "人正在查看气象覆盖" : carbonMode ? "人正在查看碳排放图层" : "人正在查看电网图层"}</span>
-      </div>
       <div className="og-toolbar-buttons">
-        <IconButton label="已保存视图（仅管理员）" icon={Bookmark} disabled />
+        <IconButton label="数据来源" icon={Database} active={activePanel === "sources"} onClick={() => onOpenPanel("sources")} />
         <IconButton label="重置全部筛选" icon={RotateCcw} onClick={onReset} />
         <IconButton label="沉浸视图" icon={ImageIcon} active={cinematic} onClick={onCinematic} />
         {weatherMode || carbonMode ? null : (
@@ -4756,7 +4959,6 @@ function TopToolbar({
         )}
         <IconButton label="标注设置" icon={Type} active={activePanel === "labels"} onClick={() => onOpenPanel("labels")} />
         <IconButton label="地球视图控制" icon={Globe2} active={activePanel === "globe"} onClick={() => onOpenPanel("globe")} />
-        <IconButton label="登录后启用中继模式" icon={RadioTower} disabled />
         <IconButton label="导出地图 PNG" icon={Camera} onClick={onScreenshot} />
         <IconButton label="分享地图链接" icon={Share2} onClick={onShare} />
         {weatherMode || carbonMode ? null : <IconButton label="打开卡片面板" icon={Database} onClick={onCards} />}
@@ -5058,9 +5260,11 @@ function numericOrNull(value: unknown) {
 function FeaturePopup({
   feature,
   onClose,
+  analysisHref,
 }: {
   feature: SelectedFeature | null;
   onClose: () => void;
+  analysisHref?: string;
 }) {
   if (!feature) {
     return null;
@@ -5087,6 +5291,7 @@ function FeaturePopup({
           </div>
         ))}
       </dl>
+      {analysisHref ? <Link className="og-popup-analysis" href={analysisHref}>对比历史排放 <ArrowUpRight size={14} /></Link> : null}
       {feature.id === "cable-pc1" ? (
         <p className="og-landing-points">
           Ajigaura, Japan; Shima, Japan; Grover Beach, CA, United States; Harbour Pointe, WA, United States
@@ -5623,10 +5828,13 @@ function MobileGenerationSheet({
   );
 }
 
-export function MapAppShell({ initialProject = "power" }: { initialProject?: WorkspaceTopic }) {
-  const [activeProject, setActiveProject] = useState<WorkspaceTopic>(initialProject);
-  const [visibleTechnologies, setVisibleTechnologies] = useState(hiddenTechnologyState);
-  const [visibleLayers, setVisibleLayers] = useState(hiddenLayerState);
+export function MapAppShell({ initialProject = "power", initialContext = {} }: {
+  initialProject?: WorkspaceTopic;
+  initialContext?: WorkspaceContext;
+}) {
+  const startingCamera = contextCamera(initialProject, initialContext);
+  const [visibleTechnologies, setVisibleTechnologies] = useState(() => switchList(hiddenTechnologyState(), initialContext.tech));
+  const [visibleLayers, setVisibleLayers] = useState(() => switchList(hiddenLayerState(), initialContext.layers));
   const [visibleCustomLayers, setVisibleCustomLayers] = useState<BooleanRecord<CustomLayerKey>>({
     customCorridor: false,
     customHeatmap: false,
@@ -5635,17 +5843,12 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Wor
   const [visibleSourceLayers, setVisibleSourceLayers] = useState(sourceLayerState);
   const [visibleVoltageClasses, setVisibleVoltageClasses] = useState(hiddenVoltageState);
   const [visibleSubstationClasses, setVisibleSubstationClasses] = useState(hiddenVoltageState);
-  const [activeRegion, setActiveRegion] = useState<RegionMeta>(defaultRegion);
-  const [focusedRegion, setFocusedRegion] = useState<RegionTargetId>(defaultRegion.id);
-  const [mapCamera, setMapCamera] = useState<MapCameraState>({
-    center: defaultRegion.center,
-    zoom: defaultRegion.zoom,
-    pitch: defaultRegion.pitch,
-    bearing: defaultRegion.bearing,
-  });
-  const [economyMapTheme, setEconomyMapTheme] = useState<MapThemeKey>("nasa");
-  const [activeMapTheme, setActiveMapTheme] = useState<MapThemeKey>(initialProject === "weather" ? "goes" : "nasa");
-  const [activeSizeMin, setActiveSizeMin] = useState<number | null>(null);
+  const [activeRegion, setActiveRegion] = useState<RegionMeta>(() => regions.find(region => region.id === initialContext.region) ?? defaultRegion);
+  const [focusedRegion, setFocusedRegion] = useState<RegionTargetId>(() => regionTargets.find(item => item.id === initialContext.region)?.id ?? defaultRegion.id);
+  const [mapCamera, setMapCamera] = useState<MapCameraState>(startingCamera ?? defaultRegion);
+  const [economyMapTheme, setEconomyMapTheme] = useState<MapThemeKey>(() => themeForContext(initialContext, "economy"));
+  const [activeMapTheme, setActiveMapTheme] = useState<MapThemeKey>(() => themeForContext(initialContext, initialProject));
+  const [activeSizeMin, setActiveSizeMin] = useState<number | null>(initialContext.minMw ?? null);
   const [generationFrame, setGenerationFrame] = useState<GenerationFrame>(defaultGenerationFrame);
   const [generationManifest, setGenerationManifest] = useState<ClimateVreManifest | null>(null);
   const [generationSummary, setGenerationSummary] = useState<ClimateVreSummary | null>(null);
@@ -5653,35 +5856,135 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Wor
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [generationPlaying, setGenerationPlaying] = useState(false);
   const [generationHeatmapEnabled, setGenerationHeatmapEnabled] = useState(false);
-  const [weatherScene, setWeatherScene] = useState<WeatherScene>("globe");
+
   const [weatherDocument, setWeatherDocument] = useState<Document | null>(null);
-  const [carbonManifest, setCarbonManifest] = useState<CarbonManifest | null>(null);
-  const [carbonDate, setCarbonDate] = useState("");
-  const [carbonSector, setCarbonSector] = useState("Power");
-  const [carbonFrame, setCarbonFrame] = useState<CarbonFrame | null>(null);
-  const [carbonLoading, setCarbonLoading] = useState(false);
-  const [carbonError, setCarbonError] = useState<string | null>(null);
   const [carbonPlaying, setCarbonPlaying] = useState(false);
   const [databaseMapVersion, setDatabaseMapVersion] = useState(0);
   const [hoveredLegend, setHoveredLegend] = useState<LegendHover | null>(null);
-  const [labelSettings, setLabelSettings] = useState<LabelSettings>(initialLabelSettings);
+  const [labelSettings, setLabelSettings] = useState<LabelSettings>(() => ({
+    ...initialLabelSettings, preset: labelPresetKeys.some(item => item === initialContext.labels)
+      ? initialContext.labels as LabelPreset : initialLabelSettings.preset,
+  }));
   const [activePanel, setActivePanel] = useState<ToolbarPanel>(null);
   const [selectedFeature, setSelectedFeature] = useState<SelectedFeature | null>(null);
   const [hoverTooltip, setHoverTooltip] = useState<HoverTooltip>(null);
-  const [focusRequest, setFocusRequest] = useState<FocusRequest | null>({
-    nonce: 1,
-    center: defaultRegion.center,
-    zoom: defaultRegion.zoom,
-    pitch: defaultRegion.pitch,
-    bearing: defaultRegion.bearing,
-  });
-  const [, setFocusNonce] = useState(2);
+  const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
+  const focusNonce = useRef(0);
   const [screenshotRequest, setScreenshotRequest] = useState(0);
   const [cinematic, setCinematic] = useState(false);
   const [cardsOpen, setCardsOpen] = useState(false);
+  const [powerForecast, setPowerForecast] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const generationLoadStartedRef = useRef(false);
+
+  const requestFocus = useCallback((center: Coordinates, zoom: number, pitch = 0, bearing = 0) => {
+    setMapCamera({ center, zoom, pitch, bearing });
+    setFocusRequest({ nonce: ++focusNonce.current, center, zoom, pitch, bearing });
+  }, []);
+
+  const changeProject = useCallback(({ topic, context }: WorkspaceSelection) => {
+    setActivePanel(null);
+    setSelectedFeature(null);
+    setHoverTooltip(null);
+    setCardsOpen(false);
+    setCinematic(false);
+    setPowerForecast(false);
+    setFocusedRegion(regionTargets.find(item => item.id === context.region)?.id ?? defaultRegion.id);
+    setActiveRegion(regions.find(item => item.id === context.region) ?? defaultRegion);
+    setActiveMapTheme(themeForContext(context, topic));
+    setGenerationPlaying(false);
+    setCarbonPlaying(false);
+    if (topic !== "weather") setWeatherDocument(null);
+    if (topic === "economy") setEconomyMapTheme(themeForContext(context, "economy"));
+    if (topic === "power") {
+      setVisibleLayers(switchList(hiddenLayerState(), context.layers));
+      setVisibleTechnologies(switchList(hiddenTechnologyState(), context.tech));
+      setActiveSizeMin(context.minMw ?? null);
+      setLabelSettings({
+        ...initialLabelSettings,
+        preset: labelPresetKeys.find(key => key === context.labels) ?? initialLabelSettings.preset,
+      });
+    }
+    const camera = contextCamera(topic, context) ?? defaultRegion;
+    requestFocus(camera.center, camera.zoom, camera.pitch, camera.bearing);
+  }, [requestFocus]);
+
+  const { topic: activeProject, context, navigate } = useWorkspaceSelection({ topic: initialProject, context: initialContext }, changeProject);
+  const weatherScene: WeatherScene = context.replay ?? "globe";
+  const carbonPlanar = activeProject === "carbon" && context.projection === "map";
+  const resourceScene = activeProject === "weather" && context.scene === "resources";
+  const powerView = context.powerView ?? "facilities";
+  const selectedProvince = activeProject === "power" ? findChinaProvince(context.region)?.code : undefined;
+  const selectedGrid = activeProject === "carbon" ? readGridPoint(context.grid) : null;
+  const powerProduct = generationSeries.find(item => item.id === context.product)?.id ?? "electricity";
+  const statsActive = activeProject === "power" && powerView !== "facilities";
+  const { frames: carbonFrames, frame: carbonFrame, previousFrame: previousCarbonFrame, manifest: carbonManifest,
+    scaleMax: carbonScale, sector: carbonSector, date: carbonDate, error: carbonError, pending: carbonLoading, retry: retryCarbon,
+  } = useCarbonAtlas(activeProject === "carbon", context);
+  const reported = useReportedGeneration(activeProject === "power" && powerView === "generation", context.month, powerProduct, context.version);
+  const provinceFrame = activeProject === "power" && powerView === "generation"
+    ? reported.regional?.regions ?? emptyProvinceFrame : undefined;
+  const globeReady = useCallback(() => finishGlobeHandoff(activeProject), [activeProject]);
+  const weatherReady = useCallback((frameDocument: Document | null) => setWeatherDocument(frameDocument), []);
+  const rememberReplayFrame = useCallback((replayFrame: number) => replaceWorkspaceContext({ replayFrame }), []);
+  useEffect(() => {
+    if (activeProject !== "weather" || !weatherDocument) return;
+    const release = () => finishGlobeHandoff("weather");
+    const progress = weatherDocument.getElementById("status");
+    const observer = new MutationObserver(() => {
+      if (!progress?.textContent?.trim()) release();
+    });
+    if (progress) observer.observe(progress, { childList: true, subtree: true, characterData: true });
+    const painted = window.setTimeout(release, 1200);
+    const frameWindow = weatherDocument.defaultView;
+    const rememberHash = () => {
+      if (frameWindow?.location.hash) replaceWorkspaceContext({ weather: frameWindow.location.hash.slice(1) });
+    };
+    frameWindow?.addEventListener("hashchange", rememberHash);
+    return () => {
+      observer.disconnect();
+      clearTimeout(painted);
+      frameWindow?.removeEventListener("hashchange", rememberHash);
+    };
+  }, [activeProject, weatherDocument]);
+
+  const onCarbonDate = useCallback((date: string) => {
+    navigate("carbon", { date }, true);
+  }, [navigate]);
+
+  const onCarbonSector = (sector: string) => {
+    setCarbonPlaying(false);
+    const dates = carbonManifest?.frames.filter(item => item.sector === sector);
+    const next = dates?.find(item => item.date === carbonDate) ?? dates?.at(-1);
+    navigate("carbon", { sector, date: next?.date }, true);
+  };
+
+  const saveMapCamera = useCallback(() => {
+    if (activeProject === "power") {
+      replaceWorkspaceContext({
+        camera: encodeCamera(mapCamera), basemap: activeMapTheme,
+        layers: Object.entries(visibleLayers).filter(([, enabled]) => enabled).map(([key]) => key).join(","),
+        tech: Object.entries(visibleTechnologies).filter(([, enabled]) => enabled).map(([key]) => key).join(","),
+        minMw: activeSizeMin, labels: labelSettings.preset,
+        month: powerView === "generation" ? reported.month || null : null,
+        version: powerView === "generation" ? reported.published?.version ?? context.version : context.version,
+      });
+    }
+    if (activeProject === "carbon") {
+      replaceWorkspaceContext({ camera: encodeCamera(mapCamera), date: carbonDate || null, sector: carbonSector, basemap: activeMapTheme });
+    }
+  }, [activeProject, activeMapTheme, mapCamera, visibleLayers, visibleTechnologies, activeSizeMin,
+    labelSettings.preset, powerView, reported.month, reported.published, context.version, carbonDate, carbonSector]);
+
+  const beforeAnalysis = (event: MouseEvent<HTMLElement>) => {
+    if (event.target instanceof Element && event.target.closest('a[href^="/visualization"]')) {
+      saveMapCamera();
+      if (activeProject === "weather" && weatherDocument?.defaultView?.location.hash) {
+        replaceWorkspaceContext({ weather: weatherDocument.defaultView.location.hash.slice(1) });
+      }
+    }
+  };
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -5750,6 +6053,7 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Wor
 
     return () => {
       active = false;
+      generationLoadStartedRef.current = false;
     };
   }, [generationHeatmapEnabled]);
 
@@ -5766,86 +6070,24 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Wor
   }, [generationFrame.mode, generationHeatmapEnabled, generationManifest?.years, generationPlaying]);
 
   useEffect(() => {
-    if (activeProject !== "carbon" || carbonManifest) {
-      return;
-    }
-
-    let active = true;
-    void loadCarbonManifest()
-      .then((manifest) => {
-        if (!active) {
-          return;
-        }
-        const initialSector = manifest.sectors.includes("Power")
-          ? "Power"
-          : manifest.sectors[0] ?? "total";
-        const initialFrame = manifest.frames.filter((item) => item.sector === initialSector).at(-1);
-        setCarbonManifest(manifest);
-        setCarbonSector(initialSector);
-        setCarbonDate(initialFrame?.date ?? manifest.latestDate ?? "");
-        setCarbonLoading(Boolean(initialFrame));
-        setCarbonError(null);
-      })
-      .catch((error: unknown) => {
-        if (active) {
-          setCarbonError(error instanceof Error ? error.message : "碳排放目录加载失败。");
-          setCarbonLoading(false);
-        }
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [activeProject, carbonManifest]);
-
-  const activeCarbonMeta = useMemo(
-    () => carbonManifest?.frames.find((item) => item.date === carbonDate && item.sector === carbonSector) ?? null,
-    [carbonDate, carbonManifest, carbonSector],
-  );
-
-  useEffect(() => {
-    if (activeProject !== "carbon" || !activeCarbonMeta) {
-      return;
-    }
-
-    let active = true;
-    void loadCarbonFrame(activeCarbonMeta)
-      .then((frame) => {
-        if (active) {
-          setCarbonFrame(frame);
-          setCarbonError(null);
-          setCarbonLoading(false);
-        }
-      })
-      .catch((error: unknown) => {
-        if (active) {
-          setCarbonError(error instanceof Error ? error.message : "碳排放帧加载失败。");
-          setCarbonLoading(false);
-        }
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [activeCarbonMeta, activeProject]);
-
-  useEffect(() => {
-    if (!carbonPlaying || activeProject !== "carbon" || !carbonManifest) {
-      return;
-    }
-    const frames = carbonManifest.frames.filter((item) => item.sector === carbonSector);
-    if (frames.length < 2) {
-      return;
-    }
-    const timer = window.setInterval(() => {
-      setCarbonDate((currentDate) => {
-        const index = frames.findIndex((item) => item.date === currentDate);
-        return frames[(index + 1) % frames.length]?.date ?? currentDate;
-      });
-      setCarbonLoading(true);
+    if (!carbonPlaying || activeProject !== "carbon" || carbonLoading || carbonFrames.length < 2) return;
+    const timer = window.setTimeout(() => {
+      if (document.hidden) return;
+      const index = carbonFrames.findIndex(item => item.date === carbonDate);
+      onCarbonDate(carbonFrames[(index + 1) % carbonFrames.length].date);
     }, 1100);
-    return () => window.clearInterval(timer);
-  }, [activeProject, carbonManifest, carbonPlaying, carbonSector]);
+    const resume = () => {
+      if (!document.hidden) {
+        const index = carbonFrames.findIndex(item => item.date === carbonDate);
+        onCarbonDate(carbonFrames[(index + 1) % carbonFrames.length].date);
+      }
+    };
+    document.addEventListener("visibilitychange", resume);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", resume);
+    };
+  }, [activeProject, carbonDate, carbonFrames, carbonLoading, carbonPlaying, onCarbonDate]);
 
   const togglePanel = useCallback((panel: NonNullable<ToolbarPanel>) => {
     setActivePanel((currentPanel) => currentPanel === panel ? null : panel);
@@ -5855,17 +6097,10 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Wor
     setEconomyMapTheme((key) => key === "nasa" ? "cartoDark" : key);
   }, []);
 
-  const requestFocus = useCallback((center: Coordinates, zoom: number, pitch = 38, bearing = 0) => {
-    setMapCamera({ center, zoom, pitch, bearing });
-    setFocusNonce((nonce) => {
-      const nextNonce = nonce + 1;
-      setFocusRequest({ nonce: nextNonce, center, zoom, pitch, bearing });
-      return nextNonce;
-    });
-  }, []);
-
   const flyToRegion = useCallback((target: RegionTarget) => {
     setFocusedRegion(target.id);
+    setActiveRegion(regions.find(item => item.id === target.id) ?? defaultRegion);
+    replaceWorkspaceContext({ region: target.id });
     requestFocus(target.center, target.zoom, target.pitch, target.bearing);
   }, [requestFocus]);
 
@@ -5885,6 +6120,7 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Wor
       setGenerationLoading(true);
     }
     setGenerationHeatmapEnabled(true);
+    if (powerView !== "facilities") navigate("power", { powerView: "facilities" });
     setLabelSettings({
       ...initialLabelSettings,
       preset: "zoom-v2",
@@ -5902,63 +6138,65 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Wor
       requestFocus(chinaTarget.center, 3.75, 0, 0);
     }
     showToast("已切换到中国发电量热力图视图；其它图层已暂时隐藏，可手动重新打开。");
-  }, [requestFocus, showToast]);
+  }, [navigate, powerView, requestFocus, showToast]);
 
   const switchProject = useCallback((project: WorkspaceTopic) => {
     if (project === activeProject) return;
-    const url = new URL(window.location.href);
-    if (project === "power") url.searchParams.delete("topic");
-    else url.searchParams.set("topic", project);
-    window.history.replaceState(null, "", url);
-    setActiveProject(project);
-    setFocusedRegion(defaultRegion.id);
-    setWeatherDocument(null);
+    saveMapCamera();
+    if (activeProject === "weather" && weatherDocument?.defaultView?.location.hash) {
+      replaceWorkspaceContext({ weather: weatherDocument.defaultView.location.hash.slice(1) });
+    }
+    const sharedMap = (topic: WorkspaceTopic) => topic === "power" || topic === "carbon";
+    if (!sharedMap(activeProject) || !sharedMap(project)) beginGlobeHandoff(project);
+    navigate(project);
+  }, [activeProject, navigate, saveMapCamera, weatherDocument]);
+
+  const selectPowerProvince = useCallback((id: string) => {
+    const province = findChinaProvince(id);
+    const center: Coordinates = province?.center ?? [104, 35];
+    const zoom = province ? 5.25 : 3.65;
+    navigate("power", { region: province?.code ?? "china", camera: encodeCamera({ center, zoom, pitch: 0, bearing: 0 }) }, true);
+    setFocusedRegion("china");
+    setActiveRegion(regions.find(item => item.id === "china") ?? defaultRegion);
+    requestFocus(center, zoom);
+  }, [navigate, requestFocus]);
+
+  const selectCarbonRegion = (id: string) => {
+    const target = carbonTargets.find(item => item.id === id);
+    if (!target) return;
+    const center: Coordinates = id === "global" && carbonPlanar ? [6, 19] : target.center;
+    const zoom = id === "global" && carbonPlanar ? atlasWorldZoom() : target.zoom;
+    navigate("carbon", { region: id, grid: undefined, camera: encodeCamera({ center, zoom, pitch: 0, bearing: 0 }) }, true);
+    requestFocus(center, zoom);
+  };
+
+  const selectPowerView = (view: PowerView) => {
+    if (view === powerView) return;
     setSelectedFeature(null);
-    setHoverTooltip(null);
-    setCardsOpen(false);
-    setActivePanel(null);
-    setCinematic(false);
+    setPowerForecast(false);
+    setGenerationPlaying(false);
+    setGenerationHeatmapEnabled(false);
+    const region = view === "generation" ? selectedProvince ?? "china" : context.region;
+    const nationalCamera = { center: [104, 35] as Coordinates, zoom: 3.65, pitch: 0, bearing: 0 };
+    const focusNation = view === "generation" && powerView === "facilities" && !selectedProvince;
+    navigate("power", { powerView: view, region, camera: encodeCamera(focusNation ? nationalCamera : mapCamera) });
+    if (focusNation) requestFocus(nationalCamera.center, nationalCamera.zoom);
+  };
 
-    if (project === "economy") {
-      setGenerationPlaying(false);
-      setCarbonPlaying(false);
-      return;
-    }
-
-    if (project === "carbon") {
-      setVisibleTechnologies(hiddenTechnologyState());
-      setVisibleLayers(hiddenLayerState());
-      setVisibleVoltageClasses(hiddenVoltageState());
-      setVisibleSubstationClasses(hiddenVoltageState());
-      setGenerationPlaying(false);
-      setGenerationHeatmapEnabled(false);
-      setCarbonPlaying(false);
-      setCarbonLoading(!carbonFrame);
-      setActiveRegion(defaultRegion);
-      setActiveMapTheme("nasa");
-      requestFocus(defaultRegion.center, defaultRegion.zoom, defaultRegion.pitch, defaultRegion.bearing);
-      showToast("已切换到碳排放地球。");
-      return;
-    }
-
-    if (project === "weather") {
-      setVisibleTechnologies(hiddenTechnologyState());
-      setVisibleLayers(hiddenLayerState());
-      setVisibleVoltageClasses(hiddenVoltageState());
-      setVisibleSubstationClasses(hiddenVoltageState());
-      setGenerationPlaying(false);
-      setGenerationHeatmapEnabled(false);
-      setActiveRegion(defaultRegion);
-      setActiveMapTheme("goes");
-      requestFocus(defaultRegion.center, defaultRegion.zoom, 0, 0);
-      showToast("已切换到 earth 原版气象项目。");
-      return;
-    }
-
-    setActiveMapTheme("nasa");
-    requestFocus(defaultRegion.center, defaultRegion.zoom, defaultRegion.pitch, defaultRegion.bearing);
-    showToast("已切换回电源项目。");
-  }, [activeProject, carbonFrame, requestFocus, showToast]);
+  const setCarbonProjection = (projection: "globe" | "map") => {
+    if (projection === context.projection) return;
+    saveMapCamera();
+    const global = (!context.region || context.region === "global") && mapCamera.zoom <= 2.5;
+    const center: Coordinates = global ? (projection === "map" ? [6, 19] : defaultRegion.center) : mapCamera.center;
+    const zoom = projection === "map" ? (global ? atlasWorldZoom() : Math.max(.3, mapCamera.zoom - .8))
+      : Math.min(8, Math.max(1.92, mapCamera.zoom + .8));
+    const camera = encodeCamera({ center, zoom, pitch: 0, bearing: 0 });
+    // Separate visual defaults from the existing 3D heatmap's chosen basemap.
+    const basemap = projection === "map" ? "satellite" : "nasa";
+    navigate("carbon", { projection, camera, basemap });
+    setActiveMapTheme(basemap);
+    requestFocus(center, zoom);
+  };
 
   const regionStats = useMemo(() => {
     void databaseMapVersion;
@@ -6133,24 +6371,53 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Wor
   };
 
   const shareMap = () => {
-    const params = new URLSearchParams();
-    if (activeProject !== "power") params.set("topic", activeProject);
-    params.set("layers", Object.entries(visibleLayers).filter(([, enabled]) => enabled).map(([key]) => key).join(","));
-    params.set("tech", Object.entries(visibleTechnologies).filter(([, enabled]) => enabled).map(([key]) => key).join(","));
-    params.set("labels", labelSettings.preset);
-    if (activeSizeMin) {
-      params.set("minMw", String(activeSizeMin));
+    saveMapCamera();
+    if (!navigator.clipboard) {
+      showToast("可从地址栏复制当前地图链接。");
+      return;
     }
-    const url = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
-
-    if (navigator.clipboard) {
-      void navigator.clipboard.writeText(url);
-      showToast("已复制包含当前筛选条件的分享链接。");
-    } else {
-      window.history.replaceState(null, "", url);
-      showToast("地址栏中的分享 URL 已更新。");
-    }
+    void navigator.clipboard.writeText(window.location.href).then(() => {
+      showToast("已复制当前地图链接。");
+    }).catch(() => showToast("可从地址栏复制当前地图链接。"));
   };
+
+  const powerAnalysisHref = powerView === "capacity"
+    ? analysisContextHref("power", { year: context.year, product: powerProduct })
+    : analysisContextHref("generation", { month: reported.month || context.month, region: selectedProvince, product: powerProduct,
+      version: reported.published?.version ?? context.version });
+  const comparableCarbon = carbonSector === "Power";
+  const carbonAnalysisHref = analysisContextHref("carbon", { date: comparableCarbon ? carbonDate || undefined : undefined });
+  const carbonCompareHref = comparableCarbon ? analysisContextHref("carbon", { date: carbonDate || undefined }, "carbon-comparison") : undefined;
+  const displayedFeature = activeProject === "carbon"
+    ? carbonFrame && selectedGrid ? carbonFeature(carbonFrame, ...selectedGrid, carbonScale) : null
+    : selectedFeature;
+  const visibleCarbonFrame = carbonFrame
+    ?? (previousCarbonFrame?.sector === carbonSector && carbonLoading ? previousCarbonFrame : null);
+
+  const onFeature = (feature: SelectedFeature) => {
+    if (feature.kind === "carbon") {
+      navigate("carbon", {
+        grid: feature.coordinates.map(value => value.toFixed(4)).join(","),
+        date: carbonDate || undefined,
+        sector: carbonSector,
+      }, true);
+      return;
+    }
+    setSelectedFeature(feature);
+  };
+  const closeFeature = () => {
+    if (activeProject === "carbon") navigate("carbon", { grid: undefined }, true);
+    else setSelectedFeature(null);
+  };
+
+  if (resourceScene) return (
+    <main className="og-app-shell is-resource-scene" onClickCapture={beforeAnalysis}>
+      <GlobeNavigation activeTopic="weather" onTopicChange={switchProject} />
+      <WeatherResourceScene context={context}
+        onChange={(update) => navigate("weather", update, true)}
+        onBack={() => navigate("weather", { scene: undefined })} />
+    </main>
+  );
 
   if (activeProject === "economy") {
     return (
@@ -6159,6 +6426,8 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Wor
         <EconomyWorkspace
           basemap={economyMapThemes.find(({ key }) => key === economyMapTheme) ?? defaultMapTheme}
           onBasemapError={fallbackEconomyBasemap}
+          initialContext={context}
+          onReady={globeReady}
         />
         <div className="og-layer-cards" aria-label="经济地球底图控制">
           <BasemapButton theme={economyMapTheme} expanded={activePanel === "mapType"} onClick={() => togglePanel("mapType")} />
@@ -6167,7 +6436,11 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Wor
           <MapTypePanel
             themes={economyMapThemes}
             activeMapTheme={economyMapTheme}
-            onTheme={setEconomyMapTheme}
+            onTheme={(theme) => {
+              setEconomyMapTheme(theme);
+              replaceWorkspaceContext({ basemap: theme });
+              setActivePanel(null);
+            }}
             onClose={() => setActivePanel(null)}
           />
         ) : null}
@@ -6181,24 +6454,26 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Wor
   const activeGas = visibleTechnologies.gas || visibleLayers.gasPipelines;
   const activePlanned = visibleLayers.plannedUpgrades;
   const sidebarSummary = {
-    power: `${activeRegion.label} · ${regionStats.totalPlants.toLocaleString()} 个可见项目`,
+    power: powerView === "facilities" ? `${activeRegion.label} · ${regionStats.totalPlants.toLocaleString()} 个可见项目` : mapModes[powerView] + " · 国家统计局",
     weather: weatherScene === "globe" ? "全球风场与气象覆盖" : replayViews[weatherScene].title,
     carbon: "GRACED · 全球 0.1° 网格",
   }[activeProject];
   return (
-    <main className={`og-app-shell ${cinematic ? "is-cinematic" : ""} ${activeProject === "weather" ? "is-earth-project" : ""} ${activeProject === "carbon" ? "is-carbon-project" : ""}`}>
+    <main className={`og-app-shell ${cinematic ? "is-cinematic" : ""} ${activeProject === "weather" ? "is-earth-project" : ""} ${activeProject === "carbon" ? "is-carbon-project" : ""}${carbonPlanar ? " is-carbon-atlas" : ""}${statsActive ? " is-power-statistics" : ""}${statsActive && powerForecast ? " is-power-forecast" : ""}`}
+      onClickCapture={beforeAnalysis}>
       <GlobeNavigation activeTopic={activeProject} onTopicChange={switchProject} />
       {activeProject === "weather" ? (
         <>
           <div className="og-weather-original" hidden={weatherScene !== "globe"}>
-            <EarthProjectViewport onLoad={setWeatherDocument} />
+            <EarthProjectViewport initialHash={context.weather} onLoad={weatherReady} />
           </div>
           {weatherScene !== "globe" && (
             <div className="og-weather-replay-stage">
-              <WeatherReplayPlayer query="" scene={weatherScene} />
+              <WeatherReplayPlayer query="" scene={weatherScene} initialFrame={context.replayFrame}
+                onFrameChange={rememberReplayFrame} />
             </div>
           )}
-          <WeatherSceneSwitcher scene={weatherScene} onChange={setWeatherScene} />
+          <WeatherSceneSwitcher scene={weatherScene} onChange={replay => navigate("weather", { replay: replay === "globe" ? undefined : replay })} />
         </>
       ) : (
         <MapViewport
@@ -6215,7 +6490,7 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Wor
           bubbleScale={bubbleScale}
           hoveredLegend={hoveredLegend}
           labelSettings={labelSettings}
-          generationHeatmapActive={generationHeatmapEnabled}
+          generationHeatmapActive={activeProject === "power" && powerView === "facilities" && generationHeatmapEnabled}
           generationHeatmapData={generationHeatmapData}
           generationFrame={generationFrame}
           weatherMetric={defaultWeatherMetric}
@@ -6223,18 +6498,25 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Wor
           weatherWindField={null}
           weatherParticlesEnabled
           weatherHighDefinition={false}
-          carbonFrame={carbonFrame}
+          carbonFrame={visibleCarbonFrame}
+          carbonScale={carbonScale}
+          carbonPlanar={carbonPlanar}
+          provinceFrame={provinceFrame}
+          selectedProvince={selectedProvince}
+          onSelectProvince={selectPowerProvince}
+          initialCamera={startingCamera}
+          onReady={globeReady}
           focusRequest={focusRequest}
           screenshotRequest={screenshotRequest}
           cinematic={cinematic}
-          onSelectFeature={setSelectedFeature}
+          onSelectFeature={onFeature}
           onHoverTooltip={setHoverTooltip}
           onRegionHover={handleRegionHover}
           onCameraChange={setMapCamera}
           onScreenshotComplete={showToast}
         />
       )}
-      {activeProject === "power" ? (
+      {activeProject === "power" && !statsActive ? (
         <MobilePowerShortcuts
           activeGeneration={generationHeatmapEnabled}
           activeCleanEnergy={activeCleanEnergy}
@@ -6249,11 +6531,22 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Wor
           onPlanned={() => toggleLayer("plannedUpgrades")}
         />
       ) : null}
-      <WorkspaceSidebar
+      {carbonPlanar ? (
+        <CarbonAtlasControls
+          manifest={carbonManifest} frames={carbonFrames} frame={visibleCarbonFrame} date={carbonDate} sector={carbonSector}
+          regionOptions={carbonTargets} region={context.region ?? "global"} pending={carbonLoading} error={carbonError}
+          playing={carbonPlaying} scaleMax={carbonScale} analysisHref={carbonAnalysisHref} compareHref={carbonCompareHref}
+          onRegion={selectCarbonRegion} onDate={onCarbonDate} onSector={onCarbonSector} onPlay={setCarbonPlaying}
+          onShare={shareMap} onExit={() => setCarbonProjection("globe")} onRetry={retryCarbon}
+        />
+      ) : <WorkspaceSidebar
         topic={activeProject}
         summary={sidebarSummary}
-        onSearch={activeProject === "power" ? () => togglePanel("search") : undefined}
-        leadingFilter={activeProject === "power" ? (
+        analysisHref={activeProject === "power" ? powerAnalysisHref : activeProject === "carbon" ? carbonAnalysisHref : undefined}
+        onSearch={activeProject === "power" && powerView === "facilities" ? () => togglePanel("search") : undefined}
+        leadingFilter={activeProject === "power" ? <>
+          <PowerViews view={powerView} onView={selectPowerView} />
+          {powerView === "facilities" ? (
           <WorkspaceFilterSelect
             label="定位地区"
             options={regionTargets.map((target) => ({ value: target.id, label: target.label, disabled: !target.enabled }))}
@@ -6263,9 +6556,17 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Wor
               if (target) flyToRegion(target);
             }}
           />
-        ) : null}
+          ) : null}</> : activeProject === "carbon" ? (
+            <button className="og-workspace-action og-secondary-entry" type="button" onClick={() => setCarbonProjection("map")}>
+              <MapIcon size={16} /> 二维排放地图 <ArrowUpRight size={14} />
+            </button>
+          ) : null}
       >
-        {activeProject === "power" ? (
+        {statsActive ? <button className="og-workspace-action og-secondary-entry" type="button"
+          aria-pressed={powerForecast} onClick={() => setPowerForecast(value => !value)}>
+          <Activity size={16} /> {powerForecast ? "返回电力统计" : "查看电力预测"} <ArrowUpRight size={14} />
+        </button> : null}
+        {activeProject === "power" && powerView === "facilities" ? (
           <PowerLegendPanel
             regionStats={regionStats}
             camera={mapCamera}
@@ -6305,24 +6606,33 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Wor
             loading={carbonLoading}
             error={carbonError}
             playing={carbonPlaying}
-            onDateChange={(date) => {
-              setCarbonLoading(true);
-              setCarbonDate(date);
-            }}
-            onSectorChange={(sector) => {
-              if (sector === carbonSector) return;
-              const nextFrame = carbonManifest?.frames.filter((item) => item.sector === sector).at(-1);
-              setCarbonLoading(Boolean(nextFrame));
-              setCarbonSector(sector);
-              setCarbonDate(nextFrame?.date ?? "");
-            }}
+            onDateChange={onCarbonDate}
+            onSectorChange={onCarbonSector}
             onPlayingChange={setCarbonPlaying}
+            onRetry={retryCarbon}
           />
-        ) : weatherScene === "globe" ? <WeatherSidebarFilters frameDocument={weatherDocument} /> : (
-          <p className="og-weather-sidebar-status">{replayViews[weatherScene].description}</p>
-        )}
-      </WorkspaceSidebar>
-      {activeProject !== "weather" ? (
+        ) : activeProject === "weather" ? (
+          <>
+            <button className="og-workspace-action og-secondary-entry" type="button"
+              onClick={() => navigate("weather", { scene: "resources" })}>
+              <Activity size={16} /> 风光资源情景 <ArrowUpRight size={14} />
+            </button>
+            {weatherScene === "globe" ? <WeatherSidebarFilters frameDocument={weatherDocument} /> : (
+              <p className="og-weather-sidebar-status">{replayViews[weatherScene].description}</p>
+            )}
+          </>
+        ) : null}
+      </WorkspaceSidebar>}
+      {statsActive && !powerForecast ? <PowerRegionPanel view={powerView} data={reported} region={selectedProvince ?? ""} year={context.year}
+        category={powerProduct} analysisHref={powerAnalysisHref} onRegionChange={selectPowerProvince}
+        onYearChange={(year) => navigate("power", { year }, true)}
+        onMonthChange={(month) => navigate("power", { month }, true)}
+        onCategory={(product) => {
+          const next = powerProduct === product ? "electricity" : product;
+          setVisibleTechnologies(switchList(hiddenTechnologyState(), generationTechnologies(next).join(",")));
+          navigate("power", { product: next }, true);
+        }} /> : null}
+      {activeProject !== "weather" && !carbonPlanar ? (
         <TopToolbar
           activeProject={activeProject}
           activePanel={activePanel}
@@ -6386,6 +6696,7 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Wor
           activeMapTheme={activeMapTheme}
           onTheme={(theme) => {
             setActiveMapTheme(theme);
+            replaceWorkspaceContext({ basemap: theme });
             showToast(`已选择${mapThemes.find((item) => item.key === theme)?.label ?? "底图"}主题。`);
           }}
           onClose={() => setActivePanel(null)}
@@ -6394,15 +6705,16 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Wor
       {activePanel === "sources" ? (
         <SourcesPanel onClose={() => setActivePanel(null)} />
       ) : null}
-      <FeaturePopup feature={selectedFeature} onClose={() => setSelectedFeature(null)} />
-      {activeProject !== "weather" ? (
+      <FeaturePopup feature={displayedFeature} onClose={closeFeature}
+        analysisHref={displayedFeature?.kind === "carbon" && comparableCarbon ? carbonCompareHref : undefined} />
+      {activeProject !== "weather" && !carbonPlanar ? (
         <LayerCards
           activePanel={activePanel}
           activeMapTheme={activeMapTheme}
           onOpenPanel={togglePanel}
         />
       ) : null}
-      {activeProject !== "weather" ? (
+      {activeProject !== "weather" && !carbonPlanar ? (
         <MiniMap
           selectedFeature={selectedFeature}
           camera={mapCamera}
@@ -6423,7 +6735,7 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Wor
           <button type="button" onClick={() => setCinematic(false)}>退出</button>
         </div>
       ) : null}
-      {activeProject !== "weather" ? (
+      {activeProject !== "weather" && !carbonPlanar ? (
         <div className="og-scale">
           <span>20mi</span>
           <span>50km</span>

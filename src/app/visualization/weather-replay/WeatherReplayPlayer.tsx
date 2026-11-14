@@ -10,7 +10,12 @@ import styles from "./player.module.css";
 const control = "inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-3 text-sm font-medium text-slate-800 hover:bg-slate-200";
 const selected = "aria-pressed:bg-teal-800 aria-pressed:text-white";
 
-export function WeatherReplayPlayer({ query, scene }: { query: string; scene?: ReplayView }) {
+export function WeatherReplayPlayer({ query, scene, initialFrame, onFrameChange }: {
+  query: string;
+  scene?: ReplayView;
+  initialFrame?: number;
+  onFrameChange?: (frame: number) => void;
+}) {
   const [selectedView, setSelectedView] = useState<ReplayView>("weather");
   const view = scene ?? selectedView;
   const embedded = scene !== undefined;
@@ -36,7 +41,8 @@ export function WeatherReplayPlayer({ query, scene }: { query: string; scene?: R
   return (
     <section className={embedded ? styles.embedded : styles.standalone} aria-label="区域风暴 3D 回放">
       {!embedded && <h1>区域风暴 3D 回放</h1>}
-      {replay ? <ReplayControls key={query} replay={replay} view={view} onViewChange={embedded ? undefined : setSelectedView} /> : failure ? (
+      {replay ? <ReplayControls key={query} replay={replay} view={view} initialFrame={initialFrame}
+        onFrameChange={onFrameChange} onViewChange={embedded ? undefined : setSelectedView} /> : failure ? (
         <div className="mt-5 flex flex-wrap items-center gap-3">
           <p role="alert">{failure}</p>
           <button className={control} onClick={() => { setFailure(""); setAttempt(value => value + 1); }}>重试</button>
@@ -46,16 +52,18 @@ export function WeatherReplayPlayer({ query, scene }: { query: string; scene?: R
   );
 }
 
-function ReplayControls({ replay, view, onViewChange }: {
+function ReplayControls({ replay, view, onViewChange, initialFrame, onFrameChange }: {
   replay: WeatherReplay;
   view: ReplayView;
   onViewChange?: (view: ReplayView) => void;
+  initialFrame?: number;
+  onFrameChange?: (frame: number) => void;
 }) {
   const [playing, setPlaying] = useState(false);
   const [rotation, setRotation] = useState(0);
   const [clouds, setClouds] = useState(true);
   const [precipitation, setPrecipitation] = useState(true);
-  const [index, setIndex] = useState(Math.min(8, replay.rain.length - 1));
+  const [index, setIndex] = useState(Math.min(initialFrame ?? 8, replay.rain.length - 1));
   const previousIndex = useRef(index);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const final = replay.rain.length - 1;
@@ -69,11 +77,16 @@ function ReplayControls({ replay, view, onViewChange }: {
     if (!playing) return;
     const timer = window.setTimeout(() => {
       const next = index + 1;
+      if (document.hidden) {
+        setPlaying(false);
+        return;
+      }
       setIndex(next);
+      onFrameChange?.(next);
       if (next >= final) setPlaying(false);
     }, 530);
     return () => window.clearTimeout(timer);
-  }, [final, index, playing]);
+  }, [final, index, onFrameChange, playing]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -111,7 +124,10 @@ function ReplayControls({ replay, view, onViewChange }: {
     if (playing) {
       setPlaying(false);
     } else {
-      if (index >= final) setIndex(0);
+      if (index >= final) {
+        setIndex(0);
+        onFrameChange?.(0);
+      }
       setPlaying(true);
     }
   }
@@ -179,7 +195,12 @@ function ReplayControls({ replay, view, onViewChange }: {
               <span>{utcClock(timestamp)} UTC</span>
               <input type="range" min={0} max={final} value={index} aria-label="回放时间"
                 aria-valuetext={`${utcClock(timestamp)} UTC`} className="h-6 w-full accent-teal-800"
-                onChange={event => { setPlaying(false); setIndex(Number(event.target.value)); }} />
+                onChange={event => {
+                  const frame = Number(event.target.value);
+                  setPlaying(false);
+                  setIndex(frame);
+                  onFrameChange?.(frame);
+                }} />
             </label>
           </div>
           <p className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-300 tabular-nums" aria-live={playing ? "off" : "polite"}>

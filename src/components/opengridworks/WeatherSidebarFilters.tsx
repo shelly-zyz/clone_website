@@ -18,6 +18,8 @@ function readWeatherMenu(document: Document) {
   const text = (id: string) => document.getElementById(id)?.textContent?.trim() ?? "";
   const mode = readChoices(document, ":is(#wind-mode-enable, #ocean-mode-enable)");
   const isOcean = mode.value === "ocean-mode-enable";
+  const time = document.getElementById("data-date");
+  const valid = time?.getAttribute("data-valid-utc");
 
   return {
     mode,
@@ -26,6 +28,13 @@ function readWeatherMenu(document: Document) {
     overlay: readChoices(document, `${isOcean ? ".ocean-mode" : ".wind-mode"} [id^='overlay-']`),
     projection: readChoices(document, ".proj"),
     date: text("data-date").replace(/Local$/, "本地时间"),
+    valid,
+    archived: !!valid && Date.parse(valid) < Date.now() - 48 * 3600000,
+    issue: time?.getAttribute("data-issue-utc"),
+    forecast: time?.getAttribute("data-forecast-hour"),
+    location: text("location-coord"),
+    windValue: [text("location-wind"), text("location-wind-units")].filter(Boolean).join(" "),
+    overlayValue: [text("location-value"), text("location-value-units")].filter(Boolean).join(" "),
     zone: text("toggle-zone").replace(/Local$/, "本地时间"),
     layer: text("data-layer"),
     source: text("data-center"),
@@ -45,9 +54,11 @@ export function WeatherSidebarFilters({ frameDocument }: { frameDocument: Docume
 
     const syncMenu = () => setMenu(readWeatherMenu(frameDocument));
     const observer = new MutationObserver(syncMenu);
-    observer.observe(sourceMenu, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["class"] });
+    observer.observe(sourceMenu, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["class", "data-valid-utc", "data-issue-utc", "data-forecast-hour"] });
     const status = frameDocument.getElementById("status");
     if (status) observer.observe(status, { childList: true, characterData: true, subtree: true });
+    const location = frameDocument.getElementById("location");
+    if (location) observer.observe(location, { childList: true, characterData: true, subtree: true });
     const request = requestAnimationFrame(syncMenu);
 
     return () => {
@@ -82,9 +93,15 @@ export function WeatherSidebarFilters({ frameDocument }: { frameDocument: Docume
       <div className="og-weather-sidebar-time">
         <p>数据时间</p>
         <div className="og-weather-sidebar-date">
-          <time>{menu.date || "等待气象数据"}</time>
+          <time dateTime={menu.valid ?? undefined}>{menu.date || "等待气象数据"}</time>
           {menu.zone ? <button type="button" onClick={() => select("toggle-zone")} aria-label={menu.zone}>{menu.zone}</button> : null}
         </div>
+        {menu.issue ? <p className="og-weather-sidebar-status">
+          起报 {menu.issue.slice(0, 16).replace("T", " ")} UTC
+          {menu.forecast !== null ? ` · +${menu.forecast} 小时` : ""}
+        </p> : null}
+        {menu.archived && menu.issue && !menu.isOcean
+          ? <p className="og-weather-sidebar-status">归档 GFS · {menu.height.value === "surface-level" ? "10 米风场" : "高空风场"}</p> : null}
         <div className="og-weather-sidebar-nav" aria-label="时间控制">
           <button type="button" aria-label={`后退${timeSteps[0]}`} onClick={() => select("nav-backward-more")}><ChevronsLeft size={17} /></button>
           <button type="button" aria-label={`后退${timeSteps[1]}`} onClick={() => select("nav-backward")}><ChevronLeft size={16} /></button>
@@ -109,6 +126,11 @@ export function WeatherSidebarFilters({ frameDocument }: { frameDocument: Docume
       {menu.layer ? <p className="og-weather-sidebar-status">{menu.layer}</p> : null}
       <canvas ref={colorScale} className="og-weather-sidebar-scale" aria-label="覆盖指标色阶" role="img" />
       {menu.source ? <p className="og-weather-sidebar-status">{menu.source}</p> : null}
+      {menu.location ? <section className="og-weather-sample" aria-label="气象选点详情">
+        <strong>{menu.location}</strong>
+        <p>{menu.windValue}{menu.overlayValue ? " · " + menu.overlayValue : ""}</p>
+        <button type="button" onClick={() => select("location-close")}>清除选点</button>
+      </section> : null}
     </div>
   );
 }

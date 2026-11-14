@@ -717,9 +717,21 @@
      * Display the grid's validity date in the menu. Allow toggling between local and UTC time.
      */
     function showDate(grids) {
-        var date = new Date(validityDate(grids)), isLocal = d3.select("#data-date").classed("local");
+        var workspace = document.documentElement.classList.contains("ogw-workspace");
+        var date = workspace && grids ? grids.primaryGrid.date : new Date(validityDate(grids));
+        var isLocal = d3.select("#data-date").classed("local");
         var formatted = isLocal ? µ.toLocalISO(date) : µ.toUTCISO(date);
-        d3.select("#data-date").text(formatted + " " + (isLocal ? "Local" : "UTC"));
+        d3.select("#data-date").text(workspace && !grids ? "" : formatted + " " + (isLocal ? "Local" : "UTC"));
+        if (workspace && grids) {
+            var grid = grids.primaryGrid, wind = grid.type === "wind";
+            d3.select("#data-date")
+                .attr("data-valid-utc", grid.date.toISOString())
+                .attr("data-issue-utc", wind && grid.referenceTime ? grid.referenceTime.toISOString() : null)
+                .attr("data-forecast-hour", wind ? grid.forecastHour : null);
+        }
+        else if (workspace) {
+            d3.select("#data-date").attr("data-valid-utc", null).attr("data-issue-utc", null).attr("data-forecast-hour", null);
+        }
         d3.select("#toggle-zone").text("⇄ " + (isLocal ? "UTC" : "Local"));
     }
 

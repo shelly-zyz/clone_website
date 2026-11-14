@@ -3608,3 +3608,97 @@
     width: auto;
   }
 }
+
+/* Data exits are secondary actions inside each earth workspace. */
+.og-secondary-entry {
+  margin-block: 8px;
+  justify-content: flex-start;
+  padding: 7px 8px;
+  border: 1px solid #8bcec54a;
+  border-radius: 7px;
+  background: #1a292b;
+  color: #cdf4e8;
+}
+.og-secondary-entry svg:last-child { margin-left: auto; }
+.og-secondary-entry:hover { background: #263e3d; }
+
+.og-map-unavailable {
+  position: absolute;
+  inset: 42% 18% auto;
+  z-index: 18;
+  text-align: center;
+  color: #d6e7e7;
+  font-size: 14px;
+}
+.og-popup-analysis {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+  margin-top: 10px;
+  color: #cef2b5;
+  font-size: 13px;
+}
+.og-popup-analysis:hover { text-decoration: underline; }
+
+.is-carbon-atlas { background: #59676c; }
+.is-carbon-atlas .og-map-vignette, .is-carbon-atlas .og-starfield, .is-carbon-atlas .og-beta-badge,
+.is-carbon-atlas .og-info-button { display: none; }
+.is-carbon-atlas .maplibregl-ctrl-bottom-right {
+  right: max(137px, 10vw);
+  bottom: calc(var(--og-globe-nav-space) + 68px);
+}
+.is-carbon-atlas .og-forecast-region { display: none; }
+.is-carbon-atlas .og-assistant-mount {
+  position: fixed;
+  inset: 0;
+  transform: translateY(-140px);
+  pointer-events: none;
+  z-index: 55;
+}
+.is-carbon-atlas .og-feature-popup {
+  top: 84px;
+  right: max(16px, 2vw);
+  width: min(290px, 36vw);
+  border-radius: 10px;
+  border-color: #b7c3a342;
+  background: rgba(27, 43, 38, .97);
+}
+.is-power-statistics .og-workspace-sidebar { border-radius: 12px; border: 1px solid #93cfc328; }
+.is-power-statistics:not(.is-power-forecast) .og-forecast-region { display: none; }
+.is-resource-scene { background: #091419; }
+
+@media (max-width: 900px) {
+  .is-power-statistics:has(aside[aria-label="电力区域详情"][data-open="true"]) .og-assistant-mount {
+    position: fixed;
+    inset: 0;
+    transform: translateY(calc(-1 * min(47svh, 430px)));
+    pointer-events: none;
+    z-index: 55;
+  }
+  .is-carbon-atlas .maplibregl-ctrl-bottom-right {
+    right: 10px;
+    bottom: calc(var(--og-globe-nav-space) + 274px);
+  }
+  .is-carbon-atlas .og-feature-popup {
+    top: auto;
+    right: 10px;
+    bottom: calc(var(--og-globe-nav-space) + 116px);
+    left: auto;
+    width: min(260px, 73vw);
+    max-height: 46svh;
+    overflow: auto;
+  }
+}
+
+.og-weather-sample {
+  border: 1px solid #74b9c644;
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  padding: 9px;
+  color: #dff8f5;
+  background: #0e232a;
+  font-size: 12px;
+}
+.og-weather-sample button { color: #9eebe5; text-align: left; }
