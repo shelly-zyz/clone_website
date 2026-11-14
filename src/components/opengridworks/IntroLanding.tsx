@@ -1,182 +1,345 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, ArrowUpRight, Compass, Pause, Play, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpRight, Pause, Play, RotateCcw } from "lucide-react";
 import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
-import { workspaceHref } from "@/lib/globe-topics";
-import { GlobeNavigation } from "./GlobeNavigation";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { beginGlobeHandoff } from "@/lib/globe-handoff";
+import { globeTopicOrder, globeTopics, workspaceHref, type WorkspaceTopic } from "@/lib/globe-topics";
+import { analysisHref, analysisTopics } from "@/lib/topic-analysis/catalog";
+import { introChapters, type IntroTopic } from "./intro-chapters";
+import type { IntroScene } from "./intro-particles";
 import styles from "./IntroLanding.module.css";
 
-const filmUrl = "/intro/graced-night-v1.mp4";
-
-const chapters = [
-  { topic: "weather", label: "气象地球", english: "WEATHER", title: "追踪全球风场",
-    description: "查看全球气温、风速与风向，沿着风场探索不同起报时刻的气象预报。" },
-  { topic: "power", label: "电力地球", english: "POWER", title: "读懂电力的版图",
-    description: "在地图上查找电源与电网设施，结合月度能源统计观察发电量和电源结构。" },
-  { topic: "carbon", label: "碳排放地球", english: "CARBON", title: "观察碳排放的分布",
-    description: "浏览 GRACED 日尺度排放估算，观察全球电力部门碳排放的空间分布及其变化。" },
-  { topic: "economy", label: "经济地球", english: "ECONOMY", title: "比较各地的经济指标",
-    description: "按国家或地区与年份浏览世界银行的 GDP、人均 GDP 和商品与服务出口额。" },
-] as const;
+type SceneStatus = "loading" | "ready" | "static";
+type NavigateEvent = { preventDefault: () => void };
+const brandTitle = ["看见地球", "的变化"] as const;
+const frameBudget = 760;
 
 export function IntroLanding() {
-  const [step, setStep] = useState<number | null>(null);
-  const [playing, setPlaying] = useState(false);
-  const film = useRef<HTMLVideoElement>(null);
-  const pausedByUser = useRef(false);
-  const startButton = useRef<HTMLButtonElement>(null);
-  const heading = useRef<HTMLHeadingElement>(null);
-  const restoreFocus = useRef(false);
-  const chapter = step === null ? undefined : chapters[step];
+  const router = useRouter();
+  const [topic, setTopic] = useState<IntroTopic>(null);
+  const [displayed, setDisplayed] = useState<IntroTopic>(null);
+  const [changing, setChanging] = useState(false);
+  const [committedTopic, setCommittedTopic] = useState<IntroTopic>(null);
+  const [status, setStatus] = useState<SceneStatus>("loading");
+  const [paused, setPaused] = useState(false);
+  const [entering, setEntering] = useState(false);
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const scene = useRef<IntroScene | null>(null);
+  const currentTopic = useRef<IntroTopic>(null);
+  const pausedRef = useRef(false);
+  const staticRef = useRef(false);
+  const pendingFlight = useRef(false);
+  const flightTimer = useRef<number>(undefined);
+  const textTimer = useRef<number>(undefined);
+  const chapterButtons = useRef<Partial<Record<WorkspaceTopic, HTMLButtonElement>>>({});
+  const chapter = displayed ? introChapters[displayed] : null;
+  const title = chapter?.title ?? brandTitle;
+  const cards = chapter?.views ?? ["power", "carbon"];
+  const target = topic ?? "power";
 
   useEffect(() => {
-    const video = film.current;
-    if (!video) return;
+    let cancelled = false;
+    let renderer: IntroScene | null = null;
+    let stopLoading: number | undefined;
     const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
-    function syncPlayback() {
-      if (!video) return;
+    const fallback = () => {
+      window.clearTimeout(stopLoading);
+      renderer?.dispose();
+      renderer = null;
+      scene.current = null;
+      staticRef.current = true;
+      setStatus("static");
+    };
+
+    function prepare() {
+      window.clearTimeout(stopLoading);
       if (motion.matches) {
-        if (video.hasAttribute("src")) {
-          video.removeAttribute("src");
-          video.load();
+        fallback();
+        return;
+      }
+      if (!canvas.current || renderer) return;
+      staticRef.current = false;
+      setStatus("loading");
+      stopLoading = window.setTimeout(fallback, 5000);
+      void import("./intro-particles").then(({ createIntroScene }) => {
+        if (cancelled || staticRef.current || !canvas.current || renderer) return;
+        try {
+          renderer = createIntroScene(canvas.current, currentTopic.current, pausedRef.current, () => {
+            window.clearTimeout(stopLoading);
+            setStatus("ready");
+          }, fallback);
+          scene.current = renderer;
+        } catch {
+          fallback();
         }
-        return;
-      }
-      if (document.hidden || pausedByUser.current) {
-        video.pause();
-        return;
-      }
-      if (!video.hasAttribute("src")) video.src = filmUrl;
-      void video.play().catch(() => {});
+      }).catch(() => { if (!cancelled) fallback(); });
     }
 
-    motion.addEventListener("change", syncPlayback);
-    document.addEventListener("visibilitychange", syncPlayback);
-    syncPlayback();
+    prepare();
+    motion.addEventListener("change", prepare);
     return () => {
-      motion.removeEventListener("change", syncPlayback);
-      document.removeEventListener("visibilitychange", syncPlayback);
-      video.pause();
+      cancelled = true;
+      window.clearTimeout(stopLoading);
+      window.clearTimeout(flightTimer.current);
+      window.clearTimeout(textTimer.current);
+      motion.removeEventListener("change", prepare);
+      renderer?.dispose();
+      scene.current = null;
     };
   }, []);
 
   useEffect(() => {
-    if (step !== null) {
-      heading.current?.focus({ preventScroll: true });
-    } else if (restoreFocus.current) {
-      startButton.current?.focus({ preventScroll: true });
-    }
-  }, [step]);
+    router.prefetch(workspaceHref(target));
+  }, [router, target]);
 
-  function closeTour() {
-    restoreFocus.current = true;
-    setStep(null);
+  function cancelFlight() {
+    if (!pendingFlight.current) return;
+    pendingFlight.current = false;
+    window.clearTimeout(flightTimer.current);
+    scene.current?.cancelFlight();
+    setEntering(false);
   }
 
-  function toggleFilm() {
-    const video = film.current;
-    if (!video) return;
-    pausedByUser.current = !video.paused;
-    if (video.paused) {
-      if (!video.hasAttribute("src")) video.src = filmUrl;
-      void video.play().catch(() => {});
+  function choose(next: IntroTopic, commit: boolean) {
+    if (commit) setCommittedTopic(next);
+    if (next === currentTopic.current) return;
+    cancelFlight();
+    currentTopic.current = next;
+    setTopic(next);
+    scene.current?.focus(next);
+    window.clearTimeout(textTimer.current);
+    if (status === "ready" && !paused && !staticRef.current) {
+      setChanging(true);
+      textTimer.current = window.setTimeout(() => {
+        setDisplayed(next);
+        setChanging(false);
+      }, 145);
     } else {
-      video.pause();
+      setDisplayed(next);
+      setChanging(false);
     }
+  }
+
+  function playPause() {
+    if (status !== "ready") return;
+    const next = !pausedRef.current;
+    pausedRef.current = next;
+    setPaused(next);
+    scene.current?.pause(next);
+  }
+
+  function replay() {
+    if (status !== "ready") return;
+    if (pausedRef.current) playPause();
+    scene.current?.replay();
+  }
+
+  function openWorkspace(event: NavigateEvent, next: WorkspaceTopic, fly: boolean) {
+    if (!fly || status !== "ready" || pausedRef.current || !scene.current || document.hidden) {
+      if (!staticRef.current) beginGlobeHandoff(next);
+      return;
+    }
+
+    event.preventDefault();
+    if (pendingFlight.current) return;
+    pendingFlight.current = true;
+    setEntering(true);
+
+    function navigate(frame?: string) {
+      if (!pendingFlight.current) return;
+      pendingFlight.current = false;
+      window.clearTimeout(flightTimer.current);
+      beginGlobeHandoff(next, frame);
+      router.push(workspaceHref(next));
+    }
+
+    flightTimer.current = window.setTimeout(() => navigate(), frameBudget);
+    scene.current.fly(next, navigate);
+  }
+
+  function goToChapters(event: React.MouseEvent<HTMLAnchorElement>) {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    choose(globeTopicOrder[0], true);
+    chapterButtons.current[globeTopicOrder[0]]?.focus({ preventScroll: true });
+  }
+
+  function onChapterKey(event: KeyboardEvent<HTMLElement>, at: WorkspaceTopic) {
+    const index = globeTopicOrder.indexOf(at);
+    const next = {
+      ArrowRight: (index + 1) % globeTopicOrder.length,
+      ArrowLeft: (index + globeTopicOrder.length - 1) % globeTopicOrder.length,
+      Home: 0,
+      End: globeTopicOrder.length - 1,
+    }[event.key];
+    if (next === undefined) return;
+    event.preventDefault();
+    const selected = globeTopicOrder[next];
+    choose(selected, true);
+    chapterButtons.current[selected]?.focus();
   }
 
   return (
-    <main className={styles.landing} aria-label="OpenGridWorks 开屏"
+    <main
+      className={styles.landing}
+      aria-label="OpenGridWorks 开屏"
+      data-scene={status}
+      data-topic={topic ?? "overview"}
+      data-entering={entering ? "" : undefined}
+      data-paused={paused ? "" : undefined}
       onKeyDown={event => {
-        if (event.key === "Escape" && chapter) closeTour();
-      }}>
-      <div aria-hidden="true" className={styles.space}>
-        <div className={styles.planet}>
-          <video ref={film} muted loop playsInline preload="none" poster="/intro/graced-night-v1.webp"
-            onPlaying={() => setPlaying(true)} onPause={() => setPlaying(false)} onEmptied={() => setPlaying(false)} />
+        if (event.key !== "Escape") return;
+        if (pendingFlight.current) cancelFlight();
+        else choose(null, true);
+      }}
+    >
+      <div className={styles.space} aria-hidden="true">
+        <div className={styles.stars} />
+        <div className={styles.poster}>
+          <Image
+            src={`/intro/atlas-poster-${topic ?? "overview"}.webp`}
+            alt=""
+            width={820}
+            height={820}
+            preload={topic === null}
+            unoptimized
+          />
         </div>
+        <canvas className={styles.canvas} ref={canvas} />
         <div className={styles.veil} />
       </div>
 
-      <header className={styles.header}>
-        <div className="flex items-center gap-2.5">
-          <Image className={styles.logo} src="/images/opengridworks/logo-dark.webp" alt="" width={36} height={36} />
-          <span className={styles.wordmark}>OpenGridWorks</span>
-        </div>
-        <div className="flex items-center gap-2 sm:gap-4">
-          {chapter
-            ? <button type="button" className={styles.headerAction} onClick={closeTour}><X size={15} aria-hidden="true" />退出导览</button>
-            : <span className={styles.headerLabel}>地球数据观测</span>}
-          <button type="button" className={`${styles.headerAction} ${styles.filmControl}`} onClick={toggleFilm}
-            aria-label={playing ? "暂停开屏动画" : "播放开屏动画"}>
-            {playing ? <Pause size={15} aria-hidden="true" /> : <Play size={15} aria-hidden="true" />}
+      <div className={styles.frame}>
+        <header className={styles.header}>
+          <button type="button" className={styles.brand} onClick={() => choose(null, true)} aria-label="返回开屏总览">
+            <Image src="/images/opengridworks/logo-dark.webp" alt="" width={32} height={32} />
+            <span>OpenGridWorks</span>
           </button>
-        </div>
-      </header>
-
-      {chapter && step !== null ? (
-        <section className={styles.hero} aria-label="专题导览">
-          <div className={styles.scene} key={chapter.topic}>
-            <p className={styles.eyebrow}><span />{chapter.english}<span /></p>
-            <p className={styles.chapterLabel}>{chapter.label}</p>
-            <h1 ref={heading} tabIndex={-1} className={styles.title}>{chapter.title}</h1>
-            <p className={styles.description}>{chapter.description}</p>
-          </div>
-          <div className={styles.tourNav}>
-            <div className={styles.progress} role="group" aria-label="选择导览章节">
-              {chapters.map((item, index) => (
-                <button key={item.topic} type="button" className={styles.step} aria-current={index === step ? "step" : undefined}
-                  aria-label={`第 ${index + 1} 幕 · ${item.label}`} onClick={() => setStep(index)}>
-                  <span>{`0${index + 1}`}</span><span>{item.label}</span>
-                </button>
-              ))}
-            </div>
-            <div className={styles.tourActions}>
-              <button type="button" className={styles.textAction} disabled={step === 0} onClick={() => setStep(step - 1)}>
-                <ArrowLeft size={17} aria-hidden="true" />上一幕
+          <nav className={styles.topNav} aria-label="平台导航">
+            <a href="#intro-chapters" onClick={goToChapters}>专题导览</a>
+            <Link href="/visualization">专题分析</Link>
+          </nav>
+          <div className={styles.topTools}>
+            {status === "ready" && (
+              <button className={styles.controlButton} type="button" aria-label={paused ? "继续开屏动画" : "暂停开屏动画"} onClick={playPause}>
+                {paused ? <Play size={17} aria-hidden="true" /> : <Pause size={17} aria-hidden="true" />}
               </button>
-              {step === chapters.length - 1
-                ? <a className={styles.textAction} href={workspaceHref(chapter.topic)}>进入平台<ArrowUpRight size={17} aria-hidden="true" /></a>
-                : <button type="button" className={styles.textAction} onClick={() => setStep(step + 1)}>下一幕<ArrowRight size={17} aria-hidden="true" /></button>}
+            )}
+            <Link
+              className={styles.skip}
+              href={workspaceHref(target)}
+              onNavigate={event => openWorkspace(event, target, false)}
+            >
+              跳过导览 <ArrowUpRight size={15} aria-hidden="true" />
+            </Link>
+          </div>
+        </header>
+
+        <div className={styles.main}>
+          <section className={styles.story} aria-label="专题概览">
+            <div className={styles.storyContent} data-changing={changing ? "" : undefined}>
+              <div key={displayed ?? "overview"} className={styles.storyText}>
+                <p className={styles.eyebrow}>{displayed ? globeTopics[displayed].label : "地球数据观测"}</p>
+                <h1 className={styles.title} id="intro-title">
+                  {title.map(line => <span key={line}>{line}</span>)}
+                </h1>
+                <p className={styles.description}>
+                  {chapter?.description ?? "从电力、气象、碳排放和经济四个视角，探索真实数据在地球上的分布与变化。"}
+                </p>
+              </div>
             </div>
-            {step !== chapters.length - 1 && (
-              <a className={styles.skip} href={workspaceHref(chapter.topic)}>进入平台<ArrowUpRight size={14} aria-hidden="true" /></a>
+            <div className={styles.actions}>
+              <Link className={styles.primary} href={workspaceHref(target)} onNavigate={event => openWorkspace(event, target, true)}>
+                {entering ? "正在打开工作区…" : topic ? `进入${globeTopics[topic].label}` : "进入平台"}
+                <ArrowUpRight size={17} aria-hidden="true" />
+              </Link>
+              {chapter ? (
+                <button className={styles.chapterArrow} type="button" onClick={() => choose(null, true)} aria-label="返回开屏总览">
+                  <ArrowLeft size={17} aria-hidden="true" />
+                </button>
+              ) : (
+                <button className={styles.secondary} type="button" onClick={() => choose(globeTopicOrder[0], true)}>
+                  观看导览 <ArrowRight size={16} aria-hidden="true" />
+                </button>
+              )}
+            </div>
+          </section>
+
+          <aside className={styles.recommended} aria-label="相关专题分析">
+            <div className={styles.cards} key={displayed ?? "overview"}>
+              {cards.map((view, index) => {
+                const link = analysisTopics[view];
+                return (
+                  <Link key={view} href={analysisHref(view)} className={styles.card} data-lead={index === 0 ? "" : undefined}>
+                    <Image
+                      src={`/images/opengridworks/globes/${link.globe}.webp`}
+                      width={240} height={240} alt="" unoptimized
+                    />
+                    <div>
+                      <strong>{link.label}</strong>
+                      <span>{link.title}</span>
+                    </div>
+                    <ArrowUpRight size={15} aria-hidden="true" />
+                  </Link>
+                );
+              })}
+            </div>
+          </aside>
+        </div>
+
+        <footer className={styles.footer}>
+          <nav className={styles.chapters} id="intro-chapters" aria-label="四个导览章节">
+            {globeTopicOrder.map((key, index) => (
+              <button
+                className={styles.chapter}
+                key={key}
+                type="button"
+                data-topic={key}
+                data-preview={topic === key ? "" : undefined}
+                aria-pressed={committedTopic === key}
+                ref={button => {
+                  if (button) chapterButtons.current[key] = button;
+                  else delete chapterButtons.current[key];
+                }}
+                onFocus={() => choose(key, false)}
+                onBlur={() => choose(committedTopic, false)}
+                onPointerEnter={event => {
+                  if (event.pointerType === "mouse") choose(key, false);
+                }}
+                onPointerLeave={event => {
+                  if (event.pointerType === "mouse" && document.activeElement !== event.currentTarget) {
+                    choose(committedTopic, false);
+                  }
+                }}
+                onClick={() => choose(key, true)}
+                onKeyDown={event => onChapterKey(event, key)}
+              >
+                <Image src={`/images/opengridworks/globes/${key}.webp`} alt="" width={240} height={240} unoptimized />
+                <span>
+                  <small>{String(index + 1).padStart(2, "0")}</small>
+                  <strong>{globeTopics[key].label}</strong>
+                  <span>{introChapters[key].shortTitle}</span>
+                </span>
+              </button>
+            ))}
+          </nav>
+          <div className={styles.credits}>
+            <p>{chapter ? <a href={chapter.sourceUrl} target="_blank" rel="noreferrer">{chapter.source}</a> : "NASA · Blue Marble / VIIRS 2012"}</p>
+            {chapter && <p>地球影像 · NASA</p>}
+            {status === "ready" && (
+              <button className={styles.replay} type="button" onClick={replay}>
+                <RotateCcw size={14} aria-hidden="true" /> 重播聚合
+              </button>
             )}
           </div>
-        </section>
-      ) : (
-        <section className={styles.hero} aria-label="平台入口">
-          <div className={styles.scene}>
-            <p className={styles.eyebrow}><span />EARTH OBSERVATORY<span /></p>
-            <h1 className={styles.title}>看见地球的变化</h1>
-            <p className={styles.description}>从四个地球专题探索电力、气象、碳排放与经济数据。</p>
-          </div>
-          <div className={styles.choices}>
-            <button ref={startButton} type="button" className={styles.choice} onClick={() => setStep(0)}>
-              <span className={styles.choiceIcon}><Play size={20} strokeWidth={1.55} aria-hidden="true" /></span>
-              <span className={styles.choiceText}><strong>观看导览</strong></span>
-              <ArrowRight className={styles.choiceArrow} size={16} aria-hidden="true" />
-            </button>
-            <a className={`${styles.choice} ${styles.primary}`} href="/workspace">
-              <span className={styles.choiceIcon}><Compass size={23} strokeWidth={1.5} aria-hidden="true" /></span>
-              <span className={styles.choiceText}><strong>进入平台</strong><small>打开地球工作区</small></span>
-              <ArrowUpRight className={styles.choiceArrow} size={16} aria-hidden="true" />
-            </a>
-          </div>
-          <p className={styles.sample}>
-            <span>GRACED POWER · 2025.08.15</span>
-            <span>电力排放格点样本 · 区域汇集演示</span>
-          </p>
-        </section>
-      )}
+        </footer>
 
-      <footer className={styles.footer}>
-        <span className={styles.footerIndex}>NASA GIBS · VIIRS 2012</span>
-        <GlobeNavigation />
-        <span className={styles.footerIndex}>GRACED POWER · 2025.08.15</span>
-      </footer>
+        <p className="sr-only" aria-live="polite">{committedTopic ? `已选${globeTopics[committedTopic].label}导览` : ""}</p>
+      </div>
     </main>
   );
 }
