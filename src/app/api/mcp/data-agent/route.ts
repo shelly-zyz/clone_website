@@ -6,6 +6,7 @@ import { DataAgentError } from "@/lib/data-agent/database.server";
 import { authorizeDataAgent } from "@/lib/data-agent/http.server";
 import { listDataCatalog, queryData } from "@/lib/data-agent/query.server";
 import { resolveDataResult } from "@/lib/data-agent/state.server";
+import { listWeatherReplays } from "@/lib/weather-replay/storage.server";
 
 export const runtime = "nodejs";
 
@@ -27,6 +28,10 @@ export async function POST(request: Request) {
   server.registerTool("list_published_catalog", {
     description: "读取气象、电力、碳专题的当前发布版本与审核指标。", inputSchema: z.strictObject({ topic: topicSchema.optional() }),
   }, ({ topic }) => resultOf(() => listDataCatalog(topic)));
+  server.registerTool("list_weather_replays", {
+    description: "只读核对已发布的 SatWeave 和 PARDIG 气象回放，包括来源、版本、时间窗、帧数及最大降水率。",
+    inputSchema: z.strictObject({ id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,79}$/).optional() }),
+  }, ({ id }) => resultOf(() => listWeatherReplays(id)));
   server.registerTool("query_published_data", {
     description: "执行批准的只读指标查询，返回数据引用、口径、质量标记及有限行数。", inputSchema: z.strictObject({ query: dataQuerySchema }),
   }, ({ query }) => resultOf(() => queryData(query)));

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { WorkspaceFilterSelect, type WorkspaceFilterOption } from "./WorkspaceSidebar";
@@ -72,13 +73,25 @@ export function WeatherSidebarFilters({ frameDocument }: { frameDocument: Docume
     return () => source.removeEventListener("weather-scale-change", copyScale);
   }, [frameDocument, menuReady]);
 
-  if (!frameDocument || !menu) return <p className="og-weather-sidebar-status" role="status">正在加载气象筛选…</p>;
+  const replayLink = (
+    <Link className="block rounded-lg bg-cyan-950 px-3 py-2 text-center text-sm font-medium text-cyan-100 hover:bg-cyan-900"
+      href="/visualization/weather-replay">
+      区域 3D 回放
+    </Link>
+  );
+  if (!frameDocument || !menu) return (
+    <div className="og-weather-sidebar-filters">
+      {replayLink}
+      <p className="og-weather-sidebar-status" role="status">正在加载气象筛选…</p>
+    </div>
+  );
 
   const select = (id: string) => frameDocument.getElementById(id)?.click();
   const timeSteps = menu.isOcean ? ["一个月", "五天"] : ["一天", "三小时"];
 
   return (
     <div className="og-weather-sidebar-filters">
+      {replayLink}
       <div className="og-weather-sidebar-time">
         <p>数据时间</p>
         <div className="og-weather-sidebar-date">
