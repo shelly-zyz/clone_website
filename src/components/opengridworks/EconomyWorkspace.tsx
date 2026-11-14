@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ArrowLeft, ArrowUpRight, ChartNoAxesCombined, Globe2, Search, X } from "lucide-react";
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { analysisContextHref, readWorkspaceContext, rememberWorkspace, replaceWorkspaceContext, type WorkspaceContext } from "@/lib/workspace-context";
 import type { MapTheme } from "@/types/opengridworks";
 import { EconomyGlobe } from "./EconomyGlobe";
@@ -83,11 +83,10 @@ function CountrySearch({ countries, onSelect }: { countries: EconomyCountry[]; o
   );
 }
 
-function ProfilePanel({ open, onOpen, onClose, children }: {
-  open: boolean; onOpen: () => void; onClose: () => void; children: ReactNode;
+function ProfilePanel({ open, onOpen, onClose, trigger, children }: {
+  open: boolean; onOpen: () => void; onClose: () => void; trigger: RefObject<HTMLButtonElement | null>; children: ReactNode;
 }) {
   const id = useId();
-  const trigger = useRef<HTMLButtonElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -222,12 +221,13 @@ export function EconomyWorkspace({ basemap, onBasemapError, initialContext, onRe
   const { data: outlook, retry: retryOutlook } = useSnapshot<EconomicOutlook>("/data/economy/gep.json");
   const [countryCode, setCountryCode] = useState(initialContext?.country ?? "");
   const [camera, setCamera] = useState(initialContext?.camera);
-  const [yearInput, setYearInput] = useState(initialContext?.year ?? 2024);
+  const [yearInput, setYearInput] = useState(initialContext?.year);
   const [metric, setMetric] = useState<EconomyMetric>(initialContext?.metric ?? "gdp");
   const [outlookActive, setOutlookActive] = useState(initialContext?.scene === "outlook");
-  const [targetInput, setTargetInput] = useState(initialContext?.targetYear ?? 2026);
+  const [targetInput, setTargetInput] = useState(initialContext?.targetYear);
   const [profileOpen, setProfileOpen] = useState(false);
   const outlookTrigger = useRef<HTMLButtonElement>(null);
+  const profileTrigger = useRef<HTMLButtonElement>(null);
   const restoredFocus = useRef(false);
   const outlookBack = useRef<HTMLButtonElement>(null);
 
@@ -238,10 +238,10 @@ export function EconomyWorkspace({ basemap, onBasemapError, initialContext, onRe
       const context = readWorkspaceContext(params);
       setCountryCode(context.country ?? "");
       setCamera(context.camera);
-      setYearInput(context.year ?? 2024);
+      setYearInput(context.year);
       setMetric(context.metric ?? "gdp");
       setOutlookActive(context.scene === "outlook");
-      setTargetInput(context.targetYear ?? 2026);
+      setTargetInput(context.targetYear);
     };
     window.addEventListener("popstate", restore);
     return () => window.removeEventListener("popstate", restore);
@@ -249,7 +249,8 @@ export function EconomyWorkspace({ basemap, onBasemapError, initialContext, onRe
 
   useEffect(() => {
     if (restoredFocus.current) {
-      (outlookActive ? outlookBack.current : outlookTrigger.current)?.focus({ preventScroll: true });
+      const historyTrigger = matchMedia("(max-width: 900px)").matches ? profileTrigger.current : outlookTrigger.current;
+      (outlookActive ? outlookBack.current : historyTrigger)?.focus({ preventScroll: true });
       restoredFocus.current = false;
     }
   }, [outlookActive]);
@@ -260,8 +261,8 @@ export function EconomyWorkspace({ basemap, onBasemapError, initialContext, onRe
   }, [snapshot]);
   const selected = snapshot?.countries.find(item => item.code === countryCode);
   const country = snapshot && !selected ? "" : countryCode;
-  const year = snapshot?.years.includes(yearInput) ? yearInput : snapshot?.years.at(-1) ?? yearInput;
-  const targetYear = outlook?.years.includes(targetInput) ? targetInput : outlook?.years[0] ?? targetInput;
+  const year = snapshot?.years.find(item => item === yearInput) ?? snapshot?.years.at(-1) ?? yearInput ?? 2024;
+  const targetYear = outlook?.years.find(item => item === targetInput) ?? outlook?.years[0] ?? targetInput ?? 2026;
   const values = useMemo<EconomyValue[]>(() => {
     if (!snapshot) return [];
     const column = snapshot.years.indexOf(year);
@@ -276,9 +277,11 @@ export function EconomyWorkspace({ basemap, onBasemapError, initialContext, onRe
   const forecastRanking = useMemo(() => rankEconomies(forecastValues), [forecastValues]);
 
   const chooseCountry = useCallback((id: string) => {
+    if (id === countryCode) return;
     setCountryCode(id);
-    replaceWorkspaceContext({ country: id || null });
-  }, []);
+    setCamera(undefined);
+    replaceWorkspaceContext({ country: id || null, camera: null });
+  }, [countryCode]);
   const pickCountry = useCallback((id: string) => {
     chooseCountry(id);
     if (!outlookActive && window.matchMedia("(max-width: 900px)").matches) setProfileOpen(true);
@@ -357,7 +360,7 @@ export function EconomyWorkspace({ basemap, onBasemapError, initialContext, onRe
               </button>
             </section>
           </WorkspaceSidebar>
-          <ProfilePanel open={profileOpen} onOpen={() => setProfileOpen(true)} onClose={() => setProfileOpen(false)}>
+          <ProfilePanel trigger={profileTrigger} open={profileOpen} onOpen={() => setProfileOpen(true)} onClose={() => setProfileOpen(false)}>
             <EconomyProfile country={selected} year={year} metric={metric} snapshot={snapshot} ranking={ranking}
               onCountry={chooseCountry} onMetric={chooseMetric} onYear={chooseYear} onOutlook={() => chooseView("outlook")} />
           </ProfilePanel>
