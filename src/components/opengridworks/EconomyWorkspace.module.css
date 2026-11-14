@@ -2,7 +2,12 @@
   position: absolute;
   inset: 0;
   overflow: hidden;
-  background: radial-gradient(ellipse at 50% 42%, #19232f 0%, #0d131c 56%, #080b10 100%);
+  background: radial-gradient(ellipse at 49% 42%, #18232e 0%, #0b131a 57%, #060a10 100%);
+  transition: background-color 220ms ease;
+}
+
+.viewport[data-outlook="true"] {
+  background: radial-gradient(ellipse at 47% 45%, #173d393d, #0d1211 45%, #0a0e0e 73%);
 }
 
 .map {
@@ -10,44 +15,83 @@
   inset: 0 calc(var(--og-forecast-width) + 30px) var(--og-globe-nav-space) calc(var(--og-sidebar-width) + 30px);
 }
 
-.mapStatus {
-  position: absolute;
-  top: 42%;
-  left: calc(50% + (var(--og-sidebar-width) - var(--og-forecast-width)) / 2);
-  transform: translateX(-50%);
-  color: #e7d9c7;
-  text-align: center;
+.map[data-ready="false"] { visibility: hidden; }
+
+.viewport[data-outlook="true"] .map {
+  inset: 70px max(240px, 22vw) calc(var(--og-globe-nav-space) + 42px) max(140px, 15vw);
 }
+
+.viewport[data-outlook="true"] .map :global(.maplibregl-canvas) {
+  mask-image: radial-gradient(ellipse 76% 70% at 50% 50%, #000 64%, transparent 100%);
+}
+
+:global(.is-economy-project):has(.viewport[data-outlook="true"]) :is(:global(.og-layer-cards), :global(.og-maptype-panel)) {
+  display: none;
+}
+
+.mapPlaceholder {
+  position: absolute;
+  inset: 0 var(--og-forecast-width) var(--og-globe-nav-space) var(--og-sidebar-width);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 11px;
+  padding: 15px;
+  color: #cfd9d8;
+  font-size: 13px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.mapPlaceholder img {
+  width: min(100%, 230px);
+  height: auto;
+  mask-image: radial-gradient(closest-side, #000 90%, transparent 100%);
+}
+
+.marker {
+  display: grid;
+  gap: 1px;
+  max-width: 110px;
+  min-width: max-content;
+  padding: 4px 7px;
+  border-left: 1px solid #d4fa45;
+  color: #e0fb94;
+  background: #10201fdf;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+  pointer-events: none;
+}
+
+.marker b { font-weight: 560; }
+.marker span { color: #fff7bd; }
 
 .filters {
   display: grid;
-  gap: 15px;
+  gap: 13px;
   padding-top: 12px;
-  border-top: 1px solid #242b2f;
+  border-top: 1px solid #2a3538;
 }
 
-.value,
-.legend,
-.source {
+.legend, .search {
   display: grid;
   gap: 6px;
-  padding-top: 12px;
-  border-top: 1px solid #242b2f;
   color: #aebbc1;
   font-size: 12px;
   line-height: 1.45;
 }
 
-.value strong {
-  color: #ffdfa3;
-  font-size: 19px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
+.legend {
+  padding-block: 12px 2px;
+  border-top: 1px solid #2a3538;
 }
 
 .scale {
   height: 6px;
   background: linear-gradient(90deg, #513727, #a05a36, #e9a04f);
+  border-radius: 3px;
 }
 
 .range {
@@ -57,8 +101,7 @@
   font-size: 10px;
 }
 
-.missing,
-.source a {
+.missing {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -67,24 +110,305 @@
 .missing span {
   width: 8px;
   height: 8px;
-  background: #25262a;
+  background: #252b2d;
+  border: 1px solid #657276;
 }
 
-.source a {
+.searchField {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding-inline: 10px;
+  border: 1px solid #364146;
+  border-radius: 5px;
+  background: #121b21;
+}
+
+.searchField:focus-within { border-color: #f0ac75; }
+
+.searchField input {
+  min-height: 38px;
+  min-width: 0;
+  width: 100%;
+  color: #f4f3ee;
+  font-size: 13px;
+  outline: none;
+}
+
+.searchField svg { flex: none; }
+
+.searchResults {
+  max-height: 224px;
+  overflow: auto;
+  border: 1px solid #2a3a3d;
+  border-radius: 5px;
+}
+
+.searchResults button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  width: 100%;
+  padding-inline: 8px;
+  color: #e8edec;
+  text-align: left;
+}
+
+.searchResults small { color: #a3b0ad; font-size: 10px; }
+.searchResults button:hover { background: #22312f; }
+
+.profile {
+  --profile-accent: #ffc381;
+  position: absolute;
+  z-index: 45;
+  top: 16px;
+  right: 16px;
+  width: var(--og-forecast-width);
+  max-height: calc(100% - var(--og-globe-nav-space) + 56px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #526366 transparent;
+  padding: clamp(12px, 1.25vw, 19px);
+  border: 1px solid #26343b;
+  color: #e9f0f0;
+  background: linear-gradient(142deg, #101c23, #0a1117 65%);
+  color-scheme: dark;
+  box-shadow: 0 18px 49px #03080d73;
+  border-radius: 9px;
+  animation: profile-reveal 200ms ease both;
+}
+
+.profileHeader {
+  display: grid;
+  gap: 5px;
+  padding-block: 2px 12px;
+}
+
+.profileHeader p { color: #a7bbb8; font-size: 11px; letter-spacing: .03em; }
+.profileHeader h2 { color: #f4f4ed; font-size: clamp(24px, 2.6vw, 40px); line-height: 1.07; letter-spacing: -0.06em; font-weight: 620; }
+.profileHeader span { color: var(--profile-accent); font-size: 12px; }
+
+.profileIndicators {
+  display: grid;
+  gap: 4px;
+  padding-bottom: 8px;
+}
+
+.profileIndicators button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+  min-height: 35px;
+  padding: 5px 8px;
+  border-left: 1px solid #41514e;
+  border-radius: 3px;
+  color: #ccd9d8;
+  background: #142129;
+  text-align: left;
+  transition: color 160ms ease, background-color 160ms ease;
+}
+
+.profileIndicators button[aria-pressed="true"] { border-color: var(--profile-accent); background: #322822; color: #fff0de; }
+.profileIndicators button:hover { color: #fff; background: #2b332f; }
+.profileIndicators span { font-size: 11px; line-height: 1.3; }
+.profileIndicators strong { color: var(--profile-accent); font-size: 13px; font-weight: 570; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+.profileSection {
+  display: grid;
+  padding-block: 12px 7px;
+  gap: 3px;
+  border-top: 1px solid #2a3a40;
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sectionHeading h3 { font-size: 13px; font-weight: 600; }
+.sectionHeading span, .note, .status { color: #a9b9ba; font-size: 11px; line-height: 1.45; }
+
+.history table { width: 100%; border-collapse: collapse; }
+.history th, .history td { border-bottom: 1px solid #2b373c; padding: 5px; font-size: 11px; }
+.history th { text-align: left; font-weight: 500; }
+.history td { text-align: right; font-variant-numeric: tabular-nums; }
+.history button { width: 100%; min-height: 27px; text-align: left; }
+.history tr[data-active="true"] { color: var(--profile-accent); background: #293334; }
+.history summary { width: fit-content; min-height: 29px; padding-top: 7px; color: #c9d6d1; font-size: 12px; cursor: pointer; }
+
+.profileRanking button {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  min-height: 31px;
+  padding-inline: 5px;
+  border-bottom: 1px solid #223139;
+  text-align: left;
+  font-size: 11px;
+  transition: color 160ms ease, background-color 160ms ease;
+}
+
+.profileRanking button:hover,
+.profileRanking button[aria-pressed="true"] { color: var(--profile-accent); background: #233332; }
+.profileRanking button span:first-of-type { color: #8aabaa; font-size: 10px; }
+.profileRanking button strong { color: #d7e2e1; white-space: nowrap; font-weight: 520; font-variant-numeric: tabular-nums; }
+
+.profileLinks {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.profileLinks a, .profileSource, .outlookLinks a {
+  display: inline-flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
   width: fit-content;
-  color: #ebcf9c;
+  min-height: 24px;
+  color: #d3e1df;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
-.source a:hover {
-  text-decoration: underline;
+.profileSource { margin-top: 5px; color: #a9bfbc; font-size: 10px; }
+.profileLinks a:hover, .profileSource:hover, .outlookLinks a:hover { text-decoration: underline; color: #fff; }
+
+.outlookAction, .sceneBack {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 39px;
+  gap: 8px;
+  padding: 5px 9px;
+  border: 1px solid #965f4069;
+  border-radius: 5px;
+  color: #ffe4c3;
+  background: #472f24;
+  font-size: 12px;
+  font-weight: 570;
+  text-align: left;
+  transition: color 160ms ease, background-color 160ms ease;
+}
+
+.outlookAction:hover { color: #20160d; background: #ffc381; }
+.textButton { min-height: 32px; margin-left: 5px; color: #f5d19c; text-decoration: underline; }
+
+.profileTrigger, .close, .scrim { display: none; }
+
+.sceneControls {
+  display: flex;
+  gap: 8px 12px;
+  align-items: end;
+  flex-wrap: wrap;
+}
+
+.sceneControls > :global(.og-filter-field) { min-width: 115px; }
+.sceneControls :global(.og-filter-select) select { border: 1px solid #63726b75; border-radius: 5px; }
+.sceneBack { min-height: 35px; border-color: #67756a; color: #e4ede6; background: #111c19; }
+.sceneBack:hover { color: #121a15; background: #d4fa45; }
+
+.outlookLegend {
+  display: grid;
+  gap: 3px;
+  margin-block: 7px;
+  color: #b8cbbe;
+}
+
+.outlookScale {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #c97663 0%, #80a4a0 37.5%, #62ac80 62.5%, #d4ee74 100%);
+}
+
+.outlookLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 11px;
+  padding-top: 5px;
+}
+
+.profile :is(a, button):focus-visible, .profileTrigger:focus-visible {
+  outline: 2px solid #ffc381;
+  outline-offset: -2px;
+}
+
+@keyframes profile-reveal {
+  from { opacity: 0.6; transform: translateX(5px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
 @media (max-width: 900px) {
-  .map {
-    inset: 40px 0 var(--og-globe-nav-space);
+  .map { inset: 40px 0 var(--og-globe-nav-space); }
+  .viewport[data-outlook="true"] .map { inset: 65px 182px calc(var(--og-globe-nav-space) + 35px) 118px; }
+  .mapPlaceholder { inset-inline: 0; }
+
+  .profileTrigger, .close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 44px;
+    padding-inline: 10px;
+    color: #ffe1bd;
+    background: #1d2526;
+    font-size: 13px;
   }
 
-  .mapStatus {
-    left: 50%;
+  .profileTrigger {
+    position: absolute;
+    z-index: 47;
+    top: max(12px, env(safe-area-inset-top));
+    right: 12px;
+  }
+
+  .profile {
+    inset: auto 0 0;
+    z-index: 77;
+    width: min(100%, 680px);
+    max-height: min(74svh, 700px);
+    margin-inline: auto;
+    padding: 14px 16px max(16px, env(safe-area-inset-bottom));
+    border-radius: 14px 14px 0 0;
+  }
+
+  .profile[data-open="false"] { display: none; }
+
+  .close {
+    position: absolute;
+    top: 9px;
+    right: 12px;
+    width: 44px;
+    border-radius: 5px;
+  }
+
+  .scrim { display: block; position: absolute; z-index: 76; inset: 0; background: #030811a3; }
+
+  .profileHeader { padding-right: 43px; }
+  .profileRanking button, .profileIndicators button, .searchResults button { min-height: 44px; }
+}
+
+@media (max-width: 660px) {
+  .viewport[data-outlook="true"] .map {
+    inset: 112px 7px calc(var(--og-globe-nav-space) + 22svh + 55px);
+  }
+  .sceneControls { gap: 5px 7px; }
+  .sceneControls > :global(.og-filter-field) { min-width: 83px; }
+  .sceneBack { min-height: 42px; }
+  .sceneControls :global(.og-filter-select) select { min-height: 42px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .viewport, .profile, .profile *, .sceneBack, .outlookAction {
+    animation: none;
+    transition: none;
   }
 }

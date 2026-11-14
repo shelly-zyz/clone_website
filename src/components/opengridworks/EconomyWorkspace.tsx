@@ -1,322 +1,404 @@
 "use client";
 
-import { ArrowUpRight } from "lucide-react";
-import maplibregl, { type ExpressionSpecification, type Map as MapLibreMap } from "maplibre-gl";
-import type { FeatureCollection, Point } from "geojson";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { applyRasterBasemap } from "@/lib/raster-basemap";
+import Link from "next/link";
+import { ArrowLeft, ArrowUpRight, ChartNoAxesCombined, Globe2, Search, X } from "lucide-react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { analysisContextHref, readWorkspaceContext, rememberWorkspace, replaceWorkspaceContext, type WorkspaceContext } from "@/lib/workspace-context";
 import type { MapTheme } from "@/types/opengridworks";
-import { ForecastSeries, ForecastSidebar } from "./ForecastSidebar";
+import { EconomyGlobe } from "./EconomyGlobe";
+import { ForecastSeries } from "./ForecastSidebar";
+import { ScenarioPeriods, ScenarioRanking, ScenarioScene } from "./ScenarioScene";
 import { WorkspaceFilterSelect, WorkspaceSidebar } from "./WorkspaceSidebar";
+import {
+  economyMetrics, formatEconomyAmount, formatGrowth, rankEconomies,
+  type EconomicOutlook, type EconomyCountry, type EconomyMetric, type EconomyRank, type EconomySnapshot, type EconomyValue,
+} from "./economy-data";
 import styles from "./EconomyWorkspace.module.css";
-import forecastStyles from "./ForecastSidebar.module.css";
 
-const indicators = {
-  "NY.GDP.MKTP.CD": { label: "GDP", min: 1e8, max: 3e13, unit: "美元" },
-  "NY.GDP.PCAP.CD": { label: "人均 GDP", min: 5e2, max: 1e5, unit: "美元/人" },
-  "NE.EXP.GNFS.CD": { label: "商品与服务出口额", min: 1e7, max: 4e12, unit: "美元" },
-};
+const views = [
+  { id: "history", label: "统计地图", icon: Globe2 },
+  { id: "outlook", label: "增长展望", icon: ChartNoAxesCombined },
+] as const;
+const metricOptions = Object.entries(economyMetrics).map(([value, { label }]) => ({ value, label }));
+const rankFormat = new Intl.NumberFormat("zh-CN");
 
-type Indicator = keyof typeof indicators;
-
-type Country = {
-  code: string;
-  mapId: string;
-  label: string;
-  coordinates: [number, number];
-  values: Record<Indicator, (number | null)[]>;
-};
-
-type EconomySnapshot = {
-  years: number[];
-  updateDates: Record<Indicator, string>;
-  countries: Country[];
-};
-
-type CountryValue = { country: Country; value: number | null };
-type EconomicOutlook = {
-  edition: string;
-  sourceUrl: string;
-  years: number[];
-  values: Record<string, (number | null)[] | undefined>;
-};
-
-const globeCenter: [number, number] = [79, 22];
-const formatter = new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 2 });
-const perCapitaFormatter = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 });
-
-function formatAmount(value: number, indicator: Indicator) {
-  const number = indicator === "NY.GDP.PCAP.CD" ? perCapitaFormatter.format(value) : formatter.format(value);
-  return `${number} ${indicators[indicator].unit}`;
-}
-
-function globeZoom(container: HTMLElement) {
-  const diameter = Math.max(185, Math.min(container.clientWidth, container.clientHeight) * 0.87);
-  return Math.log2(diameter / 145);
-}
-
-function mapLayers(values: CountryValue[], indicator: Indicator) {
-  const { min, max } = indicators[indicator];
-  const levels = new Map<string, number>();
-  const points: FeatureCollection<Point, { mapId: string; level: number }> = { type: "FeatureCollection", features: [] };
-
-  for (const { country, value } of values) {
-    if (value === null) continue;
-    const level = Math.min(1, Math.log(Math.max(value, min) / min) / Math.log(max / min));
-    levels.set(country.mapId, level);
-    points.features.push({
-      type: "Feature",
-      geometry: { type: "Point", coordinates: country.coordinates },
-      properties: { mapId: country.mapId, level },
+function useSnapshot<T>(path: string) {
+  const [data, setData] = useState<T | null>();
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch(path, { signal: controller.signal }).then(async (response) => {
+      if (!response.ok) throw new Error("Snapshot unavailable");
+      return response.json() as Promise<T>;
+    }).then((result) => {
+      if (!controller.signal.aborted) setData(result);
+    }).catch(() => {
+      if (!controller.signal.aborted) setData(null);
     });
-  }
-
-  const [first, ...rest] = levels;
-  const levelByCountry: ExpressionSpecification = first
-    ? ["match", ["get", "ADM0_A3"], first[0], first[1], ...rest.flat(), -1]
-    : ["literal", -1];
-  const fill: ExpressionSpecification = ["interpolate", ["linear"], levelByCountry,
-    -1, "#25262a", 0, "#513727", 0.5, "#a05a36", 1, "#e9a04f"];
-  return { fill, points };
+    return () => controller.abort();
+  }, [attempt, path]);
+  return { data, retry: () => { setData(undefined); setAttempt(value => value + 1); } };
 }
 
-function EconomyGlobe({ basemap, onBasemapError, values, indicator, selected, onSelect }: {
-  basemap: MapTheme;
-  onBasemapError: () => void;
-  values: CountryValue[];
-  indicator: Indicator;
-  selected: Country | undefined;
-  onSelect: (mapId: string) => void;
-}) {
-  const container = useRef<HTMLDivElement>(null);
-  const map = useRef<MapLibreMap | null>(null);
-  const [status, setStatus] = useState<"loading" | "ready" | "unavailable">("loading");
-
-  useEffect(() => {
-    const element = container.current;
-    if (!element) return;
-
-    let view: MapLibreMap;
-    try {
-      view = new maplibregl.Map({
-        container: element,
-        center: globeCenter,
-        zoom: globeZoom(element),
-        minZoom: 0.1,
-        maxZoom: 6,
-        dragRotate: false,
-        touchPitch: false,
-        attributionControl: { compact: true },
-        style: {
-          version: 8,
-          projection: { type: "globe" },
-          sky: {
-            "sky-color": "#101821",
-            "horizon-color": "#1e293b",
-            "fog-color": "#0f172a",
-            "atmosphere-blend": 0.28,
-          },
-          sources: {
-            countries: { type: "geojson", data: "/data/natural-earth/ne_50m_admin_0_countries.geojson" },
-            indicators: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
-          },
-          layers: [
-            { id: "background", type: "background", paint: { "background-color": "#020711" } },
-            { id: "countries", type: "fill", source: "countries", paint: {
-              "fill-color": "#25262a",
-              "fill-opacity": 0.42,
-            } },
-            { id: "borders", type: "line", source: "countries", paint: { "line-color": "#8e735b", "line-opacity": 0.38, "line-width": 0.7 } },
-            { id: "selected-country", type: "line", source: "countries", filter: ["==", ["get", "ADM0_A3"], ""],
-              paint: { "line-color": "#ffdb96", "line-width": 2, "line-opacity": 0.96 } },
-            { id: "indicator-glow", type: "circle", source: "indicators", paint: {
-              "circle-radius": ["interpolate", ["linear"], ["get", "level"], 0, 4, 1, 18],
-              "circle-color": "#efaa64", "circle-opacity": 0.52, "circle-blur": 0.9,
-            } },
-            { id: "indicator-points", type: "circle", source: "indicators", paint: {
-              "circle-radius": ["interpolate", ["linear"], ["get", "level"], 0, 1.3, 1, 5.8],
-              "circle-color": ["interpolate", ["linear"], ["get", "level"], 0, "#b98150", 1, "#ffe9b2"],
-              "circle-opacity": 0.96, "circle-blur": 0.18,
-            } },
-          ],
-        },
-      });
-    } catch {
-      const request = requestAnimationFrame(() => setStatus("unavailable"));
-      return () => cancelAnimationFrame(request);
-    }
-
-    map.current = view;
-    view.once("load", () => setStatus("ready"));
-    return () => {
-      map.current = null;
-      view.remove();
-    };
-  }, []);
-
-  useEffect(() => {
-    const view = map.current;
-    if (!view || status !== "ready") return;
-    applyRasterBasemap(view, basemap, "countries");
-
-    if (basemap.key !== "nasa") return;
-    const source = view.getSource<maplibregl.RasterTileSource>("basemap-raster");
-    source?.once("error", onBasemapError);
-    return () => { source?.off("error", onBasemapError); };
-  }, [basemap, onBasemapError, status]);
-
-  useEffect(() => {
-    const view = map.current;
-    if (!view || status !== "ready") return;
-    const { fill, points } = mapLayers(values, indicator);
-    view.setPaintProperty("countries", "fill-color", fill);
-    view.getSource<maplibregl.GeoJSONSource>("indicators")?.setData(points);
-
-    const mapIds = new Set(values.map(({ country }) => country.mapId));
-    const pickCountry = (event: maplibregl.MapMouseEvent) => {
-      const features = view.queryRenderedFeatures(event.point, { layers: ["indicator-points", "countries"] });
-      for (const { properties } of features) {
-        const mapId: unknown = properties.mapId ?? properties.ADM0_A3;
-        if (typeof mapId === "string" && mapIds.has(mapId)) {
-          onSelect(mapId);
-          return;
-        }
-      }
-    };
-    view.on("click", pickCountry);
-    return () => { view.off("click", pickCountry); };
-  }, [indicator, onSelect, status, values]);
-
-  useEffect(() => {
-    const view = map.current;
-    if (!view || status !== "ready") return;
-    const zoom = globeZoom(view.getContainer());
-    view.setFilter("selected-country", ["==", ["get", "ADM0_A3"], selected?.mapId ?? ""]);
-    view.easeTo({ center: selected?.coordinates ?? globeCenter, zoom: zoom + (selected ? 0.55 : 0), duration: 680 });
-  }, [selected, status]);
-
+function SnapshotStatus({ data, label, retry }: { data: unknown; label: string; retry: () => void }) {
+  if (data) return null;
   return (
-    <section className={styles.viewport} aria-label="交互式经济地球">
-      <div className={styles.map} ref={container} />
-      {status === "unavailable" ? <p className={styles.mapStatus} role="status">当前浏览器无法绘制地球</p> : null}
-    </section>
+    <p className={styles.status} role="status">
+      {data === null ? `${label}暂不可用。` : `正在读取${label}…`}
+      {data === null && <button type="button" className={styles.textButton} onClick={retry}>重试</button>}
+    </p>
   );
 }
 
-export function EconomyWorkspace({ basemap, onBasemapError }: { basemap: MapTheme; onBasemapError: () => void }) {
-  const [snapshot, setSnapshot] = useState<EconomySnapshot | null>(null);
-  const [failed, setFailed] = useState(false);
-  const [indicator, setIndicator] = useState<Indicator>("NY.GDP.MKTP.CD");
-  const [year, setYear] = useState(2024);
-  const [countryId, setCountryId] = useState("");
+function CountrySearch({ countries, onSelect }: { countries: EconomyCountry[]; onSelect: (code: string) => void }) {
+  const id = useId();
+  const [query, setQuery] = useState("");
+  const term = query.trim().toUpperCase();
+  const matches = term ? countries.filter(country => country.label.toUpperCase().includes(term) || country.code.includes(term)).slice(0, 7) : [];
+  const choose = (country: EconomyCountry) => {
+    onSelect(country.code);
+    setQuery("");
+  };
+  return (
+    <div className={styles.search}>
+      <label htmlFor={id}>搜索经济体</label>
+      <div className={styles.searchField}>
+        <Search size={14} aria-hidden="true" />
+        <input id={id} type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="名称或三字代码"
+          onKeyDown={event => {
+            if (event.key === "Enter" && matches.length === 1) choose(matches[0]);
+            if (event.key === "Escape") setQuery("");
+          }} />
+      </div>
+      {term && (matches.length > 0 ? (
+        <ul className={styles.searchResults} aria-label="经济体搜索结果">
+          {matches.map(country => (
+            <li key={country.code}><button type="button" onClick={() => choose(country)}>
+              {country.label}<small>{country.code}</small>
+            </button></li>
+          ))}
+        </ul>
+      ) : <p className={styles.status} role="status">没有匹配的经济体。</p>)}
+    </div>
+  );
+}
+
+function ProfilePanel({ open, onOpen, onClose, children }: {
+  open: boolean; onOpen: () => void; onClose: () => void; children: ReactNode;
+}) {
+  const id = useId();
+  const trigger = useRef<HTMLButtonElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    const controller = new AbortController();
-    void fetch("/data/economy/wdi.json", { signal: controller.signal })
-      .then((response) => {
-        if (!response.ok) throw new Error("World Bank snapshot is unavailable");
-        return response.json() as Promise<EconomySnapshot>;
-      })
-      .then((data) => { if (!controller.signal.aborted) setSnapshot(data); })
-      .catch(() => { if (!controller.signal.aborted) setFailed(true); });
-    return () => controller.abort();
-  }, []);
+    if (open && matchMedia("(max-width: 900px)").matches) closeButton.current?.focus({ preventScroll: true });
+  }, [open]);
 
-  const countryOptions = useMemo(() => {
-    const options = snapshot?.countries.map(({ mapId, label }) => ({ value: mapId, label })) ?? [];
-    return [{ value: "", label: "全球" }, ...options.sort((a, b) => a.label.localeCompare(b.label, "zh-CN"))];
-  }, [snapshot]);
-  const yearOptions = snapshot?.years.toReversed().map((value) => ({ value: String(value), label: `${value} 年` }))
-    ?? [{ value: String(year), label: `${year} 年` }];
-  const values = useMemo(() => {
-    if (!snapshot) return [];
-    const index = snapshot.years.indexOf(year);
-    return snapshot.countries.map((country) => ({ country, value: country.values[indicator][index] ?? null }));
-  }, [snapshot, indicator, year]);
-  const selected = values.find(({ country }) => country.mapId === countryId);
-  const available = values.filter(({ value }) => value !== null).length;
-  const { min, max } = indicators[indicator];
+  function close() {
+    onClose();
+    trigger.current?.focus();
+  }
 
   return (
     <>
-      <EconomyGlobe
-        basemap={basemap}
-        onBasemapError={onBasemapError}
-        values={values}
-        indicator={indicator}
-        selected={selected?.country}
-        onSelect={setCountryId}
-      />
-      <WorkspaceSidebar topic="economy" summary="世界银行 WDI · 全球经济指标">
-        <section className={styles.filters} aria-label="经济数据筛选">
-          <WorkspaceFilterSelect label="国家或地区" options={countryOptions} value={countryId} onChange={setCountryId} />
-          <WorkspaceFilterSelect label="经济指标" value={indicator}
-            options={Object.entries(indicators).map(([value, { label }]) => ({ value, label }))}
-            onChange={(value) => setIndicator(value as Indicator)} />
-          <WorkspaceFilterSelect label="统计年份" options={yearOptions} value={String(year)} onChange={(value) => setYear(Number(value))} />
-          <div className={styles.value} role="status">
-            {selected ? (
-              <>
-                <span>{selected.country.label} · {year} 年</span>
-                <strong>{selected.value === null ? "暂无该年数据" : formatAmount(selected.value, indicator)}</strong>
-              </>
-            ) : snapshot ? <span>{year} 年 · {available} 个国家或地区有数据</span>
-              : <span>{failed ? "经济数据暂不可用" : "正在加载经济数据…"}</span>}
-          </div>
-          <div className={styles.legend} aria-label="经济指标图例">
-            <p>现价美元 · 对数色阶</p>
-            <div className={styles.scale} aria-hidden="true" />
-            <div className={styles.range}><span>≤ {formatAmount(min, indicator)}</span><span>≥ {formatAmount(max, indicator)}</span></div>
-            <p className={styles.missing}><span aria-hidden="true" /> 缺测</p>
-          </div>
-          <div className={styles.source}>
-            <a href={`https://data.worldbank.org/indicator/${indicator}`} target="_blank" rel="noreferrer">
-              世界银行 · WDI 指标说明 <ArrowUpRight size={13} aria-hidden="true" />
-            </a>
-            {snapshot ? <span>上游更新 {snapshot.updateDates[indicator]}</span> : null}
-          </div>
-        </section>
-      </WorkspaceSidebar>
-      <EconomyForecast country={selected?.country} />
+      <button ref={trigger} type="button" className={styles.profileTrigger} aria-controls={id} aria-expanded={open} onClick={onOpen}>
+        <ChartNoAxesCombined size={16} aria-hidden="true" /> 经济体档案
+      </button>
+      {open && <button type="button" className={styles.scrim} aria-label="关闭经济体档案" onClick={close} tabIndex={-1} />}
+      <aside id={id} className={styles.profile} aria-label="经济体档案" data-open={open}
+        onKeyDown={event => { if (event.key === "Escape" && open) close(); }}>
+        <button ref={closeButton} type="button" className={styles.close} aria-label="关闭经济体档案" onClick={close}>
+          <X size={19} aria-hidden="true" />
+        </button>
+        {children}
+      </aside>
     </>
   );
 }
 
-function EconomyForecast({ country }: { country?: Country }) {
-  const [outlook, setOutlook] = useState<EconomicOutlook | null>();
+function EconomyProfile({
+  country, year, metric, snapshot, ranking, onMetric, onCountry, onYear, onOutlook,
+}: {
+  country?: EconomyCountry; year: number; metric: EconomyMetric; snapshot?: EconomySnapshot | null;
+  ranking: EconomyRank[]; onMetric: (metric: EconomyMetric) => void; onCountry: (code: string) => void;
+  onYear: (year: number) => void; onOutlook: () => void;
+}) {
+  const spec = economyMetrics[metric];
+  const years = snapshot?.years ?? [];
+  const index = years.indexOf(year);
+  const rank = ranking.find(item => item.country.code === country?.code)?.rank;
+  const history = country?.values[spec.code] ?? [];
+  const currentValue = history[index] ?? null;
+  const historyUnit = metric === "perCapita" ? "美元/人" : "亿美元";
+  const points = years.slice(0, index + 1).map((date, position) => ({
+    date: `${date}-01-01`,
+    value: history[position] == null ? null : history[position] / (metric === "perCapita" ? 1 : 1e8),
+  }));
+  const comparePath = analysisContextHref(metric === "exports" ? "trade" : "economy", {
+    country: country?.code, year, metric,
+  });
+  const tradePath = analysisContextHref("trade", { country: country?.code, year, metric: "exports" });
+
+  return (
+    <>
+      <header className={styles.profileHeader}>
+        <p>{year} 年 · 世界银行 WDI</p>
+        <h2>{country?.label ?? "全球概览"}</h2>
+        <span>{country ? `${country.code} · 经济体档案` : `${rankFormat.format(ranking.length)} 个经济体有数据`}</span>
+      </header>
+      {country && (
+        <section className={styles.profileIndicators} aria-label="经济指标">
+          {(Object.keys(economyMetrics) as EconomyMetric[]).map(item => (
+            <button key={item} type="button" aria-pressed={metric === item} onClick={() => onMetric(item)}>
+              <span>{economyMetrics[item].label}</span>
+              <strong>{formatEconomyAmount(country.values[economyMetrics[item].code][index] ?? null, item)}</strong>
+            </button>
+          ))}
+        </section>
+      )}
+      {country && (
+        <section className={styles.profileSection} aria-label="历史趋势">
+          <div className={styles.sectionHeading}>
+            <h3>{spec.label}走势</h3>
+            <span>{rank ? `第 ${rank} 位` : currentValue === null ? "本年缺测" : ""}</span>
+          </div>
+          <p className={styles.note}>现价美元 · {historyUnit}</p>
+          {points.some(point => point.value !== null)
+            ? <ForecastSeries points={points} observed grain="year" unit={historyUnit} label={`${country.label}${spec.label}史`} />
+            : <p className={styles.status}>所查时段暂无该指标数据。</p>}
+          <details className={styles.history}>
+            <summary>历年数据</summary>
+            <table>
+              <thead><tr><th scope="col">年份</th><th scope="col">{spec.label}</th></tr></thead>
+              <tbody>
+                {years.map((item, position) => (
+                  <tr key={item} data-active={item === year}>
+                    <th scope="row"><button type="button" aria-pressed={item === year} onClick={() => onYear(item)}>{item}</button></th>
+                    <td>{formatEconomyAmount(history[position] ?? null, metric)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </details>
+        </section>
+      )}
+      <section className={styles.profileSection} aria-label="经济体排行">
+        <div className={styles.sectionHeading}>
+          <h3>{spec.label}排行</h3>
+          <span>{year} 年</span>
+        </div>
+        {ranking.length ? (
+          <ol className={styles.profileRanking}>
+            {ranking.slice(0, 6).map(({ country: item, rank: position, value }) => (
+              <li key={item.code}>
+                <button type="button" aria-pressed={item.code === country?.code} onClick={() => onCountry(item.code)}>
+                  <span>{String(position).padStart(2, "0")}</span>
+                  <span>{item.label}</span>
+                  <strong>{formatEconomyAmount(value, metric)}</strong>
+                </button>
+              </li>
+            ))}
+          </ol>
+        ) : <p className={styles.status}>该年份暂无可排行的数据。</p>}
+      </section>
+      <div className={styles.profileLinks}>
+        <button type="button" className={styles.outlookAction} onClick={onOutlook}>
+          增长展望 <ArrowUpRight size={15} aria-hidden="true" />
+        </button>
+        <Link href={comparePath} prefetch={false}>{metric === "exports" ? "出口与开放度" : "更多经济分析"} <ArrowUpRight size={13} aria-hidden="true" /></Link>
+        {metric !== "exports" && <Link href={tradePath} prefetch={false}>出口与开放度 <ArrowUpRight size={13} aria-hidden="true" /></Link>}
+      </div>
+      <a className={styles.profileSource} href={`https://data.worldbank.org/indicator/${spec.code}`} target="_blank" rel="noreferrer">
+        世界银行 WDI · {snapshot?.updateDates[spec.code] ?? "指标来源"} <ArrowUpRight size={12} aria-hidden="true" />
+      </a>
+    </>
+  );
+}
+
+export function EconomyWorkspace({ basemap, onBasemapError, initialContext, onReady }: {
+  basemap: MapTheme; onBasemapError: () => void; initialContext?: WorkspaceContext; onReady?: () => void;
+}) {
+  const { data: snapshot, retry: retrySnapshot } = useSnapshot<EconomySnapshot>("/data/economy/wdi.json");
+  const { data: outlook, retry: retryOutlook } = useSnapshot<EconomicOutlook>("/data/economy/gep.json");
+  const [countryCode, setCountryCode] = useState(initialContext?.country ?? "");
+  const [camera, setCamera] = useState(initialContext?.camera);
+  const [yearInput, setYearInput] = useState(initialContext?.year ?? 2024);
+  const [metric, setMetric] = useState<EconomyMetric>(initialContext?.metric ?? "gdp");
+  const [outlookActive, setOutlookActive] = useState(initialContext?.scene === "outlook");
+  const [targetInput, setTargetInput] = useState(initialContext?.targetYear ?? 2026);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const outlookTrigger = useRef<HTMLButtonElement>(null);
+  const restoredFocus = useRef(false);
+  const outlookBack = useRef<HTMLButtonElement>(null);
+
   useEffect(() => {
-    const controller = new AbortController();
-    void fetch("/data/economy/gep.json", { signal: controller.signal })
-      .then((response) => {
-        if (!response.ok) throw new Error("Economic outlook is unavailable");
-        return response.json() as Promise<EconomicOutlook>;
-      })
-      .then((data) => { if (!controller.signal.aborted) setOutlook(data); })
-      .catch(() => { if (!controller.signal.aborted) setOutlook(null); });
-    return () => controller.abort();
+    const restore = () => {
+      const params = new URLSearchParams(window.location.search);
+      if (window.location.pathname !== "/workspace" || params.get("topic") !== "economy") return;
+      const context = readWorkspaceContext(params);
+      setCountryCode(context.country ?? "");
+      setCamera(context.camera);
+      setYearInput(context.year ?? 2024);
+      setMetric(context.metric ?? "gdp");
+      setOutlookActive(context.scene === "outlook");
+      setTargetInput(context.targetYear ?? 2026);
+    };
+    window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
   }, []);
 
-  const values = outlook?.values[country?.code ?? "WLT"];
-  const points = outlook && values
-    ? outlook.years.map((year, index) => ({ date: `${year}-01-01`, value: values[index] ?? null }))
-    : [];
+  useEffect(() => {
+    if (restoredFocus.current) {
+      (outlookActive ? outlookBack.current : outlookTrigger.current)?.focus({ preventScroll: true });
+      restoredFocus.current = false;
+    }
+  }, [outlookActive]);
+
+  const countryOptions = useMemo(() => {
+    const list = snapshot?.countries.map(({ code, label }) => ({ value: code, label })) ?? [];
+    return [{ value: "", label: "全球" }, ...list.sort((a, b) => a.label.localeCompare(b.label, "zh-CN"))];
+  }, [snapshot]);
+  const selected = snapshot?.countries.find(item => item.code === countryCode);
+  const country = snapshot && !selected ? "" : countryCode;
+  const year = snapshot?.years.includes(yearInput) ? yearInput : snapshot?.years.at(-1) ?? yearInput;
+  const targetYear = outlook?.years.includes(targetInput) ? targetInput : outlook?.years[0] ?? targetInput;
+  const values = useMemo<EconomyValue[]>(() => {
+    if (!snapshot) return [];
+    const column = snapshot.years.indexOf(year);
+    return snapshot.countries.map(item => ({ country: item, value: item.values[economyMetrics[metric].code][column] ?? null }));
+  }, [snapshot, metric, year]);
+  const forecastValues = useMemo<EconomyValue[]>(() => {
+    if (!snapshot || !outlook) return [];
+    const index = outlook.years.indexOf(targetYear);
+    return snapshot.countries.map(item => ({ country: item, value: outlook.values[item.code]?.[index] ?? null }));
+  }, [outlook, snapshot, targetYear]);
+  const ranking = useMemo(() => rankEconomies(values), [values]);
+  const forecastRanking = useMemo(() => rankEconomies(forecastValues), [forecastValues]);
+
+  const chooseCountry = useCallback((id: string) => {
+    setCountryCode(id);
+    replaceWorkspaceContext({ country: id || null });
+  }, []);
+  const pickCountry = useCallback((id: string) => {
+    chooseCountry(id);
+    if (!outlookActive && window.matchMedia("(max-width: 900px)").matches) setProfileOpen(true);
+  }, [chooseCountry, outlookActive]);
+
+  const chooseMetric = (value: EconomyMetric) => {
+    setMetric(value);
+    replaceWorkspaceContext({ metric: value });
+  };
+  const chooseYear = (value: number) => {
+    setYearInput(value);
+    replaceWorkspaceContext({ year: value });
+  };
+  const chooseTarget = (value: string) => {
+    setTargetInput(Number(value));
+    replaceWorkspaceContext({ targetYear: Number(value) });
+  };
+  const chooseView = (next: string) => {
+    const nextOutlook = next === "outlook";
+    if (nextOutlook === outlookActive) return;
+    const url = new URL(window.location.href);
+    if (nextOutlook) {
+      url.searchParams.set("scene", "outlook");
+      url.searchParams.set("targetYear", String(targetYear));
+    } else {
+      url.searchParams.delete("scene");
+    }
+    window.history.pushState(null, "", url);
+    rememberWorkspace("economy");
+    restoredFocus.current = true;
+    setProfileOpen(false);
+    setOutlookActive(nextOutlook);
+  };
+
+  const worldGrowth = outlook?.values.WLT?.[outlook.years.indexOf(targetYear)] ?? null;
+  const selectedGrowth = selected ? forecastValues.find(value => value.country.code === selected.code)?.value ?? null : worldGrowth;
+  const worldRow = { id: "", label: "全球基准", value: worldGrowth };
+  const top = forecastRanking.slice(0, 6).map(({ country: item, value }) => ({ id: item.code, label: item.label, value }));
+  const forecastRows = forecastRanking.length ? [worldRow, ...top] : [];
+  if (selected && !top.some(row => row.id === selected.code)) {
+    forecastRows.splice(1, 0, { id: selected.code, label: selected.label, value: selectedGrowth });
+  }
+  const predictedSeries = outlook?.years.map((item, index) => ({
+    date: `${item}-01-01`, value: outlook.values[selected?.code ?? "WLT"]?.[index] ?? null,
+  })) ?? [];
+  const statisticsHref = analysisContextHref("outlook", { country: selected?.code, year, metric, targetYear }, "growth-outlook");
+  const historyAnalysis = analysisContextHref(metric === "exports" ? "trade" : "economy", {
+    country: selected?.code, year, metric,
+  });
+  const { min, max } = economyMetrics[metric];
+  const yearOptions = snapshot?.years.toReversed().map(value => ({ value: String(value), label: `${value} 年` }))
+    ?? [{ value: String(year), label: `${year} 年` }];
+
   return (
-    <ForecastSidebar topic="economy">
-      <h3>{country?.label ?? "全球"}实际 GDP 增速</h3>
-      <p className={forecastStyles.muted}>世界银行发布预测 · 按不变价计算</p>
-      {points.some(({ value }) => value !== null) ? (
-        <ForecastSeries points={points} unit="%" grain="year" label="实际 GDP 年增速预测" />
+    <>
+      <EconomyGlobe basemap={basemap} onBasemapError={onBasemapError} values={outlookActive ? forecastValues : values}
+        metric={metric} outlook={outlookActive} selected={selected} country={country} camera={camera} onSelect={pickCountry} onReady={onReady} />
+      {!outlookActive ? (
+        <>
+          <WorkspaceSidebar topic="economy" summary="世界银行 WDI · 全球经济指标" analysisHref={historyAnalysis}>
+            <section className={styles.filters} aria-label="经济数据筛选">
+              {snapshot && <CountrySearch countries={snapshot.countries} onSelect={chooseCountry} />}
+              <WorkspaceFilterSelect label="国家或地区" options={countryOptions} value={country} onChange={chooseCountry} />
+              <WorkspaceFilterSelect label="经济指标" value={metric} options={metricOptions}
+                onChange={value => { if (value === "gdp" || value === "perCapita" || value === "exports") chooseMetric(value); }} />
+              <WorkspaceFilterSelect label="统计年份" options={yearOptions} value={String(year)} onChange={value => chooseYear(Number(value))} />
+              <SnapshotStatus data={snapshot} label="经济指标" retry={retrySnapshot} />
+              <div className={styles.legend} aria-label="经济指标图例">
+                <p>现价美元 · 对数色阶</p>
+                <div className={styles.scale} aria-hidden="true" />
+                <div className={styles.range}><span>≤ {formatEconomyAmount(min, metric)}</span><span>≥ {formatEconomyAmount(max, metric)}</span></div>
+                <p className={styles.missing}><span aria-hidden="true" /> 缺测</p>
+              </div>
+              <button ref={outlookTrigger} type="button" className={styles.outlookAction} onClick={() => chooseView("outlook")}>
+                查看增长展望 <ArrowUpRight size={15} aria-hidden="true" />
+              </button>
+            </section>
+          </WorkspaceSidebar>
+          <ProfilePanel open={profileOpen} onOpen={() => setProfileOpen(true)} onClose={() => setProfileOpen(false)}>
+            <EconomyProfile country={selected} year={year} metric={metric} snapshot={snapshot} ranking={ranking}
+              onCountry={chooseCountry} onMetric={chooseMetric} onYear={chooseYear} onOutlook={() => chooseView("outlook")} />
+          </ProfilePanel>
+        </>
       ) : (
-        <p className={forecastStyles.status} role="status">
-          {outlook === undefined ? "正在读取增长展望…" : outlook ? "该地区暂无已发布的增长预测。" : "增长展望暂不可用。"}
-        </p>
+        <ScenarioScene title="经济增长展望" period={targetYear} options={views} selectedOption="outlook" onOptionChange={chooseView}
+          controls={(
+            <div className={styles.sceneControls}>
+              <button ref={outlookBack} type="button" className={styles.sceneBack} onClick={() => chooseView("history")}>
+                <ArrowLeft size={16} aria-hidden="true" /> 返回统计地图
+              </button>
+              <WorkspaceFilterSelect label="展望经济体" value={country} options={countryOptions} onChange={chooseCountry} />
+            </div>
+          )}
+          footer={outlook && <ScenarioPeriods periods={outlook.years.map(value => ({ id: String(value), label: String(value) }))}
+            selected={String(targetYear)} onSelect={chooseTarget} />}
+          summary={(
+            <ScenarioRanking title={selected?.label ?? "全球实际 GDP 增速"}
+              subtitle={outlook ? `世界银行 GEP · ${outlook.edition} 版` : "世界银行全球经济展望"}
+              label={selected ? `${targetYear} 年实际 GDP 增速预测` : `${targetYear} 年预测`}
+              value={selectedGrowth === null ? "暂无" : formatGrowth(selectedGrowth)}
+              rows={forecastRows} selected={country} onSelect={chooseCountry} formatValue={formatGrowth}>
+              <div className={styles.outlookLinks}>
+                <Link href={statisticsHref} prefetch={false}>增长路径与同版对比 <ArrowUpRight size={14} aria-hidden="true" /></Link>
+                {outlook && <a href={outlook.sourceUrl} target="_blank" rel="noreferrer">数据来源 <ArrowUpRight size={12} aria-hidden="true" /></a>}
+              </div>
+              <div className={styles.outlookLegend} aria-label="实际 GDP 增速色阶">
+                <div className={styles.outlookScale} aria-hidden="true" />
+                <div className={styles.range}><span>−6% 以下</span><span>0%</span><span>10% 以上</span></div>
+                <p className={styles.missing}><span aria-hidden="true" /> 缺测</p>
+              </div>
+              <SnapshotStatus data={outlook} label="增长展望" retry={retryOutlook} />
+              <SnapshotStatus data={snapshot} label="经济体目录" retry={retrySnapshot} />
+              {forecastRanking.length > 0 && <p className={styles.note}>显示 {forecastRanking.length} 个有值经济体中的前 {top.length} 位 · 正负值按原值展示</p>}
+              {predictedSeries.some(item => item.value !== null) && (
+                <ForecastSeries points={predictedSeries} unit="%" grain="year" label="同版 GDP 增速预测" />
+              )}
+            </ScenarioRanking>
+          )}
+        />
       )}
-      {outlook && (
-        <p className={forecastStyles.source}>
-          <a href={outlook.sourceUrl} target="_blank" rel="noreferrer">世界银行 · 全球经济展望</a>
-          {" · "}{outlook.edition} 版
-        </p>
-      )}
-    </ForecastSidebar>
+    </>
   );
 }

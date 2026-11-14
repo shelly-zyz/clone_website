@@ -177,7 +177,7 @@
 .periods button[aria-pressed="true"] { background: #f1f6f3; color: #131b19; }
 
 .ranking {
-  --scene-accent: inherit;
+  --forecast-accent: var(--scene-accent, #d4fa45);
   border-block: 1px solid #536461;
   color: #f4f7f5;
 }
