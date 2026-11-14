@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import {
-  ArrowRight, ChartArea, ChartBar, ChartColumn, ChartLine, ChartScatter, Check, ChevronDown, ChevronRight, Compass,
-  Grid3X3, LayoutGrid, Map as MapIcon, RotateCw, Wind,
+  ArrowRight, CalendarDays, ChartArea, ChartBar, ChartColumn, ChartLine, ChartPie, ChartScatter, Check, ChevronDown, ChevronRight,
+  Compass, GitBranch, Grid3X3, LayoutGrid, Map as MapIcon, RotateCw, Wind,
 } from "lucide-react";
 import { useCallback, useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import type { VreTechnology } from "@/lib/climate-vre";
@@ -25,6 +25,7 @@ import styles from "./page.module.css";
 const chartIcons = {
   area: ChartArea, "stacked-area": ChartArea, line: ChartLine, column: ChartColumn, horizontal: ChartBar,
   treemap: LayoutGrid, heatmap: Grid3X3, bubble: ChartScatter, map: MapIcon, rose: Wind,
+  donut: ChartPie, sankey: GitBranch, waterfall: ChartColumn, calendar: CalendarDays, boxplot: ChartBar, "range-band": ChartArea,
 };
 const api = "/api/topic-analysis?topic=";
 
@@ -196,7 +197,7 @@ export function AnalysisWorkbench({ topic }: { topic: AnalysisTopic }) {
           <AnalysisFilter label="情景年份" value={String(displayedScenarioYear)} onChange={value => setScenarioYear(Number(value))}>
             {scenarioYears.map(year => <option key={year} value={year}>{year} 年</option>)}
           </AnalysisFilter>
-          <AnalysisFilter label="季节热力图指标" value={technology} onChange={value => {
+          <AnalysisFilter label="季节分析指标" value={technology} onChange={value => {
             if (value === "wind" || value === "solar") setTechnology(value);
           }}>
             <option value="wind">风电</option><option value="solar">光伏</option>
@@ -261,7 +262,8 @@ export function AnalysisWorkbench({ topic }: { topic: AnalysisTopic }) {
 
   function renderFigure(spec: AnalysisChartSpec, primary = false) {
     return <AnalysisFigure key={spec.id} spec={spec} primary={primary} empty={emptyMessage(spec)}
-      onRegion={spec.kind === "map" || (spec.kind === "bubble" && topic === "trade") ? onRegion : undefined} />;
+      onCategory={spec.kind === "calendar" ? setCarbonDate
+        : spec.kind === "map" || (spec.kind === "bubble" && topic === "trade") ? onRegion : undefined} />;
   }
 
   return (

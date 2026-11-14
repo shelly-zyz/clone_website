@@ -1,6 +1,6 @@
 export type Source = { label: string; href: string };
 export type Value = number | null;
-export type Series = { name: string; values: readonly Value[]; color?: string };
+export type Series = { name: string; values: readonly Value[]; color?: string; unit?: string };
 
 export type AnalysisChartSpec = {
   id: string;
@@ -20,6 +20,11 @@ export type AnalysisChartSpec = {
   | { kind: "line" | "area" | "stacked-area" | "column" | "horizontal" | "treemap" | "rose" | "heatmap" }
   | { kind: "bubble"; xUnit: string; xLog?: boolean; sizeName: string; sizeUnit: string; sizes: readonly number[] }
   | { kind: "map"; mapIds: readonly string[]; stops: readonly number[] }
+  | { kind: "donut"; center: { value: Value; label: string; unit: string } }
+  | { kind: "sankey"; nodes: { name: string; value: number; color: string }[]; links: { source: string; target: string; value: number }[] }
+  | { kind: "waterfall" | "calendar" }
+  | { kind: "boxplot"; series: readonly [minimum: Series, lower: Series, median: Series, upper: Series, maximum: Series, selected: Series, count: Series] }
+  | { kind: "range-band"; series: readonly [selected: Series, median: Series, lower: Series, upper: Series, count: Series] }
 );
 
 export type Metric = { label: string; value: string; unit?: string };

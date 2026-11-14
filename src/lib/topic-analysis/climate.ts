@@ -1,6 +1,7 @@
 import type { VreTechnology } from "@/lib/climate-vre";
 import { analysisTopics } from "./catalog";
 import carbon from "./carbon.json";
+import { distribution } from "./distribution";
 import { monthAxis, monthLabels, monthRange, observationMonths, seasonalSeries } from "./energy";
 import { carbonMetrics, type PublishedHistory, type RenewableScenario } from "./history";
 import { metric, type Analysis, type AnalysisChartSpec } from "./model";
@@ -94,6 +95,12 @@ export function buildCarbonAnalysis(date: string, history: PublishedHistory | nu
       series: [{ name: "排放速率合计", values: carbon.days.map(item => item.rate / carbonScale) }], sources: [graced],
     },
     {
+      id: "emission-calendar", label: "排放日历", title: "2025 年 8 月全球电力排放日历",
+        caption: "每格代表一个归档日，颜色越深表示该日全球排放速率越高。可点日期格或用上方筛选切换所选日纬度图。",
+      kind: "calendar", labels: carbonDates, unit: carbonUnit, color, focus: day.date,
+      series: [{ name: "排放速率合计", values: carbon.days.map(item => item.rate / carbonScale) }], sources: [graced],
+    },
+    {
       id: "emission-latitude-heatmap", label: "纬度热力图", title: "一个月内排放的纬度分布",
       caption: "2025 年 8 月日帧。颜色表示各纬度带的格点排放速率合计。",
       kind: "heatmap", labels: carbonLabels, unit: carbonUnit, color,
@@ -165,6 +172,8 @@ export function buildRenewableAnalysis(
   });
   const percent = (value: number | null | undefined) => value === null || value === undefined ? null : value * 100;
   const color = technologies[technology].color;
+  const selectedMonths = monthLabels.map((_, index) => percent(byTechnology[technology].get(selectedYear)?.monthly[index]));
+  const monthDistributions = monthLabels.map((_, index) => distribution(years.map(item => percent(byTechnology[technology].get(item)?.monthly[index]))));
   return {
     scope: `${region.label} · ${years[0]}–${years.at(-1)} 年 · ${data.gcm.toUpperCase()} / ${data.scenario.toUpperCase()} 情景`,
     metrics: [
@@ -180,6 +189,21 @@ export function buildRenewableAnalysis(
         series: years.map(item => ({
           name: String(item), values: monthLabels.map((_, index) => percent(byTechnology[technology].get(item)?.monthly[index])),
         })),
+        sources: [scenarioSource],
+      },
+      {
+        id: "renewable-distribution", label: "月度分布", title: `${region.label}${technologies[technology].name}各月容量因子分布`,
+        caption: `按日历月汇总 ${years[0]}–${years.at(-1)} 年的情景月值。箱体为第 25–75 百分位，横线为中位数，须标出最低与最高值，菱形为 ${selectedYear} 年同月。`,
+        kind: "boxplot", labels: monthLabels, unit: "%", color,
+        series: [
+          { name: "最低值", values: monthDistributions.map(item => item.minimum) },
+          { name: "第 25 百分位", values: monthDistributions.map(item => item.lower) },
+          { name: "中位数", values: monthDistributions.map(item => item.median) },
+          { name: "第 75 百分位", values: monthDistributions.map(item => item.upper) },
+          { name: "最高值", values: monthDistributions.map(item => item.maximum) },
+          { name: `${selectedYear} 年`, values: selectedMonths, color: "#d38a38" },
+          { name: "有效样本", values: monthDistributions.map(item => item.count), unit: "年" },
+        ],
         sources: [scenarioSource],
       },
       {

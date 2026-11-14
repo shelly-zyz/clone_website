@@ -1,7 +1,7 @@
 "use client";
 
-import { BarChart, HeatmapChart, LineChart, MapChart, ScatterChart, TreemapChart } from "echarts/charts";
-import { DataZoomComponent, GeoComponent, GridComponent, LegendComponent, MarkLineComponent, PolarComponent, TooltipComponent, VisualMapComponent } from "echarts/components";
+import { BarChart, BoxplotChart, CustomChart, HeatmapChart, LineChart, MapChart, PieChart, SankeyChart, ScatterChart, TreemapChart } from "echarts/charts";
+import { CalendarComponent, DataZoomComponent, GeoComponent, GridComponent, LegendComponent, MarkLineComponent, PolarComponent, TitleComponent, TooltipComponent, VisualMapComponent } from "echarts/components";
 import { getMap, init, registerMap, use as registerCharts, type ECElementEvent, type EChartsType } from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
 import { useEffect, useRef, useState } from "react";
@@ -10,8 +10,9 @@ import { chartOptions, worldMap } from "./plot-options";
 import styles from "./page.module.css";
 
 registerCharts([
-  BarChart, HeatmapChart, LineChart, MapChart, ScatterChart, TreemapChart, CanvasRenderer,
-  DataZoomComponent, GeoComponent, GridComponent, LegendComponent, MarkLineComponent, PolarComponent, TooltipComponent, VisualMapComponent,
+  BarChart, BoxplotChart, CustomChart, HeatmapChart, LineChart, MapChart, PieChart, SankeyChart, ScatterChart, TreemapChart, CanvasRenderer,
+  CalendarComponent, DataZoomComponent, GeoComponent, GridComponent, LegendComponent, MarkLineComponent, PolarComponent,
+  TitleComponent, TooltipComponent, VisualMapComponent,
 ]);
 
 type WorldGeometry = {
@@ -34,10 +35,10 @@ function loadWorld() {
   return worldRequest;
 }
 
-export function AnalysisPlot({ spec, compact = false, onRegion }: {
+export function AnalysisPlot({ spec, compact = false, onCategory }: {
   spec: AnalysisChartSpec;
   compact?: boolean;
-  onRegion?: (label: string) => void;
+  onCategory?: (label: string) => void;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const chart = useRef<EChartsType | null>(null);
@@ -76,8 +77,8 @@ export function AnalysisPlot({ spec, compact = false, onRegion }: {
     if (!instance) return;
     if (spec.kind !== "map") {
       instance.setOption(chartOptions(spec, compact), { notMerge: true });
-      if (spec.kind !== "bubble" || !onRegion || compact) return;
-      const onClick = (event: ECElementEvent) => onRegion(event.name);
+      if (!onCategory || compact || (spec.kind !== "bubble" && spec.kind !== "calendar")) return;
+      const onClick = (event: ECElementEvent) => onCategory(event.name);
       instance.on("click", onClick);
       return () => { instance.off("click", onClick); };
     }
@@ -89,14 +90,14 @@ export function AnalysisPlot({ spec, compact = false, onRegion }: {
     });
     const onClick = (event: ECElementEvent) => {
       const index = spec.mapIds.indexOf(String(event.name));
-      if (index >= 0 && spec.series[0].values[index] !== null) onRegion?.(spec.labels[index]);
+      if (index >= 0 && spec.series[0].values[index] !== null) onCategory?.(spec.labels[index]);
     };
-    if (onRegion && !compact) instance.on("click", onClick);
+    if (onCategory && !compact) instance.on("click", onClick);
     return () => {
       active = false;
       instance.off("click", onClick);
     };
-  }, [visible, spec, compact, mapAttempt, onRegion]);
+  }, [visible, spec, compact, mapAttempt, onCategory]);
 
   return (
     <div className={compact ? styles.previewPlot : styles.chartPlot} data-chart-kind={spec.kind}>

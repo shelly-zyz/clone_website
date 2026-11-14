@@ -8,6 +8,7 @@ const officialAnnual = { label: "国家统计局 · 年度统计公报", href: "
 const officialMonthly = { label: "国家统计局 · 国家数据月度库", href: "https://data.stats.gov.cn/easyquery.htm?cn=A01" };
 const officialProvincial = { label: "国家统计局 · 国家数据分省月度库", href: "https://data.stats.gov.cn/easyquery.htm?cn=E0101" };
 const mix = generationSeries.slice(1);
+const otherCapacity = { name: "其他及口径差额", color: "#668391" };
 const annualLabels = annual.map(row => String(row.year));
 export const powerYears = annualLabels.toReversed();
 export const monthLabels = Array.from({ length: 12 }, (_, index) => `${index + 1} 月`);
@@ -50,10 +51,20 @@ function annualSource(row: typeof annual[number]): Source {
   return { label: `国家统计局 · ${row.year} 年统计公报`, href: row.source };
 }
 
+function capacityValues(row: typeof annual[number]) {
+  const [total, ...parts] = row.capacityGw;
+  const residual = total - parts.reduce((sum, value) => sum + value, 0);
+  return [...parts, +residual.toFixed(2)];
+}
+
 export function buildPowerAnalysis(year: string): Analysis {
   const data = annual.find(row => String(row.year) === year) ?? annual[annual.length - 1];
+  const previous = annual.find(row => row.year === data.year - 1);
   const color = analysisTopics.power.color;
   const windSolarShare = (data.capacityGw[4] + data.capacityGw[5]) / data.capacityGw[0] * 100;
+  const composition = [...mix, otherCapacity];
+  const capacity = capacityValues(data);
+  const priorCapacity = previous ? capacityValues(previous) : [];
   const generation = mix.map(({ name, color }, index) => ({ name, color, value: data.generationTwh[index + 1] }))
     .toSorted((a, b) => (b.value ?? -1) - (a.value ?? -1));
   return {
@@ -64,6 +75,25 @@ export function buildPowerAnalysis(year: string): Analysis {
       metric("风电与太阳能装机占比", windSolarShare, "%"),
     ],
     charts: [
+      {
+        id: "capacity-share", label: "装机占比环图", title: `${data.year} 年风光装机占比`,
+        caption: "环心显示风电与太阳能占全国年末装机的比重。环段按各电源容量划分，末项为公报总量与已列分项之差。",
+        kind: "donut", labels: composition.map(item => item.name), categoryColors: composition.map(item => item.color),
+        unit: "GW", color, center: { label: "风光装机占比", value: windSolarShare, unit: "%" },
+        series: [{ name: "年末装机", values: capacity }], sources: [annualSource(data)],
+      },
+      {
+        id: "capacity-waterfall", label: "装机增量", title: `${data.year} 年全国电源装机增量`,
+        caption: previous
+          ? `与 ${previous.year} 年末相比，柱段显示各电源净变化，最后一柱为全国装机净增量。其他项含公报口径与四舍五入差额。`
+          : "年度增量需要连续两年公报。请选择 2021 年及以后的统计年份。",
+        kind: "waterfall", labels: [...mix.map(item => item.name), "其他", "净增量"], unit: "GW", color,
+        categoryColors: composition.map(item => item.color),
+        series: [{ name: "较上年变化", values: previous
+          ? [...capacity.map((value, index) => +(value - priorCapacity[index]).toFixed(2)), +(data.capacityGw[0] - previous.capacityGw[0]).toFixed(2)]
+          : Array.from({ length: composition.length + 1 }, () => null) }],
+        sources: previous ? [annualSource(previous), annualSource(data)] : [annualSource(data)],
+      },
       {
         id: "capacity-mix", label: "装机组成", title: `${data.year} 年全国电源装机组成`,
         caption: "面积表示公报列出的五类电源装机。风电、太阳能按各年度公报的统计口径展示。",
@@ -133,6 +163,15 @@ export function buildGenerationAnalysis(
   ];
   const unit = "亿千瓦时";
   const regions = regional?.month === date ? regional.regions.slice(0, 12) : [];
+  const breakdown = mix.map(item => ({
+    name: item.name, color: item.color, value: monthData.get(item.id) ?? null,
+    renewable: item.id === "hydro-power" || item.id === "wind-power" || item.id === "solar-power",
+  }));
+  const available = breakdown.flatMap(item => item.value !== null && item.value > 0 ? [{ ...item, value: item.value }] : []);
+  const total = available.reduce((sum, item) => sum + item.value, 0);
+  const renewable = available.reduce((sum, item) => sum + (item.renewable ? item.value : 0), 0);
+  const reported = "已公布分项";
+  const renewableName = "可再生电源";
   return {
     scope: `中国全国 · ${history ? "数据库已发布月度统计" : "国家统计局公开月报选录"} · ${monthRange(dates)}`,
     metrics: [
@@ -141,6 +180,24 @@ export function buildGenerationAnalysis(
       metric("有值月份", dates.length, "个月"),
     ],
     charts: [
+      {
+        id: "generation-flow", label: "电源流向", title: `${date || "所选月"} 发电量来源分解`,
+        caption: "线宽表示各电源已公布的单月发电量。水电、风电与太阳能归入可再生电源。起点为图中分项之和，分项缺测在表中留空。",
+        kind: "sankey", labels: breakdown.map(item => item.name), unit, color: generationSeries[0].color,
+        series: [{ name: "当月发电量", values: breakdown.map(item => item.value) }],
+        nodes: [
+          ...(total > 0 ? [{ name: reported, value: total, color: generationSeries[0].color }] : []),
+          ...(renewable > 0 ? [{ name: renewableName, value: renewable, color: "#25ada0" }] : []),
+          ...available.map(({ name, value, color }) => ({ name, value, color })),
+        ],
+        links: [
+          ...(renewable > 0 ? [{ source: reported, target: renewableName, value: renewable }] : []),
+          ...available.map(item => ({
+            source: item.renewable ? renewableName : reported, target: item.name, value: item.value,
+          })),
+        ],
+        sources,
+      },
       {
         id: "generation-seasonal", label: "月度热力图", title: `${selected.name}的季节分布`, focus: date.slice(0, 4),
         caption: "每格对应一个月份。留空表示没有可用的单月数据，1–2 月合报不拆分。",
@@ -212,6 +269,16 @@ export function buildFuelAnalysis(fuel: Fuel, history: PublishedHistory | null):
         { label: "国家统计局 · 工业生产月报索引", href: "https://www.stats.gov.cn/sj/zxfb/" },
         { label: "国家统计局 · 末期报告 " + dates.at(-1), href: monthly[monthly.length - 1].source },
       ],
+    },
+    {
+      id: "fuel-change", label: "产量增量", title: `${selected.name}历年产量净变化`,
+      caption: "逐年用本年公报产量减去上年公报产量。正负柱分别表示增减，最后一柱为全期净变化量。",
+      kind: "waterfall", labels: [...annualLabels.slice(1), "净变化"], unit: selected.annualUnit, color: selected.color,
+      series: [{ name: "产量变化", values: [
+        ...values.slice(1).map((value, index) => +(value - values[index]).toFixed(2)),
+        +(values[values.length - 1] - values[0]).toFixed(2),
+      ] }],
+      sources: [officialAnnual, annualSource(latest)],
     },
   ];
   return {

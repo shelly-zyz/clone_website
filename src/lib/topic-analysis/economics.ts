@@ -1,6 +1,7 @@
 import gep from "../../../public/data/economy/gep.json";
 import wdi from "../../../public/data/economy/wdi.json";
 import { analysisTopics } from "./catalog";
+import { distribution } from "./distribution";
 import { metric, type Analysis, type Source, type Value } from "./model";
 
 const GDP = "NY.GDP.MKTP.CD";
@@ -163,6 +164,7 @@ export function buildOutlookAnalysis(code: string, year: number): Analysis {
     const current = forecasts[item.code]?.[index];
     return current === null || current === undefined ? [] : [{ ...item, current }];
   }).toSorted((a, b) => b.current - a.current).slice(0, 10);
+  const distributions = gep.years.map((_, offset) => distribution(outlookCountries.map(item => forecasts[item.code]?.[offset])));
   return {
     scope: `${country.label} · 世界银行全球经济展望 2026 年 6 月版 · ${gep.years[0]}–${gep.years.at(-1)} 年预测`,
     metrics: [
@@ -176,6 +178,19 @@ export function buildOutlookAnalysis(code: string, year: number): Analysis {
         caption: "同一版实际 GDP 年增速预测。虚线表示预测值，竖线标记所选年份。",
         kind: "line", forecast: true, labels: gep.years.map(String), unit: "%", color, focus: String(year),
         series: [{ name: country.label, values: projections }, { name: "全球", color: "#347e85", values: globalForecast }],
+        sources: [forecastSource],
+      },
+      {
+        id: "growth-range", label: "预测增速区间", title: `${country.label}与有预测值经济体的增长区间`,
+        caption: "阴影为每年各经济体预测值的第 25–75 百分位，虚线对照所选经济体。每个经济体等权，覆盖数见数值表。区间表示跨经济体差异。",
+        kind: "range-band", labels: gep.years.map(String), unit: "%", color, focus: String(year),
+        series: [
+          { name: country.label, values: projections },
+          { name: "经济体中位数", values: distributions.map(item => item.median), color: "#347e85" },
+          { name: "第 25 百分位", values: distributions.map(item => item.lower) },
+          { name: "第 75 百分位", values: distributions.map(item => item.upper) },
+          { name: "有预测值经济体", values: distributions.map(item => item.count), unit: "个" },
+        ],
         sources: [forecastSource],
       },
       {

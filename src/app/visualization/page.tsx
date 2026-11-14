@@ -37,7 +37,10 @@ function preview(topic: AnalysisTopic) {
     case "fuels": return buildFuelAnalysis("raw-coal", null).charts[0];
     case "renewables": return buildRenewableAnalysis(archivedRenewableScenario(), "china", 2050, "wind").charts[0];
     case "weather": return buildWeatherAnalysis("global").charts[0];
-    case "carbon": return buildCarbonAnalysis(carbonDates[carbonDates.length - 1], null).charts[3];
+    case "carbon": {
+      const { charts } = buildCarbonAnalysis(carbonDates[carbonDates.length - 1], null);
+      return charts.find(chart => chart.kind === "calendar") ?? charts[0];
+    }
     case "economy": return buildEconomyAnalysis("CHN", latestEconomyYear, "perCapita").charts[0];
     case "trade": return buildTradeAnalysis("CHN", latestEconomyYear).charts[0];
     case "outlook": return buildOutlookAnalysis("CHN", outlookYears[0]).charts[0];
