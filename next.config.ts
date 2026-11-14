@@ -14,7 +14,7 @@ const nextConfig: NextConfig = {
   },
   serverExternalPackages: ["mcp-echarts"],
   outputFileTracingIncludes: {
-    "/api/xiaoyun": ["./src/lib/xiaoyun/skills/forecast-review/SKILL.md"],
+    "/api/xiaoyun": ["./src/lib/xiaoyun/skills/*/SKILL.md"],
     "/api/visualization": chartRuntime,
     "/api/mcp/visualization": chartRuntime,
   },

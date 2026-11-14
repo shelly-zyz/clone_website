@@ -23,10 +23,11 @@
 
 | 工具 | 输入与约束 |
 | --- | --- |
-| `load_skill` | 按名称加载 [预测与回测技能](../src/lib/xiaoyun/skills/forecast-review/SKILL.md)。常规查数、绘图和查看任务状态直接用相应工具。 |
+| `load_skill` | 按名称加载 [预测与回测](../src/lib/xiaoyun/skills/forecast-review/SKILL.md) 或 [数据看板](../src/lib/xiaoyun/skills/bigdata-dashboard/SKILL.md) 技能。常规查数、绘图和查看任务状态直接用相应工具。 |
 | `query_data` | 查数要求和可选基准。数据库 Agent 负责语义目录、指标口径与版本。成功返回已保存的 DataRef、质量和可用能力。 |
 | `inspect_data` | 读取本轮查询、之前的数据、原图或上次分析的输入。传入 `plan` 时用提交服务同一套规则预检，并返回实际留出上限等原因，无需入队。 |
 | `render_chart` | 复用单指标折线或柱状模板。修改旧图使用原输入和未改的渲染设置。GFS 图按有效时间展示并标注起报。 |
+| `render_dashboard` | 加载 `bigdata-dashboard` 后，从授权的单指标结果生成可全屏查看的看板，显示质量、数据版本和来源。 |
 | `submit_analysis`、`get_analysis` | 提交或查询项目内任务。GFS 预报帧可做描述统计。预测与回测使用连续的日度或月度历史；回测留出后至少保留 8 期训练数据。 |
 | `get_sources` | 按所引用的数据、图表或分析输入追溯数据版本与来源。 |
 | `list_available_datasets`、`utc_now` | 查看已发布数据的名称、指标单位、口径或当前 UTC 时间。 |
@@ -42,6 +43,14 @@
 部署时依次应用数据会话和业务会话迁移，再用 `green_ddl` 执行 [小云会话迁移](../scripts/v11-xiaoyun-context.sql)。应用角色只读写所需的澄清列。若部署只启用了部分预测模型，可在应用环境用 `OGW_ANALYSIS_ENABLED_MODELS` 登记，例如 `statsforecast,timesfm`。Worker 仍负责检查其 Python 依赖、权重和设备。
 
 ## 可视化
+
+### 小云数据看板
+
+在工作台对小云说「用国家统计局 2025 年 3 月全国发电量本期值做一张数据看板」发起新查询，或选中已有图表后说「把这张图做成驾驶舱」复用原结果。在业务结果卡点击「全屏查看看板」。天气和碳排放也可使用各自专题已经发布的指标。
+
+通过已有授权的 `POST /api/xiaoyun` 同样发送自然语言。Pi 在一轮内先调用 `load_skill({"name":"bigdata-dashboard"})`，查新数据后调用 `render_dashboard({"topic":"power","target":"current"})`。复用旧图时先 `inspect_data`，再用相同的专题和 `target=chart` 生成看板。图表类型 `chart` 和渲染器 `renderer` 均为可选参数。
+
+项目实现参考了 [Gitee 数字大屏生成器](https://gitee.com/scedm/bigdata-dashboard-skill) 的看板组织方式。当前入口接收项目已发布数据，输出站内单指标看板。上游 Excel/JSON 构建器、行业模板与离线 HTML 导出是独立能力。
 
 ### 项目 MCP 工具
 

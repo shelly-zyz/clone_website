@@ -371,6 +371,42 @@ if (live) {
 }
 
 if (!live) {
+  await test("小云看板复用同一授权数据和图表模板，保留质量与来源", async () => {
+    scope("power");
+    const original = data("power", "江苏", [1, 2, 3]);
+    fixtures.results.get(original).data_ref.quality.missing_rows = 1;
+    fixtures.results.get(original).rows[1].value = null;
+    const skill = ["load_skill", { name: "bigdata-dashboard" }];
+    const dashboard = ["render_dashboard", { ...selection, renderer: "vchart" }];
+    const skipped = await turn([query, dashboard]);
+    assert.equal(skipped.artifacts, undefined);
+    assert.equal(fixtures.output.at(-1).status, "needs_skill");
+    const result = await turn([skill, query, dashboard], { message: "查江苏并生成数据看板" });
+    assert.match(result.summary, /全屏查看/);
+    assert.match(fixtures.output[0].instructions, /render_dashboard/);
+    assert.equal(fixtures.output.at(-1).result_id, original);
+    const card = result.artifacts[0];
+    assert.equal(card.renderer, "vchart");
+    assert.equal(card.dashboard.validRows, 2);
+    assert.equal(card.dashboard.missingRows, 1);
+    assert.equal(card.dashboard.sources[0].url, "https://example.test/dataset");
+    assert.equal(card.version, fixtures.results.get(original).data_ref.version);
+
+    data("power", "湖北", [1, 2]);
+    await turn([query, chart]);
+    const selectedChart = { topic: "power", chart_id: card.chartId };
+    const target = { topic: "power", target: "chart" };
+    const reused = await turn([skill, ["inspect_data", target], ["render_dashboard", target]], { selectedChart });
+    assert.match(reused.artifacts[0].title, /江苏/);
+    assert.equal(fixtures.output.at(-1).result_id, original);
+    assert.deepEqual(reused.artifacts[0].options, card.options);
+
+    data("power", "江苏", [], "day", "empty");
+    const empty = await turn([skill, query, dashboard]);
+    assert.equal(empty.artifacts, undefined);
+    assert.match(empty.summary, /没有记录/);
+  });
+
   await test("预测预检记录目标；那就两期只继续同一份回测；网络重试拿到同一个任务", async () => {
     scope("power");
     fixtures.jobs.clear();

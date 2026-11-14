@@ -59,8 +59,18 @@ export const xiaoyunAnalysisArtifactSchema = z.object({
 
 export type XiaoyunAnalysisArtifact = z.infer<typeof xiaoyunAnalysisArtifactSchema>;
 
+type DashboardDetails = {
+  unit: string;
+  timeRange: { start: string | null; end: string | null };
+  validRows: number;
+  missingRows: number;
+  truncated: boolean;
+  sourceName: string;
+  sources: TaskSource[];
+};
+
 export type XiaoyunBusinessResult =
-  | { kind: "chart"; topic: Topic; chartId: string; title: string; renderer: "echarts" | "mcp-echarts" | "vchart" | "antv"; options: Record<string, unknown>; version: string }
+  | { kind: "chart"; topic: Topic; chartId: string; title: string; renderer: "echarts" | "mcp-echarts" | "vchart" | "antv"; options: Record<string, unknown>; version: string; dashboard?: DashboardDetails }
   | XiaoyunAnalysisArtifact;
 
 export type XiaoyunReply = {

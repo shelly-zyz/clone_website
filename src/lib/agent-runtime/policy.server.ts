@@ -7,7 +7,7 @@ import { DataAgentError } from "@/lib/data-agent/database.server";
 
 export const agentPolicy = {
   xiaoyun: { concurrency: 4, time: 55_000, turns: 7, tools: 9,
-    allow: ["load_skill", "query_data", "inspect_data", "render_chart", "submit_analysis", "get_analysis", "get_sources", "list_available_datasets", "utc_now"] },
+    allow: ["load_skill", "query_data", "inspect_data", "render_chart", "render_dashboard", "submit_analysis", "get_analysis", "get_sources", "list_available_datasets", "utc_now"] },
   data: { concurrency: 2, time: 25_000, turns: 4, tools: 5,
     allow: ["search_semantic_catalog", "query_approved_metric", "report_query_gap"] },
   chartPlan: { concurrency: 4, time: 10_000, turns: 1, tools: 1, allow: ["select_chart"] },
