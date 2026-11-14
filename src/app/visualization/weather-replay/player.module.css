@@ -51,6 +51,10 @@
 .standalone button[aria-pressed="true"] { background-color: #146674; }
 .embedded > p, .embedded > div[role="alert"] { padding-inline: 14px; }
 
+@media (min-width: 901px) {
+  .embedded .controls { padding-right: clamp(145px, 18vw, 265px); }
+}
+
 @media (max-width: 600px) {
   .header { padding: 8px 9px; flex-wrap: wrap; }
   .header button { font-size: 12px; min-height: 33px; }

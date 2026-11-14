@@ -6,7 +6,7 @@
 .globe > div { position: absolute; inset: 0; }
 .globe > p { position: absolute; inset: 46% 0 auto; text-align: center; color: #cbe5e7; font-size: 13px; }
 .source { font-size: 11px; color: #b1c3c6; margin-top: 8px; }
-.years { display: flex; gap: 6px 12px; flex-wrap: wrap; justify-content: center; align-items: center; }
+.years { width: min(100%, 430px); padding: 7px 10px; border-radius: 8px; background: #0b1111e6; --year-accent: #75efdf; }
 .select { display: flex; align-items: center; gap: 5px; color: #c9d9d9; font-size: 12px; }
 .select select { max-width: 135px; padding: 5px; min-height: 32px; border-radius: 7px; border: 1px solid #587173; background: #14282d; color: #ecf5f5; }
 .monthly { margin-top: 8px; }

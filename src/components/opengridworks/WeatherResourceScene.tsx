@@ -6,7 +6,8 @@ import { useWorkspaceResource } from "@/hooks/use-workspace-resource";
 import { findChinaProvince } from "@/lib/china-provinces";
 import type { RenewableScenario } from "@/lib/topic-analysis/history";
 import { analysisContextHref, type WorkspaceContext } from "@/lib/workspace-context";
-import { ScenarioPeriods, ScenarioRanking, ScenarioScene } from "./ScenarioScene";
+import { YearFilter } from "./YearFilter";
+import { ScenarioRanking, ScenarioScene } from "./ScenarioScene";
 import { ScenarioProvinceGlobe } from "./ScenarioProvinceGlobe";
 import styles from "./WeatherResourceScene.module.css";
 
@@ -68,19 +69,9 @@ export function WeatherResourceScene({ context, onChange, onBack }: {
           风光季节互补分析 <ArrowUpRight size={15} />
         </Link>
       </ScenarioRanking>}
-      footer={years.length > 0 ? (
-        <div className={styles.years}>
-          <ScenarioPeriods label="情景里程碑" periods={[years[0], 2030, 2040, 2050, years.at(-1)]
-            .filter((value, index, list): value is number => value !== undefined && years.includes(value) && list.indexOf(value) === index)
-            .map(value => ({ id: String(value), label: String(value) }))}
-            selected={String(year)} onSelect={value => onChange({ year: Number(value) })} />
-          <label className={styles.select}>情景年份
-            <select value={year} onChange={event => onChange({ year: Number(event.currentTarget.value) })}>
-              {years.map(value => <option key={value}>{value}</option>)}
-            </select>
-          </label>
-        </div>
-      ) : null}
+      footer={<div className={styles.years}>
+        <YearFilter years={years} year={year} label="情景年份" onChange={value => onChange({ year: value })} />
+      </div>}
     />
   );
 }

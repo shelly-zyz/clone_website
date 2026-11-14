@@ -44,6 +44,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { CarbonAtlasControls } from "./CarbonAtlasControls";
+import { CarbonYearFilter } from "./CarbonYearFilter";
 import { PowerRegionPanel, PowerViews } from "./PowerRegionPanel";
 import { useCarbonAtlas } from "@/hooks/use-carbon-atlas";
 import { useReportedGeneration } from "@/hooks/use-reported-generation";
@@ -4477,7 +4478,8 @@ function CarbonLegendPanel({
     source: false,
   });
   const availableFrames = manifest?.frames.filter((item) => item.sector === activeSector) ?? [];
-  const activeIndex = Math.max(0, availableFrames.findIndex((item) => item.date === activeDate));
+  const yearFrames = availableFrames.filter(item => item.date.slice(0, 4) === activeDate.slice(0, 4));
+  const activeIndex = Math.max(0, yearFrames.findIndex((item) => item.date === activeDate));
   const toggleSection = (section: keyof typeof openSections) => {
     setOpenSections((current) => ({ ...current, [section]: !current[section] }));
   };
@@ -4495,11 +4497,15 @@ function CarbonLegendPanel({
             <strong>{activeDate || "等待可用日期"}</strong>
             <p>数据库按日期读取压缩全球栅格帧。</p>
           </div>
+          <CarbonYearFilter frames={availableFrames} date={activeDate} onDate={date => {
+            onPlayingChange(false);
+            onDateChange(date);
+          }} />
           <button
             className="og-generation-play"
             type="button"
             aria-pressed={playing}
-            disabled={availableFrames.length < 2}
+            disabled={yearFrames.length < 2}
             onClick={() => onPlayingChange(!playing)}
           >
             {playing ? <Pause size={14} /> : <Play size={14} />}
@@ -4510,10 +4516,11 @@ function CarbonLegendPanel({
             <input
               type="range"
               min={0}
-              max={Math.max(0, availableFrames.length - 1)}
+              max={Math.max(0, yearFrames.length - 1)}
+              disabled={yearFrames.length < 2}
               value={activeIndex}
               onChange={(event) => {
-                const selected = availableFrames[Number(event.currentTarget.value)];
+                const selected = yearFrames[Number(event.currentTarget.value)];
                 if (selected) {
                   onPlayingChange(false);
                   onDateChange(selected.date);
@@ -4522,8 +4529,8 @@ function CarbonLegendPanel({
             />
           </label>
           <div className="og-carbon-date-range">
-            <span>{availableFrames[0]?.date ?? "—"}</span>
-            <span>{availableFrames.at(-1)?.date ?? "—"}</span>
+            <span>{yearFrames[0]?.date ?? "—"}</span>
+            <span>{yearFrames.at(-1)?.date ?? "—"}</span>
           </div>
         </div>
       </LegendSection>
@@ -6070,22 +6077,19 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
   }, [generationFrame.mode, generationHeatmapEnabled, generationManifest?.years, generationPlaying]);
 
   useEffect(() => {
-    if (!carbonPlaying || activeProject !== "carbon" || carbonLoading || carbonFrames.length < 2) return;
-    const timer = window.setTimeout(() => {
+    if (!carbonPlaying || activeProject !== "carbon" || carbonLoading) return;
+    const yearFrames = carbonFrames.filter(item => item.date.slice(0, 4) === carbonDate.slice(0, 4));
+    if (yearFrames.length < 2) return;
+    const advance = () => {
       if (document.hidden) return;
-      const index = carbonFrames.findIndex(item => item.date === carbonDate);
-      onCarbonDate(carbonFrames[(index + 1) % carbonFrames.length].date);
-    }, 1100);
-    const resume = () => {
-      if (!document.hidden) {
-        const index = carbonFrames.findIndex(item => item.date === carbonDate);
-        onCarbonDate(carbonFrames[(index + 1) % carbonFrames.length].date);
-      }
+      const index = yearFrames.findIndex(item => item.date === carbonDate);
+      onCarbonDate(yearFrames[(index + 1) % yearFrames.length].date);
     };
-    document.addEventListener("visibilitychange", resume);
+    const timer = window.setTimeout(advance, 1100);
+    document.addEventListener("visibilitychange", advance);
     return () => {
       window.clearTimeout(timer);
-      document.removeEventListener("visibilitychange", resume);
+      document.removeEventListener("visibilitychange", advance);
     };
   }, [activeProject, carbonDate, carbonFrames, carbonLoading, carbonPlaying, onCarbonDate]);
 

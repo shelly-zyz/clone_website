@@ -10,6 +10,7 @@ import {
   carbonSectorLabels, formatCarbonTotal, type CarbonManifestFrame, type CarbonManifest,
 } from "@/lib/carbon-earth";
 import { chineseLabelMatches } from "@/lib/china-provinces";
+import { CarbonYearFilter } from "./CarbonYearFilter";
 import styles from "./CarbonAtlasControls.module.css";
 
 const amount = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 });
@@ -45,11 +46,12 @@ export function CarbonAtlasControls({
   const searchId = useId();
   const toolsId = useId();
   const details = useRef<HTMLDivElement>(null);
-  const first = frames[0]?.date;
-  const index = frames.findIndex(item => item.date === date);
   const selectedMonth = date.slice(0, 7);
-  const months = [...new Set(frames.map(item => item.date.slice(0, 7)))];
-  const monthFrames = frames.filter(item => item.date.startsWith(selectedMonth));
+  const yearFrames = frames.filter(item => item.date.slice(0, 4) === date.slice(0, 4));
+  const first = yearFrames[0]?.date;
+  const index = yearFrames.findIndex(item => item.date === date);
+  const months = [...new Set(yearFrames.map(item => item.date.slice(0, 7)))];
+  const monthFrames = yearFrames.filter(item => item.date.startsWith(selectedMonth));
   const info = frame && manifest?.sources.find(item => item.sector === frame.sector && item.month === frame.date.slice(0, 7));
   const amountValue = frame ? formatCarbonTotal(frame.stats.sumKgCPerHour).split(" ")[0] : null;
   const archiveLabel = info?.fileName ?? "GRACED / Carbon Monitor";
@@ -95,20 +97,21 @@ export function CarbonAtlasControls({
           </select>
         </label>
         <label className={styles.control}>月份
-          <select value={selectedMonth} disabled={!months.length} onChange={event => selectDate(frames.findLast(item => item.date.startsWith(event.currentTarget.value))?.date)}>
+          <select aria-label="月份" value={selectedMonth} disabled={!months.length} onChange={event => selectDate(yearFrames.findLast(item => item.date.startsWith(event.currentTarget.value))?.date)}>
             {!months.length ? <option value={selectedMonth}>暂无</option> : null}
             {months.length > 0 && selectedMonth && !months.includes(selectedMonth) ? <option value={selectedMonth}>{selectedMonth} · 缺测</option> : null}
             {months.toReversed().map(month => <option key={month}>{month}</option>)}
           </select>
         </label>
         <label className={styles.control}>日期
-          <select value={date} disabled={!monthFrames.length} onChange={event => selectDate(event.currentTarget.value)}>
+          <select aria-label="日期" value={date} disabled={!monthFrames.length} onChange={event => selectDate(event.currentTarget.value)}>
             {!monthFrames.length ? <option value={date}>{date || "暂无"}</option> : null}
             {monthFrames.length > 0 && !monthFrames.some(item => item.date === date) ? <option value={date}>{date.slice(-2)} 日 · 缺测</option> : null}
             {monthFrames.toReversed().map(item => <option key={item.date} value={item.date}>{item.date.slice(-2)} 日</option>)}
           </select>
         </label>
         <span className={styles.unit}>CO₂</span>
+        <div className={styles.years}><CarbonYearFilter frames={frames} date={date} onDate={selectDate} /></div>
       </header>
 
       <aside className={styles.indicator} aria-label="全球排放摘要" aria-busy={pending}>
@@ -124,22 +127,22 @@ export function CarbonAtlasControls({
       </aside>
 
       <section className={styles.timeline} aria-label="排放日期回放">
-        <button type="button" aria-label="上一排放日" disabled={index < 1} onClick={() => selectDate(frames[index - 1]?.date)}>
+        <button type="button" aria-label="上一排放日" disabled={index < 1} onClick={() => selectDate(yearFrames[index - 1]?.date)}>
           <ChevronLeft size={17} />
         </button>
-        <button type="button" disabled={frames.length < 2} aria-label={playing ? "暂停碳排放回放" : "播放碳排放回放"}
+        <button type="button" disabled={yearFrames.length < 2} aria-label={playing ? "暂停碳排放回放" : "播放碳排放回放"}
           aria-pressed={playing} onClick={() => onPlay(!playing)}>
           {playing ? <Pause size={16} /> : <Play size={16} />}
         </button>
         <label>
           <span>{first ?? "日期范围"}</span>
           <input type="range" aria-label="排放时间轴" aria-valuetext={date || "暂无日期"} min={0}
-            max={Math.max(0, frames.length - 1)} value={Math.max(0, index)} disabled={frames.length <= 1}
-            onChange={event => selectDate(frames[Number(event.currentTarget.value)]?.date)} />
-          <span>{frames.at(-1)?.date ?? "—"}</span>
+            max={Math.max(0, yearFrames.length - 1)} value={Math.max(0, index)} disabled={yearFrames.length <= 1}
+            onChange={event => selectDate(yearFrames[Number(event.currentTarget.value)]?.date)} />
+          <span>{yearFrames.at(-1)?.date ?? "—"}</span>
         </label>
-        <button type="button" aria-label="下一排放日" disabled={index < 0 || index >= frames.length - 1}
-          onClick={() => selectDate(frames[index + 1]?.date)}><ChevronRight size={17} /></button>
+        <button type="button" aria-label="下一排放日" disabled={index < 0 || index >= yearFrames.length - 1}
+          onClick={() => selectDate(yearFrames[index + 1]?.date)}><ChevronRight size={17} /></button>
       </section>
 
       <div className={styles.actions} ref={details} onKeyDown={event => {

@@ -424,6 +424,8 @@
   display: none;
 }
 
+.og-carbon-control-panel { --year-accent: #b7ee84; }
+
 .og-weather-sidebar-filters {
   display: grid;
   gap: 12px;
@@ -1719,9 +1721,14 @@
   background: #000005;
 }
 
+.og-app-shell.is-earth-project {
+  --og-weather-card-height: clamp(50px, 10svh, 80px);
+  --og-weather-stage-top: calc(max(10px, env(safe-area-inset-top)) + var(--og-weather-card-height) + 19px);
+}
+
 .og-earth-project {
   position: absolute;
-  inset: 0 0 var(--og-globe-nav-space);
+  inset: var(--og-weather-stage-top, 0px) 0 var(--og-globe-nav-space);
   z-index: 1;
   overflow: hidden;
 }
@@ -1732,15 +1739,20 @@
 .og-weather-replay-stage {
   position: absolute;
   z-index: 2;
-  inset: 16px calc(clamp(84px, 9vw, 132px) + 27px) calc(var(--og-globe-nav-space) + 7px) calc(var(--og-sidebar-width) + 28px);
+  inset: var(--og-weather-stage-top) 16px calc(var(--og-globe-nav-space) + 7px) calc(var(--og-sidebar-width) + 28px);
   overflow: hidden;
   border: 1px solid #263b4f;
   border-radius: 10px;
 }
 
 @media (max-width: 900px) {
+  .og-app-shell.is-earth-project {
+    --og-weather-card-height: clamp(48px, 9svh, 68px);
+    --og-weather-stage-top: calc(max(12px, env(safe-area-inset-top)) + 45px + var(--og-weather-card-height) + 18px);
+  }
+
   .og-weather-replay-stage {
-    inset: 59px 79px calc(var(--og-globe-nav-space) + 108px) 5px;
+    inset: var(--og-weather-stage-top) 6px calc(var(--og-globe-nav-space) + min(108px, 14svh)) 6px;
   }
 }
 
