@@ -44,6 +44,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { CarbonAtlasControls } from "./CarbonAtlasControls";
+import { CarbonYearFilter } from "./CarbonYearFilter";
 import { PowerRegionPanel, PowerViews } from "./PowerRegionPanel";
 import { useCarbonAtlas } from "@/hooks/use-carbon-atlas";
 import { useReportedGeneration } from "@/hooks/use-reported-generation";
@@ -4495,6 +4496,10 @@ function CarbonLegendPanel({
             <strong>{activeDate || "等待可用日期"}</strong>
             <p>数据库按日期读取压缩全球栅格帧。</p>
           </div>
+          <CarbonYearFilter frames={availableFrames} date={activeDate} onDate={date => {
+            onPlayingChange(false);
+            onDateChange(date);
+          }} />
           <button
             className="og-generation-play"
             type="button"
@@ -6384,7 +6389,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
   const powerAnalysisHref = powerView === "capacity"
     ? analysisContextHref("power", { year: context.year, product: powerProduct })
     : analysisContextHref("generation", { month: reported.month || context.month, region: selectedProvince, product: powerProduct,
-      version: reported.published?.version ?? context.version });
+      version: reported.published?.version ?? context.version }, powerView === "generation" ? "province-comparison" : "");
   const comparableCarbon = carbonSector === "Power";
   const carbonAnalysisHref = analysisContextHref("carbon", { date: comparableCarbon ? carbonDate || undefined : undefined });
   const carbonCompareHref = comparableCarbon ? analysisContextHref("carbon", { date: carbonDate || undefined }, "carbon-comparison") : undefined;
