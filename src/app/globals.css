@@ -1740,7 +1740,7 @@
 
 @media (max-width: 900px) {
   .og-weather-replay-stage {
-    inset: 59px 79px calc(var(--og-globe-nav-space) + 4px) 5px;
+    inset: 59px 79px calc(var(--og-globe-nav-space) + 108px) 5px;
   }
 }
 

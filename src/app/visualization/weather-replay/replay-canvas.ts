@@ -49,7 +49,7 @@ export function paintReplay(
   const rain = view === "rain";
   const accumulation = view === "accumulation";
   const projectedWidth = Math.abs(cos) * aspect + Math.abs(sin);
-  const scale = Math.min(width * (stack ? 0.68 : 0.78) / projectedWidth, height * (stack ? 0.87 : 0.98));
+  const scale = Math.min(width * (stack ? 0.68 : 0.78) / projectedWidth, height * (stack ? 0.87 : rain ? 0.91 : 0.98));
   const project = ([longitude, latitude, z = 0]: World): Point => {
     const x = (longitude - 0.5) * aspect;
     const y = latitude - 0.5;
@@ -57,7 +57,7 @@ export function paintReplay(
     const perspective = rain ? 1 + depth * 0.26 : 1;
     return [
       width * 0.5 + (x * cos + y * sin) * scale * perspective,
-      height * (rain ? 0.74 : stack ? 0.70 : 0.63) + (depth * 0.39 - z * 0.48) * scale * perspective,
+      height * (rain ? 0.69 : stack ? 0.70 : 0.63) + (depth * 0.39 - z * 0.48) * scale * perspective,
     ];
   };
   const path = (polygon: Point[]) => {
