@@ -21,6 +21,7 @@
 }
 
 .region:is([data-topic="weather"], [data-topic="economy"]) .panel { top: 16px; }
+.region[data-topic="weather"] .panel { right: calc(clamp(84px, 9vw, 132px) + 27px); }
 
 .header {
   display: flex;

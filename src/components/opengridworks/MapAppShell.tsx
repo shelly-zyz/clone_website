@@ -43,6 +43,9 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { GlobeNavigation } from "@/components/opengridworks/GlobeNavigation";
+import { WeatherReplayPlayer } from "@/app/visualization/weather-replay/WeatherReplayPlayer";
+import { replayViews, type WeatherScene } from "@/lib/weather-replay/views";
+import { WeatherSceneSwitcher } from "./WeatherSceneSwitcher";
 import { WeatherSidebarFilters } from "@/components/opengridworks/WeatherSidebarFilters";
 import { WorkspaceFilterSelect, WorkspaceSidebar } from "@/components/opengridworks/WorkspaceSidebar";
 import { XiaoyunAssistant } from "@/components/opengridworks/XiaoyunAssistant";
@@ -5650,6 +5653,7 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Wor
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [generationPlaying, setGenerationPlaying] = useState(false);
   const [generationHeatmapEnabled, setGenerationHeatmapEnabled] = useState(false);
+  const [weatherScene, setWeatherScene] = useState<WeatherScene>("globe");
   const [weatherDocument, setWeatherDocument] = useState<Document | null>(null);
   const [carbonManifest, setCarbonManifest] = useState<CarbonManifest | null>(null);
   const [carbonDate, setCarbonDate] = useState("");
@@ -6178,14 +6182,24 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Wor
   const activePlanned = visibleLayers.plannedUpgrades;
   const sidebarSummary = {
     power: `${activeRegion.label} · ${regionStats.totalPlants.toLocaleString()} 个可见项目`,
-    weather: "全球风场与气象覆盖",
+    weather: weatherScene === "globe" ? "全球风场与气象覆盖" : replayViews[weatherScene].title,
     carbon: "GRACED · 全球 0.1° 网格",
   }[activeProject];
   return (
     <main className={`og-app-shell ${cinematic ? "is-cinematic" : ""} ${activeProject === "weather" ? "is-earth-project" : ""} ${activeProject === "carbon" ? "is-carbon-project" : ""}`}>
       <GlobeNavigation activeTopic={activeProject} onTopicChange={switchProject} />
       {activeProject === "weather" ? (
-        <EarthProjectViewport onLoad={setWeatherDocument} />
+        <>
+          <div className="og-weather-original" hidden={weatherScene !== "globe"}>
+            <EarthProjectViewport onLoad={setWeatherDocument} />
+          </div>
+          {weatherScene !== "globe" && (
+            <div className="og-weather-replay-stage">
+              <WeatherReplayPlayer query="" scene={weatherScene} />
+            </div>
+          )}
+          <WeatherSceneSwitcher scene={weatherScene} onChange={setWeatherScene} />
+        </>
       ) : (
         <MapViewport
           activeProject={activeProject}
@@ -6304,7 +6318,9 @@ export function MapAppShell({ initialProject = "power" }: { initialProject?: Wor
             }}
             onPlayingChange={setCarbonPlaying}
           />
-        ) : <WeatherSidebarFilters frameDocument={weatherDocument} />}
+        ) : weatherScene === "globe" ? <WeatherSidebarFilters frameDocument={weatherDocument} /> : (
+          <p className="og-weather-sidebar-status">{replayViews[weatherScene].description}</p>
+        )}
       </WorkspaceSidebar>
       {activeProject !== "weather" ? (
         <TopToolbar

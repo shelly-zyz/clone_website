@@ -1726,6 +1726,24 @@
   overflow: hidden;
 }
 
+.og-weather-original[hidden],
+.og-app-shell:has(.og-weather-replay-stage) .og-forecast-region[data-topic="weather"] { display: none; }
+
+.og-weather-replay-stage {
+  position: absolute;
+  z-index: 2;
+  inset: 16px calc(clamp(84px, 9vw, 132px) + 27px) calc(var(--og-globe-nav-space) + 7px) calc(var(--og-sidebar-width) + 28px);
+  overflow: hidden;
+  border: 1px solid #263b4f;
+  border-radius: 10px;
+}
+
+@media (max-width: 900px) {
+  .og-weather-replay-stage {
+    inset: 59px 79px calc(var(--og-globe-nav-space) + 4px) 5px;
+  }
+}
+
 .og-earth-project-frame {
   display: block;
   width: 100%;

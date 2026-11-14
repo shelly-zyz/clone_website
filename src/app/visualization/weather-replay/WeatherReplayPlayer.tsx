@@ -1,14 +1,19 @@
 "use client";
 
-import { CloudRain, Layers3, Pause, Play, Rotate3D } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Pause, Play, Rotate3D } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { WeatherReplay } from "@/lib/weather-replay/model";
-import { paintReplay, utcClock, type ReplayView } from "./replay-canvas";
+import { replayViewOrder, replayViews, type ReplayView } from "@/lib/weather-replay/views";
+import { accumulatedRain, paintReplay, utcClock } from "./replay-canvas";
+import styles from "./player.module.css";
 
 const control = "inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-3 text-sm font-medium text-slate-800 hover:bg-slate-200";
 const selected = "aria-pressed:bg-teal-800 aria-pressed:text-white";
 
-export function WeatherReplayPlayer({ query }: { query: string }) {
+export function WeatherReplayPlayer({ query, scene }: { query: string; scene?: ReplayView }) {
+  const [selectedView, setSelectedView] = useState<ReplayView>("weather");
+  const view = scene ?? selectedView;
+  const embedded = scene !== undefined;
   const [replay, setReplay] = useState<WeatherReplay | null>(null);
   const [failure, setFailure] = useState("");
   const [attempt, setAttempt] = useState(0);
@@ -29,9 +34,9 @@ export function WeatherReplayPlayer({ query }: { query: string }) {
   }, [attempt, query]);
 
   return (
-    <section className="mx-auto w-full max-w-6xl px-4 py-7 sm:px-8 sm:py-10">
-      <h1 className="text-2xl font-semibold tracking-tight sm:text-4xl">区域风暴 3D 回放</h1>
-      {replay ? <ReplayControls key={query} replay={replay} /> : failure ? (
+    <section className={embedded ? styles.embedded : styles.standalone} aria-label="区域风暴 3D 回放">
+      {!embedded && <h1>区域风暴 3D 回放</h1>}
+      {replay ? <ReplayControls key={query} replay={replay} view={view} onViewChange={embedded ? undefined : setSelectedView} /> : failure ? (
         <div className="mt-5 flex flex-wrap items-center gap-3">
           <p role="alert">{failure}</p>
           <button className={control} onClick={() => { setFailure(""); setAttempt(value => value + 1); }}>重试</button>
@@ -41,8 +46,11 @@ export function WeatherReplayPlayer({ query }: { query: string }) {
   );
 }
 
-function ReplayControls({ replay }: { replay: WeatherReplay }) {
-  const [view, setView] = useState<ReplayView>("weather");
+function ReplayControls({ replay, view, onViewChange }: {
+  replay: WeatherReplay;
+  view: ReplayView;
+  onViewChange?: (view: ReplayView) => void;
+}) {
   const [playing, setPlaying] = useState(false);
   const [rotation, setRotation] = useState(0);
   const [clouds, setClouds] = useState(true);
@@ -53,6 +61,9 @@ function ReplayControls({ replay }: { replay: WeatherReplay }) {
   const final = replay.rain.length - 1;
   const timestamp = replay.rain[index].time;
   const satellite = replay.satellite.findLast(frame => frame.time <= timestamp);
+  const totals = useMemo(() => view === "accumulation" ? accumulatedRain(replay, index) : undefined, [index, replay, view]);
+  const accumulationPeak = totals ? Math.max(...totals.map(value => value ?? 0)) : 0;
+  const peaks = useMemo(() => replay.rain.map(frame => Math.max(...frame.values.map(value => value ?? 0))), [replay]);
 
   useEffect(() => {
     if (!playing) return;
@@ -69,23 +80,32 @@ function ReplayControls({ replay }: { replay: WeatherReplay }) {
     if (!canvas) return;
     const previous = previousIndex.current;
     previousIndex.current = index;
-    const animate = playing && previous !== index && view === "weather" &&
-      !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const animate = previous !== index && view === "weather";
+    const rainMotion = view === "rain" && playing;
 
     const started = performance.now();
     let pending = 0;
     const draw = (now: number) => {
-      const progress = animate ? Math.min(1, (now - started) / 240) : 1;
-      paintReplay(canvas, replay, { index, view, rotation, clouds, precipitation, previous, progress });
-      if (progress < 1) pending = requestAnimationFrame(draw);
+      const progress = animate && !motion.matches ? Math.min(1, (now - started) / 240) : 1;
+      const phase = rainMotion && !motion.matches ? now / 1000 : 0;
+      paintReplay(canvas, replay, { index, view, rotation, clouds, precipitation, previous, progress, phase, totals });
+      if (progress < 1 || (rainMotion && !motion.matches)) pending = requestAnimationFrame(draw);
     };
     pending = requestAnimationFrame(draw);
-    const size = new ResizeObserver(() => {
-      paintReplay(canvas, replay, { index, view, rotation, clouds, precipitation, previous: index, progress: 1 });
-    });
+    const redraw = () => {
+      cancelAnimationFrame(pending);
+      pending = requestAnimationFrame(draw);
+    };
+    const size = new ResizeObserver(redraw);
     size.observe(canvas);
-    return () => { cancelAnimationFrame(pending); size.disconnect(); };
-  }, [clouds, index, playing, precipitation, replay, rotation, view]);
+    motion.addEventListener("change", redraw);
+    return () => {
+      cancelAnimationFrame(pending);
+      size.disconnect();
+      motion.removeEventListener("change", redraw);
+    };
+  }, [clouds, index, playing, precipitation, replay, rotation, totals, view]);
 
   function togglePlay() {
     if (playing) {
@@ -98,27 +118,37 @@ function ReplayControls({ replay }: { replay: WeatherReplay }) {
 
   return (
     <>
-      <p className="mt-2 text-sm text-slate-600">
-        {replay.region} · {timestamp.slice(0, 10)} UTC · {utcClock(replay.rain[0].time)}–{utcClock(replay.rain[final].time)}
-      </p>
-      <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div role="group" aria-label="回放视图" className="flex flex-wrap gap-2 border-b border-slate-200 px-3 py-2.5 sm:px-5">
-          <button className={`${control} ${selected}`} aria-pressed={view === "weather"} onClick={() => setView("weather")}>
-            <CloudRain size={17} aria-hidden="true" /> 云雨叠加
-          </button>
-          <button className={`${control} ${selected}`} aria-pressed={view === "time"} onClick={() => setView("time")}>
-            <Layers3 size={17} aria-hidden="true" /> 降水时空层
-          </button>
-          <button className={`${control} sm:ml-auto`} onClick={() => setRotation(value => (value + 1) % 4)}>
-            <Rotate3D size={17} aria-hidden="true" /> 旋转视角
-          </button>
+      <header className={styles.header}>
+        <div>
+          <h2>{replayViews[view].title}</h2>
+          <p>{replay.region} · {timestamp.slice(0, 10)} UTC</p>
         </div>
+        <button className={control} onClick={() => setRotation(value => (value + 1) % 4)}>
+          <Rotate3D size={16} aria-hidden="true" /> 旋转视角
+        </button>
+      </header>
+      {onViewChange && (
+        <div role="group" aria-label="回放视图" className={styles.standaloneViews}>
+          {replayViewOrder.map(item => (
+            <button key={item} className={`${control} ${selected}`} aria-pressed={view === item} onClick={() => onViewChange(item)}>
+              {replayViews[item].title}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className={styles.stage}>
         <canvas ref={canvasRef} role="img"
-          aria-label={view === "weather" ? "红外云图和按降水强度升高的三维柱" : "每隔半小时一层的降水率，向上为较晚时刻"}
-          className="block h-[clamp(15rem,54vw,30rem)] w-full bg-slate-50" />
-        <div className="grid gap-3 border-t border-slate-200 px-3 py-3 sm:px-5">
+          aria-label={replayViews[view].description}
+          className={styles.canvas} />
+          {view === "rain" && (
+            <p className={styles.rainReading}>
+              区域峰值 <strong>{peaks[index].toFixed(1)}</strong> mm/h{peaks[index] >= 75 ? " · 达到数据上限" : ""}
+            </p>
+          )}
+      </div>
+      <div className={styles.controls}>
           {view === "weather" ? (
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-slate-700">
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-slate-300">
               <label className="inline-flex min-h-8 items-center gap-2">
                 <input type="checkbox" checked={clouds} onChange={event => setClouds(event.target.checked)} className="accent-[#2769a3]" />
                 红外亮温 · 越深越冷
@@ -128,7 +158,17 @@ function ReplayControls({ replay }: { replay: WeatherReplay }) {
                 降水柱高 · 0–75 mm/h
               </label>
             </div>
-          ) : <p className="text-sm text-slate-700">每层间隔 30 分钟 · 颜色越深，降水率越高（mm/h）</p>}
+          ) : <p className={styles.description}>
+            {replayViews[view].description}
+            {view === "accumulation" && ` · 峰值约 ${accumulationPeak.toFixed(1)} mm`}
+          </p>}
+          {view === "rain" && (
+            <svg className={styles.profile} viewBox="0 0 400 34" preserveAspectRatio="none" role="img" aria-label="全时段区域峰值降水率走势">
+              <path d="M0 30 H400" className={styles.baseline} />
+              <polyline points={peaks.map((peak, frame) => `${frame * 400 / final},${30 - peak / 75 * 24}`).join(" ")} className={styles.profileLine} />
+              <line x1={index * 400 / final} x2={index * 400 / final} y1="0" y2="32" className={styles.playhead} />
+            </svg>
+          )}
           <div className="flex items-center gap-3 sm:gap-5">
             <button className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg bg-teal-800 px-3 text-sm font-medium text-white hover:bg-teal-900"
               onClick={togglePlay}>
@@ -142,7 +182,7 @@ function ReplayControls({ replay }: { replay: WeatherReplay }) {
                 onChange={event => { setPlaying(false); setIndex(Number(event.target.value)); }} />
             </label>
           </div>
-          <p className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-600 tabular-nums" aria-live={playing ? "off" : "polite"}>
+          <p className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-300 tabular-nums" aria-live={playing ? "off" : "polite"}>
             {view === "weather" && satellite && (
               <a className="underline underline-offset-2" href="https://developers.google.cn/weathernext/guides/satweave">
                 SatWeave · {utcClock(satellite.time)} UTC
@@ -153,7 +193,6 @@ function ReplayControls({ replay }: { replay: WeatherReplay }) {
             </a>
             <a className="underline underline-offset-2" href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0 · Google DeepMind / Google Research</a>
           </p>
-        </div>
       </div>
     </>
   );
