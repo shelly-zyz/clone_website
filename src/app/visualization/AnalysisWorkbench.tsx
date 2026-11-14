@@ -298,8 +298,10 @@ export function AnalysisWorkbench({ topic, initialQuery }: { topic: AnalysisTopi
   const displayedScenarioYear = scenarioYears.includes(scenarioYear) ? scenarioYear : scenarioYears[0];
 
   const forecast = topic === "outlook";
+  const country = economyCountries.find(item => item.code === context.country)?.code ?? "CHN";
   const countries = forecast ? outlookCountries : economyCountries;
-  const country = countries.find(item => item.code === context.country)?.code ?? "CHN";
+  const hasCountry = countries.some(item => item.code === country);
+  const missingCountry = hasCountry ? undefined : economyCountries.find(item => item.code === country);
   const economyYear = economyYears.find(item => item === context.year) ?? latestEconomyYear;
   const startYear = economyYears.find(item => item === Number(query.get("startYear")) && item <= economyYear) ?? economyYears[economyYears.length - 1];
   const economyIndicator = context.metric === "gdp" || query.get("indicator") === "total" ? "total" : "perCapita";
@@ -392,6 +394,7 @@ export function AnalysisWorkbench({ topic, initialQuery }: { topic: AnalysisTopi
       dataStatus = forecast ? "世界银行预测" : "WDI 历史统计";
       filters = <>
         <AnalysisFilter label="国家或地区" value={country} onChange={value => select(value, "country")}>
+          {missingCountry && <option value={country}>{missingCountry.label}（该版暂无预测）</option>}
           {countries.map(({ code, label }) => <option key={code} value={code}>{label}</option>)}
         </AnalysisFilter>
         {!forecast && <AnalysisFilter label="起始年份" value={String(startYear)} onChange={value => select(value, "startYear")}>
