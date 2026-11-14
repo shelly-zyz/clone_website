@@ -9,7 +9,7 @@ import {
   type XiaoyunAnalysisArtifact, type XiaoyunBusinessResult, type XiaoyunContext, type XiaoyunReply,
 } from "@/lib/xiaoyun/contracts";
 import { WorkspaceForecast, type LoadForecastOverview } from "./WorkspaceForecast";
-import { XiaoyunBusinessCard } from "./XiaoyunBusinessCard";
+import { XiaoyunBusinessCard, XiaoyunDashboardDialog } from "./XiaoyunBusinessCard";
 
 const storageKey = "og-xiaoyun-context";
 const forecastStorageKey = "og-xiaoyun-forecasts";
@@ -68,6 +68,7 @@ export function XiaoyunAssistant({ topic, onMapCommand }: {
   const [loadError, setLoadError] = useState(false);
   const [ready, setReady] = useState(false);
   const [business, setBusiness] = useState<XiaoyunBusinessResult[]>([]);
+  const [openDashboard, setOpenDashboard] = useState<Extract<XiaoyunBusinessResult, { kind: "chart" }>>();
   const [forecasts, setForecasts] = useState<Forecasts>({});
   const [pendingForecast, setPendingForecast] = useState<Topic>();
   const [forecastNotice, setForecastNotice] = useState<{ topic: Topic; message: string }>();
@@ -216,6 +217,8 @@ export function XiaoyunAssistant({ topic, onMapCommand }: {
             }
             setRequiresToken(false);
             const results = reply.artifacts ?? (reply.business ? [reply.business] : []);
+            const dashboard = results.find(result => result.kind === "chart" && result.dashboard);
+            if (dashboard?.kind === "chart") setOpenDashboard(dashboard);
             const sidebarResults = results.filter(isWorkspaceForecast);
             if (sidebarResults.length) {
               const next = { ...forecastRefs.current };
@@ -268,7 +271,10 @@ export function XiaoyunAssistant({ topic, onMapCommand }: {
         loadOverview={loadForecastOverview} loadAnalysis={loadAnalysis} task={forecasts[topic]}
         ready={ready} pending={pendingForecast !== undefined} onRun={runForecast}
         notice={forecastNotice?.topic === topic ? forecastNotice.message : undefined} />
+      {openDashboard && <XiaoyunDashboardDialog key={openDashboard.chartId} chart={openDashboard}
+        onClose={() => setOpenDashboard(current => current === openDashboard ? undefined : current)} />}
       {visibleBusiness.length > 0 && <XiaoyunBusinessCard results={visibleBusiness} loadAnalysis={loadAnalysis} selectedChartId={selectedChartId}
+        onOpenDashboard={setOpenDashboard}
         onSelectChart={chart => {
           const next = selectedChart.current?.chart_id === chart.chartId ? undefined : { topic: chart.topic, chart_id: chart.chartId };
           selectedChart.current = next;

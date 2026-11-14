@@ -18,7 +18,7 @@ const models = { statsforecast: "StatsForecast", timesfm: "TimesFM", chronos2: "
 const statuses = { queued: "排队中", running: "计算中", succeeded: "已完成", failed: "任务失败" };
 const formatNumber = new Intl.NumberFormat("zh-CN", { maximumSignificantDigits: 8 });
 
-function ChartPreview({ chart, expanded = false }: { chart: Chart; expanded?: boolean }) {
+function ChartPreview({ chart, size = "card" }: { chart: Chart; size?: "card" | "dialog" | "fullscreen" }) {
   const container = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState(false);
 
@@ -69,57 +69,59 @@ function ChartPreview({ chart, expanded = false }: { chart: Chart; expanded?: bo
   return (
     <div className="mt-2">
       <div ref={container} role="img" aria-label={`${renderers[chart.renderer]} 图表`}
-        className={expanded ? "h-[58svh] min-h-72 w-full" : "h-60 w-full"} />
+        className={size === "fullscreen" ? "h-[58svh] min-h-64 w-full" : size === "dialog" ? "h-[42svh] min-h-60 w-full" : "h-60 w-full"} />
       {failed && <p role="alert" className="text-sm text-red-700">图表渲染失败，请重新生成。</p>}
       <p className="mt-2 text-xs text-slate-600">{renderers[chart.renderer]} · 数据版本 {chart.version.slice(0, 12)}</p>
     </div>
   );
 }
 
-function DashboardPreview({ chart }: { chart: Chart }) {
+export function XiaoyunDashboardDialog({ chart, onClose }: { chart: Chart; onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const [expanded, setExpanded] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
   const details = chart.dashboard;
-  if (!details) return <ChartPreview chart={chart} />;
+  useEffect(() => {
+    const element = dialog.current;
+    if (element && !element.open) element.showModal();
+  }, []);
+
+  if (!details) return null;
   const { start, end } = details.timeRange;
   const coverage = start && end && start !== end ? `${start} 至 ${end}` : start ?? end ?? "未提供";
 
   return (
-    <>
-      <Button size="sm" variant="secondary" label="全屏查看看板" onClick={() => {
-        dialog.current?.showModal();
-        setExpanded(true);
-      }} />
-      <ChartPreview chart={chart} />
-      <dialog ref={dialog} aria-label={chart.title} onClose={() => setExpanded(false)}
-        className="fixed inset-0 m-0 h-[100svh] max-h-none w-screen max-w-none overflow-auto bg-slate-50 p-4 text-slate-900 sm:p-8">
-        {expanded && (
-          <div className="mx-auto max-w-7xl space-y-4">
-            <header className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-xl font-semibold sm:text-3xl">{chart.title}</h2>
-              <Button variant="secondary" label="关闭看板" onClick={() => dialog.current?.close()} />
-            </header>
-            <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {[["单位", details.unit], ["有效观测", details.validRows], ["缺测", details.missingRows], ["来源", details.sourceName]].map(([label, value]) => (
-                <div key={label} className="rounded-lg border border-slate-200 bg-white p-3">
-                  <dt className="text-sm text-slate-600">{label}</dt>
-                  <dd className="font-semibold">{value}</dd>
-                </div>
-              ))}
-            </dl>
-            <p className="text-sm text-slate-700">数据覆盖 {coverage}{details.truncated && " · 查询结果已截断"}</p>
-            <div className="rounded-lg border border-slate-200 bg-white p-2 sm:p-4">
-              <ChartPreview chart={chart} expanded />
-            </div>
-            {details.sources.length > 0 && <ul className="space-y-1 text-sm">
-              {details.sources.map(({ url, title }) => (
-                <li key={url}><a href={url} target="_blank" rel="noreferrer" className="text-sky-800 underline">{title} · {url}</a></li>
-              ))}
-            </ul>}
+    <dialog ref={dialog} aria-label={chart.title} onClose={onClose} data-astryx-theme="neutral"
+      className={`fixed inset-0 m-auto overflow-auto bg-slate-50 p-4 text-slate-900 scheme-light backdrop:bg-slate-950/55 sm:p-6 ${
+        fullscreen ? "h-[100svh] max-h-none w-screen max-w-none" : "max-h-[90svh] w-11/12 max-w-5xl rounded-xl shadow-2xl"
+      }`}>
+      <div className="mx-auto max-w-7xl space-y-4">
+        <header className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-xl font-semibold sm:text-3xl">{chart.title}</h2>
+          <div className="flex gap-2">
+            <Button size="sm" variant="secondary" label={fullscreen ? "退出全屏" : "全屏查看看板"}
+              onClick={() => setFullscreen(value => !value)} />
+            <Button size="sm" variant="secondary" label="关闭看板" onClick={() => dialog.current?.close()} />
           </div>
-        )}
-      </dialog>
-    </>
+        </header>
+        <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[["单位", details.unit], ["有效观测", details.validRows], ["缺测", details.missingRows], ["来源", details.sourceName]].map(([label, value]) => (
+            <div key={label} className="rounded-lg border border-slate-200 bg-white p-3">
+              <dt className="text-sm text-slate-600">{label}</dt>
+              <dd className="font-semibold">{value}</dd>
+            </div>
+          ))}
+        </dl>
+        <p className="text-sm text-slate-700">数据覆盖 {coverage}{details.truncated && " · 查询结果已截断"}</p>
+        <div className="rounded-lg border border-slate-200 bg-white p-2 sm:p-4">
+          <ChartPreview chart={chart} size={fullscreen ? "fullscreen" : "dialog"} />
+        </div>
+        {details.sources.length > 0 && <ul className="space-y-1 text-sm">
+          {details.sources.map(({ url, title }) => (
+            <li key={url}><a href={url} target="_blank" rel="noreferrer" className="text-sky-800 underline">{title} · {url}</a></li>
+          ))}
+        </ul>}
+      </div>
+    </dialog>
   );
 }
 
@@ -218,11 +220,12 @@ function AnalysisProgress({ task, loadAnalysis }: { task: XiaoyunAnalysisArtifac
   );
 }
 
-export function XiaoyunBusinessCard({ results, loadAnalysis, selectedChartId, onSelectChart }: {
+export function XiaoyunBusinessCard({ results, loadAnalysis, selectedChartId, onSelectChart, onOpenDashboard }: {
   results: XiaoyunBusinessResult[];
   loadAnalysis: LoadAnalysis;
   selectedChartId?: string;
   onSelectChart: (chart: Chart) => void;
+  onOpenDashboard: (chart: Chart) => void;
 }) {
   const [open, setOpen] = useState(true);
   return (
@@ -242,7 +245,8 @@ export function XiaoyunBusinessCard({ results, loadAnalysis, selectedChartId, on
                 <Button size="sm" variant="secondary" aria-pressed={selectedChartId === result.chartId}
                   label={selectedChartId === result.chartId ? "已选中" : "选中追问"} onClick={() => onSelectChart(result)} />
               </div>
-              <DashboardPreview chart={result} />
+              {result.dashboard && <Button size="sm" variant="secondary" label="打开看板" onClick={() => onOpenDashboard(result)} />}
+              <ChartPreview chart={result} />
             </section>
           ) : (
             <section key={result.jobId} className="border-t border-slate-200 pt-2">
