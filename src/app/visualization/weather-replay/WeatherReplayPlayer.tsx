@@ -2,6 +2,7 @@
 
 import { Pause, Play, Rotate3D } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { finishGlobeHandoff } from "@/lib/globe-handoff";
 import type { WeatherReplay } from "@/lib/weather-replay/model";
 import { replayViewOrder, replayViews, type ReplayView } from "@/lib/weather-replay/views";
 import { accumulatedRain, paintReplay, utcClock } from "./replay-canvas";
@@ -37,6 +38,12 @@ export function WeatherReplayPlayer({ query, scene, initialFrame, onFrameChange 
       .catch(error => { if (!request.signal.aborted) setFailure(error instanceof Error ? error.message : "区域回放加载失败。"); });
     return () => request.abort();
   }, [attempt, query]);
+
+  useEffect(() => {
+    if (!embedded || (!replay && !failure)) return;
+    const frame = requestAnimationFrame(() => finishGlobeHandoff("weather"));
+    return () => cancelAnimationFrame(frame);
+  }, [embedded, failure, replay]);
 
   return (
     <section className={embedded ? styles.embedded : styles.standalone} aria-label="区域风暴 3D 回放">
