@@ -327,7 +327,7 @@ export function EconomyWorkspace({ basemap, onBasemapError, initialContext, onRe
   const predictedSeries = outlook?.years.map((item, index) => ({
     date: `${item}-01-01`, value: outlook.values[selected?.code ?? "WLT"]?.[index] ?? null,
   })) ?? [];
-  const statisticsHref = analysisContextHref("outlook", { country: selected?.code, year, metric, targetYear }, "growth-outlook");
+  const statisticsHref = analysisContextHref("outlook", { country: selected?.code ?? "WLT", year, metric, targetYear }, "growth-outlook");
   const historyAnalysis = analysisContextHref(metric === "exports" ? "trade" : "economy", {
     country: selected?.code, year, metric,
   });
