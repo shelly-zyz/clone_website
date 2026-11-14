@@ -191,11 +191,12 @@ export function buildEconomicComparison(codes: readonly string[], startYear: num
 const comparisonColors = ["#246591", "#b86134", "#217e66"];
 
 export function buildOutlookAnalysis(code: string, year: number, compared?: readonly string[]): Analysis {
-  const country = countryAt(code);
+  const worldSelection = code === "WLT";
+  const country = worldSelection ? { label: "全球", code: "WLT" } : countryAt(code);
   const index = gep.years.indexOf(year);
   const color = analysisTopics.outlook.color;
   const edition = gep.edition.replace(/^(\d{4})-0?(\d{1,2})$/, "$1 年 $2 月");
-  const comparison = [...new Set([country.code, ...(compared ?? forecastComparison)])];
+  const comparison = [...new Set([...(worldSelection ? [] : [country.code]), ...(compared ?? forecastComparison)])];
   const projections = forecasts[country.code] ?? gep.years.map(() => null);
   const world = globalForecast[index] ?? null;
   const value = projections[index] ?? null;
@@ -206,17 +207,22 @@ export function buildOutlookAnalysis(code: string, year: number, compared?: read
   const distributions = gep.years.map((_, offset) => distribution(outlookCountries.map(item => forecasts[item.code]?.[offset])));
   return {
     scope: `${country.label} · 世界银行全球经济展望 ${edition}版 · ${gep.years[0]}–${gep.years.at(-1)} 年预测`,
-    metrics: [
+    metrics: worldSelection ? [
+      metric(`${year} 年全球预测增速`, world, "%"),
+      metric("同期经济体预测中位数", distributions[index]?.median ?? null, "%"),
+      metric("同期有预测值经济体", distributions[index]?.count ?? null, "个"),
+    ] : [
       metric(`${year} 年${country.label}预测增速`, value, "%"),
       metric("同期全球预测增速", world, "%"),
       metric("相对全球预测差值", value === null || world === null ? null : value - world, "百分点"),
     ],
     charts: [
       {
-        id: "growth-outlook", label: "增长路径", title: `${country.label}与全球的增长预测`,
+        id: "growth-outlook", label: "增长路径", title: worldSelection ? "全球实际 GDP 增长预测" : `${country.label}与全球的增长预测`,
         caption: "同一版实际 GDP 年增速预测。虚线表示预测值，竖线标记所选年份。",
         kind: "line", forecast: true, labels: gep.years.map(String), unit: "%", color, focus: String(year),
-        series: [{ name: country.label, values: projections }, { name: "全球", color: "#347e85", values: globalForecast }],
+        series: worldSelection ? [{ name: "全球", values: globalForecast }]
+          : [{ name: country.label, values: projections }, { name: "全球", color: "#347e85", values: globalForecast }],
         sources: [forecastSource],
       },
       {
@@ -234,11 +240,12 @@ export function buildOutlookAnalysis(code: string, year: number, compared?: read
       },
       {
         id: "growth-comparison", label: "经济体对照", title: "主要经济体的增长预测对照",
-        caption: "同一发布批次的实际 GDP 增速预测。所选经济体排在首行，全球值为世界银行发布的世界汇总。",
+        caption: "同一发布批次的实际 GDP 增速预测，含世界银行发布的全球汇总。",
         kind: "heatmap", labels: gep.years.map(item => item + " 年"), unit: "%", color,
         series: [
+          ...(worldSelection ? [{ name: "全球", values: globalForecast }] : []),
           ...comparison.map(item => ({ name: countryAt(item).label, values: forecasts[item] ?? gep.years.map(() => null) })),
-          { name: "全球", values: globalForecast },
+          ...(worldSelection ? [] : [{ name: "全球", values: globalForecast }]),
         ],
         sources: [forecastSource],
       },
