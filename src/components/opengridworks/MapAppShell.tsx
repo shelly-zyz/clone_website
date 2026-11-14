@@ -44,7 +44,6 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { CarbonAtlasControls } from "./CarbonAtlasControls";
-import { CarbonYearFilter } from "./CarbonYearFilter";
 import { PowerRegionPanel, PowerViews } from "./PowerRegionPanel";
 import { useCarbonAtlas } from "@/hooks/use-carbon-atlas";
 import { useReportedGeneration } from "@/hooks/use-reported-generation";
@@ -4496,10 +4495,6 @@ function CarbonLegendPanel({
             <strong>{activeDate || "等待可用日期"}</strong>
             <p>数据库按日期读取压缩全球栅格帧。</p>
           </div>
-          <CarbonYearFilter frames={availableFrames} date={activeDate} onDate={date => {
-            onPlayingChange(false);
-            onDateChange(date);
-          }} />
           <button
             className="og-generation-play"
             type="button"
