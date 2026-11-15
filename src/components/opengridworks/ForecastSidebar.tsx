@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useId, useRef, useState, type ReactNode } from "react";
 import type { ForecastPoint } from "@/lib/globe-forecast";
 import type { WorkspaceTopic } from "@/lib/globe-topics";
-import { ForecastRibbon } from "./ForecastRibbon";
+import { ForecastVisualization, type ForecastSample } from "./ForecastVisualization";
 import styles from "./ForecastSidebar.module.css";
 
 const headings = { power: "电力预测", weather: "气象预报", carbon: "碳排放预测", economy: "经济展望" };
@@ -61,13 +61,16 @@ export function ForecastSidebar({ topic, children }: { topic: WorkspaceTopic; ch
   );
 }
 
-export function ForecastSeries({ points, observed = false, unit, grain, label, appearance = "ribbon" }: {
-  points: ForecastPoint[];
+type PlotPoint = ForecastPoint & { p10?: number; p90?: number };
+
+export function ForecastSeries({ points, observed = false, unit, grain, label, chart, comparison }: {
+  points: PlotPoint[];
   observed?: boolean;
   unit: string;
   grain: Grain;
   label: string;
-  appearance?: "ribbon" | "line";
+  chart: WorkspaceTopic | "line";
+  comparison?: { primaryLabel: string; label: string; points: ForecastPoint[] };
 }) {
   if (!points.some(({ value }) => value !== null)) return null;
   const times = points.map(({ date }) => Date.parse(date));
@@ -80,16 +83,21 @@ export function ForecastSeries({ points, observed = false, unit, grain, label, a
   const rows = points.slice(-3);
   const formatter = unit === "kgC/h" ? compact : amount;
   const formatValue = (value: number) => `${formatter.format(value)}${unit === "%" ? "%" : ` ${unit}`}`;
+  const sample = ({ date, value, p10, p90 }: PlotPoint, index: number): ForecastSample => ({
+    date, position: positions[index], value, p10, p90, dateLabel: formatForecastDate(date, grain),
+    tickLabel: grain === "hour" ? date.slice(5, 16).replace("T", " ") : formatForecastDate(date, grain),
+  });
+  const benchmark = comparison && new Map(comparison.points.map(({ date, value }) => [date, value]));
+  const benchmarkSamples = benchmark && points.map(({ date }, index) => sample({ date, value: benchmark.get(date) ?? null }, index));
   return (
     <div className={styles.series}>
-      {appearance === "ribbon" ? (
-        <ForecastRibbon observed={observed} label={label} unit={unit} formatValue={formatValue}
-          samples={points.map(({ date, value }, index) => ({
-            date, position: positions[index], value, dateLabel: formatForecastDate(date, grain),
-            tickLabel: grain === "hour" ? date.slice(5, 16).replace("T", " ") : formatForecastDate(date, grain),
-          }))} />
-      ) : (
+      {chart === "line" ? (
         <ForecastLine points={points} positions={positions} label={label} />
+      ) : (
+        <ForecastVisualization topic={chart} observed={observed} label={label} unit={unit} formatValue={formatValue}
+          samples={points.map(sample)} comparison={comparison && benchmarkSamples?.some(({ value }) => value !== null) ? {
+            label: comparison.label, primaryLabel: comparison.primaryLabel, samples: benchmarkSamples,
+          } : undefined} />
       )}
       <dl className={styles.values} aria-label={label}>
         {rows.map(({ date, value }) => (

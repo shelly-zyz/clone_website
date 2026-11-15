@@ -1,0 +1,102 @@
+.graphic {
+  container-type: inline-size;
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  margin-block: 4px 8px;
+  color: #b9ccdf;
+  --forecast-haze: #356096;
+}
+
+.graphic[data-topic="weather"] { --forecast-haze: #466caa; }
+.graphic[data-topic="carbon"] { --forecast-haze: #326a72; }
+.graphic[data-topic="economy"] { --forecast-haze: #645d97; }
+
+.plot {
+  display: block;
+  width: min(100%, 380px);
+  height: auto;
+  justify-self: center;
+}
+
+.plot text {
+  fill: currentColor;
+  font-size: 11.7px;
+  font-variant-numeric: tabular-nums;
+}
+
+.unit { opacity: 0.9; }
+
+.shadowColor { stop-color: var(--forecast-haze); }
+.timeAxis, .zero, .tick { fill: none; stroke: #94aac3; stroke-width: 0.7; }
+.timeAxis { opacity: 0.22; }
+.zero { opacity: 0.54; stroke-dasharray: 3 4; }
+.tick { opacity: 0.65; }
+.station { opacity: 0.9; }
+.benchmark { opacity: 0.78; }
+.graphic[data-observed="true"] .surface { filter: saturate(0.79); }
+
+.ridge {
+  fill: none;
+  stroke-width: 1.45;
+  stroke-linecap: round;
+  stroke-opacity: 0.86;
+}
+
+.point {
+  stroke: #eff8ff;
+  stroke-width: 0.95;
+}
+
+.point:hover { stroke-width: 1.7; }
+
+.interval {
+  stroke: #a9dbcf;
+  stroke-opacity: 0.47;
+  stroke-width: 0.8;
+}
+
+.intervalStem {
+  fill: none;
+  stroke: #a9dbcf;
+  stroke-width: 1.55;
+  stroke-opacity: 0.79;
+  stroke-linecap: round;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 12px;
+  width: min(100%, 380px);
+  min-width: 0;
+  justify-self: center;
+  padding-inline: 3px;
+  font-size: 10px;
+  line-height: 1.35;
+  color: #c3d1e0;
+}
+
+.legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.legend i {
+  display: block;
+  flex: none;
+  width: 10px;
+  height: 4px;
+  border-radius: 3px;
+}
+
+.primaryKey { background: linear-gradient(90deg, #997ed9, #e6b998); }
+.benchmarkKey { background: #86a9ce; }
+.intervalKey { background: #8abdb3; }
+
+@container (max-width: 205px) {
+  .plot text { font-size: 13.3px; }
+}

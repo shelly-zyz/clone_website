@@ -31,7 +31,8 @@ function ForecastTask({ task, loadAnalysis }: { task: XiaoyunAnalysisArtifact; l
         {cutoff && ` · 数据截至 ${formatForecastDate(cutoff, grain)}`}
       </p>
       {job?.status === "failed" && <p role="alert" className={styles.error}>{job.error ?? "预测任务未完成。"}</p>}
-      {result?.points && <ForecastSeries points={result.points} unit={result.unit} grain={grain} label="模型预测值" />}
+      {result?.points && <ForecastSeries chart={task.topic === "power" ? "power" : "carbon"}
+        points={result.points} unit={result.unit} grain={grain} label="模型预测值" />}
       {result?.model && (
         <p className={styles.source}>
           {result.model.method ?? result.model.name} {result.model.version} · 数据版本 {job?.data_ref.version.slice(0, 12)}
@@ -100,10 +101,10 @@ export function WorkspaceForecast({ topic, loadOverview, task, loadAnalysis, onR
       {overview && !latest && <p className={styles.status}>暂无已发布的{weather ? "预报" : "观测"}。</p>}
       {overview && latest && (weather ? <>
         {issued && <p className={styles.status}>{overview.historicalIssue ? "历史起报" : "起报"} {formatForecastDate(issued, "hour")}</p>}
-        <ForecastSeries points={overview.points} unit={overview.unit} grain="hour" label="GFS 预报有效时刻与风速" />
+        <ForecastSeries chart="weather" points={overview.points} unit={overview.unit} grain="hour" label="GFS 预报有效时刻与风速" />
       </> : <>
         <p className={styles.status}>观测截至 {formatForecastDate(latest.date, grain)}</p>
-        {!task && <ForecastSeries points={overview.points.slice(-8)} observed unit={overview.unit} grain={grain} label="近期观测值" />}
+        {!task && <ForecastSeries chart={topic} points={overview.points.slice(-8)} observed unit={overview.unit} grain={grain} label="近期观测值" />}
         {training ? <>
           <p className={styles.muted}>
             训练窗口 {formatForecastDate(training.start, grain)} 至 {formatForecastDate(training.end, grain)}

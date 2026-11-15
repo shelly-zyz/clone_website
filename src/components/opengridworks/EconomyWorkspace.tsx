@@ -163,7 +163,7 @@ function EconomyProfile({
           </div>
           <p className={styles.note}>现价美元 · {historyUnit}</p>
           {points.some(point => point.value !== null)
-            ? <ForecastSeries points={points} observed appearance="line" grain="year" unit={historyUnit} label={`${country.label}${spec.label}史`} />
+            ? <ForecastSeries chart="line" points={points} observed grain="year" unit={historyUnit} label={`${country.label}${spec.label}史`} />
             : <p className={styles.status}>所查时段暂无该指标数据。</p>}
           <details className={styles.history}>
             <summary>历年数据</summary>
@@ -327,6 +327,11 @@ export function EconomyWorkspace({ basemap, onBasemapError, initialContext, onRe
   const predictedSeries = outlook?.years.map((item, index) => ({
     date: `${item}-01-01`, value: outlook.values[selected?.code ?? "WLT"]?.[index] ?? null,
   })) ?? [];
+  const globalComparison = selected && outlook ? {
+    primaryLabel: selected.label,
+    label: "全球基准",
+    points: predictedSeries.map(({ date }, index) => ({ date, value: outlook.values.WLT?.[index] ?? null })),
+  } : undefined;
   const statisticsHref = analysisContextHref("outlook", { country: selected?.code ?? "WLT", year, metric, targetYear }, "growth-outlook");
   const historyAnalysis = analysisContextHref(metric === "exports" ? "trade" : "economy", {
     country: selected?.code, year, metric,
@@ -398,7 +403,8 @@ export function EconomyWorkspace({ basemap, onBasemapError, initialContext, onRe
                 <SnapshotStatus data={snapshot} label="经济体目录" retry={retrySnapshot} />
                 {forecastRanking.length > 0 && <p className={styles.note}>显示 {forecastRanking.length} 个有值经济体中的前 {top.length} 位 · 正负值按原值展示</p>}
                 {predictedSeries.some(item => item.value !== null) && (
-                  <ForecastSeries points={predictedSeries} unit="%" grain="year" label="同版 GDP 增速预测" />
+                  <ForecastSeries chart="economy" points={predictedSeries} unit="%" grain="year" label="同版 GDP 增速预测"
+                    comparison={globalComparison} />
                 )}
               </ScenarioRanking>
             </>
