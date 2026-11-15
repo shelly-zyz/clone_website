@@ -103,8 +103,14 @@ export function XiaoyunAssistant({ topic, onMapCommand }: {
       signal,
     });
     if (response.status === 401) throw new Error("请从已授权的业务预览读取预测数据。");
-    if (!response.ok) throw new Error("预测数据暂不可用。");
-    return forecastOverviewSchema.parse(await response.json());
+    const payload: unknown = await response.json().catch(() => null);
+    if (!response.ok) {
+      const message = payload && typeof payload === "object" && "error" in payload && typeof payload.error === "string"
+        ? payload.error
+        : "预测数据暂不可用。";
+      throw new Error(message);
+    }
+    return forecastOverviewSchema.parse(payload);
   }, []);
 
   function runForecast(message: string) {

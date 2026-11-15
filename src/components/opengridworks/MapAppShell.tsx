@@ -907,9 +907,9 @@ const openInfraBasemapTileTemplate = "https://openinframap.org/20250311/{z}/{x}/
 const cartoBasemapSourceId = "carto-basemap";
 const cartoBasemapTileJsonUrl = "https://tiles.basemaps.cartocdn.com/vector/carto.streets/v1/tiles.json";
 const chinaTransmissionPreviewSourceId = "china-transmission-preview";
-const chinaTransmissionPreviewUrl = "/api/data/geojson?path=/data/osm-power/china-transmission-preview.geojson";
+const chinaTransmissionPreviewUrl = "/data/osm-power/china-transmission-preview.geojson";
 const chinaTransmissionDetailSourceId = "china-transmission-detail-preview";
-const chinaTransmissionDetailUrl = "/api/data/geojson?path=/data/osm-power/china-transmission-detail-preview.geojson";
+const chinaTransmissionDetailUrl = "/data/osm-power/china-transmission-detail-preview.geojson";
 const chinaTransmissionDetailMinZoom = 3;
 const chinaTransmissionPreviewLayerIds = ["china-transmission-preview-glow", "china-transmission-preview-main"];
 const chinaTransmissionDetailLayerIds = ["china-transmission-detail-glow", "china-transmission-detail-main"];

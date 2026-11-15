@@ -27,7 +27,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "next dev --webpack",
+    "dev": "node scripts/dev-with-local-config.mjs",
     "preview:ssh": "bash scripts/open-ssh-preview.sh",
     "build": "next build",
     "start": "next start",

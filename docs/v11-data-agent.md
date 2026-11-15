@@ -25,6 +25,8 @@ GRACED 速率和统计局发电量的指标规则与查询数据版本一起返�
 
 ## 复现
 
+本地 `npm run dev` 会从 `$HOME/.config/opengridworks/data-agent-database.env` 读取只读数据连接与会话连接，并从 `xiaoyun-providers.env` 读取 Pi 和语音提供方配置。凭据文件须仅用户可读；加载器只传入 Agent 查询、会话及语音所需变量，不读取审核数据库连接或访问令牌。将 `DATA_AGENT_PI_ENABLED=true` 设在本机提供方配置中以启用自然语言入口；不要把密钥复制到项目目录或提交到 Git。
+
 1. 在完成 `scripts/v11-schema-baseline.sql` 的 `zyz` 库中，以管理员执行 `scripts/v11-data-agent-extensions.sql`。宿主先安装与 PostgreSQL 主版本匹配的扩展文件，并为 TimescaleDB 配置 `shared_preload_libraries`。再以 `zyz` 依次执行 `v11-data-agent-schema.sql`、`v11-data-agent-nbs.sql`、`v11-data-agent-refresh-log.sql`、`v11-data-agent-context.sql` 和 `v11-data-agent-tiles.sql`，文件都在 `scripts/` 下。升级 API 服务后执行 `v11-data-agent-publish.sql` 发布已有源表。
 2. 在服务端配置 `DATA_AGENT_DATABASE_URL`。生产环境给 JSON 和 MCP 客户端配置同一个服务端 Bearer token。自然语言入口另需配置 `DATA_AGENT_PI_ENABLED=true` 与 `DEEPSEEK_API_KEY`。
 3. `GET /api/data-agent` 读取当前目录。`POST /api/data-agent` 接受 `catalog`、`query`、`ask` 和会话操作。Streamable HTTP MCP 路径为 `/api/mcp/data-agent`，提供 `list_published_catalog`、`query_published_data` 和 `resolve_project_result`。

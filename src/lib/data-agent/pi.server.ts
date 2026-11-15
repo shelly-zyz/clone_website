@@ -19,8 +19,11 @@ const dateParameters = { start_date: { type: "string", description: "含首日�
 
 export function getPiModel() {
   const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
-  if (!apiKey || process.env.DATA_AGENT_PI_ENABLED !== "true") {
-    throw new DataAgentError("NOT_CONFIGURED", "自然语言入口需要配置 Pi 模型。结构化查询接口可直接使用。");
+  const missing: string[] = [];
+  if (process.env.DATA_AGENT_PI_ENABLED !== "true") missing.push("DATA_AGENT_PI_ENABLED=true");
+  if (!apiKey) missing.push("DEEPSEEK_API_KEY");
+  if (missing.length) {
+    throw new DataAgentError("NOT_CONFIGURED", `自然语言入口未启用，请在服务端配置 ${missing.join(" 和 ")}。结构化查询接口可直接使用。`);
   }
   const models = createModels();
   models.setProvider(deepseekProvider());
