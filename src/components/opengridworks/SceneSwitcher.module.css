@@ -1,9 +1,10 @@
 .switcher {
   position: absolute;
   z-index: 47;
-  inset: max(10px, env(safe-area-inset-top)) calc(var(--og-forecast-width) + 29px) auto calc(var(--og-sidebar-width) + 29px);
-  width: min(100%, 490px);
-  max-width: calc(100% - var(--og-sidebar-width) - var(--og-forecast-width) - 58px);
+  top: var(--og-switcher-top);
+  left: var(--og-stage-left);
+  right: var(--og-switcher-right);
+  width: min(490px, calc(100% - var(--og-stage-left) - var(--og-switcher-right)));
   margin-inline: auto;
 }
 
@@ -11,7 +12,7 @@
   display: grid;
   grid-template-columns: 1fr 1.3fr 1fr;
   align-items: center;
-  height: var(--og-scene-card-height, var(--og-weather-card-height));
+  height: var(--og-scene-card-height);
   isolation: isolate;
 }
 
@@ -61,18 +62,11 @@
 }
 .positions button:is(:hover, [aria-pressed="true"])::after { background: #78dedb; }
 
-@media (max-width: 900px) {
-  .switcher {
-    inset: calc(max(12px, env(safe-area-inset-top)) + 45px) 10px auto;
-    max-width: calc(100% - 20px);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .card { transition: none; }
 }
 
-.carbon { width: min(100%, 286px); }
+.carbon { width: min(286px, calc(100% - var(--og-stage-left) - var(--og-switcher-right))); }
 .carbon .cards {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
@@ -83,7 +77,3 @@
   background: #243928;
 }
 .carbon .card[data-planar="true"] img { object-fit: cover; }
-.atlas {
-  inset: var(--og-carbon-switcher-top) 10px auto;
-  max-width: calc(100% - 20px);
-}

@@ -19,7 +19,6 @@ import type { Feature, FeatureCollection, LineString, Point } from "geojson";
 import {
   Activity,
   Camera,
-  CalendarDays,
   ArrowUpRight,
   Check,
   Circle,
@@ -43,9 +42,8 @@ import {
   Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { CarbonAtlasControls } from "./CarbonAtlasControls";
+import { CarbonAtlasControls, CarbonTimeline } from "./CarbonAtlasControls";
 import { CarbonSceneSwitcher } from "./CarbonSceneSwitcher";
-import { CarbonYearFilter } from "./CarbonYearFilter";
 import {
   PowerAnnualPanel, PowerMobileSelection, PowerMonthlyPanel, PowerPeriodSwitcher, PowerProjectionSwitcher, PowerViews,
 } from "./PowerRegionPanel";
@@ -56,13 +54,13 @@ import { chinaProvinces, findChinaProvince } from "@/lib/china-provinces";
 import {
   chinaPowerAnnualFrame, powerAmount, powerMapNoData, provincePowerColor, provincePowerMax, type ProvincePowerFrame,
 } from "@/lib/china-power-statistics";
+import { carbonAtlasCenter, observeMapViewport, overviewZoom, type MapOverview } from "@/lib/globe-viewport";
 import { beginGlobeHandoff, finishGlobeHandoff } from "@/lib/globe-handoff";
 import {
   analysisContextHref, readGridPoint, readWorkspaceCamera, replaceWorkspaceContext, type WorkspaceContext,
 } from "@/lib/workspace-context";
 import { generationSeries } from "@/lib/topic-analysis/history";
 import { GlobeNavigation } from "@/components/opengridworks/GlobeNavigation";
-import { WeatherReplayPlayer } from "@/app/visualization/weather-replay/WeatherReplayPlayer";
 import { replayViews, type WeatherScene } from "@/lib/weather-replay/views";
 import { WeatherSceneSwitcher } from "./WeatherSceneSwitcher";
 import { WeatherSidebarFilters } from "@/components/opengridworks/WeatherSidebarFilters";
@@ -75,11 +73,9 @@ import {
   carbonFrameColorMax,
   carbonGridPoint,
   carbonSectorLabels,
-  formatCarbonTotal,
   formatCarbonValue,
   sampleCarbonFrame,
   type CarbonFrame,
-  type CarbonCatalog,
 } from "@/lib/carbon-earth";
 import {
   capacityFactorPercent,
@@ -136,15 +132,22 @@ type BooleanRecord<T extends string> = Record<T, boolean>;
 type ProjectMode = Exclude<WorkspaceTopic, "economy">;
 type PowerView = NonNullable<WorkspaceContext["powerView"]>;
 const WeatherResourceScene = dynamic(() => import("./WeatherResourceScene").then(module => module.WeatherResourceScene));
+const WeatherReplayPlayer = dynamic(() => import("@/app/visualization/weather-replay/WeatherReplayPlayer").then(module => module.WeatherReplayPlayer));
 const powerOverviewCenter: Coordinates = [104, 36];
-const atlasWorldZoom = () => Math.max(0, Math.min(1.55, Math.log2(window.innerWidth / 500)));
-
 function powerOverviewCamera(): MapCameraState {
-  const width = typeof window === "undefined" ? 1440 : window.innerWidth;
-  const available = width > 900 ? width - 340 : width - 28;
-  const zoom = Math.min(3.35, Math.log2(available / 106));
-  return { center: powerOverviewCenter, zoom, pitch: 0, bearing: 0 };
+  return { center: powerOverviewCenter, zoom: 3.35, pitch: 0, bearing: 0 };
 }
+
+function contextOverview(topic: WorkspaceTopic, context: WorkspaceContext): MapOverview | undefined {
+  if (readWorkspaceCamera(context.camera)) return undefined;
+  const global = !context.region || context.region === "global";
+  if (topic === "carbon" && global) return context.projection === "map" ? "atlas" : "globe";
+  if (topic === "power") {
+    if (context.powerView && context.powerView !== "facilities") return findChinaProvince(context.region) ? undefined : "china";
+    if (global) return "globe";
+  }
+}
+
 function switchList<T extends string>(state: BooleanRecord<T>, items: string | undefined) {
   if (items === undefined) return state;
   const enabled = new Set(items.split(","));
@@ -168,8 +171,10 @@ function contextCamera(topic: WorkspaceTopic, context: WorkspaceContext): MapCam
   }
   if (topic === "carbon" && context.projection === "map") {
     const place = carbonTargets.find(item => item.id === context.region);
-    return { center: place && place.id !== "global" ? place.center : [6, 19], zoom: place && place.id !== "global" ? place.zoom : 1.08, pitch: 0, bearing: 0 };
+    return { center: place && place.id !== "global" ? place.center : carbonAtlasCenter, zoom: place && place.id !== "global" ? place.zoom : 1.08, pitch: 0, bearing: 0 };
   }
+  const carbonRegion = topic === "carbon" ? carbonTargets.find(item => item.id !== "global" && item.id === context.region) : undefined;
+  if (carbonRegion) return { center: carbonRegion.center, zoom: carbonRegion.zoom, pitch: 0, bearing: 0 };
   const region = regionTargets.find(item => item.id !== "global" && item.id === context.region);
   return region ? { center: region.center, zoom: region.zoom, pitch: region.pitch, bearing: region.bearing } : undefined;
 }
@@ -178,7 +183,7 @@ function themeForContext(context: WorkspaceContext, topic: WorkspaceTopic): MapT
   if (topic === "weather") return "goes";
   const themes = topic === "economy" ? economyMapThemes : mapThemes;
   return themes.find(theme => theme.key === context.basemap)?.key
-    ?? (topic === "carbon" && context.projection === "map" ? "satellite" : "nasa");
+    ?? "nasa";
 }
 const EconomyWorkspace = dynamic(() => import("@/components/opengridworks/EconomyWorkspace").then((module) => module.EconomyWorkspace));
 type MapProperties = Record<string, string | number | boolean>;
@@ -199,6 +204,7 @@ type FocusRequest = {
   zoom: number;
   pitch?: number;
   bearing?: number;
+  overview?: MapOverview;
 };
 
 type HoverTooltip = {
@@ -2061,13 +2067,13 @@ function addInteractiveLayers(map: Map) {
 
   map.addLayer({
     id: "carbon-atlas-ocean", type: "background", layout: { visibility: "none" },
-    paint: { "background-color": "#5c686d", "background-opacity": .97 },
+    paint: { "background-color": "#081322" },
   });
   map.addLayer({
     id: "carbon-atlas-land", type: "fill", source: "ne-countries", layout: { visibility: "none" },
     paint: {
-      "fill-color": ["match", ["get", "MAPCOLOR9"], 1, "#525c3d", 2, "#58603f", 4, "#5c6445", 6, "#505c43", "#545f45"],
-      "fill-outline-color": "#424f41", "fill-opacity": .98,
+      "fill-color": "#172733",
+      "fill-outline-color": "rgba(143, 174, 195, 0.26)",
     },
   });
 
@@ -3169,6 +3175,7 @@ function MapViewport({
   onSelectProvince,
   onReady,
   initialCamera,
+  initialOverview,
   focusRequest,
   screenshotRequest,
   cinematic,
@@ -3208,6 +3215,7 @@ function MapViewport({
   onSelectProvince: (code: string) => void;
   onReady: () => void;
   initialCamera?: MapCameraState;
+  initialOverview?: MapOverview;
   focusRequest: FocusRequest | null;
   screenshotRequest: number;
   cinematic: boolean;
@@ -3241,7 +3249,8 @@ function MapViewport({
   const provinceFrameRef = useRef(provinceFrame);
   const provinceRef = useRef(onSelectProvince);
   const readyRef = useRef(onReady);
-  const initialView = useRef(initialCamera ?? defaultRegion);
+  const initialView = useRef({ camera: initialCamera ?? defaultRegion, overview: initialOverview });
+  const previousCarbonPlanar = useRef(carbonPlanar);
   const [mapUnavailable, setMapUnavailable] = useState(false);
   const chinaTransmissionPreviewLoadedRef = useRef(false);
   const chinaTransmissionDetailLoadedRef = useRef(false);
@@ -3276,14 +3285,14 @@ function MapViewport({
     }
 
     let map: Map;
-    const camera = initialView.current;
-    const atlasOverview = carbonPlanarRef.current && camera.zoom === 1.08 && camera.center[0] === 6 && camera.center[1] === 19;
+    const { camera, overview } = initialView.current;
     try {
       map = new maplibregl.Map({
         container: mapContainerRef.current,
         style: baseMapStyle,
         center: camera.center,
-        zoom: atlasOverview ? atlasWorldZoom() : camera.zoom,
+        zoom: overview ? overviewZoom(mapContainerRef.current, overview, camera.center[1]) : camera.zoom,
+        trackResize: false,
         pitch: camera.pitch,
         bearing: camera.bearing,
         attributionControl: false,
@@ -3300,14 +3309,7 @@ function MapViewport({
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl({ showCompass: true, showZoom: true }), "bottom-right");
 
-    const applyViewportPadding = () => {
-      map.setPadding({
-        top: 0,
-        right: 0,
-        bottom: 0,
-        left: !carbonPlanarRef.current && window.innerWidth > 900 ? 360 : 0,
-      });
-    };
+    const stopObservingViewport = observeMapViewport(map, () => carbonPlanarRef.current);
 
     const interactiveLayerIds = [
       "energy-circles",
@@ -3333,7 +3335,6 @@ function MapViewport({
 
     map.on("load", () => {
       map.setProjection({ type: carbonPlanarRef.current || powerPlanarRef.current ? "mercator" : "globe" });
-      applyViewportPadding();
       map.setSky({
         "sky-color": "#101821",
         "horizon-color": "#1e293b",
@@ -3368,8 +3369,8 @@ function MapViewport({
         if (activeCarbonFrame && value > 0) {
           map.getCanvas().style.cursor = "crosshair";
           hoverRef.current({
-            x: event.point.x,
-            y: event.point.y,
+            x: event.originalEvent.clientX,
+            y: event.originalEvent.clientY,
             title: `${carbonSectorLabels[activeCarbonFrame.sector] ?? activeCarbonFrame.sector}排放`,
             subtitle: `${formatCarbonValue(value)} · ${activeCarbonFrame.date}`,
             color: carbonCanvasColor(value, carbonPlanarRef.current ? carbonScaleRef.current : carbonFrameColorMax(activeCarbonFrame)),
@@ -3388,8 +3389,8 @@ function MapViewport({
           const meta = weatherMetricMeta(metric);
           map.getCanvas().style.cursor = "crosshair";
           hoverRef.current({
-            x: event.point.x,
-            y: event.point.y,
+            x: event.originalEvent.clientX,
+            y: event.originalEvent.clientY,
             title: meta.label,
             subtitle: `${formatWeatherValue(metric, sample.value)} · ${formatWeatherTime(field?.validTimeUtc)}`,
             color: weatherColor(metric, sample.value, 0.9),
@@ -3406,8 +3407,8 @@ function MapViewport({
         const value = provinceFrame.regions.find(row => row.code === province?.code)?.value;
         map.getCanvas().style.cursor = province ? "pointer" : "";
         hoverRef.current(province ? {
-          x: event.point.x,
-          y: event.point.y,
+          x: event.originalEvent.clientX,
+          y: event.originalEvent.clientY,
           title: `${province.name} · ${provinceFrame.label}`,
           subtitle: `${provinceFrame.period} · ${value == null ? "暂无数据" : `${powerAmount.format(value)} ${provinceFrame.unit}`}`,
           color: provincePowerColor(value, provincePowerMax(provinceFrame)),
@@ -3426,8 +3427,8 @@ function MapViewport({
           map.getCanvas().style.cursor = "pointer";
           map.setFilter("generation-heat-hover", ["==", ["get", "iso_3166_2"], isoCode]);
           hoverRef.current({
-            x: event.point.x,
-            y: event.point.y,
+            x: event.originalEvent.clientX,
+            y: event.originalEvent.clientY,
             title: `${heatEntry.label}发电量`,
             subtitle: generationFrameSubtitle(heatEntry, generationFrameRef.current),
             color: generationHeatColor(heatEntry.normalized),
@@ -3460,8 +3461,8 @@ function MapViewport({
       const selected = featureToSelected(feature, [event.lngLat.lng, event.lngLat.lat]);
       map.getCanvas().style.cursor = "pointer";
       hoverRef.current({
-        x: event.point.x,
-        y: event.point.y,
+        x: event.originalEvent.clientX,
+        y: event.originalEvent.clientY,
         title: selected.title,
         subtitle: selected.subtitle,
         color: selected.color,
@@ -3563,7 +3564,6 @@ function MapViewport({
     map.on("click", handleClick);
     map.on("moveend", handleMoveEnd);
     map.on("error", handleMapError);
-    window.addEventListener("resize", applyViewportPadding);
     map.on("mouseleave", () => {
       if (map.getLayer("generation-heat-hover")) {
         map.setFilter("generation-heat-hover", ["==", ["get", "iso_3166_2"], ""]);
@@ -3573,7 +3573,7 @@ function MapViewport({
     });
 
     return () => {
-      window.removeEventListener("resize", applyViewportPadding);
+      stopObservingViewport();
       map.off("error", handleMapError);
       map.remove();
       mapRef.current = null;
@@ -3633,8 +3633,13 @@ function MapViewport({
     const planar = carbonPlanar || powerPlanar;
     map.setProjection({ type: planar ? "mercator" : "globe" });
     map.setRenderWorldCopies(!planar);
-    map.setMaxPitch(powerPlanar ? 0 : null);
-    map.setPadding({ top: 0, right: 0, bottom: 0, left: !carbonPlanar && window.innerWidth > 900 ? 360 : 0 });
+    map.setMaxPitch(planar ? 0 : null);
+    if (previousCarbonPlanar.current !== carbonPlanar) {
+      previousCarbonPlanar.current = carbonPlanar;
+      if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        map.getCanvas().animate([{ opacity: 0.7 }, { opacity: 1 }], { duration: 210, easing: "ease-out" });
+      }
+    }
     setLayerVisibility(map, "power-map-ocean", powerPlanar);
     setLayerVisibility(map, "power-map-land", powerPlanar);
   }, [carbonPlanar, powerPlanar, ready]);
@@ -3893,7 +3898,7 @@ function MapViewport({
     map.stop();
     map.easeTo({
       center: focusRequest.center,
-      zoom: focusRequest.zoom,
+      zoom: focusRequest.overview ? overviewZoom(map.getContainer(), focusRequest.overview, focusRequest.center[1]) : focusRequest.zoom,
       pitch: focusRequest.pitch ?? 35,
       bearing: focusRequest.bearing ?? map.getBearing(),
       duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 390,
@@ -3914,8 +3919,8 @@ function MapViewport({
     let pointerIsDown = false;
     let wheelResumeTimer = 0;
 
-    const spinGlobe = () => {
-      if (document.hidden || pointerIsDown || wheelResumeTimer || map.isMoving() || map.getZoom() > globeSpinMaxZoom) {
+    const spinGlobe = (event?: { type?: string; viewportResize?: boolean }) => {
+      if (event?.viewportResize || document.hidden || pointerIsDown || wheelResumeTimer || map.isMoving() || map.getZoom() > globeSpinMaxZoom) {
         return;
       }
 
@@ -4505,172 +4510,6 @@ function GenerationLegendPanel({
         </div>
       </div>
     </div>
-  );
-}
-
-function CarbonLegendPanel({
-  manifest,
-  activeDate,
-  activeSector,
-  frame,
-  loading,
-  error,
-  playing,
-  onDateChange,
-  onSectorChange,
-  onPlayingChange,
-  onRetry,
-}: {
-  manifest: CarbonCatalog | null;
-  activeDate: string;
-  activeSector: string;
-  frame: CarbonFrame | null;
-  loading: boolean;
-  error: string | null;
-  playing: boolean;
-  onDateChange: (date: string) => void;
-  onSectorChange: (sector: string) => void;
-  onPlayingChange: (playing: boolean) => void;
-  onRetry: () => void;
-}) {
-  const [openSections, setOpenSections] = useState({
-    time: true,
-    sectors: true,
-    intensity: true,
-    source: false,
-  });
-  const availableFrames = manifest?.frames.filter((item) => item.sector === activeSector) ?? [];
-  const yearFrames = availableFrames.filter(item => item.date.slice(0, 4) === activeDate.slice(0, 4));
-  const activeIndex = Math.max(0, yearFrames.findIndex((item) => item.date === activeDate));
-  const toggleSection = (section: keyof typeof openSections) => {
-    setOpenSections((current) => ({ ...current, [section]: !current[section] }));
-  };
-
-  return (
-    <section aria-label="碳排放筛选">
-      <LegendSection
-        title="时间"
-        open={openSections.time}
-        onOpenToggle={() => toggleSection("time")}
-      >
-        <div className="og-generation-panel og-carbon-control-panel">
-          <div className="og-generation-hero">
-            <span><CalendarDays size={14} /> GRACED 日排放</span>
-            <strong>{activeDate || "等待可用日期"}</strong>
-            <p>数据库按日期读取压缩全球栅格帧。</p>
-          </div>
-          <CarbonYearFilter frames={availableFrames} date={activeDate} onDate={date => {
-            onPlayingChange(false);
-            onDateChange(date);
-          }} />
-          <button
-            className="og-generation-play"
-            type="button"
-            aria-pressed={playing}
-            disabled={yearFrames.length < 2}
-            onClick={() => onPlayingChange(!playing)}
-          >
-            {playing ? <Pause size={14} /> : <Play size={14} />}
-            {playing ? "暂停播放" : "播放日期"}
-          </button>
-          <label className="og-generation-slider">
-            <span>日期</span>
-            <input
-              type="range"
-              min={0}
-              max={Math.max(0, yearFrames.length - 1)}
-              disabled={yearFrames.length < 2}
-              value={activeIndex}
-              onChange={(event) => {
-                const selected = yearFrames[Number(event.currentTarget.value)];
-                if (selected) {
-                  onPlayingChange(false);
-                  onDateChange(selected.date);
-                }
-              }}
-            />
-          </label>
-          <div className="og-carbon-date-range">
-            <span>{yearFrames[0]?.date ?? "—"}</span>
-            <span>{yearFrames.at(-1)?.date ?? "—"}</span>
-          </div>
-        </div>
-      </LegendSection>
-
-      <LegendSection
-        title="排放部门"
-        open={openSections.sectors}
-        onOpenToggle={() => toggleSection("sectors")}
-      >
-        <ul className="og-legend-list og-carbon-sector-list">
-          {manifest?.sectors.map((sector) => {
-            const sectorFrame = manifest.frames.find((item) => item.sector === sector && item.date === activeDate)
-              ?? manifest.frames.filter((item) => item.sector === sector).at(-1);
-            return (
-              <li key={sector}>
-                <button
-                  className={`og-legend-row og-clickable-row ${sector === activeSector ? "" : "is-muted"}`}
-                  type="button"
-                  aria-pressed={sector === activeSector}
-                  onClick={() => {
-                    onPlayingChange(false);
-                    onSectorChange(sector);
-                  }}
-                >
-                  <span className="og-dot og-carbon-dot" aria-hidden="true" />
-                  <span>{carbonSectorLabels[sector] ?? sector}</span>
-                  <strong>{sectorFrame ? formatCarbonTotal(sectorFrame.stats.sumKgCPerHour) : "—"}</strong>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      </LegendSection>
-
-      <LegendSection
-        title="排放强度（kgC/h）"
-        open={openSections.intensity}
-        onOpenToggle={() => toggleSection("intensity")}
-      >
-        <div className="og-generation-panel og-carbon-stats-panel">
-          <div className="og-generation-summary">
-            {loading ? (
-              <span>正在读取碳排放栅格...</span>
-            ) : error ? (
-              <span>{error} <button type="button" onClick={onRetry}>重试</button></span>
-            ) : frame ? (
-              <>
-                <strong>{formatCarbonTotal(frame.stats.sumKgCPerHour)}</strong>
-                <span>最高网格 {formatCarbonValue(frame.stats.max)}</span>
-                <span>有效网格 {frame.stats.nonzeroCount.toLocaleString()} 个</span>
-              </>
-            ) : (
-              <span>暂无当前日期数据</span>
-            )}
-          </div>
-          <div className="og-generation-scale og-carbon-emission-scale">
-            <span />
-            <div>
-              <small>低</small>
-              <small>对数色阶 · P99</small>
-              <small>高</small>
-            </div>
-          </div>
-        </div>
-      </LegendSection>
-
-      <LegendSection
-        title="数据来源"
-        open={openSections.source}
-        onOpenToggle={() => toggleSection("source")}
-      >
-        <div className="og-carbon-source-copy">
-          <strong>GRACED / Carbon Monitor</strong>
-          <span>单位：每个 0.1° 网格 kgC/h</span>
-          <span>{manifest?.sources.find((source) => source.sector === activeSector)?.fileName ?? "等待来源信息"}</span>
-        </div>
-      </LegendSection>
-    </section>
   );
 }
 
@@ -5948,9 +5787,9 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
   const generationLoadStartedRef = useRef(false);
   const databaseMapLoadStartedRef = useRef(false);
 
-  const requestFocus = useCallback((center: Coordinates, zoom: number, pitch = 0, bearing = 0) => {
+  const requestFocus = useCallback((center: Coordinates, zoom: number, pitch = 0, bearing = 0, overview?: MapOverview) => {
     setMapCamera({ center, zoom, pitch, bearing });
-    setFocusRequest({ nonce: ++focusNonce.current, center, zoom, pitch, bearing });
+    setFocusRequest({ nonce: ++focusNonce.current, center, zoom, pitch, bearing, overview });
   }, []);
 
   const changeProject = useCallback(({ topic, context }: WorkspaceSelection) => {
@@ -5977,7 +5816,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
       });
     }
     const camera = contextCamera(topic, context) ?? defaultRegion;
-    requestFocus(camera.center, camera.zoom, camera.pitch, camera.bearing);
+    requestFocus(camera.center, camera.zoom, camera.pitch, camera.bearing, contextOverview(topic, context));
   }, [requestFocus]);
 
   const { topic: activeProject, context, navigate } = useWorkspaceSelection({ topic: initialProject, context: initialContext }, changeProject);
@@ -6216,7 +6055,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
     setFocusedRegion(target.id);
     setActiveRegion(regions.find(item => item.id === target.id) ?? defaultRegion);
     replaceWorkspaceContext({ region: target.id });
-    requestFocus(target.center, target.zoom, target.pitch, target.bearing);
+    requestFocus(target.center, target.zoom, target.pitch, target.bearing, target.id === "global" ? "globe" : undefined);
   }, [requestFocus]);
 
   const openGenerationView = useCallback(() => {
@@ -6274,16 +6113,24 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
     navigate("power", { region: province?.code ?? "china", camera: encodeCamera(camera) }, true);
     setFocusedRegion("china");
     setActiveRegion(regions.find(item => item.id === "china") ?? defaultRegion);
-    if (focus) requestFocus(camera.center, camera.zoom);
+    if (focus) requestFocus(camera.center, camera.zoom, 0, 0, province ? undefined : "china");
   }, [mapCamera, navigate, requestFocus]);
 
   const selectCarbonRegion = (id: string) => {
     const target = carbonTargets.find(item => item.id === id);
     if (!target) return;
-    const center: Coordinates = id === "global" && carbonPlanar ? [6, 19] : target.center;
-    const zoom = id === "global" && carbonPlanar ? atlasWorldZoom() : target.zoom;
-    navigate("carbon", { region: id, grid: undefined, camera: encodeCamera({ center, zoom, pitch: 0, bearing: 0 }) }, true);
-    requestFocus(center, zoom);
+    const center = id === "global" && carbonPlanar ? carbonAtlasCenter : target.center;
+    navigate("carbon", { region: id, grid: undefined, camera: undefined }, true);
+    requestFocus(center, target.zoom, 0, 0, id === "global" ? (carbonPlanar ? "atlas" : "globe") : undefined);
+  };
+
+  const resetCarbon = () => {
+    setCarbonPlaying(false);
+    setLabelSettings(initialLabelSettings);
+    setActivePanel(null);
+    navigate("carbon", { region: "global", grid: undefined, camera: undefined, date: undefined, sector: undefined }, true);
+    requestFocus(carbonPlanar ? carbonAtlasCenter : defaultRegion.center, defaultRegion.zoom, 0, 0,
+      carbonPlanar ? "atlas" : "globe");
   };
 
   const selectPowerView = (view: PowerView) => {
@@ -6297,7 +6144,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
       ? selectedProvince ? contextCamera("power", { region }) ?? powerOverviewCamera() : powerOverviewCamera()
       : mapCamera;
     navigate("power", { powerView: view, region, camera: encodeCamera(camera) });
-    if (camera !== mapCamera) requestFocus(camera.center, camera.zoom);
+    if (camera !== mapCamera) requestFocus(camera.center, camera.zoom, 0, 0, selectedProvince ? undefined : "china");
   };
 
   const setPowerProjection = (projection: "globe" | "map") => {
@@ -6311,16 +6158,13 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
   const setCarbonProjection = (projection: "globe" | "map") => {
     if (projection === (carbonPlanar ? "map" : "globe")) return;
     saveMapCamera();
-    const global = (!context.region || context.region === "global") && mapCamera.zoom <= 2.5;
-    const center: Coordinates = global ? (projection === "map" ? [6, 19] : defaultRegion.center) : mapCamera.center;
-    const zoom = projection === "map" ? (global ? atlasWorldZoom() : Math.max(.3, mapCamera.zoom - .8))
-      : Math.min(8, Math.max(1.92, mapCamera.zoom + .8));
-    const camera = encodeCamera({ center, zoom, pitch: 0, bearing: 0 });
-    // Separate visual defaults from the existing 3D heatmap's chosen basemap.
-    const basemap = projection === "map" ? "satellite" : "nasa";
-    navigate("carbon", { projection, camera, basemap });
-    setActiveMapTheme(basemap);
-    requestFocus(center, zoom);
+    const global = (!context.region || context.region === "global") && !selectedGrid && mapCamera.zoom <= 2.5;
+    const flat = projection === "map";
+    const center: Coordinates = global ? (flat ? carbonAtlasCenter : defaultRegion.center) : mapCamera.center;
+    const zoom = clamp(mapCamera.zoom + (flat ? -0.8 : 0.8), -2, 22);
+    setHoverTooltip(null);
+    navigate("carbon", { projection, camera: global ? undefined : encodeCamera({ center, zoom, pitch: 0, bearing: 0 }) });
+    requestFocus(center, zoom, 0, 0, global ? (flat ? "atlas" : "globe") : undefined);
   };
 
   const regionStats = useMemo(() => {
@@ -6511,6 +6355,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
     : analysisContextHref("generation", { year: annualPowerFrame?.year, month: monthlyGeneration ? reported.month : undefined,
       region: selectedProvince, product: powerProduct, version: monthlyGeneration ? reported.published?.version ?? context.version : undefined },
       powerView === "generation" ? "province-comparison" : "");
+  const carbonTime = { frames: carbonFrames, date: carbonDate, playing: carbonPlaying, onDate: onCarbonDate, onPlay: setCarbonPlaying };
   const comparableCarbon = carbonSector === "Power";
   const carbonAnalysisHref = analysisContextHref("carbon", { date: comparableCarbon ? carbonDate || undefined : undefined });
   const carbonCompareHref = comparableCarbon ? analysisContextHref("carbon", { date: carbonDate || undefined }, "carbon-comparison") : undefined;
@@ -6547,7 +6392,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
 
   if (activeProject === "economy") {
     return (
-      <main className="og-app-shell is-economy-project">
+      <main className="og-app-shell og-globe-workspace is-economy-project">
         <GlobeNavigation activeTopic={activeProject} onTopicChange={switchProject} />
         <EconomyWorkspace
           basemap={economyMapThemes.find(({ key }) => key === economyMapTheme) ?? defaultMapTheme}
@@ -6585,67 +6430,75 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
     carbon: "GRACED · 全球 0.1° 网格",
   }[activeProject];
   return (
-    <main className={`og-app-shell ${cinematic ? "is-cinematic" : ""} ${activeProject === "weather" ? "is-earth-project" : ""} ${activeProject === "carbon" ? "is-carbon-project" : ""}${carbonPlanar ? " is-carbon-atlas" : ""}${statsActive ? " is-power-statistics" : ""}${powerPlanar ? " is-power-planar" : ""}${statsActive && powerForecast ? " is-power-forecast" : ""}`}
+    <main className={`og-app-shell og-globe-workspace ${cinematic ? "is-cinematic" : ""} ${activeProject === "weather" ? "is-earth-project" : ""} ${activeProject === "carbon" ? "is-carbon-project" : ""}${carbonPlanar ? " is-carbon-atlas" : ""}${statsActive ? " is-power-statistics" : ""}${powerPlanar ? " is-power-planar" : ""}${statsActive && powerForecast ? " is-power-forecast" : ""}`}
       onClickCapture={beforeAnalysis}>
       <GlobeNavigation activeTopic={activeProject} onTopicChange={switchProject} />
-      {activeProject === "weather" ? (
-        <>
-          <div className="og-weather-original" hidden={weatherScene !== "globe"}>
-            <EarthProjectViewport initialHash={context.weather} onLoad={weatherReady} />
-          </div>
-          {weatherScene !== "globe" && (
-            <div className="og-weather-replay-stage">
-              <WeatherReplayPlayer query="" scene={weatherScene} initialFrame={context.replayFrame}
-                onFrameChange={rememberReplayFrame} />
+      <div className="og-globe-stage">
+        {activeProject === "weather" ? (
+          <>
+            <div className="og-weather-original" hidden={weatherScene !== "globe"}>
+              <EarthProjectViewport initialHash={context.weather} onLoad={weatherReady} />
             </div>
-          )}
-          <WeatherSceneSwitcher scene={weatherScene} onChange={replay => navigate("weather", { replay: replay === "globe" ? undefined : replay })} />
-        </>
-      ) : (
-        <MapViewport
-          activeProject={activeProject}
-          visibleTechnologies={visibleTechnologies}
-          visibleLayers={visibleLayers}
-          visibleCustomLayers={visibleCustomLayers}
-          visibleSourceLayers={visibleSourceLayers}
-          visibleVoltageClasses={visibleVoltageClasses}
-          visibleSubstationClasses={visibleSubstationClasses}
-          activeSizeMin={activeSizeMin}
-          dataVersion={databaseMapVersion}
-          activeMapTheme={activeMapTheme}
-          bubbleScale={bubbleScale}
-          hoveredLegend={hoveredLegend}
-          labelSettings={labelSettings}
-          generationHeatmapActive={activeProject === "power" && powerView === "facilities" && generationHeatmapEnabled}
-          generationHeatmapData={generationHeatmapData}
-          generationFrame={generationFrame}
-          weatherMetric={defaultWeatherMetric}
-          weatherField={null}
-          weatherWindField={null}
-          weatherParticlesEnabled
-          weatherHighDefinition={false}
-          carbonFrame={visibleCarbonFrame}
-          carbonScale={carbonScale}
-          carbonPlanar={carbonPlanar}
-          powerPlanar={powerPlanar}
-          provinceFrame={provinceFrame}
-          selectedProvince={selectedProvince}
-          onSelectProvince={id => selectPowerProvince(id, false)}
-          initialCamera={startingCamera}
-          onReady={globeReady}
-          focusRequest={focusRequest}
-          screenshotRequest={screenshotRequest}
-          cinematic={cinematic}
-          onSelectFeature={onFeature}
-          onHoverTooltip={setHoverTooltip}
-          onRegionHover={handleRegionHover}
-          onCameraChange={setMapCamera}
-          onScreenshotComplete={showToast}
-        />
+            {weatherScene !== "globe" && (
+              <div className="og-weather-replay-stage">
+                <WeatherReplayPlayer query="" scene={weatherScene} initialFrame={context.replayFrame}
+                  onFrameChange={rememberReplayFrame} />
+              </div>
+            )}
+          </>
+        ) : (
+          <MapViewport
+            activeProject={activeProject}
+            visibleTechnologies={visibleTechnologies}
+            visibleLayers={visibleLayers}
+            visibleCustomLayers={visibleCustomLayers}
+            visibleSourceLayers={visibleSourceLayers}
+            visibleVoltageClasses={visibleVoltageClasses}
+            visibleSubstationClasses={visibleSubstationClasses}
+            activeSizeMin={activeSizeMin}
+            dataVersion={databaseMapVersion}
+            activeMapTheme={activeMapTheme}
+            bubbleScale={bubbleScale}
+            hoveredLegend={hoveredLegend}
+            labelSettings={labelSettings}
+            generationHeatmapActive={activeProject === "power" && powerView === "facilities" && generationHeatmapEnabled}
+            generationHeatmapData={generationHeatmapData}
+            generationFrame={generationFrame}
+            weatherMetric={defaultWeatherMetric}
+            weatherField={null}
+            weatherWindField={null}
+            weatherParticlesEnabled
+            weatherHighDefinition={false}
+            carbonFrame={visibleCarbonFrame}
+            carbonScale={carbonScale}
+            carbonPlanar={carbonPlanar}
+            powerPlanar={powerPlanar}
+            provinceFrame={provinceFrame}
+            selectedProvince={selectedProvince}
+            onSelectProvince={id => selectPowerProvince(id, false)}
+            initialCamera={contextCamera(activeProject, context)}
+            initialOverview={contextOverview(activeProject, context)}
+            onReady={globeReady}
+            focusRequest={focusRequest}
+            screenshotRequest={screenshotRequest}
+            cinematic={cinematic}
+            onSelectFeature={onFeature}
+            onHoverTooltip={setHoverTooltip}
+            onRegionHover={handleRegionHover}
+            onCameraChange={setMapCamera}
+            onScreenshotComplete={showToast}
+          />
+        )}
+      </div>
+      {activeProject === "weather" && (
+        <WeatherSceneSwitcher scene={weatherScene} onChange={replay => navigate("weather", { replay: replay === "globe" ? undefined : replay })} />
       )}
-      {activeProject === "carbon" ? (
-        <CarbonSceneSwitcher projection={carbonPlanar ? "map" : "globe"} onChange={setCarbonProjection} />
-      ) : null}
+      {activeProject === "carbon" && (
+        <>
+          <CarbonSceneSwitcher projection={carbonPlanar ? "map" : "globe"} onChange={setCarbonProjection} />
+          {!cinematic && <CarbonTimeline {...carbonTime} />}
+        </>
+      )}
       {statsActive && !cinematic ? (
         <>
           <PowerProjectionSwitcher projection={powerPlanar ? "map" : "globe"} onChange={setPowerProjection} />
@@ -6667,15 +6520,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
           onPlanned={() => toggleLayer("plannedUpgrades")}
         />
       ) : null}
-      {carbonPlanar ? (
-        <CarbonAtlasControls
-          manifest={carbonManifest} frames={carbonFrames} frame={visibleCarbonFrame} date={carbonDate} sector={carbonSector}
-          regionOptions={carbonTargets} region={context.region ?? "global"} pending={carbonLoading} error={carbonError}
-          playing={carbonPlaying} scaleMax={carbonScale} analysisHref={carbonAnalysisHref} compareHref={carbonCompareHref}
-          onRegion={selectCarbonRegion} onDate={onCarbonDate} onSector={onCarbonSector} onPlay={setCarbonPlaying}
-          onShare={shareMap} onRetry={retryCarbon}
-        />
-      ) : <WorkspaceSidebar
+      <WorkspaceSidebar
         topic={activeProject}
         summary={sidebarSummary}
         analysisHref={activeProject === "power" ? powerAnalysisHref : activeProject === "carbon" ? carbonAnalysisHref : undefined}
@@ -6748,19 +6593,10 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
             onHover={setHoveredLegend}
           />
         ) : activeProject === "carbon" ? (
-          <CarbonLegendPanel
-            manifest={carbonManifest}
-            activeDate={carbonDate}
-            activeSector={carbonSector}
-            frame={carbonFrame}
-            loading={carbonLoading}
-            error={carbonError}
-            playing={carbonPlaying}
-            onDateChange={onCarbonDate}
-            onSectorChange={onCarbonSector}
-            onPlayingChange={setCarbonPlaying}
-            onRetry={retryCarbon}
-          />
+          <CarbonAtlasControls {...carbonTime} manifest={carbonManifest} frame={carbonFrame} sector={carbonSector}
+            regionOptions={carbonTargets} region={context.region ?? "global"} pending={carbonLoading} error={carbonError}
+            planar={carbonPlanar} scaleMax={carbonScale} compareHref={carbonCompareHref}
+            onRegion={selectCarbonRegion} onSector={onCarbonSector} onShare={shareMap} onRetry={retryCarbon} />
         ) : activeProject === "weather" ? (
           <>
             <button className="og-workspace-action og-secondary-entry" type="button"
@@ -6772,14 +6608,14 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
             )}
           </>
         ) : null}
-      </WorkspaceSidebar>}
-      {activeProject !== "weather" && !carbonPlanar ? (
+      </WorkspaceSidebar>
+      {activeProject !== "weather" ? (
         <TopToolbar
           activeProject={activeProject}
           activePanel={activePanel}
           cinematic={cinematic}
           onOpenPanel={togglePanel}
-          onReset={resetAll}
+          onReset={activeProject === "carbon" ? resetCarbon : resetAll}
           onCinematic={() => setCinematic((state) => !state)}
           onShare={shareMap}
           onScreenshot={() => setScreenshotRequest((request) => request + 1)}
@@ -6855,7 +6691,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
           onOpenPanel={togglePanel}
         />
       ) : null}
-      {activeProject !== "weather" && !carbonPlanar ? (
+      {activeProject !== "weather" ? (
         <MiniMap
           selectedFeature={selectedFeature}
           camera={mapCamera}
@@ -6876,7 +6712,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
           <button type="button" onClick={() => setCinematic(false)}>退出</button>
         </div>
       ) : null}
-      {activeProject !== "weather" && !carbonPlanar ? (
+      {activeProject === "power" ? (
         <div className="og-scale">
           <span>20mi</span>
           <span>50km</span>

@@ -4,6 +4,7 @@ import Image from "next/image";
 import maplibregl, { type ExpressionSpecification, type Map as MapLibreMap, type Marker } from "maplibre-gl";
 import type { FeatureCollection, Point } from "geojson";
 import { useEffect, useRef, useState } from "react";
+import { observeMapViewport, overviewZoom } from "@/lib/globe-viewport";
 import { applyRasterBasemap } from "@/lib/raster-basemap";
 import { readWorkspaceCamera, replaceWorkspaceContext } from "@/lib/workspace-context";
 import type { MapTheme } from "@/types/opengridworks";
@@ -14,13 +15,6 @@ const globeCenter: [number, number] = [79, 22];
 const missingValue = -1000;
 const bounds = "/data/natural-earth/ne_50m_admin_0_countries.geojson";
 const featuredEconomies = new Set(["CHN", "USA", "DEU", "BRA", "ZAF"]);
-
-function globeZoom(container: HTMLElement, latitude: number) {
-  const diameter = Math.max(108, Math.min(container.clientWidth, container.clientHeight) * 0.88);
-  // Globe scale grows toward the poles at a fixed MapLibre zoom.
-  const latitudeScale = Math.max(0.2, Math.cos(latitude * Math.PI / 180));
-  return Math.max(0, Math.log2(diameter * latitudeScale / 140));
-}
 
 function mapLayers(values: EconomyValue[], metric: EconomyMetric, outlook: boolean) {
   const { min, max } = economyMetrics[metric];
@@ -65,7 +59,6 @@ export function EconomyGlobe({ basemap, onBasemapError, values, metric, outlook,
   const map = useRef<MapLibreMap>(null);
   const initialCamera = useRef(camera);
   const appliedCamera = useRef<string | undefined>(undefined);
-  const previousLayout = useRef(outlook);
   const [status, setStatus] = useState<"loading" | "ready" | "unavailable">("loading");
 
   useEffect(() => {
@@ -78,10 +71,11 @@ export function EconomyGlobe({ basemap, onBasemapError, values, metric, outlook,
       view = new maplibregl.Map({
         container: element,
         center: camera?.center ?? globeCenter,
-        zoom: camera ? Math.min(6, camera.zoom) : globeZoom(element, globeCenter[1]),
+        zoom: camera ? Math.min(6, camera.zoom) : overviewZoom(element, "globe", globeCenter[1]),
         pitch: camera?.pitch ?? 0,
         bearing: camera?.bearing ?? 0,
-        minZoom: 0,
+        minZoom: -2,
+        trackResize: false,
         maxZoom: 6,
         dragRotate: false,
         touchPitch: false,
@@ -147,11 +141,10 @@ export function EconomyGlobe({ basemap, onBasemapError, values, metric, outlook,
     };
     view.getCanvas().addEventListener("webglcontextlost", onContextLoss);
     view.getCanvas().addEventListener("webglcontextrestored", onContextRestore);
-    const observer = new ResizeObserver(() => view.resize());
-    observer.observe(element);
+    const stopObservingViewport = observeMapViewport(view);
     return () => {
       clearTimeout(firstPaint);
-      observer.disconnect();
+      stopObservingViewport();
       view.getCanvas().removeEventListener("webglcontextlost", onContextLoss);
       view.getCanvas().removeEventListener("webglcontextrestored", onContextRestore);
       view.off("moveend", saveCamera);
@@ -199,16 +192,6 @@ export function EconomyGlobe({ basemap, onBasemapError, values, metric, outlook,
 
   useEffect(() => {
     const view = map.current;
-    if (!view || status !== "ready" || previousLayout.current === outlook) return;
-    previousLayout.current = outlook;
-    view.resize();
-    const zoom = globeZoom(view.getContainer(), view.getCenter().lat);
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    view.easeTo({ zoom, duration: reducedMotion ? 0 : 240 });
-  }, [outlook, status]);
-
-  useEffect(() => {
-    const view = map.current;
     if (!view || status !== "ready") return;
     const { fill, points } = mapLayers(values, metric, outlook);
     view.setPaintProperty("countries", "fill-color", fill);
@@ -241,7 +224,7 @@ export function EconomyGlobe({ basemap, onBasemapError, values, metric, outlook,
     }
     if (!camera) appliedCamera.current = undefined;
     const center = selected?.coordinates ?? globeCenter;
-    const zoom = globeZoom(view.getContainer(), center[1]) + (selected ? 0.13 : 0);
+    const zoom = overviewZoom(view.getContainer(), "globe", center[1]) + (selected ? 0.13 : 0);
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     view.easeTo({ center, zoom, duration: reducedMotion ? 0 : 360 });
   }, [camera, country, selected, status]);

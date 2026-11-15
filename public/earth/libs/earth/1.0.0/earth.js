@@ -193,6 +193,21 @@
         }
 
         var dispatch = _.extend({
+            resize: function(previousView) {
+                if (!globe) return;
+                var orientation = globe.orientation().split(",");
+                var fit = globe.fit(view);
+                var oldFit = globe.fit(previousView);
+                orientation[2] = String(Math.round(globe.projection.scale() * fit / oldFit));
+                dispatch.trigger("moveStart");
+                globe.orientation(orientation.join(","), view);
+                zoom.scale(globe.projection.scale());
+                configuration.save({orientation: globe.orientation()}, {source: "moveEnd"});
+                if (activeLocation.coord) {
+                    activeLocation.point = globe.projection(activeLocation.coord);
+                }
+                dispatch.trigger("moveEnd");
+            },
             globe: function(_) {
                 if (_) {
                     globe = _;
@@ -1151,11 +1166,22 @@
             bindButtonToConfiguration("#" + p, {projection: p, orientation: ""}, ["projection"]);
         });
 
-        // When touch device changes between portrait and landscape, rebuild globe using the new view size.
-        d3.select(window).on("orientationchange", function() {
-            view = µ.view();
-            globeAgent.submit(buildGlobe, configuration.get("projection"));
-        });
+        if (workspace) {
+            // The embedded canvas can change size when a parent panel opens without a device rotation.
+            window.addEventListener("resize", _.debounce(function() {
+                var next = µ.view();
+                if (!next.width || !next.height || (next.width === view.width && next.height === view.height)) return;
+                var previous = view;
+                view = next;
+                d3.selectAll(".fill-screen").attr("width", view.width).attr("height", view.height);
+                inputController.resize(previous);
+            }, 45));
+        } else {
+            d3.select(window).on("orientationchange", function() {
+                view = µ.view();
+                globeAgent.submit(buildGlobe, configuration.get("projection"));
+            });
+        }
     }
 
     function start() {

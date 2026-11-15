@@ -10,19 +10,11 @@
   background: radial-gradient(ellipse at 47% 45%, #173d393d, #0d1211 45%, #0a0e0e 73%);
 }
 
-.map {
-  position: absolute;
-  inset: 0 calc(var(--og-forecast-width) + 30px) var(--og-globe-nav-space) calc(var(--og-sidebar-width) + 30px);
-}
-
+.map { position: absolute; inset: 0; }
 .map[data-ready="false"] { visibility: hidden; }
 
-.viewport[data-outlook="true"] .map {
-  inset: 70px max(240px, 22vw) calc(var(--og-globe-nav-space) + 42px) max(140px, 15vw);
-}
-
 .viewport[data-outlook="true"] .map :global(.maplibregl-canvas) {
-  mask-image: radial-gradient(ellipse 76% 70% at 50% 50%, #000 64%, transparent 100%);
+  mask-image: radial-gradient(ellipse 88% 86% at 50% 50%, #000 72%, transparent 100%);
 }
 
 :global(.is-economy-project):has(.viewport[data-outlook="true"]) :is(:global(.og-layer-cards), :global(.og-maptype-panel)) {
@@ -31,7 +23,7 @@
 
 .mapPlaceholder {
   position: absolute;
-  inset: 0 var(--og-forecast-width) var(--og-globe-nav-space) var(--og-sidebar-width);
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -163,10 +155,10 @@
   --profile-accent: #ffc381;
   position: absolute;
   z-index: 45;
-  top: 16px;
-  right: 16px;
+  top: var(--og-rail-top);
+  right: var(--og-gutter);
+  bottom: calc(var(--og-globe-nav-space) + 6px);
   width: var(--og-forecast-width);
-  max-height: calc(100% - var(--og-globe-nav-space) + 56px);
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
@@ -302,7 +294,23 @@
 .outlookAction:hover { color: #20160d; background: #ffc381; }
 .textButton { min-height: 32px; margin-left: 5px; color: #f5d19c; text-decoration: underline; }
 
-.profileTrigger, .close, .scrim { display: none; }
+.profileTrigger, .close {
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding-inline: 9px;
+  border-radius: 6px;
+  color: #ffe1bd;
+  background: #1d2526;
+  font-size: 13px;
+}
+
+.profileTrigger { display: none; position: absolute; z-index: 47; top: var(--og-rail-top); right: var(--og-gutter); }
+.close { display: flex; position: absolute; top: 9px; right: 12px; width: 36px; }
+.profileHeader { padding-right: 38px; }
+:global(.og-economy-profile-region[data-dock="closed"]) .profileTrigger { display: inline-flex; }
+:global(.og-economy-profile-region[data-dock="closed"]) .profile { display: none; }
 
 .sceneControls {
   display: flex;
@@ -347,59 +355,20 @@
 }
 
 @media (max-width: 900px) {
-  .map { inset: 40px 0 var(--og-globe-nav-space); }
-  .viewport[data-outlook="true"] .map { inset: 65px 182px calc(var(--og-globe-nav-space) + 35px) 118px; }
-  .mapPlaceholder { inset-inline: 0; }
-
-  .profileTrigger, .close {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    min-height: 44px;
-    padding-inline: 10px;
-    color: #ffe1bd;
-    background: #1d2526;
-    font-size: 13px;
-  }
-
-  .profileTrigger {
-    position: absolute;
-    z-index: 47;
-    top: max(12px, env(safe-area-inset-top));
-    right: 12px;
-  }
-
+  .profileTrigger { display: inline-flex; min-height: 42px; top: var(--og-workspace-top); }
+  :global(.og-economy-profile-region[data-dock="open"]) .profileTrigger { visibility: hidden; }
   .profile {
-    inset: auto 0 0;
-    z-index: 77;
-    width: min(100%, 680px);
-    max-height: min(74svh, 700px);
-    margin-inline: auto;
-    padding: 14px 16px max(16px, env(safe-area-inset-bottom));
-    border-radius: 14px 14px 0 0;
+    inset: auto var(--og-gutter) var(--og-globe-nav-space);
+    width: auto;
+    height: var(--og-mobile-dock);
+    padding: 10px 12px;
   }
 
-  .profile[data-open="false"] { display: none; }
-
-  .close {
-    position: absolute;
-    top: 9px;
-    right: 12px;
-    width: 44px;
-    border-radius: 5px;
-  }
-
-  .scrim { display: block; position: absolute; z-index: 76; inset: 0; background: #030811a3; }
-
-  .profileHeader { padding-right: 43px; }
+  :global(.og-economy-profile-region:not([data-dock="open"])) .profile { display: none; }
   .profileRanking button, .profileIndicators button, .searchResults button { min-height: 44px; }
 }
 
 @media (max-width: 660px) {
-  .viewport[data-outlook="true"] .map {
-    inset: 112px 7px calc(var(--og-globe-nav-space) + 22svh + 55px);
-  }
   .sceneControls { gap: 5px 7px; }
   .sceneControls > :global(.og-filter-field) { min-width: 83px; }
   .sceneBack { min-height: 42px; }

@@ -84,34 +84,33 @@ function CountrySearch({ countries, onSelect }: { countries: EconomyCountry[]; o
 }
 
 function ProfilePanel({ open, onOpen, onClose, trigger, children }: {
-  open: boolean; onOpen: () => void; onClose: () => void; trigger: RefObject<HTMLButtonElement | null>; children: ReactNode;
+  open: boolean | undefined; onOpen: () => void; onClose: () => void; trigger: RefObject<HTMLButtonElement | null>; children: ReactNode;
 }) {
   const id = useId();
   const closeButton = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    if (open && matchMedia("(max-width: 900px)").matches) closeButton.current?.focus({ preventScroll: true });
+    if (open) closeButton.current?.focus({ preventScroll: true });
   }, [open]);
 
   function close() {
     onClose();
-    trigger.current?.focus();
+    requestAnimationFrame(() => trigger.current?.focus());
   }
 
   return (
-    <>
-      <button ref={trigger} type="button" className={styles.profileTrigger} aria-controls={id} aria-expanded={open} onClick={onOpen}>
+    <div className="og-economy-profile-region" data-dock={open == null ? "auto" : open ? "open" : "closed"}>
+      <button ref={trigger} type="button" className={styles.profileTrigger} aria-controls={id} aria-expanded={open === true} onClick={onOpen}>
         <ChartNoAxesCombined size={16} aria-hidden="true" /> 经济体档案
       </button>
-      {open && <button type="button" className={styles.scrim} aria-label="关闭经济体档案" onClick={close} tabIndex={-1} />}
-      <aside id={id} className={styles.profile} aria-label="经济体档案" data-open={open}
-        onKeyDown={event => { if (event.key === "Escape" && open) close(); }}>
+      <aside id={id} className={styles.profile} aria-label="经济体档案"
+        onKeyDown={event => { if (event.key === "Escape" && open !== false) close(); }}>
         <button ref={closeButton} type="button" className={styles.close} aria-label="关闭经济体档案" onClick={close}>
           <X size={19} aria-hidden="true" />
         </button>
         {children}
       </aside>
-    </>
+    </div>
   );
 }
 
@@ -225,7 +224,7 @@ export function EconomyWorkspace({ basemap, onBasemapError, initialContext, onRe
   const [metric, setMetric] = useState<EconomyMetric>(initialContext?.metric ?? "gdp");
   const [outlookActive, setOutlookActive] = useState(initialContext?.scene === "outlook");
   const [targetInput, setTargetInput] = useState(initialContext?.targetYear);
-  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState<boolean>();
   const outlookTrigger = useRef<HTMLButtonElement>(null);
   const profileTrigger = useRef<HTMLButtonElement>(null);
   const restoredFocus = useRef(false);
@@ -312,7 +311,7 @@ export function EconomyWorkspace({ basemap, onBasemapError, initialContext, onRe
     window.history.pushState(null, "", url);
     rememberWorkspace("economy");
     restoredFocus.current = true;
-    setProfileOpen(false);
+    setProfileOpen(undefined);
     setOutlookActive(nextOutlook);
   };
 
@@ -335,12 +334,16 @@ export function EconomyWorkspace({ basemap, onBasemapError, initialContext, onRe
   const yearOptions = snapshot?.years.toReversed().map(value => ({ value: String(value), label: `${value} 年` }))
     ?? [{ value: String(year), label: `${year} 年` }];
 
+  const globe = (
+    <EconomyGlobe basemap={basemap} onBasemapError={onBasemapError} values={outlookActive ? forecastValues : values}
+      metric={metric} outlook={outlookActive} selected={selected} country={country} camera={camera} onSelect={pickCountry} onReady={onReady} />
+  );
+
   return (
     <>
-      <EconomyGlobe basemap={basemap} onBasemapError={onBasemapError} values={outlookActive ? forecastValues : values}
-        metric={metric} outlook={outlookActive} selected={selected} country={country} camera={camera} onSelect={pickCountry} onReady={onReady} />
       {!outlookActive ? (
         <>
+          <div className="og-globe-stage">{globe}</div>
           <WorkspaceSidebar topic="economy" summary="世界银行 WDI · 全球经济指标" analysisHref={historyAnalysis}>
             <section className={styles.filters} aria-label="经济数据筛选">
               {snapshot && <CountrySearch countries={snapshot.countries} onSelect={chooseCountry} />}
@@ -366,7 +369,7 @@ export function EconomyWorkspace({ basemap, onBasemapError, initialContext, onRe
           </ProfilePanel>
         </>
       ) : (
-        <ScenarioScene title="经济增长展望" period={targetYear} options={views} selectedOption="outlook" onOptionChange={chooseView}
+        <ScenarioScene title="经济增长展望" period={targetYear} options={views} selectedOption="outlook" onOptionChange={chooseView} globe={globe}
           controls={(
             <div className={styles.sceneControls}>
               <button ref={outlookBack} type="button" className={styles.sceneBack} onClick={() => chooseView("history")}>

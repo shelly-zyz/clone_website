@@ -1,63 +1,99 @@
 "use client";
 
 import Link from "next/link";
+import { ArrowDownToLine, ArrowUpRight, ChevronLeft, ChevronRight, Link2, Pause, Play, Search } from "lucide-react";
+import { useId, useState, type FormEvent } from "react";
 import {
-  ArrowDownToLine, ArrowUpRight, ChevronLeft, ChevronRight, CircleHelp,
-  Layers3, Link2, Map as MapIcon, Pause, Play, Search, X,
-} from "lucide-react";
-import { useId, useRef, useState, type FormEvent } from "react";
-import {
-  carbonSectorLabels, formatCarbonTotal, type CarbonManifestFrame, type CarbonCatalog, type CarbonCatalogFrame,
+  carbonFrameColorMax, carbonSectorLabels, formatCarbonTotal, formatCarbonValue,
+  type CarbonManifestFrame, type CarbonCatalog, type CarbonCatalogFrame,
 } from "@/lib/carbon-earth";
 import { chineseLabelMatches } from "@/lib/china-provinces";
 import { CarbonYearFilter } from "./CarbonYearFilter";
+import { WorkspaceFilterSelect } from "./WorkspaceSidebar";
 import styles from "./CarbonAtlasControls.module.css";
 
 const amount = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 });
 
-export function CarbonAtlasControls({
-  manifest, frames, frame, date, sector, regionOptions, region, pending, error, playing,
-  scaleMax, analysisHref, compareHref, onRegion, onDate, onSector, onPlay, onShare, onRetry,
-}: {
-  manifest: CarbonCatalog | null;
-  frames: CarbonCatalogFrame[];
-  frame: CarbonManifestFrame | null;
+type CarbonTime = {
+  frames: readonly CarbonCatalogFrame[];
   date: string;
+  playing: boolean;
+  onDate: (value: string) => void;
+  onPlay: (value: boolean) => void;
+};
+
+function framesInYear(frames: CarbonTime["frames"], date: string) {
+  return frames.filter(item => item.date.startsWith(date.slice(0, 4)));
+}
+
+export function CarbonTimeline({ frames, date, playing, onDate, onPlay }: CarbonTime) {
+  const yearFrames = framesInYear(frames, date);
+  const index = yearFrames.findIndex(item => item.date === date);
+  function select(index: number) {
+    const next = yearFrames[index];
+    if (!next) return;
+    onPlay(false);
+    onDate(next.date);
+  }
+
+  return (
+    <section className={styles.timeline} aria-label="排放日期回放">
+      <button type="button" aria-label="上一排放日" disabled={index < 1} onClick={() => select(index - 1)}>
+        <ChevronLeft size={17} />
+      </button>
+      <button type="button" disabled={yearFrames.length < 2} aria-label={playing ? "暂停碳排放回放" : "播放碳排放回放"}
+        aria-pressed={playing} onClick={() => onPlay(!playing)}>
+        {playing ? <Pause size={16} /> : <Play size={16} />}
+      </button>
+      <div className={styles.scrubber}>
+        <span>{yearFrames[0]?.date ?? "日期范围"}</span>
+        <strong>{date || "暂无日期"}</strong>
+        <span>{yearFrames.at(-1)?.date ?? "—"}</span>
+        <input type="range" aria-label="排放时间轴" aria-valuetext={date || "暂无日期"} min={0}
+          max={Math.max(0, yearFrames.length - 1)} value={Math.max(0, index)} disabled={yearFrames.length < 2}
+          onChange={event => select(Number(event.currentTarget.value))} />
+      </div>
+      <button type="button" aria-label="下一排放日" disabled={index < 0 || index >= yearFrames.length - 1}
+        onClick={() => select(index + 1)}><ChevronRight size={17} /></button>
+    </section>
+  );
+}
+
+export function CarbonAtlasControls({
+  manifest, frames, frame, date, sector, regionOptions, region, pending, error, playing, planar,
+  scaleMax, compareHref, onRegion, onDate, onSector, onPlay, onShare, onRetry,
+}: CarbonTime & {
+  manifest: CarbonCatalog | null;
+  frame: CarbonManifestFrame | null;
   sector: string;
   regionOptions: { id: string; label: string }[];
   region: string;
   pending: boolean;
   error: string | null;
-  playing: boolean;
-  scaleMax: number | null;
-  analysisHref?: string;
+  planar: boolean;
+  scaleMax: number;
   compareHref?: string;
   onRegion: (id: string) => void;
-  onDate: (value: string) => void;
   onSector: (value: string) => void;
-  onPlay: (value: boolean) => void;
   onShare: () => void;
   onRetry: () => void;
 }) {
-  const [query, setQuery] = useState("");
   const [lookup, setLookup] = useState("");
-  const [panel, setPanel] = useState<"legend" | "layers" | null>(null);
+  const [unit, setUnit] = useState("co2");
   const searchId = useId();
-  const toolsId = useId();
-  const details = useRef<HTMLDivElement>(null);
   const selectedMonth = date.slice(0, 7);
-  const yearFrames = frames.filter(item => item.date.slice(0, 4) === date.slice(0, 4));
-  const first = yearFrames[0]?.date;
-  const index = yearFrames.findIndex(item => item.date === date);
-  const months = [...new Set(yearFrames.map(item => item.date.slice(0, 7)))];
-  const monthFrames = yearFrames.filter(item => item.date.startsWith(selectedMonth));
+  const yearFrames = framesInYear(frames, date);
+  const months = [...new Set(yearFrames.map(item => item.date.slice(0, 7)))].reverse();
+  const monthFrames = yearFrames.filter(item => item.date.startsWith(selectedMonth)).reverse();
   const info = frame && manifest?.sources.find(item => item.sector === frame.sector && item.month === frame.date.slice(0, 7));
-  const amountValue = frame ? formatCarbonTotal(frame.stats.sumKgCPerHour).split(" ")[0] : null;
-  const archiveLabel = info?.fileName ?? "GRACED / Carbon Monitor";
+  const focusLabel = regionOptions.find(item => item.id === region)?.label ?? "全球";
+  const total = frame && (unit === "co2"
+    ? formatCarbonTotal(frame.stats.sumKgCPerHour).split(" ")[0]
+    : amount.format(frame.stats.sumKgCPerHour));
 
   function locate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const input = query.trim().toLocaleLowerCase();
+    const input = String(new FormData(event.currentTarget).get("region") ?? "").trim().toLocaleLowerCase();
     const exact = regionOptions.find(item => item.id.toLowerCase() === input || chineseLabelMatches(item.label, input));
     const matches = exact ? [exact] : input ? regionOptions.filter(item => item.label.includes(input) || item.id.toLowerCase().includes(input)) : [];
     if (matches.length !== 1) {
@@ -65,7 +101,7 @@ export function CarbonAtlasControls({
       return;
     }
     setLookup("");
-    setQuery(matches[0].id === "global" ? "" : matches[0].label);
+    event.currentTarget.reset();
     onRegion(matches[0].id);
   }
 
@@ -76,109 +112,66 @@ export function CarbonAtlasControls({
   }
 
   return (
-    <div className={styles.ui}>
-      <header className={styles.toolbar} aria-label="碳排放地图筛选">
-        <form className={styles.search} role="search" onSubmit={locate}>
-          <Search size={16} aria-hidden="true" />
-          <input list={searchId} aria-label="搜索国家、地区或省份"
-            placeholder={regionOptions.find(item => item.id === region)?.label ?? "搜索国家、地区或省份"}
-            value={query} onChange={event => { setQuery(event.currentTarget.value); setLookup(""); }} />
-          <datalist id={searchId}>{regionOptions.map(item => <option key={item.id} value={item.label} />)}</datalist>
-          <button type="submit" aria-label="定位搜索结果"><ArrowUpRight size={15} /></button>
-          {lookup ? <span className={styles.lookup} role="status">{lookup}</span> : null}
-        </form>
-        <label className={styles.control}>部门
-          <select value={sector} disabled={!manifest?.sectors.length} onChange={event => onSector(event.currentTarget.value)}>
-            {(manifest?.sectors.length ? manifest.sectors : [sector]).map(key => <option key={key} value={key}>{carbonSectorLabels[key] ?? key}</option>)}
-          </select>
-        </label>
-        <label className={styles.control}>月份
-          <select aria-label="月份" value={selectedMonth} disabled={!months.length} onChange={event => selectDate(yearFrames.findLast(item => item.date.startsWith(event.currentTarget.value))?.date)}>
-            {!months.length ? <option value={selectedMonth}>暂无</option> : null}
-            {months.length > 0 && selectedMonth && !months.includes(selectedMonth) ? <option value={selectedMonth}>{selectedMonth} · 缺测</option> : null}
-            {months.toReversed().map(month => <option key={month}>{month}</option>)}
-          </select>
-        </label>
-        <label className={styles.control}>日期
-          <select aria-label="日期" value={date} disabled={!monthFrames.length} onChange={event => selectDate(event.currentTarget.value)}>
-            {!monthFrames.length ? <option value={date}>{date || "暂无"}</option> : null}
-            {monthFrames.length > 0 && !monthFrames.some(item => item.date === date) ? <option value={date}>{date.slice(-2)} 日 · 缺测</option> : null}
-            {monthFrames.toReversed().map(item => <option key={item.date} value={item.date}>{item.date.slice(-2)} 日</option>)}
-          </select>
-        </label>
-        <span className={styles.unit}>CO₂</span>
-        <div className={styles.years}><CarbonYearFilter frames={frames} date={date} onDate={selectDate} /></div>
-      </header>
-
-      <aside className={styles.indicator} aria-label="全球排放摘要" aria-busy={pending}>
-        <p className={styles.eyebrow}>全球 · {carbonSectorLabels[frame?.sector ?? sector] ?? sector}</p>
-        <div className={styles.number} aria-live={playing ? "off" : "polite"}>
-          <strong>{amountValue ?? "—"}</strong>
-          <span>百万吨 CO₂ / 日</span>
+    <section className={styles.filters} aria-label="碳排放筛选">
+      <form className={styles.location} role="search" onSubmit={locate}>
+        <label htmlFor={searchId}>定位国家或地区</label>
+        <div className={styles.search}>
+          <Search size={15} aria-hidden="true" />
+          <input id={searchId} name="region" list={searchId + "-options"} placeholder={focusLabel}
+            onChange={() => setLookup("")} />
+          <datalist id={searchId + "-options"}>{regionOptions.map(item => <option key={item.id} value={item.label} />)}</datalist>
+          <button type="submit" aria-label="定位搜索结果"><ArrowUpRight size={16} /></button>
         </div>
-        <p>{frame ? <>{frame.date} · {amount.format(frame.stats.nonzeroCount)} 个非零格点</> : "GRACED 日尺度排放估算"}</p>
-        {pending ? <p role="status">正在读取 {date || "排放目录"}…</p>
-          : error ? <p role="status">{error} <button type="button" onClick={onRetry}>重试</button></p>
-            : null}
-      </aside>
-
-      <section className={styles.timeline} aria-label="排放日期回放">
-        <button type="button" aria-label="上一排放日" disabled={index < 1} onClick={() => selectDate(yearFrames[index - 1]?.date)}>
-          <ChevronLeft size={17} />
-        </button>
-        <button type="button" disabled={yearFrames.length < 2} aria-label={playing ? "暂停碳排放回放" : "播放碳排放回放"}
-          aria-pressed={playing} onClick={() => onPlay(!playing)}>
-          {playing ? <Pause size={16} /> : <Play size={16} />}
-        </button>
-        <label>
-          <span>{first ?? "日期范围"}</span>
-          <input type="range" aria-label="排放时间轴" aria-valuetext={date || "暂无日期"} min={0}
-            max={Math.max(0, yearFrames.length - 1)} value={Math.max(0, index)} disabled={yearFrames.length <= 1}
-            onChange={event => selectDate(yearFrames[Number(event.currentTarget.value)]?.date)} />
-          <span>{yearFrames.at(-1)?.date ?? "—"}</span>
-        </label>
-        <button type="button" aria-label="下一排放日" disabled={index < 0 || index >= yearFrames.length - 1}
-          onClick={() => selectDate(yearFrames[index + 1]?.date)}><ChevronRight size={17} /></button>
-      </section>
-
-      <div className={styles.actions} ref={details} onKeyDown={event => {
-        if (event.key === "Escape" && panel) {
-          setPanel(null);
-          details.current?.querySelector<HTMLButtonElement>("button[aria-expanded='true']")?.focus();
-        }
-      }}>
-        {panel ? (
-          <aside className={styles.details} id={toolsId} aria-label={panel === "legend" ? "排放图例" : "排放图层"}>
-            <header><strong>{panel === "legend" ? "排放图例" : "排放图层"}</strong>
-              <button type="button" aria-label="关闭工具面板" onClick={() => setPanel(null)}><X size={17} /></button>
-            </header>
-            {panel === "legend" ? <>
-              <div className={styles.ramp} />
-              <p className={styles.endpoints}><span>低 · 0</span><span>高 · {scaleMax ? amount.format(scaleMax) : "—"} kgC/h</span></p>
-              <p>{frame ? `${frame.grid.dx}° × ${frame.grid.dy}° 网格。` : ""}颜色按格点速率的对数色阶绘制，同一部门各日期共用色阶。图中大数为全球每小时碳质量换算为每日 CO₂ 质量。</p>
-              {info ? <a href={info.url} target="_blank" rel="noreferrer">{archiveLabel} <ArrowUpRight size={13} /></a>
-                : <a href="https://carbonmonitor-graced.com/datasets.html" target="_blank" rel="noreferrer">{archiveLabel} <ArrowUpRight size={13} /></a>}
-            </> : <>
-              <p>当前：{carbonSectorLabels[sector] ?? sector}排放格点</p>
-              <p>缩小时显示低密度的排放热点，放大后可点选每个格点查看速率、日期及经纬度。</p>
-            </>}
-          </aside>
-        ) : null}
-        <div className={styles.buttons}>
-          <button type="button" onClick={() => setPanel(panel === "legend" ? null : "legend")} aria-expanded={panel === "legend"} aria-controls={panel ? toolsId : undefined}>
-            <CircleHelp size={16} /> <span>图例</span>
-          </button>
-          <button type="button" aria-label="查看排放图层" onClick={() => setPanel(panel === "layers" ? null : "layers")} aria-expanded={panel === "layers"} aria-controls={panel ? toolsId : undefined}>
-            <Layers3 size={17} />
-          </button>
-          {frame ? <a href={frame.endpoint} download={`GRACED-${frame.sector}-${frame.date}.f32.gz`} aria-label="下载当前排放网格">
-            <ArrowDownToLine size={17} aria-hidden="true" />
-          </a> : <button type="button" aria-label="下载当前排放网格" disabled><ArrowDownToLine size={17} /></button>}
-          <button type="button" aria-label="分享碳排放地图" onClick={onShare}><Link2 size={17} /></button>
-          {compareHref ? <Link href={compareHref} className={styles.compare}><MapIcon size={16} /> 对比</Link> : null}
-          {analysisHref ? <Link href={analysisHref} className={styles.more}>查看详情 <ArrowUpRight size={16} /></Link> : null}
+        {lookup ? <p role="status">{lookup}</p> : null}
+      </form>
+      <WorkspaceFilterSelect label="排放部门" value={sector}
+        options={(manifest?.sectors.length ? manifest.sectors : [sector]).map(key => ({
+          value: key, label: carbonSectorLabels[key] ?? key, disabled: !manifest,
+        }))} onChange={value => { onPlay(false); onSector(value); }} />
+      <details className={styles.group} open>
+        <summary>时间筛选</summary>
+        <CarbonYearFilter frames={frames} date={date} onDate={selectDate} />
+        <div className={styles.dateFields}>
+          <WorkspaceFilterSelect label="月份" value={selectedMonth}
+            options={[...(months.includes(selectedMonth) ? [] : [{ value: selectedMonth, label: selectedMonth ? selectedMonth + " · 缺测" : "暂无", disabled: true }]),
+              ...months.map(value => ({ value, label: value }))]}
+            onChange={month => selectDate(yearFrames.findLast(item => item.date.startsWith(month))?.date)} />
+          <WorkspaceFilterSelect label="日期" value={date}
+            options={[...(monthFrames.some(item => item.date === date) ? [] : [{ value: date, label: date ? date.slice(-2) + " 日 · 缺测" : "暂无", disabled: true }]),
+              ...monthFrames.map(item => ({ value: item.date, label: item.date.slice(-2) + " 日" }))]}
+            onChange={selectDate} />
         </div>
+      </details>
+      <details className={styles.group} open>
+        <summary>排放摘要与图例</summary>
+        <WorkspaceFilterSelect label="全球排放显示单位" value={unit} onChange={setUnit}
+          options={[{ value: "co2", label: "百万吨 CO₂ / 日" }, { value: "carbon", label: "千克碳 / 小时" }]} />
+        <div className={styles.indicator} aria-label="全球排放摘要" aria-busy={pending}>
+          <p>全球 · {carbonSectorLabels[sector] ?? sector}</p>
+          <strong aria-live={playing ? "off" : "polite"}>{total ?? "—"}</strong>
+          <p>{frame ? `${frame.date} · ${amount.format(frame.stats.nonzeroCount)} 个非零格点` : "GRACED 日尺度排放估算"}</p>
+          {frame ? <p>最高网格 {formatCarbonValue(frame.stats.max)}</p> : null}
+          {pending ? <p role="status">正在读取 {date || "排放目录"}…</p> :
+            error ? <p role="status">{error} <button type="button" onClick={onRetry}>重试</button></p> : null}
+        </div>
+        <div className={styles.ramp} data-planar={planar} aria-hidden="true" />
+        <p className={styles.endpoints}><span>低 · 0</span><span>高 · {frame ? amount.format(planar ? scaleMax : carbonFrameColorMax(frame)) : "—"} kgC/h</span></p>
+        <p className={styles.note}>0.1° 网格 · {planar ? "部门共用对数色阶" : "当日网格对数色阶"}</p>
+      </details>
+      <details className={styles.group}>
+        <summary>排放图层与来源</summary>
+        <p className={styles.note}>缩小时显示排放热点。放大后点选网格可查看速率、日期和经纬度。</p>
+        <a className={styles.source} href={info?.url ?? "https://carbonmonitor-graced.com/datasets.html"} target="_blank" rel="noreferrer">
+          {info?.fileName ?? "GRACED / Carbon Monitor"} <ArrowUpRight size={13} />
+        </a>
+      </details>
+      <div className={styles.tools}>
+        {frame ? <a href={frame.endpoint} download={`GRACED-${frame.sector}-${frame.date}.f32.gz`} aria-label="下载当前排放网格" title="下载当前排放网格">
+          <ArrowDownToLine size={17} />
+        </a> : <button type="button" aria-label="下载当前排放网格" disabled><ArrowDownToLine size={17} /></button>}
+        <button type="button" aria-label="分享碳排放地图" title="分享碳排放地图" onClick={onShare}><Link2 size={17} /></button>
+        {compareHref ? <Link href={compareHref}>排放对比 <ArrowUpRight size={14} /></Link> : null}
       </div>
-    </div>
+    </section>
   );
 }
