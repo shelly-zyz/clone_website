@@ -66,7 +66,7 @@ function grid(compact: boolean, extraBottom = 0) {
 }
 
 function legend(palette: Palette) {
-  return { type: "scroll" as const, bottom: 7, textStyle: { color: palette.muted }, pageTextStyle: { color: palette.muted } };
+  return { type: "scroll" as const, icon: "rect", bottom: 7, textStyle: { color: palette.muted }, pageTextStyle: { color: palette.muted } };
 }
 
 function colorAt(palette: Palette, index: number) {
@@ -123,7 +123,7 @@ function heatmap(data: ChartData, fields: ChartFields, palette: Palette, compact
       },
       series: [{
         type: "heatmap", name: fieldName(data, value), data: values,
-        itemStyle: { borderRadius: rows.length <= 12 ? 4 : 0, borderWidth: 2, borderColor: palette.background },
+        itemStyle: { borderWidth: 2, borderColor: palette.background },
         label: { show: showNumbers, formatter: params => {
           const point = Array.isArray(params.value) ? Number(params.value[2]) : NaN;
           const high = (point - min) / (max - min || 1) >= 0.62;
@@ -308,7 +308,7 @@ function rank(data: ChartData, fields: ChartFields, palette: Palette, compact: b
       yAxis: { ...categoryAxis(palette, rows.map(row => row.name)), inverse: true, axisLabel: { ...axis(palette).axisLabel, formatter: (name: string) => shortName(name, compact ? 6 : 12) } },
       series: [{
         type: "bar", name: title, barMaxWidth: 20, label: { show: true, position: "right", color: palette.ink, formatter: params => compactNumber.format(Number(params.value)) },
-        data: rows.map((row, index) => ({ ...row, itemStyle: { color: ramp(colorAt(palette, index), true), borderRadius: 6 } })),
+        data: rows.map((row, index) => ({ ...row, itemStyle: { color: ramp(colorAt(palette, index), true) } })),
       }],
     },
   };
@@ -338,7 +338,7 @@ function flow(data: ChartData, fields: ChartFields, palette: Palette, compact: b
         type: "sankey", name, left: 21, right: compact ? 56 : 111, top: 21, bottom: 23,
         nodeWidth: compact ? 11 : 16, nodeGap: 12, draggable: false,
         label: { color: palette.ink, formatter: params => shortName(params.name, compact ? 5 : 12) },
-        data: labels.map((node, index) => ({ name: node, itemStyle: { color: categoryColor(palette, index, labels.length), borderRadius: 3 } })),
+        data: labels.map((node, index) => ({ name: node, itemStyle: { color: categoryColor(palette, index, labels.length) } })),
         links, lineStyle: { color: "gradient", curveness: 0.5, opacity: 0.46 }, emphasis: { focus: "adjacency" },
       }] },
     };
