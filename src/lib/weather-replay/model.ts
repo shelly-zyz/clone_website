@@ -4,10 +4,12 @@ export type ReplayFrame = {
   values: (number | null)[];
 };
 
+export type ReplayBounds = { south: number; north: number; west: number; east: number };
+
 export type WeatherReplay = {
   id: string;
   region: string;
-  bounds: { south: number; north: number; west: number; east: number };
+  bounds: ReplayBounds;
   rows: number;
   cols: number;
   coastline: [number, number][][];

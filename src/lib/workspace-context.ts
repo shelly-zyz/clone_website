@@ -1,4 +1,5 @@
 import { resolveWorkspaceTopic, workspaceHref, type WorkspaceTopic } from "./globe-topics";
+import { readReplayRegion, type ReplayRegionId } from "./weather-replay/regions";
 
 export type WorkspaceContext = {
   country?: string;
@@ -20,6 +21,7 @@ export type WorkspaceContext = {
   weather?: string;
   replay?: "weather" | "time" | "rain" | "accumulation";
   replayFrame?: number;
+  replayRegion?: ReplayRegionId;
   powerView?: "generation" | "facilities" | "capacity";
   powerPeriod?: "monthly";
   basemap?: string;
@@ -85,6 +87,7 @@ export function readWorkspaceContext(search: URLSearchParams): WorkspaceContext 
     weather: weather && /^[A-Za-z0-9_,./:@=+%-]{1,180}$/.test(weather) ? weather : undefined,
     replay: replay === "weather" || replay === "time" || replay === "rain" || replay === "accumulation" ? replay : undefined,
     replayFrame: replayFrame && /^\d{1,4}$/.test(replayFrame) ? Number(replayFrame) : undefined,
+    replayRegion: readReplayRegion(search.get("replayRegion")),
     powerView: powerView === "generation" || powerView === "capacity" || powerView === "facilities" ? powerView : undefined,
     powerPeriod: search.get("powerPeriod") === "monthly" ? "monthly" : undefined,
     basemap: readId(search.get("basemap")),

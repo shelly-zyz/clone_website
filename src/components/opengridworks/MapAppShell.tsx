@@ -62,7 +62,7 @@ import {
 } from "@/lib/workspace-context";
 import { generationSeries } from "@/lib/topic-analysis/history";
 import { GlobeNavigation } from "@/components/opengridworks/GlobeNavigation";
-import { WeatherReplayPlayer } from "@/app/visualization/weather-replay/WeatherReplayPlayer";
+import { readReplayRegion, replayRegionOptions } from "@/lib/weather-replay/regions";
 import { replayViews, type WeatherScene } from "@/lib/weather-replay/views";
 import { WeatherSceneSwitcher } from "./WeatherSceneSwitcher";
 import { WeatherSidebarFilters } from "@/components/opengridworks/WeatherSidebarFilters";
@@ -136,6 +136,7 @@ type BooleanRecord<T extends string> = Record<T, boolean>;
 type ProjectMode = Exclude<WorkspaceTopic, "economy">;
 type PowerView = NonNullable<WorkspaceContext["powerView"]>;
 const WeatherResourceScene = dynamic(() => import("./WeatherResourceScene").then(module => module.WeatherResourceScene));
+const WeatherReplayPlayer = dynamic(() => import("@/app/visualization/weather-replay/WeatherReplayPlayer").then(module => module.WeatherReplayPlayer));
 const powerOverviewCenter: Coordinates = [104, 36];
 const atlasWorldZoom = () => Math.max(0, Math.min(1.55, Math.log2(window.innerWidth / 500)));
 
@@ -6595,7 +6596,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
           </div>
           {weatherScene !== "globe" && (
             <div className="og-weather-replay-stage">
-              <WeatherReplayPlayer query="" scene={weatherScene} initialFrame={context.replayFrame}
+              <WeatherReplayPlayer query="" scene={weatherScene} region={context.replayRegion} initialFrame={context.replayFrame}
                 onFrameChange={rememberReplayFrame} />
             </div>
           )}
@@ -6768,7 +6769,11 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
               <Activity size={16} /> 风光资源情景 <ArrowUpRight size={14} />
             </button>
             {weatherScene === "globe" ? <WeatherSidebarFilters frameDocument={weatherDocument} /> : (
-              <p className="og-weather-sidebar-status">{replayViews[weatherScene].description}</p>
+              <>
+                <WorkspaceFilterSelect label="回放区域" value={context.replayRegion ?? "archive"} options={replayRegionOptions}
+                  onChange={value => navigate("weather", { replayRegion: readReplayRegion(value) })} />
+                <p className="og-weather-sidebar-status">{replayViews[weatherScene].description}</p>
+              </>
             )}
           </>
         ) : null}
