@@ -1,25 +1,11 @@
 import { geoIdentity, geoStream } from "d3-geo";
-import type { FeatureCollection, MultiPolygon, Polygon, Position } from "geojson";
+import type { FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import type { ReplayBounds, WeatherReplay } from "@/lib/weather-replay/model";
 import { replayRegions, type ReplayRegionId } from "@/lib/weather-replay/regions";
 
 export type ReplayGeography = FeatureCollection<Polygon | MultiPolygon>;
 export type Coordinate = [longitude: number, latitude: number];
 type Rings = Coordinate[][];
-
-function clipRings(geometry: MultiPolygon, bounds: ReplayBounds): Rings {
-  const rings: Rings = [];
-  let ring: Coordinate[] = [];
-  const projection = geoIdentity().clipExtent([[bounds.west, bounds.south], [bounds.east, bounds.north]]);
-  geoStream(geometry, projection.stream({
-    point(x, y) { ring.push([x, y]); },
-    lineStart() { ring = []; },
-    lineEnd() { if (ring.length >= 3) rings.push(ring); },
-    polygonStart() {},
-    polygonEnd() {},
-  }));
-  return rings;
-}
 
 function ringsContain(rings: Rings, x: number, y: number) {
   let inside = false;
@@ -52,26 +38,71 @@ function boundsOf(rings: Rings) {
   return bounds;
 }
 
+/** Preserve Polygon ownership of holes; independent islands must not XOR each other. */
+function countryPolygons(geography: ReplayGeography, countries?: readonly string[]): Rings[] {
+  return geography.features.filter(feature => !countries || countries.includes(String(feature.id)))
+    .flatMap(({ geometry }) => geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates)
+    .map(polygon => polygon.map(ring => ring.map<Coordinate>(([lon, lat]) => [lon, lat])));
+}
+
+/** Clip in geographic space before the historical perspective projection.
+ * Keep each polygon's rings together, including holes and disconnected pieces.
+ */
+function clipPolygons(polygons: Rings[], bounds: ReplayBounds): Rings[] {
+  const clipped: Rings[] = [];
+  const projection = geoIdentity().clipExtent([[bounds.west, bounds.south], [bounds.east, bounds.north]]);
+  for (const coordinates of polygons) {
+    let polygon: Rings = [];
+    let ring: Coordinate[] = [];
+    // GeoJSON winding varies between sources; clipping uses a signed winding count.
+    const oriented = coordinates.map((points, index) => {
+      const signedArea = points.reduce((sum, [x, y], i) => {
+        const [nextX, nextY] = points[(i + 1) % points.length];
+        return sum + x * nextY - nextX * y;
+      }, 0);
+      return (signedArea > 0) === (index === 0) ? points : [...points].reverse();
+    });
+    geoStream({ type: "Polygon", coordinates: oriented }, projection.stream({
+      polygonStart() { polygon = []; },
+      lineStart() { ring = []; },
+      point(lon, lat) { ring.push([lon, lat]); },
+      lineEnd() { if (ring.length >= 3) polygon.push(ring); },
+      polygonEnd() { if (polygon.length) clipped.push(polygon); },
+    }));
+  }
+  return clipped;
+}
+
 export function prepareReplayArea(replay: WeatherReplay, id: ReplayRegionId, geography: ReplayGeography) {
   const { label, land } = replayRegions[id];
-  const countries: readonly string[] = land;
-  const coordinates: Position[][][] = geography.features.filter(feature => countries.includes(String(feature.id)))
-    .flatMap(({ geometry }) => geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates);
-  const geometry: MultiPolygon = { type: "MultiPolygon", coordinates };
-  const clipped = clipRings(geometry, replay.bounds);
-  const contains = (lon: number, lat: number) => id === "archive" || ringsContain(clipped, lon, lat);
-  const cells: number[] = [];
+  const selected = countryPolygons(geography, land);
+  const inCountry = (lon: number, lat: number) => selected.some(polygon => ringsContain(polygon, lon, lat));
+  const observed: number[] = [];
+  let intersectsCountry = false;
+  let crossesCoast = false;
   for (let row = 0; row < replay.rows; row++) {
     for (let col = 0; col < replay.cols; col++) {
-      if (contains(...gridCoordinate(replay, col, row))) cells.push(row * replay.cols + col);
+      const cell = row * replay.cols + col;
+      if (!replay.rain.some(frame => frame.values[cell] != null)
+        && !replay.satellite.some(frame => frame.values[cell] != null)) continue;
+      observed.push(cell);
+      if (inCountry(...gridCoordinate(replay, col, row))) intersectsCountry = true;
+      else crossesCoast = true;
     }
   }
+  const covered = id === "archive" || intersectsCountry;
+  // A coastal archive is one geographic/data domain, including offshore observations.
+  // Country selection highlights land; it is never a mask on precipitation or clouds.
+  const ocean = covered && (id === "archive" || crossesCoast);
+  const polygons = covered ? clipPolygons(ocean ? countryPolygons(geography) : selected, replay.bounds) : selected;
+  const focusPolygons = ocean && id !== "archive" ? clipPolygons(selected, replay.bounds) : [];
+  const rings = polygons.flat();
+  const bounds = covered || !rings.length ? replay.bounds : boundsOf(rings);
+  const contains = (lon: number, lat: number) => covered && lon >= bounds.west && lon <= bounds.east
+    && lat >= bounds.south && lat <= bounds.north;
+  const cells = covered ? observed : [];
   const hasData = cells.some(cell => replay.rain.some(frame => frame.values[cell] != null));
-  // Areas outside the publication retain their full geographic outline and empty data layers.
-  const rings: Rings = clipped.length || id === "archive" ? clipped
-    : coordinates.flatMap(polygon => polygon.map(ring => ring.map<Coordinate>(([lon, lat]) => [lon, lat])));
-  const bounds = id === "archive" || !rings.length ? replay.bounds : boundsOf(rings);
-  return { id, label, bounds, rings, cells, hasData, contains };
+  return { id, label, bounds, rings, polygons, focusPolygons, cells, hasData, ocean, contains };
 }
 
 export type ReplayArea = ReturnType<typeof prepareReplayArea>;

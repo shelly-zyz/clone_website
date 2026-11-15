@@ -120,8 +120,8 @@
   pointer-events: none;
 }
 
-.legendScale { height: 4px; border-radius: 3px; background: linear-gradient(90deg, #22446b, #376e9c 22%, #42a6b9 48%, #76d2c4 73%, #c6e7d7); }
-.stage[data-view="accumulation"] .legendScale { background: linear-gradient(90deg, #1e396c, #2b6fa5 25%, #3aa3ba 55%, #71cdc6 78%, #c1ebde); }
+.legendScale { height: 4px; border-radius: 3px; background: linear-gradient(90deg, #e075341a, #e07534f2); }
+.stage[data-view="accumulation"] .legendScale { background: linear-gradient(90deg, hsl(194 67% 36%), hsl(121 76% 56%), hsl(49 85% 76%)); }
 .legendValues { display: flex; justify-content: space-between; }
 .peak strong { color: #eff8fe; font-size: 13px; font-weight: 650; }
 

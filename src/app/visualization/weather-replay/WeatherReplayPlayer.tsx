@@ -120,10 +120,7 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
   const accumulated = useMemo(() => accumulateRain(replay), [replay]);
   const totals = area.hasData && view === "accumulation" ? accumulated[index] : undefined;
   const accumulationPeak = totals ? regionalPeak(totals, area.cells) : null;
-  const accumulationLimit = useMemo(() => {
-    const max = Math.max(...accumulated.map(grid => regionalPeak(grid, area.cells) ?? 0));
-    return Math.max(25, Math.ceil(max / 25) * 25);
-  }, [accumulated, area.cells]);
+  const accumulationLimit = Math.max(1, accumulationPeak ?? 0);
 
   useEffect(() => {
     if (!canvas.current || !overlay.current) return;
@@ -221,7 +218,7 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
         )}
         {drawingFailed ? (
           <div className={styles.emptyNotice} role="alert">
-            当前浏览器无法绘制 WebGL 场景。
+            当前浏览器无法绘制回放场景。
             <button className={styles.button} onClick={() => { setDrawingFailed(false); setRenderAttempt(value => value + 1); }}>重新绘制</button>
           </div>
         ) : missing ? <p role="status" className={styles.emptyNotice}>{missing}</p> : null}
@@ -288,7 +285,7 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
             )}
             {view === "weather" && clouds && (!satellite || regionalPeak(satellite.values, area.cells) === null) && <span>当前区域红外缺测</span>}
             <a href="https://developers.google.cn/weathernext/guides/pardig">PARDIG-NRT · {utcClock(timestamp)} UTC</a>
-            <span>{region === "archive" ? "含海上网格 · " : "仅档案与国界相交范围 · "}历史回放</span>
+            <span>{area.ocean ? "含沿海与海上网格 · " : "国家覆盖范围 · "}历史回放</span>
           </p>
         </div>
       )}
