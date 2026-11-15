@@ -271,7 +271,9 @@
             log.debug("Download in progress--ignoring nav request.");
             return;
         }
-        var next = gridAgent.value().primaryGrid.navigate(step);
+        var grids = gridAgent.value();
+        if (!grids) return;
+        var next = grids.primaryGrid.navigate(step);
         if (next) {
             configuration.save(µ.dateToConfig(next));
         }
@@ -941,11 +943,17 @@
             globeAgent.submit(buildGlobe, attr);
         });
 
-        gridAgent.listenTo(configuration, "change", function() {
+        var workspace = document.documentElement.classList.contains("ogw-workspace");
+        var gridLayerKeys = ["date", "hour", "param", "surface", "level"];
+        var defaultGridSelection = {date: "current", hour: "", param: "wind", surface: "surface", level: "level", overlayType: "default"};
+        var lastGridSelection;
+        var restoringDefaultGrid = false;
+        gridAgent.listenTo(configuration, "change", function(model, options) {
+            if (options && options.restoreGrid) return;
             var changed = _.keys(configuration.changedAttributes()), rebuildRequired = false;
 
             // Build a new grid if any layer-related attributes have changed.
-            if (_.intersection(changed, ["date", "hour", "param", "surface", "level"]).length > 0) {
+            if (_.intersection(changed, gridLayerKeys).length > 0) {
                 rebuildRequired = true;
             }
             // Build a new grid if the new overlay type is different from the current one.
@@ -965,12 +973,37 @@
             if (rebuildRequired) {
                 gridAgent.submit(buildGrids);
             }
+            else if (lastGridSelection && changed.indexOf("overlayType") >= 0) {
+                lastGridSelection.overlayType = overlayType;
+            }
         });
         gridAgent.on("submit", function() {
             showGridDetails(null);
         });
         gridAgent.on("update", function(grids) {
+            lastGridSelection = _.pick(configuration.attributes, gridLayerKeys.concat("overlayType"));
             showGridDetails(grids);
+            if (restoringDefaultGrid) {
+                restoringDefaultGrid = false;
+                report.error("所选时段或图层暂无数据，已显示可用的地表风场。");
+            }
+        });
+        gridAgent.on("reject", function(error) {
+            if (!workspace) return;
+            if (!lastGridSelection) {
+                if (!restoringDefaultGrid && error.status === 404 &&
+                    !_.isEqual(_.pick(configuration.attributes, gridLayerKeys.concat("overlayType")), defaultGridSelection)) {
+                    restoringDefaultGrid = true;
+                    configuration.save(defaultGridSelection);
+                }
+                return;
+            }
+            configuration.save(lastGridSelection, {restoreGrid: true});
+            showGridDetails(gridAgent.value());
+            startInterpolation();
+            report.error(error.status === 404
+                ? "所选时段或图层暂无数据，已保留上一视图。"
+                : "所选气象数据暂不可用，已保留上一视图。");
         });
         d3.select("#toggle-zone").on("click", function() {
             d3.select("#data-date").classed("local", !d3.select("#data-date").classed("local"));
@@ -1128,6 +1161,9 @@
     function start() {
         // Everything is now set up, so load configuration from the hash fragment and kick off change events.
         configuration.fetch();
+        if (document.documentElement.classList.contains("ogw-workspace") && window.parent !== window) {
+            window.parent.postMessage("ogw-weather-ready", window.location.origin);
+        }
     }
 
     when(true).then(init).then(start).otherwise(report.error);

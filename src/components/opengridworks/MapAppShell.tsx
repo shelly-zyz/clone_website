@@ -3086,14 +3086,31 @@ function animateWeatherParticles(
 
 function EarthProjectViewport({ initialHash, onLoad }: { initialHash?: string; onLoad: (document: Document | null) => void }) {
   const [source] = useState(() => "/earth/index.html?workspace" + (initialHash ? "#" + initialHash : ""));
+  const frame = useRef<HTMLIFrameElement>(null);
+  const syncDocument = useCallback(() => {
+    const document = frame.current?.contentDocument;
+    if (document?.getElementById("menu")) onLoad(document);
+  }, [onLoad]);
+
+  useEffect(() => {
+    function receiveReady(event: MessageEvent) {
+      if (event.origin === window.location.origin && event.source === frame.current?.contentWindow &&
+          event.data === "ogw-weather-ready") syncDocument();
+    }
+    window.addEventListener("message", receiveReady);
+    syncDocument();
+    return () => window.removeEventListener("message", receiveReady);
+  }, [syncDocument]);
+
   return (
     <section className="og-earth-project" aria-label="earth 原版气象项目">
       <iframe
+        ref={frame}
         title="earth 原版气象可视化"
         src={source}
         className="og-earth-project-frame"
         loading="eager"
-        onLoad={(event) => onLoad(event.currentTarget.contentDocument)}
+        onLoad={syncDocument}
       />
     </section>
   );
@@ -5949,6 +5966,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
       if (frameWindow?.location.hash) replaceWorkspaceContext({ weather: frameWindow.location.hash.slice(1) });
     };
     frameWindow?.addEventListener("hashchange", rememberHash);
+    rememberHash();
     return () => {
       observer.disconnect();
       clearTimeout(painted);

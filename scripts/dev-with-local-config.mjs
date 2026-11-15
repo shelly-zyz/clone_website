@@ -13,9 +13,12 @@ const allowedVariables = new Set([
   "DATA_AGENT_PI_THINKING_LEVEL",
   "DEEPSEEK_API_KEY",
   "DASHSCOPE_API_KEY",
+  "WEATHER_REPLAY_S3_ENDPOINT",
+  "WEATHER_REPLAY_S3_ACCESS_KEY",
+  "WEATHER_REPLAY_S3_SECRET_KEY",
 ]);
 
-for (const fileName of ["data-agent-database.env", "xiaoyun-providers.env"]) {
+for (const fileName of ["data-agent-database.env", "xiaoyun-providers.env", "weather-replay.env"]) {
   const filePath = join(configDirectory, fileName);
   let metadata;
   try {

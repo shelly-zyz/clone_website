@@ -11,6 +11,7 @@ type ReplayRegistration = {
 };
 
 let reader: S3Client | undefined;
+let lastVerifiedReplay: { key: string; size: number; body: string; version: string } | undefined;
 
 function storageReader() {
   if (reader) return reader;
@@ -70,9 +71,13 @@ export async function readWeatherReplay(id: string, version: string | null) {
       !Number.isSafeInteger(size) || size < 1 || size > 2_000_000) {
     throw new Error("Invalid registered weather replay object");
   }
+
+  // A published version is immutable. Reuse its verified bytes when switching views.
+  if (lastVerifiedReplay?.key === key && lastVerifiedReplay.size === size) return lastVerifiedReplay;
+
   const object = await storageReader().send(new GetObjectCommand({
     Bucket: "raw", Key: key,
-  }), { abortSignal: AbortSignal.timeout(8000) });
+  }), { abortSignal: AbortSignal.timeout(15000) });
 
   if (!object.Body || object.ContentLength !== size) {
     object.Body?.transformToWebStream().cancel().catch(() => {});
@@ -82,5 +87,6 @@ export async function readWeatherReplay(id: string, version: string | null) {
   if (body.length !== size || createHash("sha256").update(body).digest("hex") !== record.sha256) {
     throw new Error("Invalid weather replay digest");
   }
-  return { body: new TextDecoder().decode(body), version: record.sha256 };
+  lastVerifiedReplay = { key, size, body: new TextDecoder().decode(body), version: record.sha256 };
+  return lastVerifiedReplay;
 }
