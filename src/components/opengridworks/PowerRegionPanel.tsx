@@ -3,7 +3,7 @@
 import { ArrowUpRight, Factory, Globe2, Layers3, MapIcon, Zap } from "lucide-react";
 import { chinaProvinces } from "@/lib/china-provinces";
 import {
-  chinaPowerAnnualFrame, powerAmount, provincePowerMax, type ProvincePowerFrame,
+  type chinaPowerAnnualFrame, powerAmount, provincePowerMax, type ProvincePowerFrame,
 } from "@/lib/china-power-statistics";
 import monthly from "@/lib/topic-analysis/nbs-monthly.json";
 import { generationSeries } from "@/lib/topic-analysis/history";
@@ -58,6 +58,18 @@ export function PowerProjectionSwitcher({ projection, onChange }: {
   );
 }
 
+export function PowerMobileSelection({ frame, region }: { frame: ProvincePowerFrame; region: string }) {
+  const province = chinaProvinces.find(item => item.code === region);
+  const value = frame.regions.find(item => item.code === region)?.value;
+  if (!province) return null;
+  return (
+    <div className={styles.mobileSelection} role="status">
+      <strong>{province.name}</strong>
+      <span>{frame.period} · {value == null ? "暂无数据" : `${powerAmount.format(value)} ${frame.unit}`}</span>
+    </div>
+  );
+}
+
 export function PowerPeriodSwitcher({ monthly, onChange }: { monthly: boolean; onChange: (monthly: boolean) => void }) {
   return (
     <div className={styles.period} role="group" aria-label="发电量统计周期">
@@ -67,10 +79,9 @@ export function PowerPeriodSwitcher({ monthly, onChange }: { monthly: boolean; o
   );
 }
 
-export function PowerAnnualPanel({ frame, region, analysisHref, onYearChange, onRegionChange, onRankSelect }: {
+export function PowerAnnualPanel({ frame, region, onYearChange, onRegionChange, onRankSelect }: {
   frame: ReturnType<typeof chinaPowerAnnualFrame>;
   region: string;
-  analysisHref?: string;
   onYearChange: (year: number) => void;
   onRegionChange: (region: string) => void;
   onRankSelect: (region: string) => void;
@@ -95,6 +106,10 @@ export function PowerAnnualPanel({ frame, region, analysisHref, onYearChange, on
         <strong>{powerAmount.format(selected?.value ?? frame.total)}</strong><span>{frame.unit}</span>
       </div>
       <PowerMapLegend frame={frame} />
+      <div className={styles.source}>
+        <a href={frame.source} target="_blank" rel="noreferrer">中国电力统计年鉴 2024 · {frame.table} <ArrowUpRight size={12} aria-hidden="true" /></a>
+        <span>统计覆盖 {frame.regions.length} 个省级地区</span>
+      </div>
       <section className={styles.mix} aria-label="省级前五">
         <h3>省级前五</h3>
         {leading.map(item => (
@@ -104,11 +119,6 @@ export function PowerAnnualPanel({ frame, region, analysisHref, onYearChange, on
           </button>
         ))}
       </section>
-      <footer>
-        <a href={frame.source} target="_blank" rel="noreferrer">中国电力统计年鉴 2024 · {frame.table} <ArrowUpRight size={12} aria-hidden="true" /></a>
-        {analysisHref ? <a href={analysisHref}>装机与结构 <ArrowUpRight size={12} aria-hidden="true" /></a> : null}
-        <span>统计覆盖 31 个省级地区</span>
-      </footer>
     </section>
   );
 }
@@ -125,12 +135,11 @@ function PowerMapLegend({ frame }: { frame: ProvincePowerFrame }) {
   );
 }
 
-export function PowerMonthlyPanel({ frame, data, region, category, analysisHref, onRegionChange, onMonthChange, onCategory }: {
+export function PowerMonthlyPanel({ frame, data, region, category, onRegionChange, onMonthChange, onCategory }: {
   frame: ProvincePowerFrame;
   data: MonthlyData;
   region: string;
   category: string;
-  analysisHref?: string;
   onRegionChange: (region: string) => void;
   onMonthChange: (month: string) => void;
   onCategory: (id: string) => void;
@@ -149,7 +158,7 @@ export function PowerMonthlyPanel({ frame, data, region, category, analysisHref,
   const yoy = selected ? null : data.published
     ? product.id === "electricity" ? data.yoy : null : monthlyReport?.yoy[product.id];
   const monthlyStatus = data.versionUnavailable ? "该发布版本暂不可读取。"
-    : data.publishedPending || (selected && data.regionalPending) ? "正在读取月度发布数据…"
+    : data.publishedPending || data.regionalPending ? "正在读取月度发布数据…"
     : selected && total == null ? "该省本月暂无同口径数据。"
     : frame.regions.every(item => item.value == null) ? "暂无可用的分省月度发布数据，可切换到年度合计。"
     : null;
@@ -182,37 +191,8 @@ export function PowerMonthlyPanel({ frame, data, region, category, analysisHref,
       </section>
       <footer>
         {source ? <a href={source} target="_blank" rel="noreferrer">国家统计局 · 规模以上工业 <ArrowUpRight size={12} aria-hidden="true" /></a> : null}
-        {analysisHref ? <a href={analysisHref}>月度分析与省际对照 <ArrowUpRight size={12} aria-hidden="true" /></a> : null}
         {data.published ? <span>发布版本 {data.published.version.slice(0, 12)}</span> : null}
       </footer>
     </section>
   );
-}
-
-export function PowerRegionPanel({ view, data, region, year, category, analysisHref, onYearChange, onRegionChange,
-  onMonthChange, onCategory }: {
-  view: Exclude<PowerView, "facilities">;
-  data: MonthlyData;
-  region: string;
-  year: number | undefined;
-  category: string;
-  analysisHref: string;
-  onYearChange: (year: number) => void;
-  onRegionChange: (region: string) => void;
-  onMonthChange: (month: string) => void;
-  onCategory: (id: string) => void;
-}) {
-  if (view === "capacity") {
-    return <PowerAnnualPanel frame={chinaPowerAnnualFrame("capacity", year)} region={region} analysisHref={analysisHref}
-      onYearChange={onYearChange} onRegionChange={onRegionChange} onRankSelect={onRegionChange} />;
-  }
-
-  const frame: ProvincePowerFrame = {
-    label: "月度发电量",
-    unit: "亿千瓦时",
-    period: data.month || "月度发布",
-    regions: data.regional?.regions ?? [],
-  };
-  return <PowerMonthlyPanel frame={frame} data={data} region={region} category={category} analysisHref={analysisHref}
-    onRegionChange={onRegionChange} onMonthChange={onMonthChange} onCategory={onCategory} />;
 }

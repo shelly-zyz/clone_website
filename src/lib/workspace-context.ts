@@ -21,6 +21,7 @@ export type WorkspaceContext = {
   replay?: "weather" | "time" | "rain" | "accumulation";
   replayFrame?: number;
   powerView?: "generation" | "facilities" | "capacity";
+  powerPeriod?: "monthly";
   basemap?: string;
   layers?: string;
   tech?: string;
@@ -85,6 +86,7 @@ export function readWorkspaceContext(search: URLSearchParams): WorkspaceContext 
     replay: replay === "weather" || replay === "time" || replay === "rain" || replay === "accumulation" ? replay : undefined,
     replayFrame: replayFrame && /^\d{1,4}$/.test(replayFrame) ? Number(replayFrame) : undefined,
     powerView: powerView === "generation" || powerView === "capacity" || powerView === "facilities" ? powerView : undefined,
+    powerPeriod: search.get("powerPeriod") === "monthly" ? "monthly" : undefined,
     basemap: readId(search.get("basemap")),
     layers: readList(search.get("layers")),
     tech: readList(search.get("tech")),

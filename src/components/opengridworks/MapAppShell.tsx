@@ -46,11 +46,16 @@ import type { LucideIcon } from "lucide-react";
 import { CarbonAtlasControls } from "./CarbonAtlasControls";
 import { CarbonSceneSwitcher } from "./CarbonSceneSwitcher";
 import { CarbonYearFilter } from "./CarbonYearFilter";
-import { PowerRegionPanel, PowerViews } from "./PowerRegionPanel";
+import {
+  PowerAnnualPanel, PowerMobileSelection, PowerMonthlyPanel, PowerPeriodSwitcher, PowerProjectionSwitcher, PowerViews,
+} from "./PowerRegionPanel";
 import { useCarbonAtlas } from "@/hooks/use-carbon-atlas";
 import { useReportedGeneration } from "@/hooks/use-reported-generation";
 import { useWorkspaceSelection, type WorkspaceSelection } from "@/hooks/use-workspace-selection";
 import { chinaProvinces, findChinaProvince } from "@/lib/china-provinces";
+import {
+  chinaPowerAnnualFrame, powerAmount, powerMapNoData, provincePowerColor, provincePowerMax, type ProvincePowerFrame,
+} from "@/lib/china-power-statistics";
 import { beginGlobeHandoff, finishGlobeHandoff } from "@/lib/globe-handoff";
 import {
   analysisContextHref, readGridPoint, readWorkspaceCamera, replaceWorkspaceContext, type WorkspaceContext,
@@ -131,9 +136,15 @@ type BooleanRecord<T extends string> = Record<T, boolean>;
 type ProjectMode = Exclude<WorkspaceTopic, "economy">;
 type PowerView = NonNullable<WorkspaceContext["powerView"]>;
 const WeatherResourceScene = dynamic(() => import("./WeatherResourceScene").then(module => module.WeatherResourceScene));
-const emptyProvinceFrame: { code: string; value: number | null }[] = [];
+const powerOverviewCenter: Coordinates = [104, 36];
 const atlasWorldZoom = () => Math.max(0, Math.min(1.55, Math.log2(window.innerWidth / 500)));
-const mapModes = { facilities: "电源设施", generation: "月度发电", capacity: "全国装机" } as const;
+
+function powerOverviewCamera(): MapCameraState {
+  const width = typeof window === "undefined" ? 1440 : window.innerWidth;
+  const available = width > 900 ? width - 340 : width - 28;
+  const zoom = Math.min(3.35, Math.log2(available / 106));
+  return { center: powerOverviewCenter, zoom, pitch: 0, bearing: 0 };
+}
 function switchList<T extends string>(state: BooleanRecord<T>, items: string | undefined) {
   if (items === undefined) return state;
   const enabled = new Set(items.split(","));
@@ -153,7 +164,7 @@ function contextCamera(topic: WorkspaceTopic, context: WorkspaceContext): MapCam
   const province = findChinaProvince(context.region);
   if (topic === "power" && province) return { center: province.center, zoom: 5.25, pitch: 0, bearing: 0 };
   if (topic === "power" && ["capacity", "generation"].includes(context.powerView ?? "")) {
-    return { center: [104, 35], zoom: 3.65, pitch: 0, bearing: 0 };
+    return powerOverviewCamera();
   }
   if (topic === "carbon" && context.projection === "map") {
     const place = carbonTargets.find(item => item.id === context.region);
@@ -2061,6 +2072,15 @@ function addInteractiveLayers(map: Map) {
   });
 
   map.addLayer({
+    id: "power-map-ocean", type: "background", layout: { visibility: "none" },
+    paint: { "background-color": "#142737" },
+  });
+  map.addLayer({
+    id: "power-map-land", type: "fill", source: "ne-countries", layout: { visibility: "none" },
+    paint: { "fill-color": "#303f48", "fill-outline-color": "#62737c" },
+  });
+
+  map.addLayer({
     id: "carbon-emissions-heatmap",
     type: "heatmap",
     source: "carbon-emissions",
@@ -2159,7 +2179,7 @@ function addInteractiveLayers(map: Map) {
   map.addLayer({
     id: "reported-generation-fill", type: "fill", source: "ne-admin1-polygons",
     filter: ["==", ["get", "adm0_a3"], "CHN"], layout: { visibility: "none" },
-    paint: { "fill-color": "#39474f", "fill-opacity": .8, "fill-outline-color": "#84b5b4" },
+    paint: { "fill-color": powerMapNoData, "fill-opacity": .9, "fill-outline-color": "#9bb6c8" },
   });
   map.addLayer({
     id: "reported-generation-selection", type: "line", source: "ne-admin1-polygons",
@@ -3143,6 +3163,7 @@ function MapViewport({
   carbonFrame,
   carbonScale,
   carbonPlanar,
+  powerPlanar,
   provinceFrame,
   selectedProvince,
   onSelectProvince,
@@ -3181,7 +3202,8 @@ function MapViewport({
   carbonFrame: CarbonFrame | null;
   carbonScale: number;
   carbonPlanar: boolean;
-  provinceFrame: { code: string; value: number | null }[] | undefined;
+  powerPlanar: boolean;
+  provinceFrame: ProvincePowerFrame | undefined;
   selectedProvince?: string;
   onSelectProvince: (code: string) => void;
   onReady: () => void;
@@ -3214,6 +3236,8 @@ function MapViewport({
   const carbonFrameRef = useRef(carbonFrame);
   const carbonScaleRef = useRef(carbonScale);
   const carbonPlanarRef = useRef(carbonPlanar);
+  const powerPlanarRef = useRef(powerPlanar);
+  const provincesVisible = Boolean(provinceFrame);
   const provinceFrameRef = useRef(provinceFrame);
   const provinceRef = useRef(onSelectProvince);
   const readyRef = useRef(onReady);
@@ -3240,10 +3264,11 @@ function MapViewport({
     carbonFrameRef.current = carbonFrame;
     carbonScaleRef.current = carbonScale;
     carbonPlanarRef.current = carbonPlanar;
+    powerPlanarRef.current = powerPlanar;
     provinceFrameRef.current = provinceFrame;
     provinceRef.current = onSelectProvince;
     readyRef.current = onReady;
-  }, [carbonScale, carbonPlanar, provinceFrame, onSelectProvince, onReady, activeProject, carbonFrame, generationFrame, generationHeatmapActive, generationHeatmapData, onCameraChange, onHoverTooltip, onRegionHover, onScreenshotComplete, onSelectFeature, weatherField, weatherMetric]);
+  }, [carbonScale, carbonPlanar, powerPlanar, provinceFrame, onSelectProvince, onReady, activeProject, carbonFrame, generationFrame, generationHeatmapActive, generationHeatmapData, onCameraChange, onHoverTooltip, onRegionHover, onScreenshotComplete, onSelectFeature, weatherField, weatherMetric]);
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) {
@@ -3299,8 +3324,15 @@ function MapViewport({
       "landing-point-symbols",
     ];
 
+    const provinceAt = (event: MapMouseEvent) => {
+      if (!map.getLayer("reported-generation-fill")) return undefined;
+      const [feature] = map.queryRenderedFeatures(event.point, { layers: ["reported-generation-fill"] });
+      const iso = feature?.properties?.iso_3166_2;
+      return typeof iso === "string" ? findChinaProvince(iso) : undefined;
+    };
+
     map.on("load", () => {
-      map.setProjection({ type: carbonPlanarRef.current ? "mercator" : "globe" });
+      map.setProjection({ type: carbonPlanarRef.current || powerPlanarRef.current ? "mercator" : "globe" });
       applyViewportPadding();
       map.setSky({
         "sky-color": "#101821",
@@ -3366,6 +3398,20 @@ function MapViewport({
           map.getCanvas().style.cursor = "";
           hoverRef.current(null);
         }
+        return;
+      }
+      const provinceFrame = provinceFrameRef.current;
+      if (provinceFrame) {
+        const province = provinceAt(event);
+        const value = provinceFrame.regions.find(row => row.code === province?.code)?.value;
+        map.getCanvas().style.cursor = province ? "pointer" : "";
+        hoverRef.current(province ? {
+          x: event.point.x,
+          y: event.point.y,
+          title: `${province.name} · ${provinceFrame.label}`,
+          subtitle: `${provinceFrame.period} · ${value == null ? "暂无数据" : `${powerAmount.format(value)} ${provinceFrame.unit}`}`,
+          color: provincePowerColor(value, provincePowerMax(provinceFrame)),
+        } : null);
         return;
       }
       if (generationActiveRef.current) {
@@ -3456,14 +3502,10 @@ function MapViewport({
         }
         return;
       }
-      if (provinceFrameRef.current && map.getLayer("reported-generation-fill")) {
-        const features = map.queryRenderedFeatures(event.point, { layers: ["reported-generation-fill"] });
-        const iso = features[0]?.properties?.iso_3166_2;
-        const province = typeof iso === "string" ? findChinaProvince(iso) : undefined;
-        if (province) {
-          provinceRef.current(province.code);
-          return;
-        }
+      if (provinceFrameRef.current) {
+        const province = provinceAt(event);
+        if (province) provinceRef.current(province.code);
+        return;
       }
       if (generationActiveRef.current) {
         const heatFeatures = getQueryableLayers(map, ["generation-heat-fill"]).length > 0
@@ -3588,23 +3630,22 @@ function MapViewport({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
-    map.setProjection({ type: carbonPlanar ? "mercator" : "globe" });
-    map.setRenderWorldCopies(!carbonPlanar);
+    const planar = carbonPlanar || powerPlanar;
+    map.setProjection({ type: planar ? "mercator" : "globe" });
+    map.setRenderWorldCopies(!planar);
+    map.setMaxPitch(powerPlanar ? 0 : null);
     map.setPadding({ top: 0, right: 0, bottom: 0, left: !carbonPlanar && window.innerWidth > 900 ? 360 : 0 });
-  }, [carbonPlanar, ready]);
+    setLayerVisibility(map, "power-map-ocean", powerPlanar);
+    setLayerVisibility(map, "power-map-land", powerPlanar);
+  }, [carbonPlanar, powerPlanar, ready]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
-    const entries = new globalThis.Map(provinceFrame?.map(row => [row.code, row.value]));
-    const values = [...entries.values()].filter((value): value is number => value !== null);
-    const maximum = Math.max(...values, 1);
-    const colors = chinaProvinces.flatMap(({ iso, code }) => {
-      const value = entries.get(code);
-      const color = value == null ? "#39474f" : generationHeatColor(Math.sqrt(value / maximum));
-      return [iso, color];
-    });
-    const color = ["match", ["get", "iso_3166_2"], ...colors, "#39474f"] as unknown as ExpressionSpecification;
+    const entries = new globalThis.Map(provinceFrame?.regions.map(row => [row.code, row.value]));
+    const maximum = provinceFrame ? provincePowerMax(provinceFrame) : 0;
+    const colors = chinaProvinces.flatMap(({ iso, code }) => [iso, provincePowerColor(entries.get(code), maximum)]);
+    const color = ["match", ["get", "iso_3166_2"], ...colors, powerMapNoData] as unknown as ExpressionSpecification;
     map.setPaintProperty("reported-generation-fill", "fill-color", color);
     setLayerVisibility(map, "reported-generation-fill", Boolean(provinceFrame));
     setLayerVisibility(map, "reported-generation-selection", Boolean(provinceFrame && selectedProvince));
@@ -3826,20 +3867,22 @@ function MapViewport({
     setLayerVisibility(map, "carto-state-border-soft", labelSettings.stateBorders);
     setLayerVisibility(map, "carto-state-border-main", labelSettings.stateBorders);
     setLayerVisibility(map, "ne-country-labels", labelSettings.showLabels && labelSettings.basemapTextLabels && labelSettings.countryBorders);
-    setLayerVisibility(map, "continent-labels", labelSettings.showLabels && labelSettings.basemapTextLabels && labelSettings.countryBorders);
+    setLayerVisibility(map, "continent-labels", !powerPlanar && labelSettings.showLabels && labelSettings.basemapTextLabels && labelSettings.countryBorders);
     setLayerVisibility(map, "ne-admin1-borders", false);
     setLayerVisibility(map, "oim-region-borders", false);
     setLayerVisibility(map, "oim-region-labels", false);
     setLayerVisibility(map, "ne-admin1-labels", labelSettings.showLabels && labelSettings.provinceLabels && !labelSettings.linesOnly);
-    map.setPaintProperty("ne-admin1-labels", "text-halo-width", labelSettings.enhancedVisibility ? 1.35 : 0.8);
+    map.setPaintProperty("ne-admin1-labels", "text-halo-width", powerPlanar || labelSettings.enhancedVisibility ? 1.35 : 0.8);
+    map.setPaintProperty("ne-admin1-labels", "text-opacity", powerPlanar ? 1
+      : ["interpolate", ["linear"], ["zoom"], 2.7, 0.22, 5, 0.54, 7, 0.68]);
     map.setLayoutProperty(
       "ne-admin1-labels",
       "text-size",
-      labelSettings.bigLabels
-        ? ["interpolate", ["linear"], ["zoom"], 2.7, 7.4, 5, 9.6, 7, 12]
+      powerPlanar ? ["interpolate", ["linear"], ["zoom"], 2.7, 10, 5, 13, 7, 15]
+        : labelSettings.bigLabels ? ["interpolate", ["linear"], ["zoom"], 2.7, 7.4, 5, 9.6, 7, 12]
         : ["interpolate", ["linear"], ["zoom"], 2.7, 6.4, 5, 8.2, 7, 10.2],
     );
-  }, [labelSettings, ready]);
+  }, [labelSettings, powerPlanar, ready]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -3859,7 +3902,7 @@ function MapViewport({
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !ready || cinematic || carbonPlanar || selectedProvince) {
+    if (!map || !ready || cinematic || carbonPlanar || provincesVisible) {
       return;
     }
 
@@ -3921,7 +3964,7 @@ function MapViewport({
       window.clearTimeout(wheelResumeTimer);
       map.stop();
     };
-  }, [carbonPlanar, cinematic, ready, selectedProvince]);
+  }, [carbonPlanar, cinematic, provincesVisible, ready]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -5946,12 +5989,27 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
   const selectedGrid = activeProject === "carbon" ? readGridPoint(context.grid) : null;
   const powerProduct = generationSeries.find(item => item.id === context.product)?.id ?? "electricity";
   const statsActive = activeProject === "power" && powerView !== "facilities";
+  const powerPlanar = statsActive && context.projection === "map";
+  const monthlyGeneration = statsActive && powerView === "generation"
+    && (context.powerPeriod === "monthly" || Boolean(context.month || context.version || powerProduct !== "electricity"));
   const { frames: carbonFrames, frame: carbonFrame, previousFrame: previousCarbonFrame, manifest: carbonManifest,
     scaleMax: carbonScale, sector: carbonSector, date: carbonDate, error: carbonError, pending: carbonLoading, retry: retryCarbon,
   } = useCarbonAtlas(activeProject === "carbon", context);
-  const reported = useReportedGeneration(activeProject === "power" && powerView === "generation", context.month, powerProduct, context.version);
-  const provinceFrame = activeProject === "power" && powerView === "generation"
-    ? reported.regional?.regions ?? emptyProvinceFrame : undefined;
+  const reported = useReportedGeneration(monthlyGeneration, context.month, powerProduct, context.version);
+  const annualPowerFrame = useMemo(
+    () => statsActive && !monthlyGeneration ? chinaPowerAnnualFrame(powerView, context.year) : undefined,
+    [context.year, monthlyGeneration, powerView, statsActive],
+  );
+  const monthlyPowerFrame = useMemo<ProvincePowerFrame | undefined>(() => monthlyGeneration ? {
+    label: generationSeries.find(item => item.id === powerProduct)?.name ?? "月度发电量",
+    unit: "亿千瓦时",
+    period: reported.month || "月度发布",
+    regions: chinaProvinces.map(({ code }) => ({
+      code,
+      value: reported.regional?.regions.find(row => row.code === code)?.value ?? null,
+    })),
+  } : undefined, [monthlyGeneration, powerProduct, reported.month, reported.regional]);
+  const provinceFrame = annualPowerFrame ?? monthlyPowerFrame;
   const globeReady = useCallback(() => finishGlobeHandoff(activeProject), [activeProject]);
   const weatherReady = useCallback((frameDocument: Document | null) => setWeatherDocument(frameDocument), []);
   const rememberReplayFrame = useCallback((replayFrame: number) => replaceWorkspaceContext({ replayFrame }), []);
@@ -5995,15 +6053,15 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
         layers: Object.entries(visibleLayers).filter(([, enabled]) => enabled).map(([key]) => key).join(","),
         tech: Object.entries(visibleTechnologies).filter(([, enabled]) => enabled).map(([key]) => key).join(","),
         minMw: activeSizeMin, labels: labelSettings.preset,
-        month: powerView === "generation" ? reported.month || null : null,
-        version: powerView === "generation" ? reported.published?.version ?? context.version : context.version,
+        month: monthlyGeneration ? reported.month || undefined : undefined,
+        version: monthlyGeneration ? reported.published?.version ?? context.version : undefined,
       });
     }
     if (activeProject === "carbon") {
       replaceWorkspaceContext({ camera: encodeCamera(mapCamera), date: carbonDate || null, sector: carbonSector, basemap: activeMapTheme });
     }
   }, [activeProject, activeMapTheme, mapCamera, visibleLayers, visibleTechnologies, activeSizeMin,
-    labelSettings.preset, powerView, reported.month, reported.published, context.version, carbonDate, carbonSector]);
+    labelSettings.preset, monthlyGeneration, reported.month, reported.published, context.version, carbonDate, carbonSector]);
 
   const beforeAnalysis = (event: MouseEvent<HTMLElement>) => {
     if (event.target instanceof Element && event.target.closest('a[href^="/visualization"]')) {
@@ -6208,15 +6266,16 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
     navigate(project);
   }, [activeProject, navigate, saveMapCamera, weatherDocument]);
 
-  const selectPowerProvince = useCallback((id: string) => {
+  const selectPowerProvince = useCallback((id: string, focus: boolean) => {
     const province = findChinaProvince(id);
-    const center: Coordinates = province?.center ?? [104, 35];
-    const zoom = province ? 5.25 : 3.65;
-    navigate("power", { region: province?.code ?? "china", camera: encodeCamera({ center, zoom, pitch: 0, bearing: 0 }) }, true);
+    const camera = focus
+      ? province ? { center: province.center, zoom: 5.25, pitch: 0, bearing: 0 } : powerOverviewCamera()
+      : mapCamera;
+    navigate("power", { region: province?.code ?? "china", camera: encodeCamera(camera) }, true);
     setFocusedRegion("china");
     setActiveRegion(regions.find(item => item.id === "china") ?? defaultRegion);
-    requestFocus(center, zoom);
-  }, [navigate, requestFocus]);
+    if (focus) requestFocus(camera.center, camera.zoom);
+  }, [mapCamera, navigate, requestFocus]);
 
   const selectCarbonRegion = (id: string) => {
     const target = carbonTargets.find(item => item.id === id);
@@ -6233,11 +6292,20 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
     setPowerForecast(false);
     setGenerationPlaying(false);
     setGenerationHeatmapEnabled(false);
-    const region = view === "generation" ? selectedProvince ?? "china" : context.region;
-    const nationalCamera = { center: [104, 35] as Coordinates, zoom: 3.65, pitch: 0, bearing: 0 };
-    const focusNation = view === "generation" && powerView === "facilities" && !selectedProvince;
-    navigate("power", { powerView: view, region, camera: encodeCamera(focusNation ? nationalCamera : mapCamera) });
-    if (focusNation) requestFocus(nationalCamera.center, nationalCamera.zoom);
+    const region = view === "facilities" ? context.region : selectedProvince ?? "china";
+    const camera = view !== "facilities" && powerView === "facilities"
+      ? selectedProvince ? contextCamera("power", { region }) ?? powerOverviewCamera() : powerOverviewCamera()
+      : mapCamera;
+    navigate("power", { powerView: view, region, camera: encodeCamera(camera) });
+    if (camera !== mapCamera) requestFocus(camera.center, camera.zoom);
+  };
+
+  const setPowerProjection = (projection: "globe" | "map") => {
+    if (projection === (powerPlanar ? "map" : "globe")) return;
+    const camera = { ...mapCamera, pitch: 0, bearing: 0 };
+    setHoverTooltip(null);
+    navigate("power", { projection, camera: encodeCamera(camera) });
+    requestFocus(camera.center, camera.zoom);
   };
 
   const setCarbonProjection = (projection: "globe" | "map") => {
@@ -6439,9 +6507,10 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
   };
 
   const powerAnalysisHref = powerView === "capacity"
-    ? analysisContextHref("power", { year: context.year, product: powerProduct })
-    : analysisContextHref("generation", { month: reported.month || context.month, region: selectedProvince, product: powerProduct,
-      version: reported.published?.version ?? context.version }, powerView === "generation" ? "province-comparison" : "");
+    ? analysisContextHref("power", { year: annualPowerFrame?.year })
+    : analysisContextHref("generation", { year: annualPowerFrame?.year, month: monthlyGeneration ? reported.month : undefined,
+      region: selectedProvince, product: powerProduct, version: monthlyGeneration ? reported.published?.version ?? context.version : undefined },
+      powerView === "generation" ? "province-comparison" : "");
   const comparableCarbon = carbonSector === "Power";
   const carbonAnalysisHref = analysisContextHref("carbon", { date: comparableCarbon ? carbonDate || undefined : undefined });
   const carbonCompareHref = comparableCarbon ? analysisContextHref("carbon", { date: carbonDate || undefined }, "carbon-comparison") : undefined;
@@ -6511,12 +6580,12 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
   const activeGas = visibleTechnologies.gas || visibleLayers.gasPipelines;
   const activePlanned = visibleLayers.plannedUpgrades;
   const sidebarSummary = {
-    power: powerView === "facilities" ? `${activeRegion.label} · ${regionStats.totalPlants.toLocaleString()} 个可见项目` : mapModes[powerView] + " · 国家统计局",
+    power: statsActive ? "中国省级电力统计" : `${activeRegion.label} · ${regionStats.totalPlants.toLocaleString()} 个可见项目`,
     weather: weatherScene === "globe" ? "全球风场与气象覆盖" : replayViews[weatherScene].title,
     carbon: "GRACED · 全球 0.1° 网格",
   }[activeProject];
   return (
-    <main className={`og-app-shell ${cinematic ? "is-cinematic" : ""} ${activeProject === "weather" ? "is-earth-project" : ""} ${activeProject === "carbon" ? "is-carbon-project" : ""}${carbonPlanar ? " is-carbon-atlas" : ""}${statsActive ? " is-power-statistics" : ""}${statsActive && powerForecast ? " is-power-forecast" : ""}`}
+    <main className={`og-app-shell ${cinematic ? "is-cinematic" : ""} ${activeProject === "weather" ? "is-earth-project" : ""} ${activeProject === "carbon" ? "is-carbon-project" : ""}${carbonPlanar ? " is-carbon-atlas" : ""}${statsActive ? " is-power-statistics" : ""}${powerPlanar ? " is-power-planar" : ""}${statsActive && powerForecast ? " is-power-forecast" : ""}`}
       onClickCapture={beforeAnalysis}>
       <GlobeNavigation activeTopic={activeProject} onTopicChange={switchProject} />
       {activeProject === "weather" ? (
@@ -6558,9 +6627,10 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
           carbonFrame={visibleCarbonFrame}
           carbonScale={carbonScale}
           carbonPlanar={carbonPlanar}
+          powerPlanar={powerPlanar}
           provinceFrame={provinceFrame}
           selectedProvince={selectedProvince}
-          onSelectProvince={selectPowerProvince}
+          onSelectProvince={id => selectPowerProvince(id, false)}
           initialCamera={startingCamera}
           onReady={globeReady}
           focusRequest={focusRequest}
@@ -6575,6 +6645,12 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
       )}
       {activeProject === "carbon" ? (
         <CarbonSceneSwitcher projection={carbonPlanar ? "map" : "globe"} onChange={setCarbonProjection} />
+      ) : null}
+      {statsActive && !cinematic ? (
+        <>
+          <PowerProjectionSwitcher projection={powerPlanar ? "map" : "globe"} onChange={setPowerProjection} />
+          {provinceFrame && selectedProvince ? <PowerMobileSelection frame={provinceFrame} region={selectedProvince} /> : null}
+        </>
       ) : null}
       {activeProject === "power" && !statsActive ? (
         <MobilePowerShortcuts
@@ -6618,6 +6694,24 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
           />
           ) : null}</> : undefined}
       >
+        {statsActive && powerView === "generation" ? (
+          <PowerPeriodSwitcher monthly={monthlyGeneration} onChange={monthly => {
+            if (monthly === monthlyGeneration) return;
+            navigate("power", monthly ? { powerPeriod: "monthly" }
+              : { powerPeriod: undefined, month: undefined, version: undefined, product: undefined }, true);
+          }} />
+        ) : null}
+        {annualPowerFrame ? <PowerAnnualPanel frame={annualPowerFrame} region={selectedProvince ?? ""}
+          onRegionChange={id => selectPowerProvince(id, true)} onRankSelect={id => selectPowerProvince(id, false)}
+          onYearChange={year => navigate("power", { year }, true)} /> : null}
+        {monthlyPowerFrame ? <PowerMonthlyPanel frame={monthlyPowerFrame} data={reported} region={selectedProvince ?? ""}
+          category={powerProduct} onRegionChange={id => selectPowerProvince(id, true)}
+          onMonthChange={month => navigate("power", { month }, true)}
+          onCategory={product => {
+            const next = powerProduct === product ? "electricity" : product;
+            setVisibleTechnologies(switchList(hiddenTechnologyState(), generationTechnologies(next).join(",")));
+            navigate("power", { product: next }, true);
+          }} /> : null}
         {statsActive ? <button className="og-workspace-action og-secondary-entry" type="button"
           aria-pressed={powerForecast} onClick={() => setPowerForecast(value => !value)}>
           <Activity size={16} /> {powerForecast ? "返回电力统计" : "查看电力预测"} <ArrowUpRight size={14} />
@@ -6679,15 +6773,6 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
           </>
         ) : null}
       </WorkspaceSidebar>}
-      {statsActive && !powerForecast ? <PowerRegionPanel view={powerView} data={reported} region={selectedProvince ?? ""} year={context.year}
-        category={powerProduct} analysisHref={powerAnalysisHref} onRegionChange={selectPowerProvince}
-        onYearChange={(year) => navigate("power", { year }, true)}
-        onMonthChange={(month) => navigate("power", { month }, true)}
-        onCategory={(product) => {
-          const next = powerProduct === product ? "electricity" : product;
-          setVisibleTechnologies(switchList(hiddenTechnologyState(), generationTechnologies(next).join(",")));
-          navigate("power", { product: next }, true);
-        }} /> : null}
       {activeProject !== "weather" && !carbonPlanar ? (
         <TopToolbar
           activeProject={activeProject}

@@ -29,7 +29,7 @@
 .projection button:focus-visible { outline: 2px solid #c6e7fa; outline-offset: -2px; }
 .panel { margin-bottom: 12px; color: #eaf4f2; }
 .panel header { margin-top: 12px; }
-.panel header > span, .note, .panel footer { font-size: 12px; color: #a8c3c4; }
+.panel header > span, .note, .panel footer, .source { font-size: 12px; color: #a8c3c4; }
 .panel h2 { font-size: 19px; line-height: 1.2; margin-top: 4px; font-weight: 650; }
 .filters { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
 .filters > div { min-width: 0; }
@@ -46,10 +46,35 @@
 .mix button { display: grid; grid-template-columns: 1fr auto; width: 100%; gap: 5px 6px; padding: 5px 5px 7px; border-radius: 5px; text-align: left; font-size: 12px; }
 .mix button strong { font-weight: 620; font-variant-numeric: tabular-nums; }
 .mix button:hover, .mix button[aria-pressed="true"] { background: #22403e; }
-.mix progress { grid-column: 1/-1; width: 100%; height: 3px; accent-color: #76bae5; }
-.panel footer { display: grid; gap: 5px; padding-top: 10px; }
-.panel footer a { display: inline-flex; gap: 3px; align-items: center; color: #b8f0de; }
-.panel footer a:hover { text-decoration: underline; }
+.mix progress { grid-column: 1/-1; width: 100%; height: 3px; appearance: none; border: 0; background: #385064; color: #76bae5; }
+.mix progress::-webkit-progress-bar { background: #385064; }
+.mix progress::-webkit-progress-value { background: #76bae5; }
+.mix progress::-moz-progress-bar { background: #76bae5; }
+.panel footer, .source { display: grid; gap: 4px; padding-top: 7px; }
+:is(.panel footer, .source) a { display: inline-flex; gap: 3px; align-items: center; color: #b8f0de; }
+:is(.panel footer, .source) a:hover { text-decoration: underline; }
+.mobileSelection { display: none; }
+@media (901px <= width <= 1260px) {
+  .projection { top: max(64px, env(safe-area-inset-top)); }
+}
 @media (max-width: 900px) {
+  .mobileSelection {
+    position: absolute;
+    z-index: 45;
+    top: calc(max(12px, env(safe-area-inset-top)) + 104px);
+    left: 50%;
+    transform: translateX(-50%);
+    display: grid;
+    gap: 2px;
+    width: max-content;
+    max-width: calc(100% - 120px);
+    padding: 7px 10px;
+    border: 1px solid #395566;
+    border-radius: 7px;
+    background: #121d22;
+    color: #d9effe;
+    font-size: 12px;
+    pointer-events: none;
+  }
   .projection { top: calc(max(12px, env(safe-area-inset-top)) + 49px); left: 50%; }
 }
