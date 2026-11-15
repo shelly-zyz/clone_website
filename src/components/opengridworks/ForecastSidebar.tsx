@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useId, useRef, useState, type ReactNode } from "react";
 import type { ForecastPoint } from "@/lib/globe-forecast";
 import type { WorkspaceTopic } from "@/lib/globe-topics";
+import { ForecastRibbon } from "./ForecastRibbon";
 import styles from "./ForecastSidebar.module.css";
 
 const headings = { power: "电力预测", weather: "气象预报", carbon: "碳排放预测", economy: "经济展望" };
@@ -60,49 +61,71 @@ export function ForecastSidebar({ topic, children }: { topic: WorkspaceTopic; ch
   );
 }
 
-export function ForecastSeries({ points, observed = false, unit, grain, label }: {
+export function ForecastSeries({ points, observed = false, unit, grain, label, appearance = "ribbon" }: {
   points: ForecastPoint[];
   observed?: boolean;
   unit: string;
   grain: Grain;
   label: string;
+  appearance?: "ribbon" | "line";
 }) {
-  const numeric = points.flatMap(({ value }) => value === null ? [] : [value]);
-  if (!numeric.length) return null;
-  const min = Math.min(...numeric);
-  const max = Math.max(...numeric);
-  const time = ({ date }: ForecastPoint) => Date.parse(date);
-  const start = time(points[0]);
-  const span = time(points[points.length - 1]) - start || 1;
-  const x = (point: ForecastPoint) => 5 + 210 * (time(point) - start) / span;
-  const y = (value: number) => max === min ? 40 : 65 - 51 * (value - min) / (max - min);
-  const path = points.map((point, index) => {
-    if (point.value === null) return "";
-    const command = index > 0 && points[index - 1].value !== null ? "L" : "M";
-    return `${command}${x(point).toFixed(1)} ${y(point.value).toFixed(1)}`;
-  }).join(" ");
+  if (!points.some(({ value }) => value !== null)) return null;
+  const times = points.map(({ date }) => Date.parse(date));
+  const span = times[times.length - 1] - times[0];
+  const hasTimeline = span > 0 && times.every(Number.isFinite);
+  const positions = times.map((time, index) => {
+    if (hasTimeline) return (time - times[0]) / span;
+    return points.length === 1 ? 0.5 : index / (points.length - 1);
+  });
   const rows = points.slice(-3);
   const formatter = unit === "kgC/h" ? compact : amount;
+  const formatValue = (value: number) => `${formatter.format(value)}${unit === "%" ? "%" : ` ${unit}`}`;
   return (
     <div className={styles.series}>
-      {numeric.length > 1 && (
-        <svg viewBox="0 0 220 76" role="img" aria-label={label} className={styles.chart}>
-          <path className={styles.guide} d="M5 15 H215 M5 40 H215 M5 65 H215" />
-          <path className={observed ? styles.observed : styles.predicted} d={path} />
-          {points.map(point => point.value === null ? null : (
-            <circle key={point.date} className={observed ? styles.observedPoint : styles.predictedPoint}
-              cx={x(point)} cy={y(point.value)} r={2.25} />
-          ))}
-        </svg>
+      {appearance === "ribbon" ? (
+        <ForecastRibbon observed={observed} label={label} unit={unit} formatValue={formatValue}
+          samples={points.map(({ date, value }, index) => ({
+            date, position: positions[index], value, dateLabel: formatForecastDate(date, grain),
+            tickLabel: grain === "hour" ? date.slice(5, 16).replace("T", " ") : formatForecastDate(date, grain),
+          }))} />
+      ) : (
+        <ForecastLine points={points} positions={positions} label={label} />
       )}
       <dl className={styles.values} aria-label={label}>
         {rows.map(({ date, value }) => (
           <div key={date}>
             <dt>{formatForecastDate(date, grain)}</dt>
-            <dd>{value === null ? "暂无" : `${formatter.format(value)}${unit === "%" ? "%" : ` ${unit}`}`}</dd>
+            <dd>{value === null ? "暂无" : formatValue(value)}</dd>
           </div>
         ))}
       </dl>
     </div>
+  );
+}
+
+function ForecastLine({ points, positions, label }: {
+  points: ForecastPoint[];
+  positions: number[];
+  label: string;
+}) {
+  const numeric = points.flatMap(({ value }) => value === null ? [] : [value]);
+  if (numeric.length < 2) return null;
+  const min = Math.min(...numeric);
+  const max = Math.max(...numeric);
+  const x = (index: number) => 5 + 210 * positions[index];
+  const y = (value: number) => max === min ? 40 : 65 - 51 * (value - min) / (max - min);
+  const path = points.map(({ value }, index) => {
+    if (value === null) return "";
+    const command = index > 0 && points[index - 1].value !== null ? "L" : "M";
+    return `${command}${x(index).toFixed(1)} ${y(value).toFixed(1)}`;
+  }).join(" ");
+  return (
+    <svg viewBox="0 0 220 76" role="img" aria-label={label} className={styles.chart}>
+      <path className={styles.guide} d="M5 15 H215 M5 40 H215 M5 65 H215" />
+      <path className={styles.observed} d={path} />
+      {points.map(({ date, value }, index) => value === null ? null : (
+        <circle key={date} className={styles.observedPoint} cx={x(index)} cy={y(value)} r={2.25} />
+      ))}
+    </svg>
   );
 }

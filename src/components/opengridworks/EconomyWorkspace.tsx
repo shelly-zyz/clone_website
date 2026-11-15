@@ -163,7 +163,7 @@ function EconomyProfile({
           </div>
           <p className={styles.note}>现价美元 · {historyUnit}</p>
           {points.some(point => point.value !== null)
-            ? <ForecastSeries points={points} observed grain="year" unit={historyUnit} label={`${country.label}${spec.label}史`} />
+            ? <ForecastSeries points={points} observed appearance="line" grain="year" unit={historyUnit} label={`${country.label}${spec.label}史`} />
             : <p className={styles.status}>所查时段暂无该指标数据。</p>}
           <details className={styles.history}>
             <summary>历年数据</summary>

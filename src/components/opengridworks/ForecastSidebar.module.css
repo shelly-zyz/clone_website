@@ -109,9 +109,48 @@
 .chart path { fill: none; }
 .guide { stroke: #293236; stroke-width: 1; }
 .observed { stroke: #b3c3ce; stroke-width: 1.8; }
-.predicted { stroke: var(--forecast-accent); stroke-width: 2; stroke-dasharray: 5 4; }
 .observedPoint { fill: #b3c3ce; }
-.predictedPoint { fill: var(--forecast-accent); }
+
+.ribbon {
+  --ribbon-color: var(--forecast-accent, #63dce8);
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-bottom: 8px;
+  border: 1px solid #293b48;
+  border-radius: 6px;
+  background: radial-gradient(ellipse at 73% 22%, #182435, #0b121c 76%);
+}
+
+.ribbon[data-observed="true"] {
+  --ribbon-color: color-mix(in srgb, var(--forecast-accent, #63dce8) 52%, #a3bbd8);
+}
+
+.ribbon text {
+  fill: #c5d1df;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.backPlane, .floorPlane, .sidePlane {
+  stroke: #657c94;
+  stroke-opacity: 0.52;
+  stroke-width: 0.8;
+}
+
+.backPlane { fill: #1c2c41; }
+.floorPlane { fill: #142032; }
+.sidePlane { fill: #172538; }
+.ribbonGrid { fill: none; stroke: #637f9b; stroke-opacity: 0.34; stroke-width: 0.75; }
+.zeroLine { fill: none; stroke: #97adbf; stroke-dasharray: 3 3; stroke-width: 0.9; }
+.faceLight { stop-color: color-mix(in srgb, var(--ribbon-color) 75%, #eaf7ff); stop-opacity: 0.82; }
+.faceDark { stop-color: color-mix(in srgb, var(--ribbon-color) 18%, #413e98); stop-opacity: 0.43; }
+.ridgeCool { stop-color: color-mix(in srgb, var(--ribbon-color) 40%, #807ffe); }
+.ridgeWarm { stop-color: color-mix(in srgb, var(--ribbon-color) 73%, #e6f9ff); }
+.ribbonTop { stroke: #dbf3ff; stroke-opacity: 0.58; stroke-width: 0.65; }
+.ribbonEnd { fill: color-mix(in srgb, var(--ribbon-color) 32%, #41488e); fill-opacity: 0.75; }
+.ribbonEdge, .singleStem { fill: none; stroke: var(--ribbon-color); stroke-width: 1.4; stroke-linejoin: round; }
+.ribbonPoint { fill: #ecf8ff; stroke: var(--ribbon-color); stroke-width: 1.05; }
 
 .values { display: grid; gap: 4px; margin-top: 4px; }
 .values > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 8px; }
