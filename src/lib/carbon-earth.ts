@@ -69,29 +69,42 @@ export const carbonSectorLabels: Record<string, string> = {
   InternationalShipping: "国际航运",
 };
 
-let manifestPromise: Promise<CarbonManifest> | null = null;
+export type CarbonCatalogFrame = { date: string; sector: string; stats: Pick<CarbonFrameStats, "sumKgCPerHour"> };
+export type CarbonCatalog = {
+  frames: CarbonCatalogFrame[];
+  sectors: string[];
+  scales: Record<string, number>;
+  sources: Pick<CarbonManifest["sources"][number], "sector" | "month" | "fileName" | "url">[];
+};
 
-export async function loadCarbonManifest() {
-  manifestPromise ??= fetch("/api/carbon-earth?request=manifest", { cache: "no-store" })
+let catalogPromise: Promise<CarbonCatalog> | null = null;
+
+export async function loadCarbonCatalog() {
+  catalogPromise ??= fetch("/api/carbon-earth?request=catalog", { cache: "no-store" })
     .then((response) => {
       if (!response.ok) {
         throw new Error("无法读取碳排放数据目录。");
       }
-      return response.json() as Promise<CarbonManifest>;
+      return response.json() as Promise<CarbonCatalog>;
     })
     .catch((error: unknown) => {
-      manifestPromise = null;
+      catalogPromise = null;
       throw error;
     });
-  return manifestPromise;
+  return catalogPromise;
 }
 
-export async function loadCarbonFrame(meta: CarbonManifestFrame, signal?: AbortSignal) {
+export async function loadCarbonFrame(selection: Pick<CarbonManifestFrame, "date" | "sector">, signal?: AbortSignal) {
   const canDecompress = typeof DecompressionStream !== "undefined";
-  const response = await fetch(canDecompress ? meta.endpoint : `${meta.endpoint}&raw=1`, { signal });
+  const params = new URLSearchParams({ request: "frame", date: selection.date, sector: selection.sector, meta: "1" });
+  if (!canDecompress) params.set("raw", "1");
+  const response = await fetch(`/api/carbon-earth?${params}`, { signal });
   if (!response.ok) {
     throw new Error("无法读取当前碳排放帧。");
   }
+  const metadata = response.headers.get("X-Carbon-Metadata");
+  if (!metadata) throw new Error("无法读取碳排放帧元数据。");
+  const meta = JSON.parse(metadata) as CarbonManifestFrame;
   const encoded = await response.arrayBuffer();
   const decoded = canDecompress ? await decompressGzip(encoded) : encoded;
   const expectedBytes = meta.grid.width * meta.grid.height * Float32Array.BYTES_PER_ELEMENT;

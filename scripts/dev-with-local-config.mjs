@@ -6,6 +6,7 @@ import { parseEnv } from "node:util";
 
 const configDirectory = join(homedir(), ".config", "opengridworks");
 const allowedVariables = new Set([
+  "DATABASE_URL",
   "DATA_AGENT_DATABASE_URL",
   "DATA_AGENT_STATE_DATABASE_URL",
   "DATA_AGENT_PI_ENABLED",
@@ -18,7 +19,7 @@ const allowedVariables = new Set([
   "WEATHER_REPLAY_S3_SECRET_KEY",
 ]);
 
-for (const fileName of ["data-agent-database.env", "xiaoyun-providers.env", "weather-replay.env"]) {
+for (const fileName of ["map-database.env", "data-agent-database.env", "xiaoyun-providers.env", "weather-replay.env"]) {
   const filePath = join(configDirectory, fileName);
   let metadata;
   try {

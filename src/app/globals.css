@@ -3668,6 +3668,11 @@
 }
 .og-popup-analysis:hover { text-decoration: underline; }
 
+.is-carbon-project {
+  --og-scene-card-height: clamp(58px, 10svh, 80px);
+  --og-carbon-switcher-top: max(10px, env(safe-area-inset-top));
+  --og-carbon-toolbar-top: calc(var(--og-carbon-switcher-top) + var(--og-scene-card-height) + 9px);
+}
 .is-carbon-atlas { background: #59676c; }
 .is-carbon-atlas .og-map-vignette, .is-carbon-atlas .og-starfield, .is-carbon-atlas .og-beta-badge,
 .is-carbon-atlas .og-info-button { display: none; }
@@ -3684,7 +3689,7 @@
   z-index: 55;
 }
 .is-carbon-atlas .og-feature-popup {
-  top: 84px;
+  top: calc(var(--og-carbon-toolbar-top) + 114px);
   right: max(16px, 2vw);
   width: min(290px, 36vw);
   border-radius: 10px;

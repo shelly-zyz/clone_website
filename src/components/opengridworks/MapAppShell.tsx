@@ -44,6 +44,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { CarbonAtlasControls } from "./CarbonAtlasControls";
+import { CarbonSceneSwitcher } from "./CarbonSceneSwitcher";
 import { CarbonYearFilter } from "./CarbonYearFilter";
 import { PowerRegionPanel, PowerViews } from "./PowerRegionPanel";
 import { useCarbonAtlas } from "@/hooks/use-carbon-atlas";
@@ -73,7 +74,7 @@ import {
   formatCarbonValue,
   sampleCarbonFrame,
   type CarbonFrame,
-  type CarbonManifest,
+  type CarbonCatalog,
 } from "@/lib/carbon-earth";
 import {
   capacityFactorPercent,
@@ -4476,7 +4477,7 @@ function CarbonLegendPanel({
   onPlayingChange,
   onRetry,
 }: {
-  manifest: CarbonManifest | null;
+  manifest: CarbonCatalog | null;
   activeDate: string;
   activeSector: string;
   frame: CarbonFrame | null;
@@ -6017,9 +6018,10 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
   }, []);
 
   useEffect(() => {
-    let active = true;
+    if (activeProject !== "power" || databaseMapVersion > 0) return;
+    const controller = new AbortController();
 
-    void fetch("/api/data/map-assets", { cache: "no-store" })
+    void fetch("/api/data/map-assets", { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) {
           throw new Error(`Map asset request failed with ${response.status}.`);
@@ -6027,7 +6029,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
         return response.json() as Promise<DatabaseMapAssets>;
       })
       .then((databaseAssets) => {
-        if (!active || !Array.isArray(databaseAssets.energyAssets) || !Array.isArray(databaseAssets.dataCenters)) {
+        if (controller.signal.aborted || !Array.isArray(databaseAssets.energyAssets) || !Array.isArray(databaseAssets.dataCenters)) {
           return;
         }
         energyAssets.splice(0, energyAssets.length, ...databaseAssets.energyAssets);
@@ -6035,13 +6037,11 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
         setDatabaseMapVersion((version) => version + 1);
       })
       .catch((error: unknown) => {
-        console.warn("Using bundled map assets because the database request failed.", error);
+        if (!controller.signal.aborted) console.warn("Using bundled map assets because the database request failed.", error);
       });
 
-    return () => {
-      active = false;
-    };
-  }, []);
+    return () => controller.abort();
+  }, [activeProject, databaseMapVersion]);
 
   useEffect(() => {
     if (!generationHeatmapEnabled || generationLoadStartedRef.current) {
@@ -6206,7 +6206,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
   };
 
   const setCarbonProjection = (projection: "globe" | "map") => {
-    if (projection === context.projection) return;
+    if (projection === (carbonPlanar ? "map" : "globe")) return;
     saveMapCamera();
     const global = (!context.region || context.region === "global") && mapCamera.zoom <= 2.5;
     const center: Coordinates = global ? (projection === "map" ? [6, 19] : defaultRegion.center) : mapCamera.center;
@@ -6538,6 +6538,9 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
           onScreenshotComplete={showToast}
         />
       )}
+      {activeProject === "carbon" ? (
+        <CarbonSceneSwitcher projection={carbonPlanar ? "map" : "globe"} onChange={setCarbonProjection} />
+      ) : null}
       {activeProject === "power" && !statsActive ? (
         <MobilePowerShortcuts
           activeGeneration={generationHeatmapEnabled}
@@ -6559,7 +6562,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
           regionOptions={carbonTargets} region={context.region ?? "global"} pending={carbonLoading} error={carbonError}
           playing={carbonPlaying} scaleMax={carbonScale} analysisHref={carbonAnalysisHref} compareHref={carbonCompareHref}
           onRegion={selectCarbonRegion} onDate={onCarbonDate} onSector={onCarbonSector} onPlay={setCarbonPlaying}
-          onShare={shareMap} onExit={() => setCarbonProjection("globe")} onRetry={retryCarbon}
+          onShare={shareMap} onRetry={retryCarbon}
         />
       ) : <WorkspaceSidebar
         topic={activeProject}
@@ -6578,11 +6581,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
               if (target) flyToRegion(target);
             }}
           />
-          ) : null}</> : activeProject === "carbon" ? (
-            <button className="og-workspace-action og-secondary-entry" type="button" onClick={() => setCarbonProjection("map")}>
-              <MapIcon size={16} /> 二维排放地图 <ArrowUpRight size={14} />
-            </button>
-          ) : null}
+          ) : null}</> : undefined}
       >
         {statsActive ? <button className="og-workspace-action og-secondary-entry" type="button"
           aria-pressed={powerForecast} onClick={() => setPowerForecast(value => !value)}>

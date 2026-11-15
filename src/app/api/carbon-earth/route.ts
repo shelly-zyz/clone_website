@@ -1,4 +1,5 @@
 import { gunzipSync } from "node:zlib";
+import type { CarbonCatalog } from "@/lib/carbon-earth";
 import { queryDatabase } from "@/lib/db";
 import { mapJsonResponse } from "@/lib/map-json-response";
 
@@ -33,22 +34,30 @@ type CarbonSourceRow = {
   source_attributes: Record<string, string>;
 };
 
-type CarbonFrameRow = {
-  observed_on: string;
-  sector: string;
-  unit: string;
-  width: number;
-  height: number;
-  longitude_min: number;
-  latitude_max: number;
-  dx: number;
-  dy: number;
+type CarbonFrameRow = Omit<CarbonManifestRow, "frame_size_bytes"> & {
   frame_sha256: string;
   frame_data: Buffer;
 };
 
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
 const sectorPattern = /^[A-Za-z]+$/;
+let catalogRequest: ReturnType<typeof readCatalog> | undefined;
+let catalogExpiresAt = 0;
+
+function loadCatalog() {
+  if (!catalogRequest || Date.now() >= catalogExpiresAt) {
+    catalogExpiresAt = Infinity;
+    catalogRequest = readCatalog().then((catalog) => {
+      catalogExpiresAt = Date.now() + 60_000;
+      return catalog;
+    }).catch((error: unknown) => {
+      catalogRequest = undefined;
+      catalogExpiresAt = 0;
+      throw error;
+    });
+  }
+  return catalogRequest;
+}
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -60,6 +69,11 @@ export async function GET(request: Request) {
         "Cache-Control": "public, max-age=60, stale-while-revalidate=300",
       });
     }
+    if (requestType === "catalog") {
+      return mapJsonResponse(request, await loadCatalog(), {
+        "Cache-Control": "public, max-age=60",
+      });
+    }
 
     if (requestType === "frame") {
       const observedOn = url.searchParams.get("date");
@@ -67,7 +81,7 @@ export async function GET(request: Request) {
       if (!observedOn || !datePattern.test(observedOn) || !sector || !sectorPattern.test(sector)) {
         return Response.json({ error: "Expected a valid date and sector." }, { status: 400 });
       }
-      return readFrame(observedOn, sector, url.searchParams.get("raw") === "1");
+      return await readFrame(observedOn, sector, url.searchParams.get("raw") === "1", url.searchParams.get("meta") === "1");
     }
 
     return Response.json({ error: "Unknown carbon-earth request." }, { status: 400 });
@@ -78,6 +92,35 @@ export async function GET(request: Request) {
       { status: 503 },
     );
   }
+}
+
+async function readCatalog(): Promise<CarbonCatalog> {
+  const [catalog, sources] = await Promise.all([
+    queryDatabase<{ sector: string; entries: [string, number][] | null; scale: number }>(
+      `SELECT sector,
+         json_agg(json_build_array(observed_on, sum_kgc_per_hour) ORDER BY observed_on)
+           FILTER (WHERE octet_length(frame_data) > 0) AS entries,
+         greatest(1,
+           max((statistics->>'p99')::double precision) FILTER (WHERE octet_length(frame_data) > 0),
+           max((statistics->>'p95')::double precision) FILTER (WHERE octet_length(frame_data) > 0)) AS scale
+       FROM website_data.carbon_emission_frames
+       GROUP BY sector ORDER BY sector`,
+    ),
+    queryDatabase<Pick<CarbonSourceRow, "sector" | "data_month" | "file_name" | "source_url">>(
+      `SELECT sector, data_month::text, file_name, source_url
+       FROM website_data.carbon_source_archives ORDER BY data_month DESC, sector`,
+    ),
+  ]);
+  return {
+    sectors: catalog.rows.map(row => row.sector),
+    frames: catalog.rows.flatMap(row => (row.entries ?? []).map(([date, sumKgCPerHour]) => ({
+      date, sector: row.sector, stats: { sumKgCPerHour },
+    }))),
+    scales: Object.fromEntries(catalog.rows.map(row => [row.sector, row.scale])),
+    sources: sources.rows.map(row => ({
+      sector: row.sector, month: row.data_month.slice(0, 7), fileName: row.file_name, url: row.source_url,
+    })),
+  };
 }
 
 async function readManifest() {
@@ -100,6 +143,7 @@ async function readManifest() {
          statistics,
          octet_length(frame_data) AS frame_size_bytes
        FROM website_data.carbon_emission_frames
+       WHERE octet_length(frame_data) > 0
        ORDER BY observed_on, sector`,
     );
   const sourcesResult = await queryDatabase<CarbonSourceRow>(
@@ -114,7 +158,29 @@ async function readManifest() {
        ORDER BY data_month DESC, sector`,
     );
 
-  const frames = framesResult.rows.map((row) => ({
+  const frames = framesResult.rows.map(frameMetadata);
+  const dates = [...new Set(frames.map((frame) => frame.date))];
+  const sectors = [...new Set(frames.map((frame) => frame.sector))];
+
+  return {
+    generatedAt: new Date().toISOString(),
+    dates,
+    sectors,
+    latestDate: dates.at(-1) ?? null,
+    frames,
+    sources: sourcesResult.rows.map((row) => ({
+      sector: row.sector,
+      month: row.data_month.slice(0, 7),
+      fileName: row.file_name,
+      url: row.source_url,
+      apiUpdatedAt: row.api_updated_at,
+      attributes: row.source_attributes,
+    })),
+  };
+}
+
+function frameMetadata(row: CarbonManifestRow) {
+  return {
     date: row.observed_on,
     sector: row.sector,
     unit: row.unit,
@@ -136,28 +202,10 @@ async function readManifest() {
     },
     sizeBytes: row.frame_size_bytes,
     endpoint: `/api/carbon-earth?request=frame&date=${row.observed_on}&sector=${row.sector}`,
-  }));
-  const dates = [...new Set(frames.map((frame) => frame.date))];
-  const sectors = [...new Set(frames.map((frame) => frame.sector))];
-
-  return {
-    generatedAt: new Date().toISOString(),
-    dates,
-    sectors,
-    latestDate: dates.at(-1) ?? null,
-    frames,
-    sources: sourcesResult.rows.map((row) => ({
-      sector: row.sector,
-      month: row.data_month.slice(0, 7),
-      fileName: row.file_name,
-      url: row.source_url,
-      apiUpdatedAt: row.api_updated_at,
-      attributes: row.source_attributes,
-    })),
   };
 }
 
-async function readFrame(observedOn: string, sector: string, raw: boolean) {
+async function readFrame(observedOn: string, sector: string, raw: boolean, includeMetadata: boolean) {
   const result = await queryDatabase<CarbonFrameRow>(
     `SELECT
        observed_on::text,
@@ -169,6 +217,12 @@ async function readFrame(observedOn: string, sector: string, raw: boolean) {
        latitude_max,
        dx,
        dy,
+       min_value,
+       max_value,
+       mean_value,
+       sum_kgc_per_hour,
+       nonzero_count,
+       statistics,
        frame_sha256,
        frame_data
      FROM website_data.carbon_emission_frames
@@ -176,13 +230,14 @@ async function readFrame(observedOn: string, sector: string, raw: boolean) {
     [observedOn, sector],
   );
   const frame = result.rows[0];
-  if (!frame) {
+  if (!frame?.frame_data.length) {
     return Response.json({ error: "Carbon frame not found." }, { status: 404 });
   }
 
   const payload = raw ? gunzipSync(frame.frame_data) : frame.frame_data;
   return new Response(new Uint8Array(payload), {
     headers: {
+      ...(includeMetadata ? { "X-Carbon-Metadata": JSON.stringify(frameMetadata({ ...frame, frame_size_bytes: frame.frame_data.length })) } : {}),
       "Content-Type": raw ? "application/octet-stream" : "application/gzip",
       "Content-Length": String(payload.length),
       "Cache-Control": "public, max-age=86400, immutable",

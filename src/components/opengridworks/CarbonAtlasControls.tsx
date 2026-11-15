@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import {
-  ArrowDownToLine, ArrowLeft, ArrowUpRight, ChevronLeft, ChevronRight, CircleHelp,
-  Globe2, Layers3, Link2, Map as MapIcon, Pause, Play, Search, X,
+  ArrowDownToLine, ArrowUpRight, ChevronLeft, ChevronRight, CircleHelp,
+  Layers3, Link2, Map as MapIcon, Pause, Play, Search, X,
 } from "lucide-react";
 import { useId, useRef, useState, type FormEvent } from "react";
 import {
-  carbonSectorLabels, formatCarbonTotal, type CarbonManifestFrame, type CarbonManifest,
+  carbonSectorLabels, formatCarbonTotal, type CarbonManifestFrame, type CarbonCatalog, type CarbonCatalogFrame,
 } from "@/lib/carbon-earth";
 import { chineseLabelMatches } from "@/lib/china-provinces";
 import { CarbonYearFilter } from "./CarbonYearFilter";
@@ -17,10 +17,10 @@ const amount = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 });
 
 export function CarbonAtlasControls({
   manifest, frames, frame, date, sector, regionOptions, region, pending, error, playing,
-  scaleMax, analysisHref, compareHref, onRegion, onDate, onSector, onPlay, onShare, onExit, onRetry,
+  scaleMax, analysisHref, compareHref, onRegion, onDate, onSector, onPlay, onShare, onRetry,
 }: {
-  manifest: CarbonManifest | null;
-  frames: CarbonManifestFrame[];
+  manifest: CarbonCatalog | null;
+  frames: CarbonCatalogFrame[];
   frame: CarbonManifestFrame | null;
   date: string;
   sector: string;
@@ -37,7 +37,6 @@ export function CarbonAtlasControls({
   onSector: (value: string) => void;
   onPlay: (value: boolean) => void;
   onShare: () => void;
-  onExit: () => void;
   onRetry: () => void;
 }) {
   const [query, setQuery] = useState("");
@@ -79,9 +78,6 @@ export function CarbonAtlasControls({
   return (
     <div className={styles.ui}>
       <header className={styles.toolbar} aria-label="碳排放地图筛选">
-        <button className={styles.back} type="button" onClick={onExit} aria-label="返回碳地球">
-          <ArrowLeft size={17} aria-hidden="true" /> <span>碳排放地球</span>
-        </button>
         <form className={styles.search} role="search" onSubmit={locate}>
           <Search size={16} aria-hidden="true" />
           <input list={searchId} aria-label="搜索国家、地区或省份"
@@ -165,7 +161,6 @@ export function CarbonAtlasControls({
             </> : <>
               <p>当前：{carbonSectorLabels[sector] ?? sector}排放格点</p>
               <p>缩小时显示低密度的排放热点，放大后可点选每个格点查看速率、日期及经纬度。</p>
-              <button type="button" onClick={onExit}><Globe2 size={15} /> 切换 3D 地球</button>
             </>}
           </aside>
         ) : null}

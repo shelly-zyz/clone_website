@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { replayViewOrder, replayViews, type WeatherScene } from "@/lib/weather-replay/views";
-import styles from "./WeatherSceneSwitcher.module.css";
+import styles from "./SceneSwitcher.module.css";
 
 const scenes = ["globe", ...replayViewOrder] as const;
 const title = (scene: WeatherScene) => scene === "globe" ? "气象地球" : replayViews[scene].title;

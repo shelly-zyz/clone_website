@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { loadCarbonFrame, loadCarbonManifest, type CarbonFrame, type CarbonManifest } from "@/lib/carbon-earth";
+import { loadCarbonCatalog, loadCarbonFrame, type CarbonFrame, type CarbonCatalog } from "@/lib/carbon-earth";
 import type { WorkspaceContext } from "@/lib/workspace-context";
 
 export function useCarbonAtlas(enabled: boolean, selection: Pick<WorkspaceContext, "date" | "sector">) {
-  const [catalog, setCatalog] = useState<{ manifest: CarbonManifest | null; error: string | null }>();
+  const [catalog, setCatalog] = useState<{ manifest: CarbonCatalog | null; error: string | null }>();
   const [loaded, setLoaded] = useState<CarbonFrame | null>(null);
   const [loadError, setLoadError] = useState<{ key: string; message: string } | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -19,12 +19,12 @@ export function useCarbonAtlas(enabled: boolean, selection: Pick<WorkspaceContex
   const unavailable = manifest && !meta && (selection.date ? "该部门没有此日期的发布网格。" : "该部门暂无发布网格。");
   const error = catalog?.error ?? (loadError?.key === key ? loadError.message : unavailable || null);
   const pending = !catalog || Boolean(meta && !frame && !error);
-  const scaleMax = useMemo(() => frames.reduce((bound, item) => Math.max(bound, item.stats.p99 ?? 0, item.stats.p95 ?? 0), 1), [frames]);
+  const scaleMax = manifest?.scales[sector] ?? 1;
 
   useEffect(() => {
     if (!enabled || manifest) return;
     let relevant = true;
-    void loadCarbonManifest().then(data => {
+    void loadCarbonCatalog().then(data => {
       if (relevant) setCatalog({ manifest: data, error: null });
     }).catch(() => {
       if (relevant) setCatalog({ manifest: null, error: "排放数据目录暂不可用。" });
