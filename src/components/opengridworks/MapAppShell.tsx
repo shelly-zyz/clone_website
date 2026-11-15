@@ -241,6 +241,7 @@ type GenerationHeatmapData = {
 type DatabaseMapAssets = {
   energyAssets: EnergyAsset[];
   dataCenters: DataCenterAsset[];
+  nextCursor: string | null;
 };
 
 const mapDataset = getMockMapDataset();
@@ -5902,6 +5903,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
   const [searchQuery, setSearchQuery] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const generationLoadStartedRef = useRef(false);
+  const databaseMapLoadStartedRef = useRef(false);
 
   const requestFocus = useCallback((center: Coordinates, zoom: number, pitch = 0, bearing = 0) => {
     setMapCamera({ center, zoom, pitch, bearing });
@@ -6018,30 +6020,63 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
   }, []);
 
   useEffect(() => {
-    if (activeProject !== "power" || databaseMapVersion > 0) return;
+    if (activeProject !== "power" || databaseMapLoadStartedRef.current) return;
     const controller = new AbortController();
+    let complete = false;
+    databaseMapLoadStartedRef.current = true;
 
-    void fetch("/api/data/map-assets", { cache: "no-store", signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error(`Map asset request failed with ${response.status}.`);
-        }
-        return response.json() as Promise<DatabaseMapAssets>;
-      })
-      .then((databaseAssets) => {
-        if (controller.signal.aborted || !Array.isArray(databaseAssets.energyAssets) || !Array.isArray(databaseAssets.dataCenters)) {
-          return;
-        }
-        energyAssets.splice(0, energyAssets.length, ...databaseAssets.energyAssets);
-        dataCenters.splice(0, dataCenters.length, ...databaseAssets.dataCenters);
-        setDatabaseMapVersion((version) => version + 1);
-      })
-      .catch((error: unknown) => {
-        if (!controller.signal.aborted) console.warn("Using bundled map assets because the database request failed.", error);
-      });
+    void (async () => {
+      let cursor: string | null = null;
+      let firstPage = true;
+      try {
+        while (!controller.signal.aborted) {
+          const url = cursor ? `/api/data/map-assets?after=${encodeURIComponent(cursor)}` : "/api/data/map-assets";
+          let databaseAssets: DatabaseMapAssets | null = null;
+          for (let attempt = 0; attempt < 3 && !databaseAssets; attempt += 1) {
+            try {
+              const response = await fetch(url, { cache: "no-store", signal: controller.signal });
+              if (!response.ok) throw new Error(`Map asset request failed with ${response.status}.`);
+              const page = await response.json() as DatabaseMapAssets;
+              if (!Array.isArray(page.energyAssets) || !Array.isArray(page.dataCenters)
+                || (page.nextCursor !== null && typeof page.nextCursor !== "string")) {
+                throw new Error("Map asset page has an invalid shape.");
+              }
+              databaseAssets = page;
+            } catch (error: unknown) {
+              if (controller.signal.aborted || attempt === 2) throw error;
+              await new Promise((resolve) => window.setTimeout(resolve, 400 * (attempt + 1)));
+            }
+          }
+          if (!databaseAssets || controller.signal.aborted) return;
 
-    return () => controller.abort();
-  }, [activeProject, databaseMapVersion]);
+          if (firstPage) {
+            energyAssets.splice(0, energyAssets.length, ...databaseAssets.energyAssets);
+            dataCenters.splice(0, dataCenters.length, ...databaseAssets.dataCenters);
+            firstPage = false;
+          } else {
+            energyAssets.push(...databaseAssets.energyAssets);
+          }
+          setDatabaseMapVersion((version) => version + 1);
+          cursor = databaseAssets.nextCursor;
+          if (!cursor) {
+            complete = true;
+            return;
+          }
+        }
+      } catch (error: unknown) {
+        if (!controller.signal.aborted) {
+          console.warn("Map assets could not be fully loaded from the database.", error);
+        }
+      } finally {
+        if (!complete) databaseMapLoadStartedRef.current = false;
+      }
+    })();
+
+    return () => {
+      controller.abort();
+      if (!complete) databaseMapLoadStartedRef.current = false;
+    };
+  }, [activeProject]);
 
   useEffect(() => {
     if (!generationHeatmapEnabled || generationLoadStartedRef.current) {

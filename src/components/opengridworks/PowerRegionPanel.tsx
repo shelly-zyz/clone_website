@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
-import { ArrowUpRight, ChevronDown, Factory, Layers3, Zap } from "lucide-react";
-import { useState } from "react";
+import { ArrowUpRight, Factory, Globe2, Layers3, MapIcon, Zap } from "lucide-react";
 import { chinaProvinces } from "@/lib/china-provinces";
-import annual from "@/lib/topic-analysis/nbs-annual.json";
+import {
+  chinaPowerAnnualFrame, powerAmount, provincePowerMax, type ProvincePowerFrame,
+} from "@/lib/china-power-statistics";
 import monthly from "@/lib/topic-analysis/nbs-monthly.json";
 import { generationSeries } from "@/lib/topic-analysis/history";
 import type { useReportedGeneration } from "@/hooks/use-reported-generation";
@@ -13,12 +13,17 @@ import { WorkspaceFilterSelect } from "./WorkspaceSidebar";
 import styles from "./PowerRegionPanel.module.css";
 
 type PowerView = NonNullable<WorkspaceContext["powerView"]>;
+type Projection = NonNullable<WorkspaceContext["projection"]>;
 type MonthlyData = ReturnType<typeof useReportedGeneration>;
-const amount = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 });
 const viewTabs = [
   { id: "facilities", label: "设施", icon: Factory },
   { id: "generation", label: "发电量", icon: Zap },
   { id: "capacity", label: "装机", icon: Layers3 },
+] as const;
+
+const projectionTabs = [
+  { id: "globe", label: "电力地球", icon: Globe2 },
+  { id: "map", label: "二维电力地图", icon: MapIcon },
 ] as const;
 
 const filterOptions = [
@@ -38,9 +43,154 @@ export function PowerViews({ view, onView }: { view: PowerView; onView: (view: P
   );
 }
 
-export function PowerRegionPanel({
-  view, data, region, year, category, analysisHref, onYearChange, onRegionChange, onMonthChange, onCategory,
-}: {
+export function PowerProjectionSwitcher({ projection, onChange }: {
+  projection: Projection;
+  onChange: (projection: Projection) => void;
+}) {
+  return (
+    <div className={styles.projection} role="group" aria-label="电力地图投影">
+      {projectionTabs.map(({ id, label, icon: Icon }) => (
+        <button key={id} type="button" aria-pressed={projection === id} onClick={() => onChange(id)}>
+          <Icon size={16} aria-hidden="true" />{label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function PowerPeriodSwitcher({ monthly, onChange }: { monthly: boolean; onChange: (monthly: boolean) => void }) {
+  return (
+    <div className={styles.period} role="group" aria-label="发电量统计周期">
+      <button type="button" aria-pressed={!monthly} onClick={() => onChange(false)}>年度合计</button>
+      <button type="button" aria-pressed={monthly} onClick={() => onChange(true)}>月度发布</button>
+    </div>
+  );
+}
+
+export function PowerAnnualPanel({ frame, region, analysisHref, onYearChange, onRegionChange, onRankSelect }: {
+  frame: ReturnType<typeof chinaPowerAnnualFrame>;
+  region: string;
+  analysisHref?: string;
+  onYearChange: (year: number) => void;
+  onRegionChange: (region: string) => void;
+  onRankSelect: (region: string) => void;
+}) {
+  const selected = frame.regions.find(item => item.code === region);
+  const leading = frame.regions.toSorted((a, b) => b.value - a.value).slice(0, 5);
+  const maximum = provincePowerMax(frame);
+
+  return (
+    <section className={styles.panel} aria-label={frame.label}>
+      <div className={styles.filters}>
+        <WorkspaceFilterSelect label="统计年份" value={String(frame.year)}
+          options={frame.years.toReversed().map(year => ({ value: String(year), label: `${year} 年` }))}
+          onChange={value => onYearChange(Number(value))} />
+        <WorkspaceFilterSelect label="地区" value={region} options={filterOptions} onChange={onRegionChange} />
+      </div>
+      <header>
+        <span>{frame.period} · {frame.label}</span>
+        <h2>{selected?.name ?? "中国全国"}</h2>
+      </header>
+      <div className={styles.stat} aria-live="polite">
+        <strong>{powerAmount.format(selected?.value ?? frame.total)}</strong><span>{frame.unit}</span>
+      </div>
+      <PowerMapLegend frame={frame} />
+      <section className={styles.mix} aria-label="省级前五">
+        <h3>省级前五</h3>
+        {leading.map(item => (
+          <button key={item.code} type="button" aria-pressed={region === item.code} onClick={() => onRankSelect(item.code)}>
+            <span>{item.name}</span><strong>{powerAmount.format(item.value)}</strong>
+            <progress aria-label={item.name} value={item.value} max={maximum} />
+          </button>
+        ))}
+      </section>
+      <footer>
+        <a href={frame.source} target="_blank" rel="noreferrer">中国电力统计年鉴 2024 · {frame.table} <ArrowUpRight size={12} aria-hidden="true" /></a>
+        {analysisHref ? <a href={analysisHref}>装机与结构 <ArrowUpRight size={12} aria-hidden="true" /></a> : null}
+        <span>统计覆盖 31 个省级地区</span>
+      </footer>
+    </section>
+  );
+}
+
+function PowerMapLegend({ frame }: { frame: ProvincePowerFrame }) {
+  const maximum = provincePowerMax(frame);
+  if (maximum <= 0) return null;
+  return (
+    <div className={styles.legend} aria-label="省级地图图例">
+      <div className={styles.scale} aria-hidden="true" />
+      <div><span>0</span><span>{powerAmount.format(maximum)} {frame.unit}</span></div>
+      {frame.regions.some(item => item.value == null) ? <span className={styles.missing}>暂无数据</span> : null}
+    </div>
+  );
+}
+
+export function PowerMonthlyPanel({ frame, data, region, category, analysisHref, onRegionChange, onMonthChange, onCategory }: {
+  frame: ProvincePowerFrame;
+  data: MonthlyData;
+  region: string;
+  category: string;
+  analysisHref?: string;
+  onRegionChange: (region: string) => void;
+  onMonthChange: (month: string) => void;
+  onCategory: (id: string) => void;
+}) {
+  const monthlyReport = data.versionUnavailable ? undefined : monthly.find(item => item.date === data.month);
+  const local = frame.regions.find(item => item.code === region);
+  const selected = chinaProvinces.find(item => item.code === region);
+  const product = generationSeries.find(item => item.id === category) ?? generationSeries[0];
+  const publishedValue = product.id === "electricity" ? data.total : data.composition.find(item => item.id === product.id)?.value;
+  const breakdown = data.published ? data.composition : monthlyReport ? generationSeries.slice(1).map(item => ({
+    ...item, value: monthlyReport.values[item.id] ?? null,
+  })) : [];
+  const maximum = Math.max(...breakdown.map(item => item.value ?? 0), 1);
+  const total = selected ? local?.value : data.published ? publishedValue : monthlyReport?.values[product.id];
+  const source = data.published ? "https://data.stats.gov.cn/easyquery.htm?cn=" + (selected ? "E0101" : "A01") : monthlyReport?.source;
+  const yoy = selected ? null : data.published
+    ? product.id === "electricity" ? data.yoy : null : monthlyReport?.yoy[product.id];
+  const monthlyStatus = data.versionUnavailable ? "该发布版本暂不可读取。"
+    : data.publishedPending || (selected && data.regionalPending) ? "正在读取月度发布数据…"
+    : selected && total == null ? "该省本月暂无同口径数据。"
+    : frame.regions.every(item => item.value == null) ? "暂无可用的分省月度发布数据，可切换到年度合计。"
+    : null;
+
+  return (
+    <section className={styles.panel} aria-label="月度发电量">
+      <div className={styles.filters}>
+        <WorkspaceFilterSelect label="统计月份" value={data.month}
+          options={data.months.toReversed().map(value => ({ value, label: value }))} onChange={onMonthChange} />
+        <WorkspaceFilterSelect label="地区" value={region} options={filterOptions} onChange={onRegionChange} />
+      </div>
+      <header>
+        <span>{data.month || "月度发布"} · {product.name}</span>
+        <h2>{selected?.name ?? "中国全国"}</h2>
+      </header>
+      <div className={styles.stat} aria-live="polite">
+        <strong>{total == null ? "—" : powerAmount.format(total)}</strong><span>{frame.unit}</span>
+        {typeof yoy === "number" ? <span className={styles.yoy}>同比 {yoy > 0 ? "+" : ""}{powerAmount.format(yoy)}%</span> : null}
+      </div>
+      {monthlyStatus ? <p className={styles.note}>{monthlyStatus}</p> : null}
+      <PowerMapLegend frame={frame} />
+      <section className={styles.mix} aria-label="全国电源结构">
+        <h3>全国已公布分项</h3>
+        {breakdown.length ? breakdown.map(item => (
+          <button key={item.id} type="button" aria-pressed={category === item.id} onClick={() => onCategory(item.id)}>
+            <span>{item.name}</span><strong>{item.value == null ? "—" : powerAmount.format(item.value)}</strong>
+            <progress aria-label={item.name} value={item.value ?? 0} max={maximum} />
+          </button>
+        )) : <p className={styles.note}>本期未公布分电源统计。</p>}
+      </section>
+      <footer>
+        {source ? <a href={source} target="_blank" rel="noreferrer">国家统计局 · 规模以上工业 <ArrowUpRight size={12} aria-hidden="true" /></a> : null}
+        {analysisHref ? <a href={analysisHref}>月度分析与省际对照 <ArrowUpRight size={12} aria-hidden="true" /></a> : null}
+        {data.published ? <span>发布版本 {data.published.version.slice(0, 12)}</span> : null}
+      </footer>
+    </section>
+  );
+}
+
+export function PowerRegionPanel({ view, data, region, year, category, analysisHref, onYearChange, onRegionChange,
+  onMonthChange, onCategory }: {
   view: Exclude<PowerView, "facilities">;
   data: MonthlyData;
   region: string;
@@ -52,74 +202,17 @@ export function PowerRegionPanel({
   onMonthChange: (month: string) => void;
   onCategory: (id: string) => void;
 }) {
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const isCapacity = view === "capacity";
-  const annualReport = annual.find(item => item.year === year) ?? annual[annual.length - 1];
-  const monthlyReport = data.versionUnavailable ? undefined : monthly.find(item => item.date === data.month);
-  const local = data.regional?.regions.find(item => item.code === region);
-  const product = generationSeries.find(item => item.id === category) ?? generationSeries[0];
-  const fallbackValue = monthlyReport?.values[product.id];
-  const publishedValue = product.id === "electricity" ? data.total : data.composition.find(item => item.id === product.id)?.value;
-  const fallbackBreakdown = monthlyReport ? generationSeries.slice(1).map(item => ({
-    ...item, value: monthlyReport.values[item.id] ?? null,
-  })) : [];
-  const breakdown = isCapacity
-    ? generationSeries.slice(1).map((item, index) => ({ ...item, value: annualReport.capacityGw[index + 1] }))
-    : data.published ? data.composition : fallbackBreakdown;
-  const maximum = Math.max(...breakdown.map(item => item.value ?? 0), 1);
-  const selected = chinaProvinces.find(item => item.code === region);
-  const title = isCapacity ? "全国年末装机" : selected?.name ?? "中国全国";
-  const total = isCapacity ? annualReport.capacityGw[0] : selected
-    ? local?.value : data.published ? publishedValue : fallbackValue;
-  const unit = isCapacity ? "GW" : "亿千瓦时";
-  const source = isCapacity ? annualReport.source
-    : data.published ? "https://data.stats.gov.cn/easyquery.htm?cn=" + (selected ? "E0101" : "A01") : monthlyReport?.source;
-  const yoy = selected || isCapacity ? null : data.published
-    ? product.id === "electricity" ? data.yoy : null : monthlyReport?.yoy[product.id];
-  const date = isCapacity ? `${annualReport.year} 年` : data.month || "暂无月份";
-  const details = selected ? `${selected.name} · ${date}` : date;
-  const unavailable = selected && !data.regionalPending && (local?.value == null);
+  if (view === "capacity") {
+    return <PowerAnnualPanel frame={chinaPowerAnnualFrame("capacity", year)} region={region} analysisHref={analysisHref}
+      onYearChange={onYearChange} onRegionChange={onRegionChange} onRankSelect={onRegionChange} />;
+  }
 
-  return (
-    <div className={styles.region} onKeyDown={event => { if (event.key === "Escape") setMobileOpen(false); }}>
-      <button className={styles.trigger} type="button" aria-expanded={mobileOpen} onClick={() => setMobileOpen(!mobileOpen)}>
-        <Zap size={16} aria-hidden="true" /> 电力统计 <ChevronDown size={15} aria-hidden="true" />
-      </button>
-      <aside className={styles.panel} data-open={mobileOpen} aria-label="电力区域详情">
-        <header><span>国家统计局 · {isCapacity ? "年度公报" : "规模以上工业"}</span>
-          <h2>{title}</h2><p>{details}{isCapacity ? "" : " · " + product.name}</p>
-        </header>
-        <div className={styles.filters}>
-          {isCapacity ? <WorkspaceFilterSelect label="统计年份" value={String(annualReport.year)}
-            options={annual.toReversed().map(item => ({ value: String(item.year), label: item.year + " 年" }))}
-            onChange={value => onYearChange(Number(value))} /> : <>
-            <WorkspaceFilterSelect label="地区" value={region} options={filterOptions} onChange={onRegionChange} />
-            <WorkspaceFilterSelect label="统计月份" value={data.month}
-              options={data.months.toReversed().map(value => ({ value, label: value }))} onChange={onMonthChange} />
-          </>}
-        </div>
-        <div className={styles.stat} aria-live="polite">
-          <strong>{total == null ? "—" : amount.format(total)}</strong><span>{unit}</span>
-          {typeof yoy === "number" ? <span className={styles.yoy}>同比 {yoy > 0 ? "+" : ""}{amount.format(yoy)}%</span> : null}
-        </div>
-        {unavailable ? <p className={styles.note}>该省本期暂无同口径发布值。</p> : null}
-        {data.publishedPending && !isCapacity ? <p className={styles.note}>正在核对发布版本…</p> : null}
-        {data.versionUnavailable && !isCapacity ? <p className={styles.note}>该发布版本暂不可读取。</p> : null}
-        <section className={styles.mix} aria-label="全国电源结构">
-          <h3>{isCapacity ? "全国装机构成" : "全国已公布分项"}</h3>
-          {breakdown.length ? breakdown.map(item => (
-            <button key={item.id} type="button" aria-pressed={category === item.id} onClick={() => onCategory(item.id)}>
-              <span>{item.name}</span><strong>{item.value == null ? "—" : amount.format(item.value)}</strong>
-              <span className={styles.bar}><span style={{ width: `${(item.value ?? 0) / maximum * 100}%`, backgroundColor: item.color }} /></span>
-            </button>
-          )) : <p className={styles.note}>本期未公布分电源统计。</p>}
-        </section>
-        <footer>
-          {source ? <a href={source} target="_blank" rel="noreferrer">统计来源 <ArrowUpRight size={12} /></a> : null}
-          <Link href={analysisHref}>{isCapacity ? "装机与结构" : "月度分析与省际对照"} <ArrowUpRight size={14} /></Link>
-          {!isCapacity && data.published ? <span>发布版本 {data.published.version.slice(0, 12)}</span> : null}
-        </footer>
-      </aside>
-    </div>
-  );
+  const frame: ProvincePowerFrame = {
+    label: "月度发电量",
+    unit: "亿千瓦时",
+    period: data.month || "月度发布",
+    regions: data.regional?.regions ?? [],
+  };
+  return <PowerMonthlyPanel frame={frame} data={data} region={region} category={category} analysisHref={analysisHref}
+    onRegionChange={onRegionChange} onMonthChange={onMonthChange} onCategory={onCategory} />;
 }

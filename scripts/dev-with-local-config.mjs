@@ -8,6 +8,8 @@ const configDirectory = join(homedir(), ".config", "opengridworks");
 const allowedVariables = new Set([
   "DATABASE_URL",
   "DATA_AGENT_DATABASE_URL",
+  "DATA_AGENT_INGEST_DATABASE_URL",
+  "DATA_AGENT_REVIEW_DATABASE_URL",
   "DATA_AGENT_STATE_DATABASE_URL",
   "DATA_AGENT_PI_ENABLED",
   "DATA_AGENT_PI_MODEL",

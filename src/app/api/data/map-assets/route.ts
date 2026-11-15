@@ -32,15 +32,41 @@ type DataCenterRow = {
   properties: Record<string, unknown>;
 };
 
+const assetPageSize = 1_024;
+const energyAssetColumns = "id, name, technology, capacity_mw, status, country_code, region_id, source, latitude, longitude, properties";
+
+async function readEnergyAssets(afterId: string | null) {
+  const result = afterId
+    ? await queryDatabase<EnergyAssetRow>(
+      "SELECT " + energyAssetColumns + " FROM website_data.energy_assets WHERE id > $1 ORDER BY id LIMIT $2",
+      [afterId, assetPageSize + 1],
+    )
+    : await queryDatabase<EnergyAssetRow>(
+      "SELECT " + energyAssetColumns + " FROM website_data.energy_assets ORDER BY id LIMIT $1",
+      [assetPageSize + 1],
+    );
+  const hasMore = result.rows.length > assetPageSize;
+  const rows = result.rows.slice(0, assetPageSize);
+  const nextCursor = hasMore ? rows.at(-1)?.id ?? null : null;
+  if (hasMore && (!nextCursor || nextCursor === afterId)) {
+    throw new Error("Energy asset pagination did not advance.");
+  }
+  return { rows, nextCursor };
+}
+
 export async function GET(request: Request) {
   try {
+    const afterId = new URL(request.url).searchParams.get("after");
+    if (afterId !== null && !/^[a-zA-Z0-9._:-]{1,128}$/.test(afterId)) {
+      return NextResponse.json({ error: "Invalid map asset cursor." }, { status: 400 });
+    }
+
     const [assets, centers] = await Promise.all([
-      queryDatabase<EnergyAssetRow>(
-        `SELECT * FROM website_data.energy_assets ORDER BY id`,
-      ),
-      queryDatabase<DataCenterRow>(
-        `SELECT * FROM website_data.data_centers ORDER BY id`,
-      ),
+      readEnergyAssets(afterId),
+      afterId === null ? queryDatabase<DataCenterRow>(
+        `SELECT id, name, kind, operator, country_code, region_id, source, latitude, longitude, properties
+         FROM website_data.data_centers ORDER BY id`,
+      ) : Promise.resolve({ rows: [] as DataCenterRow[] }),
     ]);
 
     return mapJsonResponse(request, {
@@ -69,6 +95,7 @@ export async function GET(request: Request) {
         lng: row.longitude,
         ...row.properties,
       })),
+      nextCursor: assets.nextCursor,
     });
   } catch (error) {
     console.error("Database map asset request failed.", error);

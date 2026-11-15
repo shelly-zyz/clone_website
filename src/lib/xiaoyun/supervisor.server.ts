@@ -133,6 +133,7 @@ async function runXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal, gua
   let lastRoute: XiaoyunReply["lastRoute"];
   let terminal = false;
   const loadedSkills = new Set<string>();
+  const forecastSkillRequired = () => forecastReviewRequired && !loadedSkills.has(forecastSkill);
 
   function bind(topic: Topic) {
     if (boundTopic && boundTopic !== topic) throw new XiaoyunContextError("本轮已锁定一个专题。请分开处理不同专题的操作。");
@@ -168,6 +169,7 @@ async function runXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal, gua
 
   const normalized = input.message.replace(/[，。！？,.!?\s]/g, "");
   const lookupOnly = /(?:只要|只报|仅返回)(?:数字|数值)(?:和单位)?$/.test(normalized);
+  const forecastReviewRequired = /(?:预报|预测|回测|基线比较|基准比较)/.test(normalized);
   if (/^(请)?(展示|显示|查看|给我看|告诉我)(一下)?(刚才|上一条|上一个|这个|这组)?的?(数据)?来源$/.test(normalized)) {
     try {
       const topic = input.selectedChart?.topic ?? input.context.lastTopic ?? input.topic;
@@ -220,6 +222,9 @@ async function runXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal, gua
 
   async function renderChart({ topic, target, chart, renderer }: z.infer<typeof chartInput>, dashboard = false) {
     const toolName = dashboard ? "render_dashboard" : "render_chart";
+    if (forecastSkillRequired()) {
+      return note("forecast_skill_required", "请先使用 load_skill 读取 forecast-review，再继续处理预报数据。", "needs_skill");
+    }
     const entry = actionable(topic, target);
     if (artifacts.some(result => result.kind === "chart")) throw new XiaoyunContextError("本轮图表已生成。");
     if (!entry.profile.chart) return note(toolName, "该结果没有可绘制的有效数值。");
@@ -261,6 +266,9 @@ async function runXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal, gua
       topic: topicSchema, question: z.string().trim().min(1).max(300),
       base: z.enum(["data", "chart", "analysis"]).optional(), latestVersion: z.boolean().optional(), resume: z.boolean().optional(),
     }), async ({ topic, question, base, latestVersion, resume }) => {
+      if (forecastSkillRequired()) {
+        return note("forecast_skill_required", "请先使用 load_skill 读取 forecast-review，再继续查询预报数据。", "needs_skill");
+      }
       bind(topic);
       if (queryAttempted || artifacts.length) throw new XiaoyunContextError("本轮只执行一次新的查询，且应在出图和提交分析之前执行。");
       const state = await context.get(topic, !resume && !base);
@@ -303,6 +311,9 @@ async function runXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal, gua
       ...targetInput, plan: planSchema.optional(),
     }),
       async ({ topic, target, plan }) => {
+        if (forecastSkillRequired()) {
+          return note("forecast_skill_required", "请先使用 load_skill 读取 forecast-review，再检查预报分析。", "needs_skill");
+        }
         const { id, profile, result, chart } = await inspect(topic, target);
         const state = await context.get(topic);
         const pending = state && target === "pending_analysis" ? context.pendingAnalysis(state) : undefined;

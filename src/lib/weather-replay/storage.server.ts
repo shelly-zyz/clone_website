@@ -75,15 +75,30 @@ export async function readWeatherReplay(id: string, version: string | null) {
   // A published version is immutable. Reuse its verified bytes when switching views.
   if (lastVerifiedReplay?.key === key && lastVerifiedReplay.size === size) return lastVerifiedReplay;
 
-  const object = await storageReader().send(new GetObjectCommand({
-    Bucket: "raw", Key: key,
-  }), { abortSignal: AbortSignal.timeout(15000) });
+  const chunkSize = 128 * 1024;
+  const chunkCount = Math.ceil(size / chunkSize);
+  const chunks = new Array<Buffer>(chunkCount);
+  const requestSignal = AbortSignal.timeout(25_000);
+  for (let index = 0; index < chunkCount; index += 1) {
+    const start = index * chunkSize;
+    const end = Math.min(size - 1, start + chunkSize - 1);
+    const expectedLength = end - start + 1;
+    const object = await storageReader().send(new GetObjectCommand({
+      Bucket: "raw",
+      Key: key,
+      Range: "bytes=" + start + "-" + end,
+    }), { abortSignal: requestSignal });
 
-  if (!object.Body || object.ContentLength !== size) {
-    object.Body?.transformToWebStream().cancel().catch(() => {});
-    throw new Error("Incomplete weather replay object");
+    if (!object.Body || object.ContentLength !== expectedLength
+      || object.ContentRange !== "bytes " + start + "-" + end + "/" + size) {
+      object.Body?.transformToWebStream().cancel().catch(() => {});
+      throw new Error("Incomplete weather replay range");
+    }
+    const bytes = Buffer.from(await object.Body.transformToByteArray());
+    if (bytes.length !== expectedLength) throw new Error("Incomplete weather replay range");
+    chunks[index] = bytes;
   }
-  const body = await object.Body.transformToByteArray();
+  const body = Buffer.concat(chunks, size);
   if (body.length !== size || createHash("sha256").update(body).digest("hex") !== record.sha256) {
     throw new Error("Invalid weather replay digest");
   }
