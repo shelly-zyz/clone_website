@@ -3,7 +3,7 @@
 import Link from "next/link";
 import {
   ArrowRight, CalendarDays, ChartArea, ChartBar, ChartColumn, ChartLine, ChartPie, ChartScatter, Check, ChevronDown, ChevronRight,
-  Compass, GitBranch, GitCompareArrows, Grid3X3, LayoutGrid, Map as MapIcon, RotateCw, Wind,
+  Compass, FileChartColumnIncreasing, GitBranch, GitCompareArrows, Grid3X3, LayoutGrid, Map as MapIcon, RotateCw, Wind,
 } from "lucide-react";
 import { useEffect, useId, useState, type MouseEvent, type ReactNode } from "react";
 import { chinaProvinces, chineseLabelMatches, findChinaProvince } from "@/lib/china-provinces";
@@ -500,6 +500,9 @@ export function AnalysisWorkbench({ topic, initialQuery }: { topic: AnalysisTopi
           <a href="#topic-filters" aria-current={!selected && !comparisonActive ? "location" : undefined} onClick={event => selectView(event, "")}>
             <Compass size={22} strokeWidth={1.65} aria-hidden="true" /><span>概览</span>
           </a>
+          <Link href={analysisHref(topic) + "/custom" + (query.size ? "?" + query.toString() : "")} prefetch={false}>
+            <FileChartColumnIncreasing size={22} strokeWidth={1.65} aria-hidden="true" /><span>自定义制图</span>
+          </Link>
           {comparisonId && <ComparisonLink id={comparisonId} active={comparisonActive} />}
           {analysis?.charts.map(spec => <ChartLink key={spec.id} spec={spec} active={selected?.id === spec.id} />)}
         </nav>
