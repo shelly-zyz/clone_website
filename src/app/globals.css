@@ -225,7 +225,7 @@
   width: var(--og-sidebar-width);
   padding: 16px 14px 12px;
   color: #edf0f2;
-  background: #080b0e;
+  background: #060a0d;
   color-scheme: dark;
 }
 
@@ -240,31 +240,49 @@
 }
 
 .og-workspace-heading {
-  padding: 0 0 20px;
+  position: relative;
+  isolation: isolate;
+  padding: 0 0 23px;
+}
+
+.og-workspace-heading::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0 -2px 0 auto;
+  width: min(65%, 168px);
+  background: url("/images/opengridworks/sidebar-earth.webp") right top / cover no-repeat;
+  mask-image: linear-gradient(90deg, transparent, #000 24%), linear-gradient(#000 52%, transparent 100%);
+  mask-composite: intersect;
+  mix-blend-mode: screen;
+  content: "";
 }
 
 .og-workspace-brand {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  color: #bdc7cb;
-  font-size: 13px;
-  font-weight: 600;
+  color: #f4f6f8;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.og-workspace-brand img {
+  mix-blend-mode: screen;
 }
 
 .og-workspace-heading h1 {
   margin-top: 18px;
   color: #f5f7f8;
-  font-size: clamp(26px, 2.15vw, 32px);
-  font-weight: 450;
-  letter-spacing: 0.025em;
+  font-size: clamp(28px, 2.3vw, 34px);
+  font-weight: 680;
+  letter-spacing: 0.015em;
   line-height: 1.14;
 }
 
 .og-workspace-heading p {
   margin-top: 8px;
-  color: #a2afb6;
-  font-size: 12px;
+  color: #bac4cb;
+  font-size: 13px;
   line-height: 1.45;
 }
 
@@ -390,26 +408,23 @@
   align-items: center;
   gap: 6px;
   min-height: 52px;
-  margin-top: 9px;
-  padding: 10px 11px;
-  color: #9cedde;
-  background-color: #17262a;
-  font-size: 20px;
-  font-weight: 700;
+  margin: 9px 2px 8px;
+  padding: 9px 1px 13px;
+  color: #f4f6f8;
+  border-bottom: 2px solid #64a8ff;
+  border-image: linear-gradient(90deg, #00deed, #738dff 50%, #f52bd7) 1;
+  font-size: 21px;
+  font-weight: 600;
   line-height: 1.2;
   transition: background-color 160ms ease;
 }
 
 .og-workspace-visualization-link:hover {
-  background-color: #203a3f;
+  background-color: #131c23;
 }
 
-@media (forced-colors: none) {
-  .og-workspace-visualization-link > span {
-    color: transparent;
-    background-image: linear-gradient(100deg, #7fecd9, #ffe17b);
-    background-clip: text;
-  }
+.og-workspace-visualization-link svg {
+  flex: none;
 }
 
 .og-workspace-sidebar :is(button, a, select):focus-visible,

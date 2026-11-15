@@ -23,19 +23,28 @@
 .region:is([data-topic="weather"], [data-topic="economy"]) .panel { top: 16px; }
 
 .header {
+  container-type: inline-size;
   display: flex;
   flex: none;
   align-items: center;
-  gap: 8px;
-  min-height: 51px;
-  padding: 12px 14px 7px;
-  color: var(--forecast-accent);
+  gap: clamp(10px, 1vw, 15px);
+  padding: 12px 14px 10px;
+}
+
+.thumbnail {
+  display: block;
+  flex: none;
+  width: clamp(56px, 5.2vw, 74px);
+  height: auto;
 }
 
 .header h2 {
-  color: inherit;
-  font-size: 17px;
-  font-weight: 650;
+  min-width: 0;
+  color: #f5f7f8;
+  font-family: "Songti SC", "Noto Serif CJK SC", SimSun, serif;
+  font-size: clamp(17px, 12cqi, 28px);
+  font-weight: 550;
+  line-height: 1.2;
 }
 
 .content {
@@ -130,7 +139,9 @@
     right: 12px;
   }
 
-  .close { justify-content: center; width: 44px; margin-left: auto; }
+  .header h2 { font-size: clamp(17px, min(12cqi, 6.4vw), 26px); }
+
+  .close { flex: none; justify-content: center; width: 44px; margin-left: auto; }
 
   .region .panel,
   .region:is([data-topic="weather"], [data-topic="economy"]) .panel {

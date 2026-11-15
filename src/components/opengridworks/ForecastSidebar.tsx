@@ -1,6 +1,7 @@
 "use client";
 
 import { Activity, X } from "lucide-react";
+import Image from "next/image";
 import { useId, useRef, useState, type ReactNode } from "react";
 import type { ForecastPoint } from "@/lib/globe-forecast";
 import type { WorkspaceTopic } from "@/lib/globe-topics";
@@ -17,6 +18,17 @@ export function formatForecastDate(date: string, grain: Grain) {
   if (grain === "month") return date.slice(0, 7);
   if (grain === "day") return date.slice(0, 10);
   return date.slice(0, 16).replace("T", " ") + " UTC";
+}
+
+export function ForecastHeading({ topic, children }: { topic: WorkspaceTopic; children?: ReactNode }) {
+  return (
+    <header className={styles.header}>
+      <Image className={styles.thumbnail} src={`/images/opengridworks/forecasts/${topic}.webp`}
+        alt="" width={74} height={74} unoptimized />
+      <h2>{headings[topic]}</h2>
+      {children}
+    </header>
+  );
 }
 
 export function ForecastSidebar({ topic, children }: { topic: WorkspaceTopic; children: ReactNode }) {
@@ -37,13 +49,11 @@ export function ForecastSidebar({ topic, children }: { topic: WorkspaceTopic; ch
         <Activity size={16} aria-hidden="true" /> {title}
       </button>
       <aside id={panelId} className={styles.panel} data-open={open} aria-label={title}>
-        <header className={styles.header}>
-          <Activity size={18} aria-hidden="true" />
-          <h2>{title}</h2>
+        <ForecastHeading topic={topic}>
           <button type="button" className={styles.close} aria-label="关闭预测侧栏" onClick={close}>
             <X size={19} aria-hidden="true" />
           </button>
-        </header>
+        </ForecastHeading>
         <div className={styles.content}>{children}</div>
       </aside>
     </div>

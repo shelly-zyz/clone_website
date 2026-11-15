@@ -6,7 +6,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNod
 import { analysisContextHref, readWorkspaceContext, rememberWorkspace, replaceWorkspaceContext, type WorkspaceContext } from "@/lib/workspace-context";
 import type { MapTheme } from "@/types/opengridworks";
 import { EconomyGlobe } from "./EconomyGlobe";
-import { ForecastSeries } from "./ForecastSidebar";
+import { ForecastHeading, ForecastSeries } from "./ForecastSidebar";
 import { ScenarioPeriods, ScenarioRanking, ScenarioScene } from "./ScenarioScene";
 import { WorkspaceFilterSelect, WorkspaceSidebar } from "./WorkspaceSidebar";
 import {
@@ -378,27 +378,30 @@ export function EconomyWorkspace({ basemap, onBasemapError, initialContext, onRe
           footer={outlook && <ScenarioPeriods periods={outlook.years.map(value => ({ id: String(value), label: String(value) }))}
             selected={String(targetYear)} onSelect={chooseTarget} />}
           summary={(
-            <ScenarioRanking title={selected?.label ?? "全球实际 GDP 增速"}
-              subtitle={outlook ? `世界银行 GEP · ${outlook.edition} 版` : "世界银行全球经济展望"}
-              label={selected ? `${targetYear} 年实际 GDP 增速预测` : `${targetYear} 年预测`}
-              value={selectedGrowth === null ? "暂无" : formatGrowth(selectedGrowth)}
-              rows={forecastRows} selected={country} onSelect={chooseCountry} formatValue={formatGrowth}>
-              <div className={styles.outlookLinks}>
-                <Link href={statisticsHref} prefetch={false}>增长路径与同版对比 <ArrowUpRight size={14} aria-hidden="true" /></Link>
-                {outlook && <a href={outlook.sourceUrl} target="_blank" rel="noreferrer">数据来源 <ArrowUpRight size={12} aria-hidden="true" /></a>}
-              </div>
-              <div className={styles.outlookLegend} aria-label="实际 GDP 增速色阶">
-                <div className={styles.outlookScale} aria-hidden="true" />
-                <div className={styles.range}><span>−6% 以下</span><span>0%</span><span>10% 以上</span></div>
-                <p className={styles.missing}><span aria-hidden="true" /> 缺测</p>
-              </div>
-              <SnapshotStatus data={outlook} label="增长展望" retry={retryOutlook} />
-              <SnapshotStatus data={snapshot} label="经济体目录" retry={retrySnapshot} />
-              {forecastRanking.length > 0 && <p className={styles.note}>显示 {forecastRanking.length} 个有值经济体中的前 {top.length} 位 · 正负值按原值展示</p>}
-              {predictedSeries.some(item => item.value !== null) && (
-                <ForecastSeries points={predictedSeries} unit="%" grain="year" label="同版 GDP 增速预测" />
-              )}
-            </ScenarioRanking>
+            <>
+              <ForecastHeading topic="economy" />
+              <ScenarioRanking title={selected?.label ?? "全球实际 GDP 增速"}
+                subtitle={outlook ? `世界银行 GEP · ${outlook.edition} 版` : "世界银行全球经济展望"}
+                label={selected ? `${targetYear} 年实际 GDP 增速预测` : `${targetYear} 年预测`}
+                value={selectedGrowth === null ? "暂无" : formatGrowth(selectedGrowth)}
+                rows={forecastRows} selected={country} onSelect={chooseCountry} formatValue={formatGrowth}>
+                <div className={styles.outlookLinks}>
+                  <Link href={statisticsHref} prefetch={false}>增长路径与同版对比 <ArrowUpRight size={14} aria-hidden="true" /></Link>
+                  {outlook && <a href={outlook.sourceUrl} target="_blank" rel="noreferrer">数据来源 <ArrowUpRight size={12} aria-hidden="true" /></a>}
+                </div>
+                <div className={styles.outlookLegend} aria-label="实际 GDP 增速色阶">
+                  <div className={styles.outlookScale} aria-hidden="true" />
+                  <div className={styles.range}><span>−6% 以下</span><span>0%</span><span>10% 以上</span></div>
+                  <p className={styles.missing}><span aria-hidden="true" /> 缺测</p>
+                </div>
+                <SnapshotStatus data={outlook} label="增长展望" retry={retryOutlook} />
+                <SnapshotStatus data={snapshot} label="经济体目录" retry={retrySnapshot} />
+                {forecastRanking.length > 0 && <p className={styles.note}>显示 {forecastRanking.length} 个有值经济体中的前 {top.length} 位 · 正负值按原值展示</p>}
+                {predictedSeries.some(item => item.value !== null) && (
+                  <ForecastSeries points={predictedSeries} unit="%" grain="year" label="同版 GDP 增速预测" />
+                )}
+              </ScenarioRanking>
+            </>
           )}
         />
       )}
