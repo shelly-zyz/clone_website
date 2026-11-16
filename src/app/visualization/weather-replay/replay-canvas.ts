@@ -8,6 +8,28 @@ type World = [number, number, number?];
 
 const rainColor = "224, 117, 52";
 const cloudColor = "39, 105, 163";
+const rainCeiling = 0.64;
+const rainTail = 0.026;
+const rainStroke = "rgba(187, 226, 255, .75)";
+
+function coordinateTicks(start: number, end: number, target: number) {
+  const spacing = (end - start) / target;
+  const magnitude = 10 ** Math.floor(Math.log10(spacing));
+  const step = (spacing / magnitude <= 2 ? 2 : spacing / magnitude <= 5 ? 5 : 10) * magnitude;
+  const ticks: number[] = [];
+  for (let i = Math.ceil(start / step); i * step <= end; i++) ticks.push(i * step);
+  return ticks;
+}
+
+function coordinateLabel(value: number, longitude: boolean) {
+  const hemisphere = longitude ? (value < 0 ? "W" : "E") : (value < 0 ? "S" : "N");
+  return Math.abs(Number(value.toPrecision(6))) + "°" + hemisphere;
+}
+
+function rainRandom(seed: number, salt: number) {
+  const bits = Math.imul(seed ^ salt, 0x9e3779b9);
+  return (Math.imul(bits ^ (bits >>> 16), 0x85ebca6b) >>> 0) / 4294967296;
+}
 
 export const utcClock = (iso: string) => iso.slice(11, 16);
 
@@ -52,16 +74,35 @@ export function paintReplay(
   const stack = view === "time";
   const rain = view === "rain";
   const accumulation = view === "accumulation";
-  const projectedWidth = Math.abs(cos) * aspect + Math.abs(sin);
-  const scale = Math.min(width * (stack ? 0.68 : 0.78) / projectedWidth, height * (stack ? 0.87 : rain ? 0.91 : 0.98)) * zoom;
-  const project = ([longitude, latitude, z = 0]: World): Point => {
+  const { mapBounds } = area;
+  const normalizeLon = (lon: number) => (lon - west) / (east - west);
+  const normalizeLat = (lat: number) => (lat - south) / (north - south);
+  const mapCorners: World[] = [
+    [normalizeLon(mapBounds.west), normalizeLat(mapBounds.south)],
+    [normalizeLon(mapBounds.east), normalizeLat(mapBounds.south)],
+    [normalizeLon(mapBounds.east), normalizeLat(mapBounds.north)],
+    [normalizeLon(mapBounds.west), normalizeLat(mapBounds.north)],
+  ];
+  const toView = ([longitude, latitude]: World): Point => {
     const x = (longitude - 0.5) * aspect;
     const y = latitude - 0.5;
     const depth = x * sin - y * cos;
+    return [(x * cos + y * sin) * (rain ? 1 + depth * 0.26 : 1), depth];
+  };
+  const mapX = mapCorners.map(point => toView(point)[0]);
+  const left = Math.min(...mapX);
+  const right = Math.max(...mapX);
+  const projectedWidth = Math.abs(cos) * aspect + Math.abs(sin);
+  const scale = Math.min(width * (stack ? 0.68 : 0.78) / projectedWidth,
+    width * 0.84 / (right - left), height * (stack ? 0.87 : rain ? 0.91 : 0.98)) * zoom;
+  const centerX = (left + right) / 2;
+  const project = (point: World): Point => {
+    const [x, depth] = toView(point);
+    const z = point[2] ?? 0;
     const perspective = rain ? 1 + depth * 0.26 : 1;
     return [
-      width * 0.5 + (x * cos + y * sin) * scale * perspective,
-      height * (rain ? 0.69 : stack ? 0.70 : 0.63) + (depth * tilt - z * 0.48) * scale * perspective,
+      width * 0.5 + (x - centerX) * scale,
+      height * (rain ? 0.67 : stack ? 0.70 : 0.63) + (depth * tilt - z * 0.48) * scale * perspective,
     ];
   };
   const path = (polygon: Point[]) => {
@@ -80,7 +121,7 @@ export function paintReplay(
     ([[x - dx, y - dy, z], [x + dx, y - dy, z], [x + dx, y + dy, z], [x - dx, y + dy, z]] satisfies World[]).map(project);
   // Data and geographic outlines share this transform; never mask data with land.
   const geoPoint = (lon: number, lat: number, z = 0): Point => project([
-    (lon - west) / (east - west), (lat - south) / (north - south), z,
+    normalizeLon(lon), normalizeLat(lat), z,
   ]);
   const landPath = (polygon: ReplayArea["polygons"][number], z = 0) => {
     ctx.beginPath();
@@ -91,46 +132,40 @@ export function paintReplay(
       ctx.closePath();
     }
   };
-  const paintLand = (z = 0, thickness = false) => {
-    for (const polygon of area.polygons) {
+  const paintLand = (polygons: ReplayArea["polygons"], color: string, z = 0) => {
+    ctx.fillStyle = color;
+    for (const polygon of polygons) {
       landPath(polygon, z);
-      ctx.fillStyle = thickness ? "rgba(50,83,104,.55)" : "rgba(91,139,157,.62)";
       ctx.fill("evenodd");
-      if (!thickness) {
-        ctx.strokeStyle = "#8aaeba";
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
+    }
+  };
+  const paintBoundaries = (polygons: ReplayArea["polygons"], color: string, lineWidth: number, z = 0) => {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lineWidth;
+    for (const polygon of polygons) {
+      landPath(polygon, z);
+      ctx.stroke();
+    }
+  };
+  // Sample the geographic line so it follows the same perspective as data points.
+  const mapLine = (lon: number, lat: number, endLon: number, endLat: number) => {
+    ctx.moveTo(...geoPoint(lon, lat));
+    for (let i = 1; i <= 8; i++) {
+      ctx.lineTo(...geoPoint(lon + (endLon - lon) * i / 8, lat + (endLat - lat) * i / 8));
     }
   };
   const gridX = 1 / (replay.cols - 1);
   const gridY = 1 / (replay.rows - 1);
-  const base = plane(0);
-  if (area.ocean) {
-    fill(plane(-0.012), "rgba(51,99,128,.4)");
-    fill(base, "rgba(62,114,147,.30)");
-    ctx.strokeStyle = rain ? "#476c88" : "#537284";
-    ctx.stroke();
-  } else {
-    paintLand(-0.012, true);
-  }
-  ctx.save();
-  path(base);
-  ctx.clip();
-  paintLand();
-
-  const paintCoastline = () => {
-    for (const polygon of area.polygons) {
-      landPath(polygon);
-      ctx.strokeStyle = rain ? "#4f92b1" : "#8aaeba";
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    }
-  };
+  const map = mapCorners.map(project);
+  if (area.ocean) fill(map, "rgba(90, 121, 143, .16)");
+  paintLand(area.mapPolygons, "#657787");
 
   const current = replay.rain[index];
   const satellite = satelliteAt(replay, current.time);
   if (area.hasData && clouds && satellite && view === "weather") {
+    ctx.save();
+    path(plane(0));
+    ctx.clip();
     for (let row = 0; row < replay.rows; row++) {
       for (let col = 0; col < replay.cols; col++) {
         const kelvin = satellite.values[row * replay.cols + col];
@@ -139,25 +174,59 @@ export function paintReplay(
         fill(cell(col * gridX, row * gridY, gridX * 0.51, gridY * 0.51, 0), `rgba(${cloudColor}, ${opacity})`);
       }
     }
+    ctx.restore();
   }
-  paintCoastline();
-  for (const polygon of area.focusPolygons) {
-    landPath(polygon);
-    ctx.strokeStyle = "#d3e8ef";
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-  }
-  ctx.restore();
 
-  ctx.font = "12px system-ui, sans-serif";
-  ctx.fillStyle = "#a4bdcc";
+  const { west: mapWest, south: mapSouth, east: mapEast, north: mapNorth } = mapBounds;
+  const tickCount = width < 480 ? 3 : 5;
+  const longitudes = coordinateTicks(mapWest, mapEast, tickCount);
+  const latitudes = coordinateTicks(mapSouth, mapNorth, tickCount);
+  ctx.save();
+  ctx.setLineDash([3, 5]);
+  ctx.lineWidth = 0.8;
+  ctx.strokeStyle = "rgba(183, 207, 224, .32)";
+  ctx.beginPath();
+  for (const lon of longitudes) mapLine(lon, mapSouth, lon, mapNorth);
+  for (const lat of latitudes) mapLine(mapWest, lat, mapEast, lat);
+  ctx.stroke();
+  ctx.restore();
+  paintBoundaries(area.mapPolygons, "#a6b6c1", 0.9);
+  paintBoundaries(area.focusPolygons, "#e0edf5", 1.3);
+
+  // Anchor both scale axes to the nearest corner so labels stay outside the map.
+  const corner = map.reduce((nearest, point, i) => point[1] > map[nearest][1] ? i : nearest, 0);
+  const edgeLon = corner === 0 || corner === 3 ? mapWest : mapEast;
+  const edgeLat = corner < 2 ? mapSouth : mapNorth;
+  ctx.strokeStyle = "#758c9f";
+  ctx.lineWidth = 0.9;
+  ctx.beginPath();
+  mapLine(mapWest, edgeLat, mapEast, edgeLat);
+  mapLine(edgeLon, mapSouth, edgeLon, mapNorth);
+  ctx.stroke();
+  ctx.font = (width < 480 ? 10 : 11) + "px system-ui, sans-serif";
+  ctx.fillStyle = "#c7d7e3";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  const labels: [World, string][] = [[[0, -0.08], "西"], [[1, -0.08], "东"], [[0.5, 1.08], "北"]];
-  for (const [point, label] of labels) {
-    const [x, y] = project(point);
-    ctx.fillText(label, x, y);
+  const tick = (point: Point, outward: Point, label: string) => {
+    const dx = outward[0] - point[0];
+    const dy = outward[1] - point[1];
+    const distance = Math.hypot(dx, dy) || 1;
+    const x = dx / distance;
+    const y = dy / distance;
+    ctx.beginPath();
+    ctx.moveTo(...point);
+    ctx.lineTo(point[0] + x * 4, point[1] + y * 4);
+    ctx.stroke();
+    ctx.fillText(label, point[0] + x * 17, point[1] + y * 15);
+  };
+  for (const lon of longitudes) {
+    tick(geoPoint(lon, edgeLat), geoPoint(lon, edgeLat + (edgeLat === mapSouth ? -0.1 : 0.1)), coordinateLabel(lon, true));
   }
+  for (const lat of latitudes) {
+    if (Math.abs(lat - edgeLat) < (mapNorth - mapSouth) * 0.15) continue;
+    tick(geoPoint(edgeLon, lat), geoPoint(edgeLon + (edgeLon === mapWest ? -0.1 : 0.1), lat), coordinateLabel(lat, false));
+  }
+  ctx.font = "12px system-ui, sans-serif";
 
   if (stack && area.hasData) {
     const indexes = Array.from({ length: 5 }, (_, layer) => index - (4 - layer) * 2).filter(frame => frame >= 0);
@@ -172,7 +241,8 @@ export function paintReplay(
       ctx.save();
       path(surface);
       ctx.clip();
-      paintLand(z);
+      paintLand(area.polygons, "rgba(91,139,157,.62)", z);
+      paintBoundaries(area.polygons, "#8aaeba", 1, z);
       ctx.restore();
       for (let row = 1; row < replay.rows - 1; row += 2) {
         for (let col = 1; col < replay.cols - 1; col += 2) {
@@ -189,49 +259,30 @@ export function paintReplay(
     }
   }
 
-  if (rain && area.hasData) {
-    const rainBands: [number, number, number, number][][] = [[], [], []];
-    const splashes: [number, number, number][] = [];
+  if (area.hasData && (rain || (view === "weather" && precipitation))) {
+    const previousValues = replay.rain[previous].values;
+    ctx.strokeStyle = rainStroke;
+    ctx.lineWidth = 0.95;
+    ctx.beginPath();
     for (let row = 0; row < replay.rows; row++) {
       for (let col = 0; col < replay.cols; col++) {
         const cellIndex = row * replay.cols + col;
         const value = current.values[cellIndex];
-        if (value === null || value < 0.5) continue;
-        const drops = Math.ceil(Math.sqrt(value) * 1.35);
+        if (value == null) continue;
+        const before = previousValues[cellIndex] ?? value;
+        const rate = rain ? value : before + (value - before) * progress;
+        if (rate < 0.5) continue;
+        const drops = Math.ceil(Math.sqrt(rate) * 1.35);
         for (let drop = 0; drop < drops; drop++) {
           const seed = 1 + cellIndex * 23 + drop;
-          const random = (salt: number) => ((Math.imul(seed + salt, 2654435761) >>> 8) % 65521) / 65521;
-          const x = (col + (random(9) - 0.5) * 0.9) * gridX;
-          const y = (row + (random(19) - 0.5) * 0.9) * gridY;
-          const age = ((phase * (0.56 + 0.27 * random(29)) + random(39)) % 1 + 1) % 1;
-          const ceiling = 0.34 + Math.sqrt(value / 75) * 0.4;
-          const z = (1 - age) * ceiling;
-          const [px, py] = project([x, y, z]);
-          const [tx, ty] = project([x, y, z + 0.009 + 0.027 * random(49)]);
-          const band = value >= 20 ? 2 : value >= 5 ? 1 : 0;
-          rainBands[band].push([px, py, tx, ty]);
-          if (drop === 0 && value >= 5 && age > 0.94) {
-            const [sx, sy] = project([x, y]);
-            splashes.push([sx, sy, 1 + (age - 0.94) * 43]);
-          }
+          const x = Math.max(0, Math.min(1, (col + (rainRandom(seed, 9) - 0.5) * 0.9) * gridX));
+          const y = Math.max(0, Math.min(1, (row + (rainRandom(seed, 19) - 0.5) * 0.9) * gridY));
+          const age = (phase * 0.78 + rainRandom(seed, 39)) % 1;
+          const head = (1 - age) * rainCeiling;
+          ctx.moveTo(...project([x, y, head]));
+          ctx.lineTo(...project([x, y, Math.min(rainCeiling, head + rainTail)]));
         }
       }
-    }
-    rainBands.forEach((drops, band) => {
-      ctx.strokeStyle = ["rgba(129,181,218,.36)", "rgba(150,208,247,.58)", "rgba(216,241,255,.83)"][band];
-      ctx.lineWidth = 0.55 + band * 0.22;
-      ctx.beginPath();
-      for (const [x, y, tx, ty] of drops) {
-        ctx.moveTo(x, y);
-        ctx.lineTo(tx, ty);
-      }
-      ctx.stroke();
-    });
-    ctx.beginPath();
-    ctx.strokeStyle = "rgba(136,213,255,.30)";
-    for (const [x, y, radius] of splashes) {
-      ctx.moveTo(x + radius, y);
-      ctx.ellipse(x, y, radius, radius * 0.34, 0, 0, Math.PI * 2);
     }
     ctx.stroke();
   }
@@ -261,33 +312,6 @@ export function paintReplay(
     }
   }
 
-  if (area.hasData && precipitation && view === "weather") {
-    const marks = [];
-    for (let row = 0; row < replay.rows; row += 2) {
-      for (let col = 0; col < replay.cols; col += 2) {
-        const cellIndex = row * replay.cols + col;
-        const value = current.values[cellIndex];
-        if (value === null) continue;
-        const before = replay.rain[previous].values[cellIndex] ?? value;
-        const interpolated = before + (value - before) * progress;
-        if (interpolated < 1.5) continue;
-        const x = col * gridX;
-        const y = row * gridY;
-        marks.push({ x, y, value: interpolated, depth: project([x, y])[1] });
-      }
-    }
-    marks.sort((a, b) => a.depth - b.depth);
-    for (const { x, y, value } of marks) {
-      const bottom = cell(x, y, gridX * 0.8, gridY * 0.8, 0);
-      const top = cell(x, y, gridX * 0.8, gridY * 0.8, value / 75);
-      const faces = [[0, 1], [1, 2], [2, 3], [3, 0]];
-      faces.sort(([a, b], [c, d]) => bottom[a][1] + bottom[b][1] - bottom[c][1] - bottom[d][1]);
-      faces.slice(2).forEach(([a, b], side) => {
-        fill([bottom[a], bottom[b], top[b], top[a]], `rgba(${rainColor}, ${0.32 + value / 230 + side * 0.12})`);
-      });
-      fill(top, `rgba(${rainColor}, 0.86)`);
-    }
-  }
 }
 
 
@@ -300,7 +324,6 @@ type ViewState = {
   accumulationLimit: number;
 };
 
-/** Keep the current controls while restoring the pre-6d506a6 drawing algorithms. */
 export function createReplayScene(canvas: HTMLCanvasElement, labels: HTMLDivElement, onContextLoss: () => void) {
   if (!canvas.getContext("2d")) throw new Error("Weather canvas unavailable");
   let replay: WeatherReplay | undefined;
@@ -321,7 +344,8 @@ export function createReplayScene(canvas: HTMLCanvasElement, labels: HTMLDivElem
   function draw(now: number) {
     requested = 0;
     if (!replay || !area || !state || document.hidden) return;
-    const animateRain = state.view === "rain" && area.hasData && !motion.matches;
+    const animateRain = area.hasData && !motion.matches
+      && (state.view === "rain" || (state.view === "weather" && state.precipitation));
     if (animateRain && lastDraw) phase += Math.min(0.05, (now - lastDraw) / 1000);
     lastDraw = animateRain ? now : 0;
     const progress = motion.matches ? 1 : Math.min(1, (now - started) / 240);

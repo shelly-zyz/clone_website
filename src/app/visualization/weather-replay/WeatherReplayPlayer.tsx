@@ -170,6 +170,7 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
 
   const displayPeak = view === "accumulation" ? accumulationPeak : currentPeak;
   const unit = view === "accumulation" ? "mm" : "mm/h";
+  const showsRainParticles = view === "rain" || (view === "weather" && precipitation);
   const missing = !area.hasData ? "该区域暂无已发布的云雨回放。"
     : displayPeak === null ? view === "accumulation" ? "所选窗口缺测，无法计算累计降水。" : "当前降水帧缺测。" : "";
   const track = peaks.map((peak, frame) => peak === null ? "" :
@@ -213,7 +214,7 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
           <div className={styles.stageLabels}>
             <span className={styles.sceneTime}><Compass size={13} aria-hidden="true" /> {utcClock(timestamp)} UTC</span>
             {view === "time" && <span>时间切片 · UTC</span>}
-            {view === "rain" && <span>粒子密度 · 降水率</span>}
+            {showsRainParticles && <span>粒子密度 · 降水率</span>}
           </div>
         )}
         {drawingFailed ? (
@@ -225,7 +226,7 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
         {area.hasData && (
           <div className={styles.legend}>
             <span>{view === "accumulation" ? "累计降水" : "降水率"} · {unit}</span>
-            {view !== "rain" && (
+            {(view === "time" || view === "accumulation") && (
               <>
                 <span className={styles.legendScale} aria-hidden="true" />
                 <span className={styles.legendValues}><span>0</span><span>{view === "accumulation" ? accumulationLimit : 75}</span></span>

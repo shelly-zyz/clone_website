@@ -94,15 +94,27 @@ export function prepareReplayArea(replay: WeatherReplay, id: ReplayRegionId, geo
   // A coastal archive is one geographic/data domain, including offshore observations.
   // Country selection highlights land; it is never a mask on precipitation or clouds.
   const ocean = covered && (id === "archive" || crossesCoast);
-  const polygons = covered ? clipPolygons(ocean ? countryPolygons(geography) : selected, replay.bounds) : selected;
-  const focusPolygons = ocean && id !== "archive" ? clipPolygons(selected, replay.bounds) : [];
+  const context = ocean ? countryPolygons(geography) : selected;
+  const polygons = covered ? clipPolygons(context, replay.bounds) : selected;
   const rings = polygons.flat();
   const bounds = covered || !rings.length ? replay.bounds : boundsOf(rings);
+  // Give coastal scenes enough landward context to show Florida and Cuba.
+  // The data layers still use the original archive bounds.
+  const lonSpan = bounds.east - bounds.west;
+  const latSpan = bounds.north - bounds.south;
+  const mapBounds = ocean ? {
+    west: Math.max(-180, bounds.west - lonSpan * 0.32),
+    east: bounds.east,
+    south: Math.max(-90, bounds.south - latSpan * 0.16),
+    north: Math.min(90, bounds.north + latSpan * 0.16),
+  } : bounds;
+  const mapPolygons = ocean ? clipPolygons(context, mapBounds) : polygons;
+  const focusPolygons = ocean && id !== "archive" ? clipPolygons(selected, mapBounds) : [];
   const contains = (lon: number, lat: number) => covered && lon >= bounds.west && lon <= bounds.east
     && lat >= bounds.south && lat <= bounds.north;
   const cells = covered ? observed : [];
   const hasData = cells.some(cell => replay.rain.some(frame => frame.values[cell] != null));
-  return { id, label, bounds, rings, polygons, focusPolygons, cells, hasData, ocean, contains };
+  return { id, label, bounds, rings, polygons, mapBounds, mapPolygons, focusPolygons, cells, hasData, ocean, contains };
 }
 
 export type ReplayArea = ReturnType<typeof prepareReplayArea>;

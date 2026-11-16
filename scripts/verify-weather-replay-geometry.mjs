@@ -56,28 +56,66 @@ assert.equal(island.hasData,true,'island inside a hole is preserved');
 assert.equal(island.polygons.length, 1, 'clipping retains the island, not the enclosing hole');
 assert.equal(prepareReplayArea(tiny(0.5,0.5,1,1),'usa',custom).ocean,false,'inland data uses national outline');
 
-// Compare data drawing operations against history, excluding only geographic support.
-// This catches changes to density, height, color, spacing, camera and distribution.
+// Compare the unchanged data layers within the historical viewport.
+const historicalArea = { ...archive, mapBounds: archive.bounds };
+assert(archive.mapBounds.west < replay.bounds.west, 'the basemap extends landward');
+assert.deepEqual(archive.bounds, replay.bounds, 'the data retain their own geographic extent');
 function recorder() {
-  const operations = []; let path = [];
+  const operations = [];
+  const drops = [];
+  const labels = [];
+  let path = [];
   const ctx = new Proxy({
     beginPath(){path=[];}, moveTo(...p){path.push(['M',...p]);}, lineTo(...p){path.push(['L',...p]);},
     closePath(){}, ellipse(...p){path.push(['E',...p]);},
     fill(){ if (/^(rgba\(224, 117, 52|rgba\(39, 105, 163|hsl\()/.test(this.fillStyle)) operations.push([this.fillStyle,structuredClone(path)]); },
-    stroke(){if (/^(rgba\(129,181|rgba\(150,208|rgba\(216,241|rgba\(136,213)/.test(this.strokeStyle)) operations.push([this.strokeStyle,this.lineWidth,structuredClone(path)]);},
+    stroke(){ if (this.strokeStyle === "rgba(187, 226, 255, .75)") drops.push(...path); },
+    fillText(label){ labels.push(label); },
   }, {get(target,key){return key in target ? target[key] : () => {};}});
-  return { operations, canvas:{clientWidth:1060,clientHeight:500,width:1060,height:500,getContext:()=>ctx} };
+  return { operations, drops, labels, canvas:{clientWidth:1060,clientHeight:500,width:1060,height:500,getContext:()=>ctx} };
 }
 globalThis.window = {devicePixelRatio:1};
-for (const view of ['weather','time','rain','accumulation']) {
+for (const view of ['weather','time','accumulation']) {
   const current=recorder(), before=recorder();
   const index=Math.min(8,replay.rain.length-1);
   const args={index,view,clouds:true,precipitation:true,previous:index,progress:1,phase:0.375,totals:accumulateRain(replay)[index]};
-  paintReplay(current.canvas,replay,{...args,area:archive,rotation:0.42});
+  paintReplay(current.canvas,replay,{...args,area:historicalArea,rotation:0.42});
   paintOriginal(before.canvas,replay,{...args,rotation:0});
+  if (view === 'weather') {
+    assert(current.drops.length > 0);
+    before.operations = before.operations.filter(([color]) => color.startsWith('rgba(39, 105, 163'));
+  }
   const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
   assert.equal(digest(current.operations),digest(before.operations),view+' matches historical data rendering');
   assert(current.operations.length>0,view+' renders data');
   console.log(view+': historical data drawing preserved ('+current.operations.length+' operations)');
 }
-console.log('PASS: coastal data, national outline, holes, islands, coordinates and four-mode rendering');
+function renderRain(rate, phase, view, precipitation = true) {
+  const recording = recorder();
+  // Only one wet grid cell. Weak and strong rain share the same trajectories
+  // for overlapping particles, with extra particles at the higher rate.
+  const sample = tiny(-80, 23, -64, 35);
+  sample.rain[0].values = [0, 0, rate, null];
+  paintReplay(recording.canvas, sample, {
+    area: archive, view, rotation: 0.42, index: 0, previous: 0, progress: 1,
+    phase, clouds: false, precipitation,
+  });
+  return recording;
+}
+
+for (const view of ['weather', 'rain']) {
+  const light = renderRain(1, 0, view);
+  const heavy = renderRain(64, 0, view);
+  assert(light.labels.some(label => label.endsWith('°W')) && light.labels.some(label => label.endsWith('°N')));
+  assert.equal(light.drops.length, 4, 'weak rate produces two drops');
+  assert(heavy.drops.length > light.drops.length, 'heavy rate increases drop density');
+  assert.deepEqual(heavy.drops.slice(0, light.drops.length), light.drops, 'intensity does not affect drop height or length');
+  for (let i = 0; i < heavy.drops.length; i += 2) {
+    assert.equal(heavy.drops[i][1], heavy.drops[i + 1][1], 'vertical drop');
+  }
+  const next = renderRain(64, 0.05, view);
+  assert(heavy.drops.some((point, i) => point[0] === 'M' && next.drops[i][2] > point[2]), 'rain falls');
+  assert.equal(renderRain(0, 0, view).drops.length, 0, 'dry and missing cells stay dry');
+}
+assert.equal(renderRain(64, 0, 'weather', false).drops.length, 0, 'cloud view honors precipitation toggle');
+console.log('PASS: basemap coordinates, coastal coverage, polygon holes and islands, and density-only rain');
