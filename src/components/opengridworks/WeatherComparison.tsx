@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState, type PointerEvent } from "react";
-import { geoEquirectangular, geoOrthographic, geoPath, type GeoPermissibleObjects } from "d3-geo";
-import { Pause, Play } from "lucide-react";
+import { useEffect, useRef, useState, useSyncExternalStore, type PointerEvent } from "react";
+import { geoEquirectangular, geoPath, type GeoPermissibleObjects } from "d3-geo";
+import { Pause, Play, Wind } from "lucide-react";
 import { finishGlobeHandoff } from "@/lib/globe-handoff";
 import { scaleColor } from "@/app/visualization/weather-replay/replay-palette";
+import { animateComparisonWind, globeProjection, globeRadius, type ComparisonWindGrid, type GlobeBearing } from "./weather-comparison-particles";
 import styles from "./WeatherComparison.module.css";
 
 const fields = {
@@ -23,19 +24,45 @@ const windColors = [[0, [34, 57, 151]], [.23, [49, 128, 191]], [.5, [205, 225, 2
 const colorScale = (metric: Metric) => metric === "u10" ? windColors : colors;
 
 type PackedField = { analysis: string; forecast: string; quantum: number; unit: string };
-type Frame = { time: string; forecastSource: string; fields: Record<Metric, PackedField> };
+type Frame = { time: string; forecastSource: string; fields: Record<Metric, PackedField> & { v10?: PackedField } };
 type WeatherArchive = { schema: number; run: string; cols: number; rows: number; step: number; analysisSource: string; frames: Frame[] };
 type Raster = { canvas: HTMLCanvasElement; bytes: Uint8ClampedArray; width: number; height: number };
-type Bearing = { lon: number; lat: number };
 const globeSize = 450;
 const initialBearing = { lon: -15, lat: 15 };
 const archivePath = "/data/weather-replay/global-20220322.json";
 const coastPath = "/data/natural-earth/ne_50m_admin_0_countries.geojson";
 
-function makeRaster(field: PackedField, source: FieldSource, metric: Metric, cols: number, rows: number): Raster {
+const reducedMotionQuery = "(prefers-reduced-motion: reduce)";
+function subscribeToMotionPreference(callback: () => void) {
+  const media = window.matchMedia(reducedMotionQuery);
+  media.addEventListener("change", callback);
+  return () => media.removeEventListener("change", callback);
+}
+
+function readPackedField(field: PackedField, source: FieldSource, size: number) {
   const input = Uint8Array.from(atob(field[source]), char => char.charCodeAt(0));
-  const encoded = new DataView(input.buffer);
-  if (encoded.byteLength !== 2 * cols * rows) throw new Error("Unexpected global grid size.");
+  if (input.byteLength !== 2 * size) throw new Error("Unexpected global grid size.");
+  return new DataView(input.buffer);
+}
+
+function makeWindGrid(frame: Frame, source: FieldSource, { cols, rows, step }: WeatherArchive): ComparisonWindGrid | undefined {
+  const { u10, v10 } = frame.fields;
+  if (!v10 || v10.quantum !== u10.quantum) return;
+  const read = (field: PackedField) => {
+    const data = readPackedField(field, source, cols * rows);
+    return Array.from({ length: cols * rows }, (_, i) => data.getInt16(2 * i, true));
+  };
+  return {
+    kind: "vector",
+    encoding: { kind: "linear", offset: 0, scale: u10.quantum, missingValue: -32768 },
+    header: { lo1: 0, la1: 90, dx: step, dy: step, nx: cols, ny: rows },
+    u: read(u10),
+    v: read(v10),
+  };
+}
+
+function makeRaster(field: PackedField, source: FieldSource, metric: Metric, cols: number, rows: number): Raster {
+  const encoded = readPackedField(field, source, cols * rows);
   const canvas = document.createElement("canvas");
   canvas.width = cols + 1;
   canvas.height = rows;
@@ -79,12 +106,12 @@ function MiniMap({ raster, land, label }: { raster: Raster; land?: GeoPermissibl
   return <canvas className={styles.mini} ref={ref} width={240} height={121} role="img" aria-label={label} />;
 }
 
-function drawGlobe(canvas: HTMLCanvasElement, raster: Raster, bearing: Bearing, zoom: number, land?: GeoPermissibleObjects) {
+function drawGlobe(canvas: HTMLCanvasElement, raster: Raster, bearing: GlobeBearing, zoom: number, land?: GeoPermissibleObjects) {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
   const size = canvas.width;
   const center = size / 2;
-  const radius = size * .46 * zoom;
+  const radius = globeRadius(size, zoom);
   const image = ctx.createImageData(size, size);
   const toRadian = Math.PI / 180;
   const lon0 = bearing.lon * toRadian, lat0 = bearing.lat * toRadian;
@@ -118,7 +145,7 @@ function drawGlobe(canvas: HTMLCanvasElement, raster: Raster, bearing: Bearing, 
   ctx.putImageData(image, 0, 0);
   if (land) {
     ctx.beginPath();
-    geoPath(geoOrthographic().scale(radius).translate([center, center]).rotate([-bearing.lon, -bearing.lat]).clipAngle(90), ctx)(land);
+    geoPath(globeProjection(size, bearing, zoom), ctx)(land);
     ctx.strokeStyle = "rgba(229, 247, 244, .74)";
     ctx.lineWidth = .62;
     ctx.stroke();
@@ -130,8 +157,14 @@ function drawGlobe(canvas: HTMLCanvasElement, raster: Raster, bearing: Bearing, 
   ctx.stroke();
 }
 
-function Globe({ raster, land, label }: { raster: Raster; land?: GeoPermissibleObjects; label: string }) {
+function Globe({ raster, land, label, wind }: {
+  raster: Raster;
+  land?: GeoPermissibleObjects;
+  label: string;
+  wind?: ComparisonWindGrid;
+}) {
   const ref = useRef<HTMLCanvasElement>(null);
+  const windRef = useRef<HTMLCanvasElement>(null);
   const [bearing, setBearing] = useState(initialBearing);
   const [zoom, setZoom] = useState(1);
   const drag = useRef<{ id: number; x: number; y: number } | undefined>(undefined);
@@ -141,6 +174,10 @@ function Globe({ raster, land, label }: { raster: Raster; land?: GeoPermissibleO
     const next = requestAnimationFrame(() => drawGlobe(canvas, raster, bearing, zoom, land));
     return () => cancelAnimationFrame(next);
   }, [bearing, land, raster, zoom]);
+
+  useEffect(() => {
+    if (windRef.current && wind) return animateComparisonWind(windRef.current, wind, bearing, zoom);
+  }, [bearing, wind, zoom]);
 
   function move(event: PointerEvent<HTMLCanvasElement>) {
     if (drag.current?.id !== event.pointerId) return;
@@ -152,12 +189,15 @@ function Globe({ raster, land, label }: { raster: Raster; land?: GeoPermissibleO
 
   return (
     <div className={styles.sphere}>
-      <canvas ref={ref} width={globeSize} height={globeSize} className={styles.globe} role="img" aria-label={label}
-        onPointerDown={event => {
-          if (drag.current) return;
-          drag.current = { id: event.pointerId, x: event.clientX, y: event.clientY };
-          event.currentTarget.setPointerCapture(event.pointerId);
-        }} onPointerMove={move} onLostPointerCapture={() => { drag.current = undefined; }} />
+      <div className={styles.globeSurface}>
+        <canvas ref={ref} width={globeSize} height={globeSize} className={styles.globe} role="img" aria-label={label}
+          onPointerDown={event => {
+            if (drag.current) return;
+            drag.current = { id: event.pointerId, x: event.clientX, y: event.clientY };
+            event.currentTarget.setPointerCapture(event.pointerId);
+          }} onPointerMove={move} onLostPointerCapture={() => { drag.current = undefined; }} />
+        {wind && <canvas ref={windRef} width={globeSize} height={globeSize} className={styles.windTrails} aria-hidden="true" />}
+      </div>
       <div className={styles.camera} role="group" aria-label="地球视角">
         <button type="button" onClick={() => setBearing(current => ({ ...current, lon: current.lon - 30 }))} aria-label="旋转地球">↻</button>
         <button type="button" onClick={() => setZoom(current => Math.max(.72, current - .12))} aria-label="缩小地球">−</button>
@@ -179,7 +219,14 @@ export function WeatherComparison() {
   const [source, setSource] = useState<FieldSource>("forecast");
   const [index, setIndex] = useState(1);
   const [playing, setPlaying] = useState(false);
-  const [rasters, setRasters] = useState<{ frame: Frame; maps: Record<Metric, Record<FieldSource, Raster>> }>();
+  const [showWind, setShowWind] = useState<boolean>();
+  const reducedMotion = useSyncExternalStore(subscribeToMotionPreference,
+    () => window.matchMedia(reducedMotionQuery).matches, () => false);
+  const [rasters, setRasters] = useState<{
+    frame: Frame;
+    maps: Record<Metric, Record<FieldSource, Raster>>;
+    wind: Record<FieldSource, ComparisonWindGrid | undefined>;
+  }>();
   const frame = archive?.frames[index];
 
   useEffect(() => {
@@ -207,7 +254,8 @@ export function WeatherComparison() {
           analysis: makeRaster(frame.fields[key], "analysis", key, archive.cols, archive.rows),
           forecast: makeRaster(frame.fields[key], "forecast", key, archive.cols, archive.rows),
         }])) as Record<Metric, Record<FieldSource, Raster>>;
-        setRasters({ frame, maps });
+        const wind = { analysis: makeWindGrid(frame, "analysis", archive), forecast: makeWindGrid(frame, "forecast", archive) };
+        setRasters({ frame, maps, wind });
         finishGlobeHandoff("weather");
       } catch { setError(true); }
     });
@@ -230,6 +278,8 @@ export function WeatherComparison() {
 
   const meta = fields[metric];
   const shown = rasters.frame;
+  const wind = rasters.wind[source];
+  const windEnabled = showWind ?? !reducedMotion;
   return (
     <section className={styles.atlas} aria-label="全球气象对照">
       <div className={styles.main}>
@@ -237,7 +287,8 @@ export function WeatherComparison() {
           <h2>全球气象对照</h2>
           <p>{timeText(shown.time)}</p>
         </header>
-        <Globe raster={rasters.maps[metric][source]} land={land} label={`${meta.name} · ${source === "forecast" ? "GFS 预报" : "ERA5 再分析"}`} />
+        <Globe raster={rasters.maps[metric][source]} land={land} wind={windEnabled ? wind : undefined}
+          label={`${meta.name} · ${source === "forecast" ? "GFS 预报" : "ERA5 再分析"}`} />
         <div className={styles.controls}>
           <div className={styles.mapControls}>
             <select aria-label="地球变量" value={metric} onChange={event => setMetric(event.target.value as Metric)}>
@@ -247,6 +298,10 @@ export function WeatherComparison() {
               <button type="button" aria-pressed={source === "analysis"} onClick={() => setSource("analysis")}>再分析</button>
               <button type="button" aria-pressed={source === "forecast"} onClick={() => setSource("forecast")}>预报</button>
             </div>
+            <button type="button" className={styles.windToggle} aria-pressed={!!wind && windEnabled} disabled={!wind}
+              onClick={() => setShowWind(!windEnabled)}>
+              <Wind size={15} aria-hidden="true" />10 米风粒子
+            </button>
           </div>
           <div className={styles.legend}>
             <span>{meta.range[0]}</span><span className={styles.legendRamp} data-diverging={metric === "u10"} />

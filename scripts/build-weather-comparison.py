@@ -22,6 +22,7 @@ FIELDS = {
     "u10": ("10m_u_component_of_wind", None, "UGRD:10 m above ground", .1, 0, "m/s"),
     "z500": ("geopotential", 500, "HGT:500 mb", 1, 0, "m"),
     "t850": ("temperature", 850, "TMP:850 mb", .1, 273.15, "°C"),
+    "v10": ("10m_v_component_of_wind", None, "VGRD:10 m above ground", .1, 0, "m/s"),
 }
 META = {}
 

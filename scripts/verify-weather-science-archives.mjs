@@ -11,7 +11,16 @@ assert.equal(global.frames.length, 4);
 for (const [i, frame] of global.frames.entries()) {
   assert.equal(Date.parse(frame.time) - Date.parse(global.run), (i + 1) * 6 * 3600000);
   assert.match(frame.forecastSource, /noaa-gfs-bdp-pds/);
-  assert.deepEqual(Object.keys(frame.fields), ["t2m", "u10", "z500", "t850"]);
+  assert.deepEqual(Object.keys(frame.fields), ["t2m", "u10", "z500", "t850", "v10"]);
+  assert.equal(frame.fields.v10.quantum, frame.fields.u10.quantum);
+  assert.equal(frame.fields.v10.unit, "m/s");
+  for (const source of ["analysis", "forecast"]) {
+    const meridional = unpack(frame.fields.v10[source]);
+    assert(!meridional.equals(unpack(frame.fields.u10[source])), "the wind streams use both components");
+    const values = Array.from({ length: meridional.length / 2 }, (_, i) => meridional.readInt16LE(i * 2))
+      .filter(value => value !== -32768);
+    assert(values.some(value => value > 50) && values.some(value => value < -50), "winds have northward and southward components");
+  }
   for (const field of Object.values(frame.fields)) {
     const a = unpack(field.analysis), b = unpack(field.forecast);
     assert.equal(a.length, global.cols * global.rows * 2);
