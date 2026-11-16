@@ -6042,7 +6042,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
     carbon: "GRACED · 全球 0.1° 网格",
   }[activeProject];
   return (
-    <main className={`og-app-shell og-globe-workspace ${cinematic ? "is-cinematic" : ""} ${activeProject === "weather" ? "is-earth-project" : ""} ${activeProject === "carbon" ? "is-carbon-project" : ""}${carbonPlanar ? " is-carbon-atlas" : ""}${statsActive ? " is-power-statistics" : ""}${statsActive && powerForecast ? " is-power-forecast" : ""}`}
+    <main className={`og-app-shell og-globe-workspace ${cinematic ? "is-cinematic" : ""} ${activeProject === "weather" ? "is-earth-project" : ""} ${activeProject === "carbon" ? "is-carbon-project" : ""}${carbonPlanar ? " is-carbon-atlas" : ""}${activeProject === "power" ? " is-power-project" : ""}${statsActive ? " is-power-statistics" : ""}${statsActive && powerForecast ? " is-power-forecast" : ""}`}
       onClickCapture={beforeAnalysis}>
       <GlobeNavigation activeTopic={activeProject} onTopicChange={switchProject} />
       <div className="og-globe-stage">
@@ -6115,7 +6115,11 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
             onScreenshotComplete={showToast}
           />
         )}
+        {provinceFrame && !cinematic ? <PowerMapHeading frame={provinceFrame} /> : null}
       </div>
+      {activeProject === "power" && !cinematic && (
+        <PowerViews view={powerView} onView={selectPowerView} />
+      )}
       {activeProject === "weather" && (
         <WeatherSceneSwitcher scene={weatherScene} onChange={replay => navigate("weather", { replay: replay === "globe" ? undefined : replay })} />
       )}
@@ -6125,11 +6129,8 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
           {!cinematic && <CarbonTimeline {...carbonTime} />}
         </>
       )}
-      {statsActive && !cinematic ? (
-        <>
-          {provinceFrame ? <PowerMapHeading frame={provinceFrame} /> : null}
-          {provinceFrame && selectedProvince ? <PowerMobileSelection frame={provinceFrame} region={selectedProvince} /> : null}
-        </>
+      {statsActive && !cinematic && provinceFrame && selectedProvince ? (
+        <PowerMobileSelection frame={provinceFrame} region={selectedProvince} />
       ) : null}
       {activeProject === "power" && !statsActive ? (
         <MobilePowerShortcuts
@@ -6150,9 +6151,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
         summary={sidebarSummary}
         analysisHref={activeProject === "power" ? powerAnalysisHref : activeProject === "carbon" ? carbonAnalysisHref : undefined}
         onSearch={activeProject === "power" && powerView === "facilities" ? () => togglePanel("search") : undefined}
-        leadingFilter={activeProject === "power" ? <>
-          <PowerViews view={powerView} onView={selectPowerView} />
-          {powerView === "facilities" ? (
+        leadingFilter={activeProject === "power" && powerView === "facilities" ? (
           <WorkspaceFilterSelect
             label="定位地区"
             options={regionTargets.map((target) => ({ value: target.id, label: target.label, disabled: !target.enabled }))}
@@ -6162,7 +6161,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
               if (target) flyToRegion(target);
             }}
           />
-          ) : null}</> : undefined}
+        ) : undefined}
       >
         {statsActive && powerView === "generation" ? (
           <PowerPeriodSwitcher monthly={monthlyGeneration} onChange={monthly => {

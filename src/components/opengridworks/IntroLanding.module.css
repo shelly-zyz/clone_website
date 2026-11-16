@@ -1,15 +1,12 @@
 .landing {
   --base: #090911;
-  --paper: #f1e9da;
-  --muted: #b8b9ae;
-  --accent: #d5c5ff;
   position: relative;
   display: grid;
   min-height: 100svh;
   padding: 12px;
   isolation: isolate;
   overflow: clip;
-  color: var(--paper);
+  color: #fff;
   background: var(--base);
   color-scheme: dark;
 }
@@ -110,7 +107,6 @@
 .brand {
   min-height: 44px;
   gap: 8px;
-  color: var(--paper);
   font-size: 0.79rem;
   font-weight: 650;
   letter-spacing: 0.01em;
@@ -131,7 +127,6 @@
   justify-content: center;
   border-radius: 50%;
   background: #10171acf;
-  color: var(--paper);
 }
 
 .controlButton:hover {
@@ -170,7 +165,6 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  color: var(--accent);
   font-size: .72rem;
   font-weight: 550;
   letter-spacing: .14em;
@@ -178,7 +172,6 @@
 
 .title {
   display: grid;
-  color: var(--paper);
   font-family: "Songti SC", "Noto Serif CJK SC", "Microsoft YaHei", serif;
   font-size: clamp(2.45rem, 10.3vw, 3.2rem);
   font-weight: 500;
@@ -190,7 +183,6 @@
 
 .description {
   max-width: 24rem;
-  color: var(--muted);
   font-size: .78rem;
   line-height: 1.6;
   text-wrap: pretty;
@@ -206,7 +198,6 @@
   font-weight: 650;
   transition: background-color 140ms ease, transform 140ms ease;
   white-space: nowrap;
-  color: #fff;
   background-image: linear-gradient(145deg, rgb(85 82 78 / 64%), rgb(57 56 54 / 70%) 56%, rgb(33 34 36 / 76%));
   backdrop-filter: blur(18px);
 }
@@ -240,7 +231,6 @@
   padding: 7px 10px 7px 6px;
   border-radius: 10px;
   background: #101713e0;
-  color: var(--paper);
   transition: background 160ms ease, transform 160ms ease;
 }
 
@@ -268,7 +258,6 @@
 
 .card strong,
 .globeLink strong {
-  color: var(--paper);
   font-size: .8rem;
   font-weight: 570;
 }
@@ -276,13 +265,10 @@
 .card div > span,
 .globeLink span > span {
   overflow: hidden;
-  color: var(--muted);
   font-size: .66rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-.card > svg { color: var(--accent); }
 
 .footer {
   display: grid;
@@ -312,8 +298,6 @@
   background: #29203b;
 }
 
-.globeLink > svg { color: var(--accent); }
-
 .globeLink img {
   display: block;
   width: 100%;
@@ -338,13 +322,12 @@
 .globeLink strong { white-space: nowrap; }
 
 .credits {
-  color: var(--muted);
   font-size: .62rem;
   line-height: 1.4;
 }
 
 .landing :is(button, a):focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid currentColor;
   outline-offset: 4px;
 }
 
@@ -385,13 +368,11 @@
   }
 
   .topNav > a {
-    color: #dedccf;
     font-size: .75rem;
     white-space: nowrap;
   }
 
-  .topNav > a:hover { color: var(--accent); }
-
+  .topNav > a:hover { text-decoration: underline; }
 
   .poster img {
     top: 43.5%;

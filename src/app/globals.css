@@ -3614,7 +3614,7 @@
   --og-rail-top: var(--og-workspace-top);
 }
 
-.og-globe-workspace:is(.is-earth-project, .is-economy-project, .is-carbon-project, .is-power-statistics) {
+.og-globe-workspace:is(.is-earth-project, .is-economy-project, .is-carbon-project, .is-power-project) {
   --og-stage-top: calc(var(--og-switcher-top) + 52px);
 }
 

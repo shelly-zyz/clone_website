@@ -16,7 +16,7 @@ import switcherStyles from "./SceneSwitcher.module.css";
 type PowerView = NonNullable<WorkspaceContext["powerView"]>;
 type MonthlyData = ReturnType<typeof useReportedGeneration>;
 const viewTabs = [
-  { id: "facilities", label: "设施" },
+  { id: "facilities", label: "设备" },
   { id: "generation", label: "发电量" },
   { id: "capacity", label: "装机" },
 ] as const;
@@ -28,13 +28,13 @@ const filterOptions = [
 
 export function PowerViews({ view, onView }: { view: PowerView; onView: (view: PowerView) => void }) {
   return (
-    <div className={`${switcherStyles.bar} ${styles.switcher}`} role="group" aria-label="电力地图视图">
+    <nav className={`${switcherStyles.bar} ${switcherStyles.scene}`} aria-label="电力地图视图">
       {viewTabs.map(({ id, label }) => (
         <button key={id} type="button" aria-pressed={view === id} onClick={() => onView(id)}>
           {label}
         </button>
       ))}
-    </div>
+    </nav>
   );
 }
 
