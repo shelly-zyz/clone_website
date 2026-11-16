@@ -1,15 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+import { usePathname, useRouter } from "next/navigation";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import type { VoiceAssistant } from "@xiaoyun/voice";
-import { topicSchema, type Topic } from "@/lib/data-agent/contracts";
+import type { Topic } from "@/lib/data-agent/contracts";
 import { forecastOverviewSchema } from "@/lib/globe-forecast";
+import { analysisTopics, analysisTopicOrder } from "@/lib/topic-analysis/catalog";
+import { mechanismSchema, type Mechanism } from "@/lib/xiaoyun/anatomy";
+import { detectSiteView, resolveSiteNavigation, siteNavigationSchema, type SiteViewId } from "@/lib/xiaoyun/site-views";
 import {
   analysisJobSchema, xiaoyunAnalysisArtifactSchema, xiaoyunContextSchema,
   type XiaoyunAnalysisArtifact, type XiaoyunBusinessResult, type XiaoyunContext, type XiaoyunReply,
 } from "@/lib/xiaoyun/contracts";
 import { WorkspaceForecast, type LoadForecastOverview } from "./WorkspaceForecast";
 import { XiaoyunBusinessCard, XiaoyunDashboardDialog } from "./XiaoyunBusinessCard";
+
+const XiaoyunMechanismDialog = dynamic(() => import("./XiaoyunMechanismDialog").then(module => module.XiaoyunMechanismDialog), { ssr: false });
 
 const storageKey = "og-xiaoyun-context";
 const forecastStorageKey = "og-xiaoyun-forecasts";
@@ -51,28 +59,69 @@ function loadContext(): XiaoyunContext {
   }
 }
 
-export function XiaoyunAssistant({ topic, onMapCommand }: {
+type Workspace = {
+  slot: HTMLDivElement;
   topic: Topic;
   onMapCommand: (message: string) => string | null;
-}) {
+};
+
+const WorkspaceRegistration = createContext<(workspace: Workspace | null) => void>(() => {});
+
+export function XiaoyunAssistant({ topic, onMapCommand }: Pick<Workspace, "topic" | "onMapCommand">) {
+  const register = useContext(WorkspaceRegistration);
+  const slot = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (!slot.current) return;
+    register({ slot: slot.current, topic, onMapCommand });
+    return () => register(null);
+  }, [register, topic, onMapCommand]);
+  return <div ref={slot} />;
+}
+
+export function XiaoyunSiteAssistant({ children }: { children: ReactNode }) {
+  const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  return (
+    <WorkspaceRegistration value={setWorkspace}>
+      {children}
+      <XiaoyunRuntime workspace={workspace} />
+    </WorkspaceRegistration>
+  );
+}
+
+function viewTopic(view: SiteViewId | undefined): Topic | undefined {
+  if (view === "weather-replay" || view === "globe-weather") return "meteo";
+  if (view === "globe-carbon") return "carbon";
+  if (view === "globe-power") return "power";
+  const analysis = analysisTopicOrder.find(topic => topic === view || "custom-" + topic === view);
+  const topic = analysis && analysisTopics[analysis].globe;
+  return topic === "weather" ? "meteo" : topic === "economy" ? undefined : topic;
+}
+
+function XiaoyunRuntime({ workspace }: { workspace: Workspace | null }) {
   const container = useRef<HTMLDivElement>(null);
+  const mount = useRef<HTMLDivElement | null>(null);
+  const pathname = usePathname();
+  const router = useRouter();
   const voice = useRef<VoiceAssistant | null>(null);
   const context = useRef<XiaoyunContext>({});
   const selectedChart = useRef<{ topic: Topic; chart_id: string } | undefined>(undefined);
-  const retry = useRef<{ id: string; message: string; topic: Topic; chartId?: string } | undefined>(undefined);
+  const retry = useRef<{ id: string; message: string; topic: Topic; view?: SiteViewId; chartId?: string } | undefined>(undefined);
   const forecastRequest = useRef<{ topic: Topic; message: string; answered: boolean } | null>(null);
   const forecastRefs = useRef<Forecasts>({});
-  const page = useRef({ topic, onMapCommand });
+  const page = useRef({ workspace, router });
   const token = useRef("");
   const [requiresToken, setRequiresToken] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [ready, setReady] = useState(false);
   const [business, setBusiness] = useState<XiaoyunBusinessResult[]>([]);
   const [openDashboard, setOpenDashboard] = useState<Extract<XiaoyunBusinessResult, { kind: "chart" }>>();
+  const [mechanism, setMechanism] = useState<Mechanism>();
+  const [mechanismOpen, setMechanismOpen] = useState(false);
   const [forecasts, setForecasts] = useState<Forecasts>({});
   const [pendingForecast, setPendingForecast] = useState<Topic>();
   const [forecastNotice, setForecastNotice] = useState<{ topic: Topic; message: string }>();
   const [selectedChartId, setSelectedChartId] = useState<string>();
+  const workspaceTopic = workspace?.topic;
 
   const loadAnalysis = useCallback(async (task: Extract<XiaoyunBusinessResult, { kind: "analysis" }>, signal: AbortSignal) => {
     const scope = context.current.sessions?.[task.topic];
@@ -115,7 +164,8 @@ export function XiaoyunAssistant({ topic, onMapCommand }: {
 
   function runForecast(message: string) {
     const assistant = voice.current;
-    if (!assistant || forecastRequest.current) return;
+    const topic = workspaceTopic;
+    if (!assistant || !topic || forecastRequest.current) return;
     const request = { topic, message, answered: false };
     forecastRequest.current = request;
     setPendingForecast(topic);
@@ -129,13 +179,20 @@ export function XiaoyunAssistant({ topic, onMapCommand }: {
     });
   }
 
-  useEffect(() => {
-    page.current = { topic, onMapCommand };
-    voice.current?.updateContext({ topic });
-  }, [topic, onMapCommand]);
+  useLayoutEffect(() => {
+    page.current = { workspace, router };
+    const slot = workspace?.slot ?? container.current;
+    if (slot && mount.current && mount.current.parentElement !== slot) slot.appendChild(mount.current);
+    const active = detectSiteView(pathname, window.location.search);
+    voice.current?.updateContext({ topic: viewTopic(active) ?? context.current.lastTopic ?? "power" });
+  }, [pathname, router, workspace]);
 
   useEffect(() => {
     let disposed = false;
+    const voiceMount = document.createElement("div");
+    voiceMount.className = "og-assistant-mount";
+    (page.current.workspace?.slot ?? container.current)?.appendChild(voiceMount);
+    mount.current = voiceMount;
     context.current = loadContext();
     forecastRefs.current = loadForecasts();
     void Promise.resolve().then(() => {
@@ -161,13 +218,14 @@ export function XiaoyunAssistant({ topic, onMapCommand }: {
       .catch(() => null);
 
     void Promise.all([import("@xiaoyun/voice"), capability]).then(([{ createVoiceAssistant }, config]) => {
-      if (disposed || !container.current) return;
+      if (disposed) return;
+      const active = detectSiteView(window.location.pathname, window.location.search);
       voice.current = createVoiceAssistant({
-        container: container.current,
+        container: voiceMount,
         projectId: "opengridworks",
         mode: "live",
         assetBaseUrl: "/xiaoyun-audio/",
-        context: { topic: page.current.topic },
+        context: { topic: viewTopic(active) ?? context.current.lastTopic ?? "power" },
         ui: { theme: "power-earth", position: { right: 18, bottom: 112 } },
         browserAdapter: {
           audio: config?.enabled ? {
@@ -178,26 +236,28 @@ export function XiaoyunAssistant({ topic, onMapCommand }: {
               return audio;
             },
           } : undefined,
-          async submit(message, snapshot, signal) {
+          async submit(message, _snapshot, signal) {
             signal.throwIfAborted();
-            const commandResult = page.current.onMapCommand(message);
+            const activeView = detectSiteView(window.location.pathname, window.location.search);
+            const commandResult = window.location.pathname === "/workspace" && page.current.workspace?.slot.isConnected
+              && page.current.workspace.onMapCommand(message);
             if (commandResult) return { summary: commandResult };
 
-            const activeTopic = topicSchema.safeParse(snapshot.topic).data ?? page.current.topic;
+            const activeTopic = viewTopic(activeView) ?? context.current.lastTopic ?? "power";
             const pending = forecastRequest.current;
             const fromSidebar = pending?.topic === activeTopic && pending.message === message;
             const chart = fromSidebar ? undefined : selectedChart.current;
             const previous = retry.current;
-            const id = previous?.message === message && previous.topic === activeTopic && previous.chartId === chart?.chart_id
+            const id = previous?.message === message && previous.topic === activeTopic && previous.view === activeView && previous.chartId === chart?.chart_id
               ? previous.id : newRequestId();
-            retry.current = { id, message, topic: activeTopic, chartId: chart?.chart_id };
+            retry.current = { id, message, topic: activeTopic, view: activeView, chartId: chart?.chart_id };
             const response = await fetch("/api/xiaoyun", {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
                 ...(token.current ? { Authorization: `Bearer ${token.current}` } : {}),
               },
-              body: JSON.stringify({ requestId: id, message, topic: activeTopic, context: context.current, selectedChart: chart }),
+              body: JSON.stringify({ requestId: id, message, topic: activeTopic, activeView, context: context.current, selectedChart: chart }),
               signal,
             });
             const reply: XiaoyunReply & { error?: string } = await response.json();
@@ -222,6 +282,13 @@ export function XiaoyunAssistant({ topic, onMapCommand }: {
               // Keep the live session available if browser storage is disabled.
             }
             setRequiresToken(false);
+            if (reply.mechanism) {
+              const result = mechanismSchema.safeParse(reply.mechanism).data;
+              if (result) {
+                setMechanism(result);
+                setMechanismOpen(true);
+              }
+            }
             const results = reply.artifacts ?? (reply.business ? [reply.business] : []);
             const dashboard = results.find(result => result.kind === "chart" && result.dashboard);
             if (dashboard?.kind === "chart") setOpenDashboard(dashboard);
@@ -241,7 +308,7 @@ export function XiaoyunAssistant({ topic, onMapCommand }: {
                 setForecastNotice({ topic: activeTopic, message: reply.summary });
               }
             }
-            const floatingResults = results.filter(result => !isWorkspaceForecast(result) || result.topic !== page.current.topic);
+            const floatingResults = results.filter(result => !isWorkspaceForecast(result) || result.topic !== page.current.workspace?.topic);
             if (floatingResults.length) setBusiness(current => {
               const next = current.filter(item => !floatingResults.some(result => result.topic === item.topic && (
                 result.kind === "analysis" && item.kind === "analysis" && result.jobId === item.jobId
@@ -252,7 +319,28 @@ export function XiaoyunAssistant({ topic, onMapCommand }: {
               selectedChart.current = undefined;
               setSelectedChartId(undefined);
             }
-            return { summary: reply.summary, markdown: reply.markdown, data: reply.data, sources: reply.sources };
+            let summary = reply.summary;
+            if (reply.navigation) {
+              const action = siteNavigationSchema.safeParse(reply.navigation).data;
+              const target = action && resolveSiteNavigation(action);
+              const current = window.location;
+              if (target && detectSiteView(current.pathname, current.search) === activeView) {
+                const next = new URL(target.href, current.href);
+                if (next.href === current.href) {
+                  summary = summary.replace(`正在打开${target.label}。`, `当前已在${target.label}。`);
+                } else {
+                  if (next.pathname === current.pathname) {
+                    window.history.pushState(null, "", target.href);
+                    window.dispatchEvent(new PopStateEvent("popstate"));
+                  } else {
+                    page.current.router.push(target.href);
+                  }
+                }
+              } else {
+                summary = target ? `当前页面已变化，未自动打开${target.label}。` : "无法识别要打开的页面。";
+              }
+            }
+            return { summary, markdown: reply.markdown, data: reply.data, sources: reply.sources };
           },
         },
       });
@@ -266,17 +354,25 @@ export function XiaoyunAssistant({ topic, onMapCommand }: {
       forecastRequest.current = null;
       voice.current?.destroy();
       voice.current = null;
+      voiceMount.remove();
+      mount.current = null;
     };
   }, []);
 
-  const visibleBusiness = business.filter(result => !isWorkspaceForecast(result) || result.topic !== topic);
+  const visibleBusiness = business.filter(result => !isWorkspaceForecast(result) || result.topic !== workspaceTopic);
+  const workspaceElement = workspace?.slot.parentElement;
   return (
     <>
-      <div ref={container} className="og-assistant-mount" />
-      <WorkspaceForecast key={topic} topic={topic === "meteo" ? "weather" : topic}
-        loadOverview={loadForecastOverview} loadAnalysis={loadAnalysis} task={forecasts[topic]}
+      <div ref={container} className="[&>.og-assistant-mount]:pointer-events-none [&>.og-assistant-mount]:fixed [&>.og-assistant-mount]:inset-0 [&>.og-assistant-mount]:z-30" />
+      {workspaceElement && workspaceTopic && createPortal(<WorkspaceForecast key={workspaceTopic}
+        topic={workspaceTopic === "meteo" ? "weather" : workspaceTopic}
+        loadOverview={loadForecastOverview} loadAnalysis={loadAnalysis} task={forecasts[workspaceTopic]}
         ready={ready} pending={pendingForecast !== undefined} onRun={runForecast}
-        notice={forecastNotice?.topic === topic ? forecastNotice.message : undefined} />
+        notice={forecastNotice?.topic === workspaceTopic ? forecastNotice.message : undefined} />, workspaceElement)}
+      {mechanism && <button type="button"
+        className="fixed bottom-5 right-5 z-[2400] rounded-md bg-slate-950 px-3 py-2 text-sm text-white shadow-lg"
+        onClick={() => setMechanismOpen(true)}>打开立体示意</button>}
+      {mechanism && mechanismOpen && <XiaoyunMechanismDialog mechanism={mechanism} onClose={() => setMechanismOpen(false)} />}
       {openDashboard && <XiaoyunDashboardDialog key={openDashboard.chartId} chart={openDashboard}
         onClose={() => setOpenDashboard(current => current === openDashboard ? undefined : current)} />}
       {visibleBusiness.length > 0 && <XiaoyunBusinessCard results={visibleBusiness} loadAnalysis={loadAnalysis} selectedChartId={selectedChartId}

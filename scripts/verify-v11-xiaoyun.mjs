@@ -32,7 +32,7 @@ fixtures.pi = {
       fixtures.calls = context.messages.filter(message => message.role === "assistant")
         .flatMap(message => message.content.filter(item => item.type === "toolCall").map(item => item.name));
       fixtures.output = context.messages.filter(message => message.role === "toolResult")
-        .map(message => JSON.parse(message.content[0].text));
+        .map(message => message.isError ? { status: "invalid_tool_call" } : JSON.parse(message.content[0].text));
       if (live) return models.streamSimple(currentModel, context, options);
       const step = fixtures.steps.shift();
       const stopReason = step ? "toolUse" : "stop";
@@ -172,6 +172,7 @@ registerHooks({
 });
 
 const { askXiaoyun } = await import("../src/lib/xiaoyun/supervisor.server.ts");
+const { detectSiteView, resolveSiteNavigation, siteNavigationSchema, siteViewCatalog } = await import("../src/lib/xiaoyun/site-views.ts");
 
 const context = { sessions: {} };
 const selection = { topic: "power", target: "current" };
@@ -268,6 +269,58 @@ if (live) {
     assert.deepEqual(failures, []);
   });
 } else {
+  await test("明确的首页指令直接返回可执行页面动作", async () => {
+    const result = await turn([], { message: "帮我切换到首页", activeView: "globe-power", context: {} });
+    assert.equal(result.route, "navigation");
+    assert.deepEqual(result.navigation, { view: "home" });
+    assert.deepEqual(resolveSiteNavigation(result.navigation), { href: "/", label: "首页" });
+    assert.deepEqual(fixtures.calls, []);
+  });
+
+  await test("全站页面与图表筛选由白名单解析，业务查询可与导航合并", async () => {
+    for (const { view } of siteViewCatalog()) {
+      const url = new URL(resolveSiteNavigation({ view }).href, "https://fixture.test");
+      assert.equal(detectSiteView(url.pathname, url.search), view);
+    }
+    assert.equal(siteNavigationSchema.safeParse({ view: "home", href: "//elsewhere.test" }).success, false);
+    assert.equal(resolveSiteNavigation({ view: "economy", section: "province-ranking" }), undefined);
+    assert.equal(resolveSiteNavigation({ view: "generation", section: "generation-history", filters: { region: "CN-JS" } }), undefined);
+    assert.equal(resolveSiteNavigation({ view: "power", filters: { year: 2016 } }), undefined);
+    assert.equal(resolveSiteNavigation({ view: "weather-replay", filters: { region: "usa" } }).href, "/visualization/weather-replay?region=usa");
+    assert.equal(resolveSiteNavigation({ view: "generation", section: "province-ranking", filters: { month: "2025-05" } }).href,
+      "/visualization/generation?month=2025-05#province-ranking");
+
+    scope("power");
+    data("power", "江苏", [1, 2, 3]);
+    const action = { view: "generation", section: "generation-history" };
+    const reply = await turn([
+      ["find_site_views", { view: "generation" }], ["navigate_site", action], query, chart,
+    ], { message: "请打开现有全国月度发电量趋势，另外查江苏每日发电量并画图。" });
+    assert.deepEqual(reply.navigation, action);
+    assert.equal(reply.artifacts?.[0]?.kind, "chart");
+  });
+
+  await test("立体解释先加载 Anatomy，场景只接受结构化部件", async () => {
+    const scene = {
+      title: "风机并网的两步示意", introduction: "沿两个部件看机械能如何转为电能。",
+      parts: [
+        { name: "叶轮", shape: "rotor", explanation: "风对叶片施加力，叶轮绕轴转动。" },
+        { name: "发电机", shape: "coil", explanation: "转轴带动转子改变磁通，线圈产生电压。" },
+      ], takeaway: "风先推动机械旋转，再通过电磁感应产生电压。",
+    };
+    const input = { message: "解释风力发电机的工作原理。", context: {} };
+    const blocked = await turn([["render_mechanism", scene]], input);
+    assert.equal(blocked.mechanism, undefined);
+    assert.match(blocked.summary, /anatomy/);
+    const malformed = await turn([["load_skill", { name: "anatomy" }], ["render_mechanism", { ...scene, html: "<canvas />" }]], input);
+    assert.equal(malformed.mechanism, undefined);
+    const result = await turn([["load_skill", { name: "anatomy" }], ["render_mechanism", scene]], input);
+    assert.equal(result.route, "explanation");
+    assert.deepEqual(result.mechanism, scene);
+    assert.equal(result.navigation, undefined);
+    assert.match(fixtures.output[0].instructions, /Anatomy/);
+  });
+
   await test("小云按同一 DataRef 串联查数、出图、预测和来源", async () => {
     scope("power");
     const inputId = data("power", "江苏", Array.from({ length: 14 }, (_, i) => i + 1));

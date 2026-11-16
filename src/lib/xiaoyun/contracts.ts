@@ -3,6 +3,8 @@ import { z } from "zod";
 import type { TaskSource } from "@xiaoyun/voice";
 import { topicSchema, type Topic } from "@/lib/data-agent/contracts";
 import { analysisOperations, forecastModels } from "@/lib/analysis-agent/contracts";
+import { siteViewIdSchema, type SiteNavigation } from "./site-views";
+import type { Mechanism } from "./anatomy";
 
 const businessSessionSchema = z.strictObject({ session_id: z.uuid() });
 
@@ -25,6 +27,7 @@ export const xiaoyunRequestSchema = z.strictObject({
   requestId: z.uuid().optional(),
   message: z.string().trim().min(1).max(300),
   topic: topicSchema,
+  activeView: siteViewIdSchema.optional(),
   context: xiaoyunContextSchema,
   selectedChart: z.strictObject({ topic: topicSchema, chart_id: z.uuid() }).optional(),
 });
@@ -75,7 +78,7 @@ export type XiaoyunBusinessResult =
 
 export type XiaoyunReply = {
   runId?: string;
-  route: "data" | "general" | "sources" | "clarify" | "visualization" | "analysis";
+  route: "data" | "general" | "sources" | "clarify" | "visualization" | "analysis" | "navigation" | "explanation";
   summary: string;
   markdown?: string;
   sources?: TaskSource[];
@@ -86,4 +89,6 @@ export type XiaoyunReply = {
   lastRoute?: XiaoyunContext["lastRoute"];
   business?: XiaoyunBusinessResult;
   artifacts?: XiaoyunBusinessResult[];
+  navigation?: SiteNavigation;
+  mechanism?: Mechanism;
 };

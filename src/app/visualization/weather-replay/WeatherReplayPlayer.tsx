@@ -6,6 +6,7 @@ import { WorkspaceFilterSelect } from "@/components/opengridworks/WorkspaceSideb
 import { finishGlobeHandoff } from "@/lib/globe-handoff";
 import type { WeatherReplay } from "@/lib/weather-replay/model";
 import { readReplayRegion, replayRegionOptions, type ReplayRegionId } from "@/lib/weather-replay/regions";
+import { updateAnalysisQuery, useAnalysisQuery } from "../useAnalysisLocation";
 import { replayViewOrder, replayViews, type ReplayView } from "@/lib/weather-replay/views";
 import { createReplayScene } from "./replay-canvas";
 import { accumulateRain, satelliteAt, utcClock } from "./replay-data";
@@ -22,10 +23,10 @@ export function WeatherReplayPlayer({ query, scene, region, initialFrame, onFram
   onFrameChange?: (frame: number) => void;
 }) {
   const [selectedView, setSelectedView] = useState<ReplayView>("weather");
-  const [selectedRegion, setSelectedRegion] = useState<ReplayRegionId>(region ?? "archive");
   const view = scene ?? selectedView;
-  const regionId = scene ? region ?? "archive" : selectedRegion;
   const embedded = scene !== undefined;
+  const location = useAnalysisQuery(region ? "region=" + region : "");
+  const regionId = (embedded ? region : readReplayRegion(location.get("region"))) ?? "archive";
   const [response, setResponse] = useState<ReplayRequest>();
   const [attempt, setAttempt] = useState(0);
   const current = response?.query === query ? response : undefined;
@@ -67,7 +68,7 @@ export function WeatherReplayPlayer({ query, scene, region, initialFrame, onFram
         <div className={styles.standaloneHeading}>
           <h1>区域风暴 3D 回放</h1>
           <WorkspaceFilterSelect label="回放区域" value={regionId} options={replayRegionOptions}
-            onChange={value => setSelectedRegion(readReplayRegion(value) ?? "archive")} />
+            onChange={value => updateAnalysisQuery({ region: readReplayRegion(value) })} />
         </div>
       )}
       {current && "replay" in current ? (

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { GlobeHandoff } from "@/components/opengridworks/GlobeHandoff";
+import { XiaoyunSiteAssistant } from "@/components/opengridworks/XiaoyunAssistant";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -17,7 +18,10 @@ export default function RootLayout({
       lang="zh-CN"
       className="h-full antialiased"
     >
-      <body className="min-h-full flex flex-col">{children}<GlobeHandoff /></body>
+      <body className="min-h-full flex flex-col">
+        <XiaoyunSiteAssistant>{children}</XiaoyunSiteAssistant>
+        <GlobeHandoff />
+      </body>
     </html>
   );
 }
