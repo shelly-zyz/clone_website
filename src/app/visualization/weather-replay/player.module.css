@@ -129,9 +129,6 @@
 .layers { display: flex; flex-wrap: wrap; gap: 4px 18px; color: #b8cad8; font-size: 12px; }
 .layers label { display: flex; align-items: center; gap: 6px; min-height: 24px; }
 .layers input { width: 14px; height: 14px; accent-color: #72bdd1; }
-.baseline { stroke: #334d63; fill: none; }
-.profileLine { fill: none; stroke: #82cbf5; stroke-width: 1.3; vector-effect: non-scaling-stroke; }
-.playhead { stroke: #c7e4ed; stroke-width: 1; vector-effect: non-scaling-stroke; }
 .timelineTimes { display: flex; justify-content: space-between; align-items: baseline; gap: 5px; color: #9db3c7; font-size: 10px; }
 .timelineTimes strong { color: #e3edf7; font-size: 12px; font-weight: 650; }
 .timelineInput { width: 100%; height: 18px; accent-color: #5aaebe; cursor: pointer; }
@@ -184,8 +181,36 @@
 .readingsValues > div { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
 .readingsValues dt { color: #a5bccd; }
 .readingsValues dd { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
-.readingsChart { width: 100%; aspect-ratio: 242 / 72; cursor: crosshair; touch-action: pan-y; }
-.readingsAxis { display: flex; justify-content: space-between; color: #aac3d1; font-size: 10px; }
+.readingsFigure {
+  min-width: 0;
+  margin: 3px 0 0;
+  padding: 8px 7px 1px;
+  border: 1px solid #ded6cb;
+  border-radius: 7px;
+  background: #fffdfa;
+  color: #443a31;
+}
+
+.readingsCaption {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 0 3px 5px;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.readingsCaption > span:last-child { color: #74665a; font-size: 10px; font-weight: 500; }
+.readingsChart { display: block; width: 100%; height: auto; cursor: crosshair; touch-action: pan-y; }
+.readingsTick { fill: #675b50; font-size: 10px; font-variant-numeric: tabular-nums; }
+.readingsGrid { stroke: #e5dcd2; stroke-width: .75; stroke-dasharray: 2 3; }
+.readingsAxes { fill: none; stroke: #a3978b; stroke-width: .8; }
+.readingsLine { fill: none; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; }
+.readingsSample { stroke: #fffdfa; stroke-width: .75; }
+.readingsPlayhead { stroke-width: 1; stroke-dasharray: 3 2; opacity: .67; }
+.readingsCurrent { stroke: #fffdfa; stroke-width: 1.35; }
 .readingsToggle { display: none; }
 
 @media (max-width: 900px) {
@@ -198,5 +223,5 @@
   .readingsToggle > span:last-child { display: flex; align-items: center; gap: 5px; }
   .readingsBody[data-open="false"] { display: none; }
   .readingsBody h3 { display: none; }
-  .readingsChart { max-height: 100px; }
+  .readingsFigure { width: 100%; max-width: 420px; justify-self: center; }
 }
