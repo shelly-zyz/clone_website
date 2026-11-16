@@ -5,6 +5,8 @@ import { topicSchema, type Topic } from "@/lib/data-agent/contracts";
 import { analysisOperations, forecastModels } from "@/lib/analysis-agent/contracts";
 import { siteViewIdSchema, type SiteNavigation } from "./site-views";
 import type { Mechanism } from "./anatomy";
+import { activePageSchema, type PageChange } from "./page-actions";
+import type { Evidence, ExportReference } from "./assistant-artifacts";
 
 const businessSessionSchema = z.strictObject({ session_id: z.uuid() });
 
@@ -20,6 +22,7 @@ export const xiaoyunContextSchema = z.strictObject({
   threadId: z.string().max(80).nullable().optional(),
   sessions: z.partialRecord(topicSchema, sessionSchema).optional(),
   lastTopic: topicSchema.optional(),
+  evidenceIds: z.array(z.uuid()).max(8).optional(),
   lastRoute: z.enum(["data", "visualization", "analysis"]).optional(),
 });
 
@@ -28,6 +31,7 @@ export const xiaoyunRequestSchema = z.strictObject({
   message: z.string().trim().min(1).max(300),
   topic: topicSchema,
   activeView: siteViewIdSchema.optional(),
+  activePage: activePageSchema.optional(),
   context: xiaoyunContextSchema,
   selectedChart: z.strictObject({ topic: topicSchema, chart_id: z.uuid() }).optional(),
 });
@@ -78,7 +82,7 @@ export type XiaoyunBusinessResult =
 
 export type XiaoyunReply = {
   runId?: string;
-  route: "data" | "general" | "sources" | "clarify" | "visualization" | "analysis" | "navigation" | "explanation";
+  route: "data" | "general" | "sources" | "clarify" | "visualization" | "analysis" | "navigation" | "explanation" | "knowledge" | "project" | "export";
   summary: string;
   markdown?: string;
   sources?: TaskSource[];
@@ -91,4 +95,8 @@ export type XiaoyunReply = {
   artifacts?: XiaoyunBusinessResult[];
   navigation?: SiteNavigation;
   mechanism?: Mechanism;
+  pageChange?: PageChange;
+  evidence?: Evidence[];
+  openedEvidence?: Evidence;
+  export?: ExportReference;
 };

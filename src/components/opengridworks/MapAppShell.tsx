@@ -68,7 +68,7 @@ import { WeatherSceneSwitcher } from "./WeatherSceneSwitcher";
 import { WeatherSidebarFilters } from "@/components/opengridworks/WeatherSidebarFilters";
 import { WorkspaceFilterSelect, WorkspaceSidebar } from "@/components/opengridworks/WorkspaceSidebar";
 import { XiaoyunAssistant } from "@/components/opengridworks/XiaoyunAssistant";
-import { globeTopicOrder, globeTopics, type WorkspaceTopic } from "@/lib/globe-topics";
+import type { WorkspaceTopic } from "@/lib/globe-topics";
 import {
   buildCarbonHeatCollection,
   carbonColor,
@@ -6352,42 +6352,6 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
     setVisibleTechnologies((state) => ({ ...state, [key]: !state[key] }));
   };
 
-  const handleXiaoyunMapCommand = useCallback((message: string) => {
-    const command = message.trim().replace(/[。！!]+$/, "").replace(/\s/g, "");
-    const project = command.match(/^(?:请)?(?:切换到|切到|打开)(.+地球)$/)?.[1];
-    const next = project === "碳地球" ? "carbon" : globeTopicOrder.find((topic) =>
-      globeTopics[topic].title === project || globeTopics[topic].label === project);
-    if (next) {
-      switchProject(next);
-      return `已打开${globeTopics[next].title}。`;
-    }
-
-    const layer = command.match(/^(?:请)?(打开|显示|关闭|隐藏)风电图层$/)?.[1];
-    if (layer) {
-      const enabled = layer === "打开" || layer === "显示";
-      if (enabled && activeProject !== "power") switchProject("power");
-      setVisibleTechnologies((state) => ({ ...state, wind: enabled }));
-      return enabled ? "已打开电源地球的风电图层。" : "已关闭电源地球的风电图层。";
-    }
-
-    const place = command.match(/^(?:请)?(?:切换到|切到|定位到)([^，。！？,.!?]+?)(?:地图)?$/)?.[1];
-    if (!place) return null;
-    const target = regionTargets.find((item) => item.label === place);
-    if (target) {
-      flyToRegion(target);
-      return `已将地图定位到${place}。`;
-    }
-    if (place === "广东" || place === "广东省") {
-      requestFocus([113.26, 23.13], 6.2, 0, 0);
-      return "已将地图定位到广东。";
-    }
-    if (place === "湖北" || place === "湖北省") {
-      requestFocus([114.30, 30.59], 6.2, 0, 0);
-      return "已将地图定位到湖北。";
-    }
-    return null;
-  }, [activeProject, flyToRegion, requestFocus, switchProject]);
-
   const toggleTechnologyGroup = () => {
     const anyTechnologyVisible = technologies.some((item) => visibleTechnologies[item.key]);
     setVisibleTechnologies(anyTechnologyVisible ? hiddenTechnologyState() : technologyState());
@@ -6873,7 +6837,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
         </>
       ) : null}
       <HoverBubble tooltip={hoverTooltip} />
-      <XiaoyunAssistant topic={activeProject === "weather" ? "meteo" : activeProject} onMapCommand={handleXiaoyunMapCommand} />
+      <XiaoyunAssistant topic={activeProject === "weather" ? "meteo" : activeProject} captureView={saveMapCamera} />
       <Toast message={toast} />
       {cinematic ? (
         <div className="og-cinematic-banner">

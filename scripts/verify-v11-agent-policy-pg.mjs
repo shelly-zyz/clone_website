@@ -61,7 +61,7 @@ try {
   `);
   // Only the production database-name guard is omitted in this disposable instance.
   await db.exec(schema("v11-data-agent-schema.sql").replace(/DO \$\$[\s\S]*?\$\$;/, ""));
-  for (const migration of ["v11-data-agent-context.sql", "v11-business-agent-context.sql", "v11-xiaoyun-context.sql", "v11-agent-policy.sql", "v11-agent-policy.sql"]) {
+  for (const migration of ["v11-data-agent-context.sql", "v11-business-agent-context.sql", "v11-xiaoyun-context.sql", "v11-agent-policy.sql", "v11-agent-policy.sql", "v11-xiaoyun-tools.sql", "v11-xiaoyun-tools.sql"]) {
     await db.exec(schema(migration));
   }
   const { queryData } = await import("../src/lib/data-agent/query.server.ts");
@@ -142,6 +142,67 @@ try {
     await assert.rejects(resolveDataResult(project.project_id, retry.result_id, "x".repeat(43)), { code: "PROJECT_NOT_FOUND" });
     const audits = await db.query("SELECT count(*)::integer AS total FROM projects.agent_audit_event WHERE event->>'action'='save_query'");
     assert.equal(audits.rows[0].total, 1);
+
+    const { exportResult } = await import("../src/lib/xiaoyun/export.server.ts");
+    const reference = { kind: "data", id: first.result_id, topic: "power", format: "csv" };
+    const exported = await exportResult(reference, project.project_id, project.project_key);
+    assert.match(exported.contents, /发布版本/);
+    assert.match(exported.contents, new RegExp(answer.data_ref.version));
+    assert.match(exported.contents, new RegExp(first.result_id));
+    assert.match(exported.contents, /320000000000/);
+    await assert.rejects(exportResult(reference, project.project_id, "x".repeat(43)), { code: "PROJECT_NOT_FOUND" });
+
+    const jobId = randomUUID();
+    await db.query(`
+      INSERT INTO results.analysis_job(id,project_id,status,plan,input,data_ref,result)
+      VALUES($1,$2,'succeeded','{"operation":"describe"}','{}',$3::jsonb,
+        '{"metric":"发电量","unit":"GWh","observed_rows":1,"missing_rows":0,"summary":{"mean":9,"median":9,"min":9,"max":9,"stddev":0}}')
+    `, [jobId, project.project_id, JSON.stringify(answer.data_ref)]);
+    const completed = await exportResult({ kind: "analysis", id: jobId, topic: "power", format: "json" }, project.project_id, project.project_key);
+    assert.equal(JSON.parse(completed.contents).data_ref.version, answer.data_ref.version);
+    assert.equal(JSON.parse(completed.contents).result.summary.mean, 9);
+
+    const { listProjectViews, loadProjectView, saveProjectView } = await import("../src/lib/xiaoyun/project-views.server.ts");
+    const scope = { ...session, project_key: project.project_key };
+    const view = { page: { view: "generation", search: "?month=2026-09", section: "generation-history" },
+      chart: { chart_id: randomUUID(), result_id: first.result_id, selection: { chart: "bar", renderer: "echarts" } },
+      dataVersion: answer.data_ref.version };
+    await saveProjectView(scope, "九月快照", view);
+    await saveProjectView(scope, "九月快照", view);
+    assert.deepEqual(await loadProjectView(scope, "九月快照"), view);
+    assert.equal((await listProjectViews(scope)).length, 1);
+    const stranger = await createDataProject("power", "other project");
+    assert.equal(await loadProjectView(stranger, "九月快照"), undefined);
+    await assert.rejects(loadProjectView({ ...scope, project_key: stranger.project_key }, "九月快照"), { code: "PROJECT_NOT_FOUND" });
+  });
+
+  await test("知识内容须通过版本及段落审核，两个有效冲突证据均可回看", async () => {
+    const { searchKnowledge, openEvidence } = await import("../src/lib/xiaoyun/knowledge.server.ts");
+    const seed = await searchKnowledge("MAE RMSE 滚动 回测");
+    assert.ok(seed.evidence.some(item => item.url.includes("#L") && item.version === "ccc98fd"));
+    assert.equal((await searchKnowledge("无匹配资料占位词999888")).evidence.length, 0);
+    const document = randomUUID(), approved = randomUUID(), staged = randomUUID();
+    const left = randomUUID(), right = randomUUID(), pending = randomUUID(), hidden = randomUUID();
+    await db.query("INSERT INTO knowledge.document VALUES($1,'标准试验')", [document]);
+    await db.query(`
+      INSERT INTO knowledge.document_version(id,document_id,version,source_url,content_sha256,review_status,reviewed_at)
+      VALUES($1,$3,'approved fixture','https://example.test/reference',repeat('f',64),'approved',now()),
+            ($2,$3,'staged fixture','https://example.test/reference',repeat('c',64),'pending',null)
+    `, [approved, staged, document]);
+    await db.query(`
+      INSERT INTO knowledge.chunk(id,version_id,locator,source_fragment,passage,keywords,claim_key,claim_value,review_status)
+      VALUES($1,$5,'第 1 页','#page=1','校准值为 10。','间隔校准','sample-interval','10','approved'),
+            ($2,$5,'第 2 页','#page=2','校准值为 30。','间隔校准','sample-interval','30','approved'),
+            ($3,$5,'第 3 页','#page=3','尚未审核的结论。','间隔校准',null,null,'pending'),
+            ($4,$6,'第 4 页','#page=4','待审核版本的说明。','间隔校准',null,null,'approved')
+    `, [left, right, pending, hidden, approved, staged]);
+    const result = await searchKnowledge("间隔校准");
+    assert.deepEqual(new Set(result.evidence.map(item => item.id)), new Set([left, right]));
+    assert.equal(result.conflicts.length, 1);
+    assert.equal((await openEvidence(left)).url, "https://example.test/reference#page=1");
+    assert.equal(await openEvidence(pending), undefined);
+    assert.equal(await openEvidence(hidden), undefined);
+    await assert.rejects(withRole("green_agent_ro", client => client.query("SELECT * FROM knowledge.chunk")), { code: "42501" });
   });
 
   await test("真实 Worker：跳过不支持的模型，领取并校验 StatsForecast 结果", {

@@ -494,7 +494,7 @@ export function AnalysisWorkbench({ topic, initialQuery }: { topic: AnalysisTopi
   }
 
   return (
-    <div className={styles.workbench} data-topic={topic}>
+    <div className={styles.workbench} data-topic={topic} data-published-version={history?.version}>
       <aside className={styles.workbenchNav}>
         <nav aria-label="专题图表视图" className={styles.chartNav}>
           <a href="#topic-filters" aria-current={!selected && !comparisonActive ? "location" : undefined} onClick={event => selectView(event, "")}>

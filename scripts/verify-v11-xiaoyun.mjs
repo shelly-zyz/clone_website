@@ -149,6 +149,7 @@ const modules = {
 
 globalThis.xiaoyunFixture = fixtures;
 const sourceRoot = new URL("../src/", import.meta.url).href;
+const publicRoot = new URL("../public/", import.meta.url).href;
 const baselineUrl = new URL("../src/lib/xiaoyun/supervisor.server.ts?baseline", import.meta.url).href;
 registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -158,12 +159,16 @@ registerHooks({
     if (Object.hasOwn(modules, key)) {
       return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(modules[key]) };
     }
+    if (location?.href.startsWith(sourceRoot) && location.href.endsWith(".json")) return nextResolve(location.href, context);
     if (location?.protocol === "file:" && existsSync(fileURLToPath(location) + ".ts")) {
       return nextResolve(pathToFileURL(fileURLToPath(location) + ".ts").href, context);
     }
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
+    if ((url.startsWith(sourceRoot) || url.startsWith(publicRoot)) && url.endsWith(".json")) {
+      return nextLoad(url, { ...context, importAttributes: { type: "json" } });
+    }
     if (baselineSource && url === baselineUrl) {
       return { format: "module-typescript", source: baselineSource, shortCircuit: true };
     }
@@ -173,6 +178,8 @@ registerHooks({
 
 const { askXiaoyun } = await import("../src/lib/xiaoyun/supervisor.server.ts");
 const { detectSiteView, resolveSiteNavigation, siteNavigationSchema, siteViewCatalog } = await import("../src/lib/xiaoyun/site-views.ts");
+
+const { pageLocation } = await import("../src/lib/xiaoyun/page-actions.ts");
 
 const context = { sessions: {} };
 const selection = { topic: "power", target: "current" };
@@ -319,6 +326,36 @@ if (live) {
     assert.deepEqual(result.mechanism, scene);
     assert.equal(result.navigation, undefined);
     assert.match(fixtures.output[0].instructions, /Anatomy/);
+  });
+
+  await test("地图同轮定位和切图层，保留既有图层并拒绝未知地名", async () => {
+    const activePage = { view: "globe-power", search: "?tech=solar&layers=substations&basemap=nasa" };
+    const result = await turn([["set_map_view", { read: true, place: "江苏", layers: [{ id: "transmission", visible: true }] }]], {
+      message: "把地图定位到江苏，打开输电线路", activePage, context: {},
+    });
+    assert.equal(result.route, "navigation");
+    assert.deepEqual(result.pageChange.expected, activePage);
+    const { url } = pageLocation(result.pageChange.page);
+    assert.equal(url.searchParams.get("region"), "320000000000");
+    assert.equal(url.searchParams.get("layers"), "substations,transmission");
+    assert.equal(url.searchParams.get("tech"), "solar");
+    assert.equal(url.searchParams.get("basemap"), "nasa");
+    const blocked = await turn([["set_map_view", { place: "https://elsewhere.test" }]], { activePage, context: {} });
+    assert.equal(blocked.pageChange, undefined);
+  });
+
+  await test("仅更新当前图表要求的筛选，拒绝重复对照、陌生经济体和不匹配比较年份", async () => {
+    const activePage = { view: "economy", search: "?country=DEU&year=2024&startYear=2018&compareCountry=USA&comparisonMode=growth", section: "economic-comparison" };
+    const input = { activePage, context: {} };
+    const valid = await turn([["set_view_filters", { compareCountry: "JPN" }]], input);
+    const { url } = pageLocation(valid.pageChange.page);
+    assert.equal(url.hash, "#economic-comparison");
+    assert.equal(url.searchParams.get("compareCountry"), "JPN");
+    assert.equal(url.searchParams.get("year"), "2024");
+    assert.equal(url.searchParams.get("comparisonMode"), "growth");
+    assert.equal((await turn([["set_view_filters", { compareCountry: "DEU" }]], input)).pageChange, undefined);
+    assert.equal((await turn([["set_view_filters", { compareCountry: "XXX" }]], input)).pageChange, undefined);
+    assert.equal((await turn([["set_view_filters", { startYear: 2023, year: 2020 }]], input)).pageChange, undefined);
   });
 
   await test("小云按同一 DataRef 串联查数、出图、预测和来源", async () => {

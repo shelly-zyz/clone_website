@@ -16,6 +16,9 @@ import {
 } from "@/lib/xiaoyun/contracts";
 import { WorkspaceForecast, type LoadForecastOverview } from "./WorkspaceForecast";
 import { XiaoyunBusinessCard, XiaoyunDashboardDialog } from "./XiaoyunBusinessCard";
+import { evidenceSchema, exportReferenceSchema, type Evidence, type ExportReference } from "@/lib/xiaoyun/assistant-artifacts";
+import { pageChangeSchema, pageLocation, readActivePage } from "@/lib/xiaoyun/page-actions";
+import { XiaoyunEvidence } from "./XiaoyunEvidence";
 
 const XiaoyunMechanismDialog = dynamic(() => import("./XiaoyunMechanismDialog").then(module => module.XiaoyunMechanismDialog), { ssr: false });
 
@@ -62,19 +65,21 @@ function loadContext(): XiaoyunContext {
 type Workspace = {
   slot: HTMLDivElement;
   topic: Topic;
-  onMapCommand: (message: string) => string | null;
+  captureView: () => void;
 };
 
 const WorkspaceRegistration = createContext<(workspace: Workspace | null) => void>(() => {});
 
-export function XiaoyunAssistant({ topic, onMapCommand }: Pick<Workspace, "topic" | "onMapCommand">) {
+export function XiaoyunAssistant({ topic, captureView }: Pick<Workspace, "topic" | "captureView">) {
   const register = useContext(WorkspaceRegistration);
   const slot = useRef<HTMLDivElement>(null);
+  const capture = useRef(captureView);
+  useLayoutEffect(() => { capture.current = captureView; }, [captureView]);
   useLayoutEffect(() => {
     if (!slot.current) return;
-    register({ slot: slot.current, topic, onMapCommand });
+    register({ slot: slot.current, topic, captureView: () => capture.current() });
     return () => register(null);
-  }, [register, topic, onMapCommand]);
+  }, [register, topic]);
   return <div ref={slot} />;
 }
 
@@ -97,6 +102,16 @@ function viewTopic(view: SiteViewId | undefined): Topic | undefined {
   return topic === "weather" ? "meteo" : topic === "economy" ? undefined : topic;
 }
 
+function readCurrentPage() {
+  const { pathname, search, hash } = window.location;
+  const loadedVersion = document.querySelector<HTMLElement>("#topic-analysis-page [data-published-version]")?.dataset.publishedVersion;
+  const query = new URLSearchParams(search);
+  if (loadedVersion && !query.has("version")) query.set("version", loadedVersion);
+  const active = readActivePage(pathname, query.size ? "?" + query : "", hash);
+  const location = active && pageLocation(active);
+  return active && location ? { ...active, search: location.url.search, section: location.url.hash.slice(1) || undefined } : undefined;
+}
+
 function XiaoyunRuntime({ workspace }: { workspace: Workspace | null }) {
   const container = useRef<HTMLDivElement>(null);
   const mount = useRef<HTMLDivElement | null>(null);
@@ -117,6 +132,8 @@ function XiaoyunRuntime({ workspace }: { workspace: Workspace | null }) {
   const [openDashboard, setOpenDashboard] = useState<Extract<XiaoyunBusinessResult, { kind: "chart" }>>();
   const [mechanism, setMechanism] = useState<Mechanism>();
   const [mechanismOpen, setMechanismOpen] = useState(false);
+  const [evidence, setEvidence] = useState<Evidence[]>([]);
+  const [activeEvidence, setActiveEvidence] = useState<Evidence>();
   const [forecasts, setForecasts] = useState<Forecasts>({});
   const [pendingForecast, setPendingForecast] = useState<Topic>();
   const [forecastNotice, setForecastNotice] = useState<{ topic: Topic; message: string }>();
@@ -161,6 +178,28 @@ function XiaoyunRuntime({ workspace }: { workspace: Workspace | null }) {
     }
     return forecastOverviewSchema.parse(payload);
   }, []);
+
+  async function download(reference: ExportReference, signal: AbortSignal) {
+    const scope = context.current.sessions?.[reference.topic];
+    if (!scope) throw new Error("此结果已不在当前项目里。");
+    const response = await fetch("/api/xiaoyun/export", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Data-Project-Key": scope.project_key,
+        ...(token.current ? { Authorization: `Bearer ${token.current}` } : {}),
+      },
+      body: JSON.stringify({ ...reference, projectId: scope.project_id }), signal,
+    });
+    if (response.status === 401) setRequiresToken(true);
+    if (!response.ok) throw new Error("暂时无法下载此项目结果。");
+    const url = URL.createObjectURL(await response.blob());
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `opengridworks-${reference.id}.${reference.format}`;
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  }
 
   function runForecast(message: string) {
     const assistant = voice.current;
@@ -238,11 +277,12 @@ function XiaoyunRuntime({ workspace }: { workspace: Workspace | null }) {
           } : undefined,
           async submit(message, _snapshot, signal) {
             signal.throwIfAborted();
-            const activeView = detectSiteView(window.location.pathname, window.location.search);
-            const commandResult = window.location.pathname === "/workspace" && page.current.workspace?.slot.isConnected
-              && page.current.workspace.onMapCommand(message);
-            if (commandResult) return { summary: commandResult };
-
+            const { location } = window;
+            if (location.pathname === "/workspace" && page.current.workspace?.slot.isConnected) {
+              page.current.workspace.captureView();
+            }
+            const activePage = readCurrentPage();
+            const activeView = activePage?.view;
             const activeTopic = viewTopic(activeView) ?? context.current.lastTopic ?? "power";
             const pending = forecastRequest.current;
             const fromSidebar = pending?.topic === activeTopic && pending.message === message;
@@ -257,7 +297,7 @@ function XiaoyunRuntime({ workspace }: { workspace: Workspace | null }) {
                 "Content-Type": "application/json",
                 ...(token.current ? { Authorization: `Bearer ${token.current}` } : {}),
               },
-              body: JSON.stringify({ requestId: id, message, topic: activeTopic, activeView, context: context.current, selectedChart: chart }),
+              body: JSON.stringify({ requestId: id, message, topic: activeTopic, activeView, activePage, context: context.current, selectedChart: chart }),
               signal,
             });
             const reply: XiaoyunReply & { error?: string } = await response.json();
@@ -272,7 +312,15 @@ function XiaoyunRuntime({ workspace }: { workspace: Workspace | null }) {
             }
             retry.current = undefined;
 
+            const retrieved = reply.evidence?.flatMap(item => {
+              const parsed = evidenceSchema.safeParse(item).data;
+              return parsed ? [parsed] : [];
+            });
+            if (retrieved) setEvidence(retrieved);
+            const opened = evidenceSchema.safeParse(reply.openedEvidence).data;
+            if (opened) setActiveEvidence(opened);
             const updated = { ...context.current };
+            if (retrieved) updated.evidenceIds = retrieved.map(item => item.id);
             if (reply.threadId) updated.threadId = reply.threadId;
             if (reply.session) updated.sessions = { ...updated.sessions, [reply.session.topic]: reply.session.scope };
             if (reply.lastTopic) updated.lastTopic = reply.lastTopic;
@@ -320,6 +368,51 @@ function XiaoyunRuntime({ workspace }: { workspace: Workspace | null }) {
               setSelectedChartId(undefined);
             }
             let summary = reply.summary;
+            if (reply.pageChange) {
+              const change = pageChangeSchema.safeParse(reply.pageChange).data;
+              const target = change && pageLocation(change.page);
+              const current = window.location;
+              const confirm = readCurrentPage();
+              const expected = change?.expected && pageLocation(change.expected)?.href;
+              if (change && target && confirm?.view === activeView && (!expected || confirm && pageLocation(confirm)?.href === expected)) {
+                const next = new URL(target.href, current.href);
+                if (next.pathname === current.pathname) {
+                  if (next.href !== current.href) {
+                    window.history.pushState(null, "", target.href);
+                    window.dispatchEvent(new PopStateEvent("popstate"));
+                  }
+                  const observed = readActivePage(current.pathname, current.search, current.hash);
+                  summary = summary.replace("正在应用页面设置。", observed && pageLocation(observed)?.href === target.href
+                    ? `已应用${change.status}。` : "页面设置暂未生效。");
+                } else {
+                  page.current.router.push(target.href);
+                  const deadline = performance.now() + 3_000;
+                  let applied = false;
+                  while (!applied && performance.now() < deadline && !signal.aborted) {
+                    await new Promise(resolve => window.setTimeout(resolve, 50));
+                    const observed = readCurrentPage();
+                    applied = Boolean(observed && pageLocation(observed)?.href === target.href);
+                  }
+                  signal.throwIfAborted();
+                  summary = summary.replace("正在应用页面设置。", applied
+                    ? `已应用${change.status}。` : `正在打开${change.status}。`);
+                }
+              } else {
+                summary = summary.replace("正在应用页面设置。", "当前页面已有变更，请重试这次设置。");
+              }
+            }
+            if (reply.export) {
+              const reference = exportReferenceSchema.safeParse(reply.export).data;
+              if (reference) {
+                try {
+                  await download(reference, signal);
+                  summary = summary.replace("正在准备下载。", "已生成文件并发起下载。");
+                } catch {
+                  signal.throwIfAborted();
+                  summary = summary.replace("正在准备下载。", "下载暂不可用，请重试。");
+                }
+              }
+            }
             if (reply.navigation) {
               const action = siteNavigationSchema.safeParse(reply.navigation).data;
               const target = action && resolveSiteNavigation(action);
@@ -369,6 +462,8 @@ function XiaoyunRuntime({ workspace }: { workspace: Workspace | null }) {
         loadOverview={loadForecastOverview} loadAnalysis={loadAnalysis} task={forecasts[workspaceTopic]}
         ready={ready} pending={pendingForecast !== undefined} onRun={runForecast}
         notice={forecastNotice?.topic === workspaceTopic ? forecastNotice.message : undefined} />, workspaceElement)}
+      <XiaoyunEvidence items={evidence} active={activeEvidence} onOpen={setActiveEvidence}
+        onClose={() => setActiveEvidence(undefined)} onDismiss={() => setEvidence([])} />
       {mechanism && <button type="button"
         className="fixed bottom-5 right-5 z-[2400] rounded-md bg-slate-950 px-3 py-2 text-sm text-white shadow-lg"
         onClick={() => setMechanismOpen(true)}>打开立体示意</button>}
