@@ -108,7 +108,7 @@ export function readWorkspaceCamera(value: string | null | undefined) {
   if (!value || !/^-?[\d.]+,-?[\d.]+,-?[\d.]+,-?[\d.]+,-?[\d.]+$/.test(value)) return null;
   const [lng, lat, zoom, pitch, bearing] = value.split(",").map(Number);
   if (![lng, lat, zoom, pitch, bearing].every(Number.isFinite) || Math.abs(lng) > 180 || Math.abs(lat) > 90
-    || zoom < 0 || zoom > 24 || pitch < 0 || pitch > 85 || Math.abs(bearing) > 360) return null;
+    || zoom < -2 || zoom > 24 || pitch < 0 || pitch > 85 || Math.abs(bearing) > 360) return null;
   return { center: [lng, lat] as [number, number], zoom, pitch, bearing };
 }
 

@@ -1,3 +1,67 @@
+:global(.og-globe-workspace.is-economy-project):has(.viewSwitcher) {
+  --og-stage-top: calc(var(--og-switcher-top) + 56px);
+}
+
+:global(.og-globe-workspace.is-economy-project):has(.viewport[data-outlook="true"]) {
+  --og-stage-footer: 55px;
+}
+
+.viewSwitcher {
+  position: absolute;
+  z-index: 47;
+  top: var(--og-switcher-top);
+  left: var(--og-stage-left);
+  right: var(--og-stage-right);
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: calc(100% - var(--og-stage-left) - var(--og-stage-right));
+  margin-inline: auto;
+}
+
+.viewSwitcher button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 4px 6px 4px 16px;
+  border: 0;
+  border-radius: 28px;
+  background: #17201fe6;
+  color: #dce4e1;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.viewSwitcher button:hover { background: #26332e; color: #fff; }
+.viewSwitcher button[aria-pressed="true"] { background: #d4fa45; color: #131d0b; }
+.viewSwitcher button:focus-visible { outline: 2px solid #d4fa45; outline-offset: 3px; }
+
+.viewIcon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #899994;
+  border-radius: 50%;
+}
+
+.viewSwitcher button[aria-pressed="true"] .viewIcon { border-color: #19231566; }
+
+.viewFooter {
+  position: absolute;
+  z-index: 44;
+  left: var(--og-stage-left);
+  right: var(--og-stage-right);
+  bottom: calc(var(--og-globe-nav-space) + var(--og-mobile-dock) + 6px);
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
 .viewport {
   position: absolute;
   inset: 0;
@@ -10,19 +74,11 @@
   background: radial-gradient(ellipse at 47% 45%, #173d393d, #0d1211 45%, #0a0e0e 73%);
 }
 
-.map {
-  position: absolute;
-  inset: 0 calc(var(--og-forecast-width) + 30px) var(--og-globe-nav-space) calc(var(--og-sidebar-width) + 30px);
-}
-
+.map { position: absolute; inset: 0; }
 .map[data-ready="false"] { visibility: hidden; }
 
-.viewport[data-outlook="true"] .map {
-  inset: 70px max(240px, 22vw) calc(var(--og-globe-nav-space) + 42px) max(140px, 15vw);
-}
-
 .viewport[data-outlook="true"] .map :global(.maplibregl-canvas) {
-  mask-image: radial-gradient(ellipse 76% 70% at 50% 50%, #000 64%, transparent 100%);
+  mask-image: radial-gradient(ellipse 88% 86% at 50% 50%, #000 72%, transparent 100%);
 }
 
 :global(.is-economy-project):has(.viewport[data-outlook="true"]) :is(:global(.og-layer-cards), :global(.og-maptype-panel)) {
@@ -31,7 +87,7 @@
 
 .mapPlaceholder {
   position: absolute;
-  inset: 0 var(--og-forecast-width) var(--og-globe-nav-space) var(--og-sidebar-width);
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -160,36 +216,30 @@
 .searchResults button:hover { background: #22312f; }
 
 .profile {
-  --profile-accent: #ffc381;
+  --scene-accent: #d4fa45;
+  --profile-accent: var(--scene-accent);
   position: absolute;
   z-index: 45;
-  top: 16px;
-  right: 16px;
+  top: var(--og-rail-top);
+  right: var(--og-gutter);
+  bottom: calc(var(--og-globe-nav-space) + 6px);
   width: var(--og-forecast-width);
-  max-height: calc(100% - var(--og-globe-nav-space) + 56px);
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
   scrollbar-color: #526366 transparent;
   padding: clamp(12px, 1.25vw, 19px);
-  border: 1px solid #26343b;
-  color: #e9f0f0;
-  background: linear-gradient(142deg, #101c23, #0a1117 65%);
+  border: 0;
+  color: #f4f7f5;
+  background: linear-gradient(90deg, #090e0d3b, #090e0dbf 30%);
   color-scheme: dark;
-  box-shadow: 0 18px 49px #03080d73;
-  border-radius: 9px;
+  box-shadow: none;
+  border-radius: 0;
   animation: profile-reveal 200ms ease both;
 }
 
-.profileHeader {
-  display: grid;
-  gap: 5px;
-  padding-block: 2px 12px;
-}
-
-.profileHeader p { color: #a7bbb8; font-size: 11px; letter-spacing: .03em; }
-.profileHeader h2 { color: #f4f4ed; font-size: clamp(24px, 2.6vw, 40px); line-height: 1.07; letter-spacing: -0.06em; font-weight: 620; }
-.profileHeader span { color: var(--profile-accent); font-size: 12px; }
+.profile > section > div:first-child { padding-right: 38px; }
+.profile > header { padding-inline: 0 36px; }
 
 .profileIndicators {
   display: grid;
@@ -204,15 +254,15 @@
   gap: 7px;
   min-height: 35px;
   padding: 5px 8px;
-  border-left: 1px solid #41514e;
-  border-radius: 3px;
+  border: 0;
+  border-radius: 5px;
   color: #ccd9d8;
-  background: #142129;
+  background: #182321;
   text-align: left;
   transition: color 160ms ease, background-color 160ms ease;
 }
 
-.profileIndicators button[aria-pressed="true"] { border-color: var(--profile-accent); background: #322822; color: #fff0de; }
+.profileIndicators button[aria-pressed="true"] { background: #21322a; color: #edffc2; }
 .profileIndicators button:hover { color: #fff; background: #2b332f; }
 .profileIndicators span { font-size: 11px; line-height: 1.3; }
 .profileIndicators strong { color: var(--profile-accent); font-size: 13px; font-weight: 570; white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -242,25 +292,6 @@
 .history tr[data-active="true"] { color: var(--profile-accent); background: #293334; }
 .history summary { width: fit-content; min-height: 29px; padding-top: 7px; color: #c9d6d1; font-size: 12px; cursor: pointer; }
 
-.profileRanking button {
-  display: grid;
-  grid-template-columns: 20px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 5px;
-  width: 100%;
-  min-height: 31px;
-  padding-inline: 5px;
-  border-bottom: 1px solid #223139;
-  text-align: left;
-  font-size: 11px;
-  transition: color 160ms ease, background-color 160ms ease;
-}
-
-.profileRanking button:hover,
-.profileRanking button[aria-pressed="true"] { color: var(--profile-accent); background: #233332; }
-.profileRanking button span:first-of-type { color: #8aabaa; font-size: 10px; }
-.profileRanking button strong { color: #d7e2e1; white-space: nowrap; font-weight: 520; font-variant-numeric: tabular-nums; }
-
 .profileLinks {
   display: grid;
   gap: 6px;
@@ -282,39 +313,24 @@
 .profileSource { margin-top: 5px; color: #a9bfbc; font-size: 10px; }
 .profileLinks a:hover, .profileSource:hover, .outlookLinks a:hover { text-decoration: underline; color: #fff; }
 
-.outlookAction, .sceneBack {
-  display: inline-flex;
+.textButton { min-height: 32px; margin-left: 5px; color: #d4fa45; text-decoration: underline; }
+
+.profileTrigger, .close {
   align-items: center;
-  justify-content: space-between;
-  min-height: 39px;
-  gap: 8px;
-  padding: 5px 9px;
-  border: 1px solid #965f4069;
-  border-radius: 5px;
-  color: #ffe4c3;
-  background: #472f24;
-  font-size: 12px;
-  font-weight: 570;
-  text-align: left;
-  transition: color 160ms ease, background-color 160ms ease;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding-inline: 9px;
+  border-radius: 6px;
+  color: #dce4e1;
+  background: #17201f;
+  font-size: 13px;
 }
 
-.outlookAction:hover { color: #20160d; background: #ffc381; }
-.textButton { min-height: 32px; margin-left: 5px; color: #f5d19c; text-decoration: underline; }
-
-.profileTrigger, .close, .scrim { display: none; }
-
-.sceneControls {
-  display: flex;
-  gap: 8px 12px;
-  align-items: end;
-  flex-wrap: wrap;
-}
-
-.sceneControls > :global(.og-filter-field) { min-width: 115px; }
-.sceneControls :global(.og-filter-select) select { border: 1px solid #63726b75; border-radius: 5px; }
-.sceneBack { min-height: 35px; border-color: #67756a; color: #e4ede6; background: #111c19; }
-.sceneBack:hover { color: #121a15; background: #d4fa45; }
+.profileTrigger { display: none; position: absolute; z-index: 47; top: var(--og-rail-top); right: var(--og-gutter); }
+.close { display: flex; position: absolute; top: 9px; right: 12px; width: 36px; }
+:global(.og-economy-profile-region[data-dock="closed"]) .profileTrigger { display: inline-flex; }
+:global(.og-economy-profile-region[data-dock="closed"]) .profile { display: none; }
 
 .outlookLegend {
   display: grid;
@@ -337,7 +353,7 @@
 }
 
 .profile :is(a, button):focus-visible, .profileTrigger:focus-visible {
-  outline: 2px solid #ffc381;
+  outline: 2px solid #d4fa45;
   outline-offset: -2px;
 }
 
@@ -347,67 +363,28 @@
 }
 
 @media (max-width: 900px) {
-  .map { inset: 40px 0 var(--og-globe-nav-space); }
-  .viewport[data-outlook="true"] .map { inset: 65px 182px calc(var(--og-globe-nav-space) + 35px) 118px; }
-  .mapPlaceholder { inset-inline: 0; }
-
-  .profileTrigger, .close {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    min-height: 44px;
-    padding-inline: 10px;
-    color: #ffe1bd;
-    background: #1d2526;
-    font-size: 13px;
-  }
-
-  .profileTrigger {
-    position: absolute;
-    z-index: 47;
-    top: max(12px, env(safe-area-inset-top));
-    right: 12px;
-  }
-
+  .profileTrigger { display: inline-flex; min-height: 42px; top: var(--og-workspace-top); }
+  :global(.og-economy-profile-region[data-dock="open"]) .profileTrigger { visibility: hidden; }
   .profile {
-    inset: auto 0 0;
-    z-index: 77;
-    width: min(100%, 680px);
-    max-height: min(74svh, 700px);
-    margin-inline: auto;
-    padding: 14px 16px max(16px, env(safe-area-inset-bottom));
-    border-radius: 14px 14px 0 0;
+    inset: auto var(--og-gutter) var(--og-globe-nav-space);
+    width: auto;
+    height: var(--og-mobile-dock);
+    padding: 10px 12px;
   }
 
-  .profile[data-open="false"] { display: none; }
-
-  .close {
-    position: absolute;
-    top: 9px;
-    right: 12px;
-    width: 44px;
-    border-radius: 5px;
-  }
-
-  .scrim { display: block; position: absolute; z-index: 76; inset: 0; background: #030811a3; }
-
-  .profileHeader { padding-right: 43px; }
-  .profileRanking button, .profileIndicators button, .searchResults button { min-height: 44px; }
+  :global(.og-economy-profile-region:not([data-dock="open"])) .profile { display: none; }
+  .profile { background: #0b1111ed; }
+  .profileIndicators button, .searchResults button { min-height: 44px; }
 }
 
 @media (max-width: 660px) {
-  .viewport[data-outlook="true"] .map {
-    inset: 112px 7px calc(var(--og-globe-nav-space) + 22svh + 55px);
-  }
-  .sceneControls { gap: 5px 7px; }
-  .sceneControls > :global(.og-filter-field) { min-width: 83px; }
-  .sceneBack { min-height: 42px; }
-  .sceneControls :global(.og-filter-select) select { min-height: 42px; }
+  .viewSwitcher { gap: 6px; }
+  .viewSwitcher button { padding-left: 12px; font-size: 12px; gap: 5px; }
+  .viewIcon { width: 30px; height: 30px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .viewport, .profile, .profile *, .sceneBack, .outlookAction {
+  .viewport, .profile, .profile *, .viewSwitcher button {
     animation: none;
     transition: none;
   }

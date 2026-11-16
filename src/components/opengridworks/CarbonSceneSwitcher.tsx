@@ -15,7 +15,7 @@ export function CarbonSceneSwitcher({ projection, onChange }: {
   onChange: (projection: Projection) => void;
 }) {
   return (
-    <nav aria-label="碳排放视图" className={`${styles.switcher} ${styles.carbon} ${projection === "map" ? styles.atlas : ""}`}>
+    <nav aria-label="碳排放视图" className={`${styles.switcher} ${styles.carbon}`}>
       <div className={styles.cards}>
         {scenes.map(scene => (
           <button key={scene.projection} className={styles.card} type="button"

@@ -1,9 +1,10 @@
 .switcher {
   position: absolute;
   z-index: 47;
-  inset: max(10px, env(safe-area-inset-top)) calc(var(--og-forecast-width) + 29px) auto calc(var(--og-sidebar-width) + 29px);
-  width: min(100%, 490px);
-  max-width: calc(100% - var(--og-sidebar-width) - var(--og-forecast-width) - 58px);
+  top: var(--og-switcher-top);
+  left: var(--og-stage-left);
+  right: var(--og-switcher-right);
+  width: min(490px, calc(100% - var(--og-stage-left) - var(--og-switcher-right)));
   margin-inline: auto;
 }
 
@@ -11,7 +12,7 @@
   display: grid;
   grid-template-columns: 1fr 1.3fr 1fr;
   align-items: center;
-  height: var(--og-scene-card-height, var(--og-weather-card-height));
+  height: var(--og-scene-card-height);
   isolation: isolate;
 }
 
@@ -61,18 +62,11 @@
 }
 .positions button:is(:hover, [aria-pressed="true"])::after { background: #78dedb; }
 
-@media (max-width: 900px) {
-  .switcher {
-    inset: calc(max(12px, env(safe-area-inset-top)) + 45px) 10px auto;
-    max-width: calc(100% - 20px);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .card { transition: none; }
 }
 
-.carbon { width: min(100%, 286px); }
+.carbon { width: min(286px, calc(100% - var(--og-stage-left) - var(--og-switcher-right))); }
 .carbon .cards {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
@@ -83,7 +77,165 @@
   background: #243928;
 }
 .carbon .card[data-planar="true"] img { object-fit: cover; }
-.atlas {
-  inset: var(--og-carbon-switcher-top) 10px auto;
-  max-width: calc(100% - 20px);
+
+/* Reserve space for the elevated weather views without moving the other scene switchers. */
+:global(.og-globe-workspace.is-earth-project):has(.weather) {
+  --og-scene-card-height: clamp(94px, 13svh, 118px);
+  --og-stage-top: calc(var(--og-switcher-top) + var(--og-scene-card-height) + 28px);
+}
+
+/* Weather views project like overlapping glass screens instead of outlined cards. */
+.weather {
+  width: min(610px, calc(100% - var(--og-stage-left) - var(--og-switcher-right)));
+}
+
+.weather .cards {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.38fr) minmax(0, 1fr);
+  align-items: end;
+}
+
+.weather .card {
+  height: 82%;
+  border: 0;
+  border-radius: 22px 22px 26px 26px;
+  background: radial-gradient(ellipse 85% 75% at 50% 106%, #2887d175, transparent 85%),
+    linear-gradient(158deg, #234778d6 0%, #102b4bbf 48%, #17446ebd 100%);
+  color: #edf7ff;
+  font-size: clamp(11px, 1vw, 14px);
+  font-weight: 600;
+  opacity: .86;
+  box-shadow: inset 0 12px 24px #81caff13, inset 0 -13px 22px #61bcf63c,
+    0 13px 22px #0107119c;
+  transition: height 200ms ease, opacity 200ms ease, filter 200ms ease,
+    transform 200ms ease, box-shadow 200ms ease;
+}
+
+.weather .card:first-child {
+  margin-right: -16px;
+  transform: perspective(700px) rotateY(-7deg);
+}
+
+.weather .card:last-child {
+  margin-left: -16px;
+  transform: perspective(700px) rotateY(7deg);
+}
+
+.weather .card::before,
+.weather .card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.weather .card::before {
+  z-index: 1;
+  background: linear-gradient(166deg, #b1dcff1f, transparent 39%),
+    linear-gradient(0deg, #10385fb8, transparent 48%);
+}
+
+.weather .card::after {
+  z-index: 2;
+  inset: auto -12% -46% -12%;
+  height: 92%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 5%, #62c8fa50, #1877ce2e 47%, transparent 72%);
+  box-shadow: 0 -9px 17px #75ceff25;
+}
+
+.weather .card[aria-pressed="true"] {
+  z-index: 2;
+  height: 100%;
+  border: 0;
+  border-radius: 27px 27px 30px 30px;
+  background: radial-gradient(ellipse 80% 72% at 50% 111%, #3adbf6bd, transparent 90%),
+    linear-gradient(157deg, #2e6eb5e8, #0e3564e8 51%, #227ec2e8);
+  color: #fff;
+  font-weight: 750;
+  opacity: 1;
+  transform: translateY(-2px);
+  box-shadow: inset 0 16px 30px #9ee5ff30, inset 0 -14px 22px #62eaff94,
+    0 6px 20px #21baf36b, 0 18px 28px #010714bf;
+}
+
+.weather .card[aria-pressed="true"]::after {
+  background: radial-gradient(ellipse at 50% 5%, #7feaffb8, #219eef66 48%, transparent 73%);
+  box-shadow: 0 -12px 22px #7addff6b;
+}
+
+.weather .card:hover {
+  border: 0;
+  opacity: 1;
+  filter: brightness(1.18);
+}
+
+.weather .card:first-child:hover { transform: perspective(700px) rotateY(-7deg) translateY(-3px); }
+.weather .card:last-child:hover { transform: perspective(700px) rotateY(7deg) translateY(-3px); }
+.weather .card[aria-pressed="true"]:hover { transform: translateY(-2px); }
+
+.weather .card img {
+  position: absolute;
+  top: -5%;
+  left: 0;
+  width: 100%;
+  height: 90%;
+  object-fit: cover;
+  mix-blend-mode: screen;
+  mask-image: linear-gradient(to bottom, #000 0%, #000 61%, transparent 100%);
+}
+
+.weather .card[data-globe="true"] img {
+  height: 108%;
+  padding: 0;
+  object-fit: contain;
+  mask-image: radial-gradient(ellipse 46% 51% at 50% 43%, #000 68%, transparent 100%);
+  filter: drop-shadow(0 0 10px #6bc7ff80);
+}
+
+.weather .card span {
+  position: absolute;
+  z-index: 3;
+  right: 0;
+  bottom: 10%;
+  left: 0;
+  padding: 0 5px;
+  font-size: inherit;
+  line-height: 1.15;
+  letter-spacing: .06em;
+  text-shadow: 0 2px 8px #00152b, 0 0 15px #00152b;
+}
+
+.weather .card[aria-pressed="true"] span { bottom: 9%; font-size: 1.15em; }
+
+.weather .positions { gap: 7px; margin-top: 9px; }
+.weather .positions button { width: 28px; height: 16px; }
+.weather .positions button::after {
+  width: 20px;
+  height: 3px;
+  background: #7395b789;
+  transition: background-color 200ms ease, box-shadow 200ms ease;
+}
+.weather .positions button[aria-pressed="true"]::after {
+  background: #46ecf6;
+  box-shadow: 0 0 10px #35e8f5a8;
+}
+
+@media (max-width: 900px) {
+  :global(.og-globe-workspace.is-earth-project):has(.weather) {
+    --og-scene-card-height: clamp(70px, 11svh, 86px);
+  }
+}
+
+@media (max-width: 600px) {
+  .weather .card { border-radius: 15px 15px 18px 18px; }
+  .weather .card[aria-pressed="true"] { border-radius: 18px 18px 20px 20px; }
+  .weather .card:first-child { margin-right: -10px; }
+  .weather .card:last-child { margin-left: -10px; }
+  .weather .card span { bottom: 10%; font-size: 10px; letter-spacing: 0; }
+  .weather .card[aria-pressed="true"] span { bottom: 9%; font-size: 12px; }
+  .weather .positions { margin-top: 5px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .weather .card, .weather .positions button::after { transition: none; }
 }

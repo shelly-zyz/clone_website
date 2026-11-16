@@ -58,9 +58,10 @@ export function ScenarioPeriods({ periods, selected, onSelect, label = "目标�
 }
 
 export function ScenarioRanking({
-  title, subtitle, label, value, rows, selected, onSelect, formatValue = String, children,
+  title, showTitle = true, subtitle, label, value, rows, selected, onSelect, formatValue = String, children,
 }: {
   title: string;
+  showTitle?: boolean;
   subtitle?: string;
   label?: string;
   value?: string;
@@ -75,7 +76,7 @@ export function ScenarioRanking({
     <section className={styles.ranking} aria-label={title}>
       <div className={styles.rankingIntro}>
         {subtitle && <p>{subtitle}</p>}
-        <h2>{title}</h2>
+        {showTitle && <h2>{title}</h2>}
         {label !== undefined && <p>{label}</p>}
         {value !== undefined && <strong className={styles.total} key={value}>{value}</strong>}
       </div>

@@ -16,7 +16,7 @@ export function WeatherSceneSwitcher({ scene, onChange }: { scene: WeatherScene;
   const next = scenes[(index + 1) % scenes.length];
 
   return (
-    <nav aria-label="气象可视化样式" className={styles.switcher} onKeyDown={event => {
+    <nav aria-label="气象可视化样式" className={`${styles.switcher} ${styles.weather}`} onKeyDown={event => {
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
       event.preventDefault();
       onChange(event.key === "ArrowLeft" ? previous : next);

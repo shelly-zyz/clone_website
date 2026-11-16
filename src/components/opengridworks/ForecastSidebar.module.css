@@ -10,17 +10,16 @@
 .panel {
   position: absolute;
   z-index: 45;
-  top: 64px;
-  right: 16px;
+  inset: var(--og-rail-top) var(--og-gutter) max(var(--og-globe-nav-space), calc(var(--og-assistant-bottom) + 106px)) auto;
   width: var(--og-forecast-width);
-  max-height: calc(100% - var(--og-globe-nav-space) - 72px);
   display: flex;
   flex-direction: column;
   color: #edf0f2;
-  background: #080b0e;
+  background: linear-gradient(150deg, #111b24, #090f17 65%);
+  border-radius: 8px;
 }
 
-.region:is([data-topic="weather"], [data-topic="economy"]) .panel { top: 16px; }
+.region[data-dock="closed"] .panel { display: none; }
 
 .header {
   container-type: inline-size;
@@ -116,39 +115,47 @@
 .values dt { color: #aebbc1; font-size: 11px; }
 .values dd { color: #f1f5f7; font-size: 12px; font-variant-numeric: tabular-nums; }
 
-.trigger, .close { display: none; }
+.trigger, .close {
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 9px;
+  border-radius: 6px;
+  color: var(--forecast-accent);
+  background: #16212a;
+  font-size: 13px;
+}
+
+.trigger {
+  display: none;
+  position: absolute;
+  z-index: 46;
+  top: var(--og-rail-top);
+  right: var(--og-gutter);
+}
+
+.region[data-dock="closed"] .trigger, .close { display: flex; }
+.close { flex: none; margin-left: auto; }
+.close:hover, .trigger:hover { background: #223445; }
+.mobileClose { display: none; }
 
 @media (max-width: 900px) {
-  .trigger, .close {
+  .region .trigger {
     display: flex;
-    min-height: 44px;
-    align-items: center;
-    gap: 6px;
-    padding: 0 10px;
-    color: var(--forecast-accent);
-    background: #141b20;
-    font-size: 13px;
+    top: var(--og-workspace-top);
+    min-height: 42px;
   }
-
-  .trigger {
-    position: absolute;
-    z-index: 46;
-    top: max(12px, env(safe-area-inset-top));
-    right: 12px;
+  .region[data-dock="open"] .trigger { visibility: hidden; }
+  .desktopClose { display: none; }
+  .mobileClose { display: block; }
+  .header { padding: 7px 10px 5px; }
+  .thumbnail { width: 38px; }
+  .header h2 { font-size: 18px; }
+  .panel {
+    inset: auto var(--og-gutter) var(--og-globe-nav-space);
+    width: auto;
+    height: var(--og-mobile-dock);
   }
-
-  .header h2 { font-size: clamp(17px, min(12cqi, 6.4vw), 26px); }
-
-  .close { flex: none; justify-content: center; width: 44px; margin-left: auto; }
-
-  .region .panel,
-  .region:is([data-topic="weather"], [data-topic="economy"]) .panel {
-    inset: 0 0 0 auto;
-    z-index: 77;
-    width: min(310px, calc(100% - 44px));
-    max-height: none;
-    padding-block: env(safe-area-inset-top) env(safe-area-inset-bottom);
-  }
-
-  .panel[data-open="false"] { display: none; }
+  .region:not([data-dock="open"]) .panel { display: none; }
 }
