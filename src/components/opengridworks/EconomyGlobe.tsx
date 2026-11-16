@@ -47,7 +47,8 @@ function mapLayers(values: EconomyValue[], metric: EconomyMetric, outlook: boole
   return { fill, points };
 }
 
-export function EconomyGlobe({ basemap, onBasemapError, values, metric, outlook, selected, country, camera, cameraRevision = 0, onSelect, onReady }: {
+export function EconomyGlobe({ active, basemap, onBasemapError, values, metric, outlook, selected, country, camera, cameraRevision = 0, onSelect, onReady }: {
+  active: boolean;
   basemap: MapTheme;
   onBasemapError: () => void;
   values: EconomyValue[];
@@ -163,6 +164,10 @@ export function EconomyGlobe({ basemap, onBasemapError, values, metric, outlook,
   }, [onReady, status]);
 
   useEffect(() => {
+    if (!active) map.current?.stop();
+  }, [active]);
+
+  useEffect(() => {
     const view = map.current;
     if (!view || status !== "ready") return;
     applyRasterBasemap(view, basemap, "countries");
@@ -204,7 +209,7 @@ export function EconomyGlobe({ basemap, onBasemapError, values, metric, outlook,
 
   useEffect(() => {
     const view = map.current;
-    if (!view || status !== "ready") return;
+    if (!view || !active || status !== "ready") return;
     view.setFilter("selected-country", ["==", ["get", "ADM0_A3"], selected?.mapId ?? ""]);
     if (country && !selected) return;
     if (cameraRevision !== appliedCameraRevision.current) {
@@ -224,7 +229,7 @@ export function EconomyGlobe({ basemap, onBasemapError, values, metric, outlook,
     const zoom = overviewZoom(view.getContainer(), "globe", center[1]) + (selected ? 0.13 : 0);
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     view.easeTo({ center, zoom, duration: reducedMotion ? 0 : 360 });
-  }, [camera, cameraRevision, country, selected, status]);
+  }, [active, camera, cameraRevision, country, selected, status]);
 
   useEffect(() => {
     const view = map.current;

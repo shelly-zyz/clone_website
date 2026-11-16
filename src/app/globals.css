@@ -1742,7 +1742,12 @@
 }
 
 .og-weather-original[hidden],
+.og-globe-stage[hidden],
+.og-workspace-map-layer[hidden],
+.og-retained-economy[hidden],
 .og-app-shell:has(.og-weather-replay-stage) .og-forecast-region[data-topic="weather"] { display: none; }
+
+.og-workspace-map-layer { position: absolute; inset: 0; }
 
 .og-weather-replay-stage {
   border: 1px solid #263b4f;
@@ -3604,7 +3609,8 @@
   background: var(--og-visual-background);
 }
 
-.og-globe-workspace:where(:has(> .og-forecast-region:not([data-dock="closed"]), .og-economy-profile-region:not([data-dock="closed"]))) {
+.og-globe-workspace:where(:has(> .og-forecast-region:not([data-dock="closed"])),
+  .is-economy-project:has(.og-economy-profile-region:not([data-dock="closed"]))) {
   --og-stage-right: calc(var(--og-forecast-width) + 2 * var(--og-gutter));
 }
 
@@ -3731,8 +3737,8 @@
   }
 
   .og-globe-workspace:not(.is-cinematic, .is-power-statistics:not(.is-power-forecast), :has(.og-weather-replay-stage)):has(> .og-forecast-region[data-dock="open"]),
-  .og-globe-workspace:has(.og-economy-profile-region[data-dock="open"]),
-  .og-globe-workspace:not(.is-cinematic):has(.og-workspace-sidebar[data-open="true"]) {
+  .og-globe-workspace.is-economy-project:has(.og-economy-profile-region[data-dock="open"], .og-workspace-sidebar[data-open="true"]),
+  .og-globe-workspace:not(.is-cinematic):has(> .og-workspace-sidebar[data-open="true"]) {
     --og-mobile-dock: var(--og-dock-size);
   }
 
@@ -3747,7 +3753,8 @@
     animation: og-reveal-bottom-dock var(--og-stage-transition);
   }
   .og-globe-workspace .og-workspace-scrim { display: none; }
-  .og-globe-workspace:has(.og-workspace-sidebar[data-open="true"]) :is(.og-forecast-region, .og-economy-profile-region) {
+  .og-globe-workspace:has(> .og-workspace-sidebar[data-open="true"]) > .og-forecast-region,
+  .og-globe-workspace.is-economy-project:has(.og-workspace-sidebar[data-open="true"]) .og-economy-profile-region {
     visibility: hidden;
   }
 

@@ -43,6 +43,7 @@ const datePattern = /^\d{4}-\d{2}-\d{2}$/;
 const sectorPattern = /^[A-Za-z]+$/;
 let catalogRequest: ReturnType<typeof readCatalog> | undefined;
 let catalogExpiresAt = 0;
+const frameCache = new Map<string, { request: Promise<CarbonFrameRow | undefined>; expiresAt: number }>();
 
 function loadCatalog() {
   if (!catalogRequest || Date.now() >= catalogExpiresAt) {
@@ -205,7 +206,7 @@ function frameMetadata(row: CarbonManifestRow) {
   };
 }
 
-async function readFrame(observedOn: string, sector: string, raw: boolean, includeMetadata: boolean) {
+async function selectFrame(observedOn: string, sector: string) {
   const result = await queryDatabase<CarbonFrameRow>(
     `SELECT
        observed_on::text,
@@ -229,7 +230,34 @@ async function readFrame(observedOn: string, sector: string, raw: boolean, inclu
      WHERE observed_on = $1::date AND sector = $2`,
     [observedOn, sector],
   );
-  const frame = result.rows[0];
+  return result.rows[0];
+}
+
+function loadFrame(observedOn: string, sector: string) {
+  const key = sector + "/" + observedOn;
+  const cached = frameCache.get(key);
+  if (cached && Date.now() < cached.expiresAt) return cached.request;
+
+  const entry = { request: selectFrame(observedOn, sector), expiresAt: Infinity };
+  entry.request = entry.request.then(frame => {
+    if (frame?.frame_data.length) entry.expiresAt = Date.now() + 120_000;
+    else if (frameCache.get(key) === entry) frameCache.delete(key);
+    return frame;
+  }).catch(error => {
+    if (frameCache.get(key) === entry) frameCache.delete(key);
+    throw error;
+  });
+  frameCache.delete(key);
+  frameCache.set(key, entry);
+  if (frameCache.size > 4) {
+    const oldest = frameCache.keys().next().value;
+    if (oldest !== undefined) frameCache.delete(oldest);
+  }
+  return entry.request;
+}
+
+async function readFrame(observedOn: string, sector: string, raw: boolean, includeMetadata: boolean) {
+  const frame = await loadFrame(observedOn, sector);
   if (!frame?.frame_data.length) {
     return Response.json({ error: "Carbon frame not found." }, { status: 404 });
   }

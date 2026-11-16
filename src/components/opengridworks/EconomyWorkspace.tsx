@@ -22,21 +22,40 @@ const views = [
 ] as const;
 const metricOptions = Object.entries(economyMetrics).map(([value, { label }]) => ({ value, label }));
 const rankFormat = new Intl.NumberFormat("zh-CN");
+const wdiPath = "/data/economy/wdi.json";
+const gepPath = "/data/economy/gep.json";
+const snapshotRequests = new Map<string, Promise<unknown>>();
+
+function loadSnapshot<T>(path: string) {
+  let request = snapshotRequests.get(path);
+  if (!request) {
+    request = fetch(path, { signal: AbortSignal.timeout(12_000) }).then(response => {
+      if (!response.ok) throw new Error("Snapshot unavailable");
+      return response.json();
+    }).catch(error => {
+      snapshotRequests.delete(path);
+      throw error;
+    });
+    snapshotRequests.set(path, request);
+  }
+  return request as Promise<T>;
+}
+
+export function loadEconomySnapshots() {
+  return Promise.all([loadSnapshot<EconomySnapshot>(wdiPath), loadSnapshot<EconomicOutlook>(gepPath)]);
+}
 
 function useSnapshot<T>(path: string) {
   const [data, setData] = useState<T | null>();
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    const controller = new AbortController();
-    void fetch(path, { signal: controller.signal }).then(async (response) => {
-      if (!response.ok) throw new Error("Snapshot unavailable");
-      return response.json() as Promise<T>;
-    }).then((result) => {
-      if (!controller.signal.aborted) setData(result);
+    let current = true;
+    void loadSnapshot<T>(path).then(result => {
+      if (current) setData(result);
     }).catch(() => {
-      if (!controller.signal.aborted) setData(null);
+      if (current) setData(null);
     });
-    return () => controller.abort();
+    return () => { current = false; };
   }, [attempt, path]);
   return { data, retry: () => { setData(undefined); setAttempt(value => value + 1); } };
 }
@@ -196,11 +215,11 @@ function EconomyProfile({
   );
 }
 
-export function EconomyWorkspace({ basemap, onBasemapError, initialContext, onReady }: {
-  basemap: MapTheme; onBasemapError: () => void; initialContext?: WorkspaceContext; onReady?: () => void;
+export function EconomyWorkspace({ active, basemap, onBasemapError, initialContext, onReady }: {
+  active: boolean; basemap: MapTheme; onBasemapError: () => void; initialContext?: WorkspaceContext; onReady?: () => void;
 }) {
-  const { data: snapshot, retry: retrySnapshot } = useSnapshot<EconomySnapshot>("/data/economy/wdi.json");
-  const { data: outlook, retry: retryOutlook } = useSnapshot<EconomicOutlook>("/data/economy/gep.json");
+  const { data: snapshot, retry: retrySnapshot } = useSnapshot<EconomySnapshot>(wdiPath);
+  const { data: outlook, retry: retryOutlook } = useSnapshot<EconomicOutlook>(gepPath);
   const [countryCode, setCountryCode] = useState(initialContext?.country ?? "");
   const [camera, setCamera] = useState(initialContext?.camera);
   const [cameraRevision, setCameraRevision] = useState(0);
@@ -211,23 +230,31 @@ export function EconomyWorkspace({ basemap, onBasemapError, initialContext, onRe
   const [profileOpen, setProfileOpen] = useState<boolean>();
   const profileTrigger = useRef<HTMLButtonElement>(null);
   const viewId = useId();
+  const [wasActive, setWasActive] = useState(active);
+
+  const restoreContext = useCallback((context: WorkspaceContext) => {
+    setCountryCode(context.country ?? "");
+    setCamera(context.camera);
+    setCameraRevision(value => value + 1);
+    setYearInput(context.year);
+    setMetric(context.metric ?? "gdp");
+    setOutlookActive(context.scene === "outlook");
+    setTargetInput(context.targetYear);
+  }, []);
+  if (wasActive !== active) {
+    setWasActive(active);
+    if (active) restoreContext(initialContext ?? {});
+  }
 
   useEffect(() => {
     const restore = () => {
       const params = new URLSearchParams(window.location.search);
       if (window.location.pathname !== "/workspace" || params.get("topic") !== "economy") return;
-      const context = readWorkspaceContext(params);
-      setCountryCode(context.country ?? "");
-      setCamera(context.camera);
-      setCameraRevision(value => value + 1);
-      setYearInput(context.year);
-      setMetric(context.metric ?? "gdp");
-      setOutlookActive(context.scene === "outlook");
-      setTargetInput(context.targetYear);
+      restoreContext(readWorkspaceContext(params));
     };
     window.addEventListener("popstate", restore);
     return () => window.removeEventListener("popstate", restore);
-  }, []);
+  }, [restoreContext]);
 
   const countryOptions = useMemo(() => {
     const list = snapshot?.countries.map(({ code, label }) => ({ value: code, label })) ?? [];
@@ -313,7 +340,7 @@ export function EconomyWorkspace({ basemap, onBasemapError, initialContext, onRe
     ?? [{ value: String(year), label: `${year} 年` }];
 
   const globe = (
-    <EconomyGlobe basemap={basemap} onBasemapError={onBasemapError} values={outlookActive ? forecastValues : values}
+    <EconomyGlobe active={active} basemap={basemap} onBasemapError={onBasemapError} values={outlookActive ? forecastValues : values}
       metric={metric} outlook={outlookActive} selected={selected} country={country} camera={camera} cameraRevision={cameraRevision}
       onSelect={pickCountry} onReady={onReady} />
   );
@@ -334,7 +361,8 @@ export function EconomyWorkspace({ basemap, onBasemapError, initialContext, onRe
           </button>
         ))}
       </nav>
-      <div id={viewId} className="og-globe-stage" data-view={outlookActive ? "outlook" : "history"}>{globe}</div>
+      <div id={viewId} className="og-globe-stage" data-economy-data-ready={Boolean(snapshot && outlook)}
+        data-view={outlookActive ? "outlook" : "history"}>{globe}</div>
       <WorkspaceSidebar topic="economy" summary={outlookActive ? "世界银行 GEP · 实际 GDP 增速预测" : "世界银行 WDI · 全球经济指标"}
         analysisHref={outlookActive ? statisticsHref : historyAnalysis}>
         <section className={styles.filters} aria-label={outlookActive ? "增长展望筛选" : "经济数据筛选"}>

@@ -1,17 +1,41 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { readDataAgent } from "@/lib/data-agent/database.server";
+import { demoReplayId } from "./model";
 
 type ReplayRegistration = {
   object_uri: string;
   sha256: string;
   size_bytes: string;
+  body?: Buffer | null;
 };
 
+type ReplayContent = { body: string; version: string; source: "postgres" | "object-storage" | "bundled-archive" };
+const bundledVersion = "db39d036034dcb896d3e3a76d711de0c84929d594b86b6845a78d54bd2b4e2e5";
+const archiveFile = "public/data/weather-replay/us-southeast-2026-09-26-db39d036.json";
 let reader: S3Client | undefined;
-let lastVerifiedReplay: { key: string; size: number; body: string; version: string } | undefined;
+let lastObject: { key: string; size: number; content: ReplayContent } | undefined;
+let bundledArchive: Promise<ReplayContent> | undefined;
+let retryPayloadViewAt = 0;
+
+function verifiedContent(bytes: Buffer, size: number, version: string, source: ReplayContent["source"]): ReplayContent {
+  if (bytes.length !== size || createHash("sha256").update(bytes).digest("hex") !== version) {
+    throw new Error("Invalid weather replay digest");
+  }
+  return { body: new TextDecoder().decode(bytes), version, source };
+}
+
+export async function readBundledReplay(id: string, version: string | null) {
+  if (id !== demoReplayId || (version !== null && version !== bundledVersion)) return null;
+  bundledArchive ??= readFile(join(process.cwd(), archiveFile))
+    .then(bytes => verifiedContent(bytes, 488_445, bundledVersion, "bundled-archive"))
+    .catch(error => { bundledArchive = undefined; throw error; });
+  return bundledArchive;
+}
 
 function storageReader() {
   if (reader) return reader;
@@ -54,16 +78,33 @@ export async function listWeatherReplays(id?: string) {
   });
 }
 
-export async function readWeatherReplay(id: string, version: string | null) {
-  const record = await readDataAgent(async client => {
-    const result = await client.query<ReplayRegistration>(`
-      SELECT object_uri, sha256, size_bytes
-      FROM catalog.published_weather_replay
+function lookupReplay(id: string, version: string | null, withPayload: boolean) {
+  // Both data sources are fixed views. The legacy catalog supports staggered deployment of the migration.
+  const select = withPayload
+    ? "SELECT object_uri, sha256, size_bytes, body FROM catalog.published_weather_replay_payload"
+    : "SELECT object_uri, sha256, size_bytes FROM catalog.published_weather_replay";
+  return readDataAgent(async client => {
+    const result = await client.query<ReplayRegistration>(select + `
       WHERE id = $1 AND ($2::text IS NULL OR version = $2)
       ORDER BY published_at DESC, version DESC LIMIT 1`, [id, version]);
     return result.rows[0];
   });
+}
 
+async function readReplayRegistration(id: string, version: string | null) {
+  if (Date.now() >= retryPayloadViewAt) {
+    try {
+      return await lookupReplay(id, version, true);
+    } catch (error) {
+      if (!error || typeof error !== "object" || !("code" in error) || error.code !== "42P01") throw error;
+      retryPayloadViewAt = Date.now() + 30_000;
+    }
+  }
+  return lookupReplay(id, version, false);
+}
+
+export async function readWeatherReplay(id: string, version: string | null) {
+  const record = await readReplayRegistration(id, version);
   if (!record) return null;
   const key = `meteo/storm-replay/${record.sha256}/${id}.json`;
   const size = Number(record.size_bytes);
@@ -72,8 +113,12 @@ export async function readWeatherReplay(id: string, version: string | null) {
     throw new Error("Invalid registered weather replay object");
   }
 
-  // A published version is immutable. Reuse its verified bytes when switching views.
-  if (lastVerifiedReplay?.key === key && lastVerifiedReplay.size === size) return lastVerifiedReplay;
+  if (record.body) return verifiedContent(record.body, size, record.sha256, "postgres");
+  const bundled = await readBundledReplay(id, record.sha256).catch(() => null);
+  if (bundled) return bundled;
+
+  // A published version is immutable. Retain its verified bytes for older registrations.
+  if (lastObject?.key === key && lastObject.size === size) return lastObject.content;
 
   const chunkSize = 128 * 1024;
   const chunkCount = Math.ceil(size / chunkSize);
@@ -98,10 +143,7 @@ export async function readWeatherReplay(id: string, version: string | null) {
     if (bytes.length !== expectedLength) throw new Error("Incomplete weather replay range");
     chunks[index] = bytes;
   }
-  const body = Buffer.concat(chunks, size);
-  if (body.length !== size || createHash("sha256").update(body).digest("hex") !== record.sha256) {
-    throw new Error("Invalid weather replay digest");
-  }
-  lastVerifiedReplay = { key, size, body: new TextDecoder().decode(body), version: record.sha256 };
-  return lastVerifiedReplay;
+  const content = verifiedContent(Buffer.concat(chunks, size), size, record.sha256, "object-storage");
+  lastObject = { key, size, content };
+  return content;
 }

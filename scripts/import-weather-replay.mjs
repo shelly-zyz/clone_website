@@ -147,9 +147,12 @@ async function publish() {
       (id, version, region, start_at, end_at, satellite_frames, rain_frames, peak_rain_rate, object_uri)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT DO NOTHING`,
     [id, version, region, epoch(start), epoch(end), satellite.length, rain.length, peak, uri]);
-    const result = await db.query(`SELECT version FROM catalog.published_weather_replay
+    await db.query(`INSERT INTO catalog.weather_replay_payload (sha256, body)
+      VALUES ($1,$2) ON CONFLICT DO NOTHING`, [version, body]);
+    const result = await db.query(`SELECT version FROM catalog.published_weather_replay_payload
       WHERE id=$1 AND version=$2 AND object_uri=$3 AND sha256=$2 AND size_bytes=$4
-        AND satellite_frames=$5 AND rain_frames=$6`, [id, version, uri, body.length, satellite.length, rain.length]);
+        AND satellite_frames=$5 AND rain_frames=$6 AND body=$7`,
+    [id, version, uri, body.length, satellite.length, rain.length, body]);
     if (result.rowCount !== 1) throw new Error("Replay registration failed its consistency check");
     await db.query("COMMIT");
     console.log(JSON.stringify({ id, version, satelliteFrames: satellite.length, rainFrames: rain.length, bytes: body.length }));

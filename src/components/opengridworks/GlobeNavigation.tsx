@@ -1,9 +1,10 @@
 import Image from "next/image";
 import { globeTopicOrder, globeTopics, workspaceHref, type WorkspaceTopic } from "@/lib/globe-topics";
 
-export function GlobeNavigation({ activeTopic, onTopicChange }: {
+export function GlobeNavigation({ activeTopic, onTopicChange, onTopicIntent }: {
   activeTopic?: WorkspaceTopic;
   onTopicChange?: (topic: WorkspaceTopic) => void;
+  onTopicIntent?: (topic: WorkspaceTopic) => void;
 }) {
   return (
     <nav className={`og-globe-navigation${onTopicChange ? " is-docked" : ""}`} aria-label="地球专题">
@@ -16,7 +17,9 @@ export function GlobeNavigation({ activeTopic, onTopicChange }: {
         );
 
         return onTopicChange ? (
-          <button key={topic} type="button" data-topic={topic} aria-pressed={activeTopic === topic} onClick={() => onTopicChange(topic)}>
+          <button key={topic} type="button" data-topic={topic} aria-pressed={activeTopic === topic} onClick={() => onTopicChange(topic)}
+            onPointerEnter={onTopicIntent ? () => onTopicIntent(topic) : undefined}
+            onFocus={onTopicIntent ? () => onTopicIntent(topic) : undefined}>
             {preview}
           </button>
         ) : (

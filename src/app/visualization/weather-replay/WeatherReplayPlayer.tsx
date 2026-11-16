@@ -11,6 +11,7 @@ import { replayViewOrder, replayViews, type ReplayView } from "@/lib/weather-rep
 import { createReplayScene } from "./replay-canvas";
 import { accumulateRain, satelliteAt, utcClock } from "./replay-data";
 import { prepareReplayArea, regionalPeak, type ReplayGeography } from "./replay-geography";
+import { loadWeatherReplayData } from "./replay-loader";
 import styles from "./player.module.css";
 
 type ReplayRequest = { query: string; replay: WeatherReplay; geography: ReplayGeography } | { query: string; error: string };
@@ -32,28 +33,13 @@ export function WeatherReplayPlayer({ query, scene, region, initialFrame, onFram
   const current = response?.query === query ? response : undefined;
 
   useEffect(() => {
-    const request = new AbortController();
-    const signal = request.signal;
-    void Promise.all([
-      fetch(query ? "/api/weather-replay?" + query : "/api/weather-replay", { signal }).then(async result => {
-        if (!result.ok) {
-          const payload: { error?: string } = await result.json();
-          throw new Error(payload.error || "暂时无法加载区域回放。");
-        }
-        const replay = await result.json() as WeatherReplay;
-        if (!replay.rain?.length || replay.cols < 2 || replay.rows < 2) throw new Error("该案例没有可回放的降水帧。");
-        return replay;
-      }),
-      fetch("/data/weather-replay/regions.geojson", { signal }).then(async result => {
-        if (!result.ok) throw new Error("区域边界暂不可用。");
-        return result.json() as Promise<ReplayGeography>;
-      }),
-    ]).then(([replay, geography]) => {
-      if (!signal.aborted) setResponse({ query, replay, geography });
+    let current = true;
+    void loadWeatherReplayData(query).then(data => {
+      if (current) setResponse({ query, ...data });
     }).catch(error => {
-      if (!signal.aborted) setResponse({ query, error: error instanceof Error ? error.message : "区域回放加载失败。" });
+      if (current) setResponse({ query, error: error instanceof Error ? error.message : "区域回放加载失败。" });
     });
-    return () => request.abort();
+    return () => { current = false; };
   }, [attempt, query]);
 
   useEffect(() => {

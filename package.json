@@ -29,6 +29,7 @@
   "scripts": {
     "dev": "node scripts/dev-with-local-config.mjs",
     "preview:ssh": "bash scripts/open-ssh-preview.sh",
+    "check:preview": "node scripts/check-preview.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",

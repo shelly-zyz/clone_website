@@ -561,6 +561,8 @@
         return d.promise;
     }
 
+    var workspaceVisible = true;
+
     function animate(globe, field, grids) {
         if (!globe || !field || !grids) return;
 
@@ -646,8 +648,17 @@
                     field.release();
                     return;
                 }
+                if (!workspaceVisible || document.hidden) {
+                    setTimeout(frame, 250);
+                    return;
+                }
                 evolve();
                 draw();
+                if (window.parent !== window && document.documentElement.classList.contains("ogw-workspace") &&
+                    !document.documentElement.dataset.ogwWeatherRendered) {
+                    document.documentElement.dataset.ogwWeatherRendered = "true";
+                    window.parent.postMessage("ogw-weather-rendered", window.location.origin);
+                }
                 setTimeout(frame, FRAME_RATE);
             }
             catch (e) {
@@ -1167,6 +1178,11 @@
         });
 
         if (workspace) {
+            window.addEventListener("message", function(event) {
+                if (event.origin !== window.location.origin || event.source !== window.parent) return;
+                if (event.data === "ogw-weather-show") workspaceVisible = true;
+                if (event.data === "ogw-weather-hide") workspaceVisible = false;
+            });
             // The embedded canvas can change size when a parent panel opens without a device rotation.
             window.addEventListener("resize", _.debounce(function() {
                 var next = µ.view();
