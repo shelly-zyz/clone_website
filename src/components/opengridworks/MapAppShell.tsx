@@ -2964,6 +2964,7 @@ function MapViewport({
   const [ready, setReady] = useState(false);
   const [mapZoom, setMapZoom] = useState(defaultRegion.zoom);
   const [orbitPositions, setOrbitPositions] = useState<Record<string, { left: number; top: number; visible: boolean; cardSide: "left" | "right" }>>({});
+  const showOrbitBeacons = active && activeProject !== "carbon";
 
   useEffect(() => {
     selectRef.current = onSelectFeature;
@@ -3753,7 +3754,7 @@ function MapViewport({
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !ready) {
+    if (!map || !ready || !showOrbitBeacons) {
       return;
     }
 
@@ -3771,7 +3772,7 @@ function MapViewport({
         const center = map.getCenter();
         const centerCoordinates: Coordinates = [center.lng, center.lat];
 
-        setOrbitPositions(Object.fromEntries(orbitBeacons.map((beacon) => {
+        const positions = Object.fromEntries(orbitBeacons.map((beacon) => {
           const point = map.project(beacon.lngLat);
           const onFacingHemisphere = angularDistanceDegrees(centerCoordinates, beacon.lngLat) < 96;
           const visible = onFacingHemisphere && point.x > -96 && point.x < width + 96 && point.y > -96 && point.y < height + 96;
@@ -3782,10 +3783,16 @@ function MapViewport({
               left: Math.round(point.x),
               top: Math.round(point.y),
               visible,
-              cardSide: point.x > width * 0.62 ? "left" : "right",
+              cardSide: point.x > width * 0.62 ? "left" as const : "right" as const,
             },
           ];
-        })));
+        }));
+        setOrbitPositions(previous => orbitBeacons.every(({ id }) => {
+          const before = previous[id];
+          const after = positions[id];
+          return before && before.left === after.left && before.top === after.top &&
+            before.visible === after.visible && before.cardSide === after.cardSide;
+        }) ? previous : positions);
       });
     };
 
@@ -3806,7 +3813,7 @@ function MapViewport({
       map.off("pitch", updateOrbitPositions);
       map.off("resize", updateOrbitPositions);
     };
-  }, [ready]);
+  }, [ready, showOrbitBeacons]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -3848,7 +3855,7 @@ function MapViewport({
         aria-hidden="true"
       />
       <div className="og-orbit-beacons" aria-label="轨道观测点">
-        {activeProject === "carbon" ? null : orbitBeacons.map((beacon) => {
+        {showOrbitBeacons && orbitBeacons.map((beacon) => {
           const position = orbitPositions[beacon.id] ?? { left: -999, top: -999, visible: false, cardSide: "right" as const };
 
           return (
