@@ -16,12 +16,15 @@
 .tabs { display: flex; flex-wrap: wrap; gap: 4px; }
 .tabs button, .sidebar select, .header select, .profileGrid button, .notice button {
   min-height: 33px;
-  color: #dae9f4;
-  background: #172e42;
+  color: #fff;
+  background: var(--og-weather-control-fill);
   padding: 4px 8px;
   font-size: 12px;
 }
-.tabs button[aria-pressed="true"] { color: #112632; background: #91ccd9; }
+.tabs button[aria-pressed="true"] { text-decoration: underline; text-underline-offset: 3px; }
+.tabs button:hover, .sidebar select:hover, .header select:hover, .profileGrid button:hover, .notice button:hover {
+  background: var(--og-weather-control-hover);
+}
 .stage { position: relative; min-height: 200px; flex: 1; background: radial-gradient(ellipse at 50% 54%, #1b354b, #101d2d 60%, #0a1521); }
 .volumeCanvas { position: absolute; inset: 0; height: 100%; width: 100%; display: block; touch-action: none; cursor: grab; }
 .volumeCanvas:active { cursor: grabbing; }
@@ -81,7 +84,6 @@
 .layout { background: transparent; }
 .header, .sidebar { border: 0; border-radius: 12px; background: rgba(15, 25, 38, .85); backdrop-filter: blur(15px); }
 .sidebar { margin-left: 8px; }
-.tabs button, .sidebar select, .header select, .profileGrid button, .notice button { border-radius: 7px; border: 0; }
-.tabs button[aria-pressed="true"] { background: #5f506d; color: #faf0f5; }
+
 .stage { background: radial-gradient(ellipse at 49% 55%, #1c3041, #0c1722 75%); }
 @media (max-width: 900px) { .sidebar { margin: 6px 0 0; } }

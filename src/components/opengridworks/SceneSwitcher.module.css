@@ -155,8 +155,14 @@
   background: transparent;
   box-shadow: none;
 }
-.weather .card[aria-pressed="true"] { background: #444253; }
-.weather .card:hover { background: #30384a; }
+.weather .card[aria-pressed="true"] {
+  background: var(--og-weather-control-fill);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.weather .card { border-radius: 0; color: #fff; opacity: 1; }
+.weather .card:hover { background: var(--og-weather-control-hover); }
+.weather button:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
 .weather .card span { padding: 0; }
 .weather .card img { width: 30px; height: 24px; border-radius: 4px; }
 .weather .positions button { height: 13px; }
