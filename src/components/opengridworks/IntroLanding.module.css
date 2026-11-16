@@ -14,11 +14,6 @@
   color-scheme: dark;
 }
 
-.landing[data-topic="power"] { --accent: #f4d88e; }
-.landing[data-topic="weather"] { --accent: #a2e6df; }
-.landing[data-topic="carbon"] { --accent: #d1eb9f; }
-.landing[data-topic="economy"] { --accent: #efb68c; }
-
 .space {
   position: absolute;
   inset: 0;
@@ -105,13 +100,9 @@
 }
 
 .brand,
-.topTools,
-.skip,
 .topNav,
 .primary,
-.secondary,
-.controlButton,
-.chapterArrow {
+.controlButton {
   display: inline-flex;
   align-items: center;
 }
@@ -134,10 +125,7 @@
 
 .topNav { display: none; }
 
-.topTools { gap: 6px; }
-
-.controlButton,
-.chapterArrow {
+.controlButton {
   min-width: 40px;
   height: 40px;
   justify-content: center;
@@ -146,20 +134,7 @@
   color: var(--paper);
 }
 
-.skip {
-  min-height: 40px;
-  gap: 7px;
-  padding: 0 10px;
-  border-radius: 100px;
-  background: #111b1cce;
-  color: var(--paper);
-  font-size: .72rem;
-  white-space: nowrap;
-}
-
-.controlButton:hover,
-.skip:hover,
-.chapterArrow:hover {
+.controlButton:hover {
   background: #27312e;
 }
 
@@ -177,15 +152,6 @@
   align-content: end;
   gap: 16px;
   min-width: 0;
-}
-
-.storyContent {
-  transition: opacity 130ms ease, transform 130ms ease;
-}
-
-.storyContent[data-changing] {
-  opacity: 0;
-  transform: translateY(4px);
 }
 
 .storyText {
@@ -230,15 +196,7 @@
   text-wrap: pretty;
 }
 
-.actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.primary,
-.secondary {
+.primary {
   min-height: 41px;
   justify-content: space-between;
   gap: 10px;
@@ -248,25 +206,13 @@
   font-weight: 650;
   transition: background 140ms ease, color 140ms ease, transform 140ms ease;
   white-space: nowrap;
-}
-
-.primary {
   color: #141915;
   background: var(--accent);
-}
-
-.secondary {
-  color: var(--paper);
-  background: #171d1b;
 }
 
 .primary:hover {
   background: #fff5e2;
   transform: translateY(-2px);
-}
-
-.secondary:hover {
-  background: #27312e;
 }
 
 .recommended { display: none; }
@@ -314,14 +260,14 @@
 }
 
 .card strong,
-.chapter strong {
+.globeLink strong {
   color: var(--paper);
   font-size: .8rem;
   font-weight: 570;
 }
 
 .card div > span,
-.chapter span > span {
+.globeLink span > span {
   overflow: hidden;
   color: var(--muted);
   font-size: .66rem;
@@ -337,35 +283,31 @@
   min-width: 0;
 }
 
-.chapters {
+.globeLinks {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
-.chapter {
-  --topic-accent: #f4d88e;
-  position: relative;
+.globeLink {
   display: grid;
   min-height: 57px;
-  grid-template-columns: minmax(0, 46px) minmax(0, 1fr);
+  grid-template-columns: 46px minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
   padding: 5px 6px;
   border-radius: 8px;
   text-align: start;
+  transition: background 160ms ease;
 }
 
-.chapter[data-topic="weather"] { --topic-accent: #a2e6df; }
-.chapter[data-topic="carbon"] { --topic-accent: #d1eb9f; }
-.chapter[data-topic="economy"] { --topic-accent: #efb68c; }
-
-.chapter[data-preview],
-.chapter[aria-pressed="true"] {
-  background: color-mix(in srgb, var(--topic-accent) 12%, transparent);
+.globeLink:is(:hover, :focus-visible) {
+  background: #29203b;
 }
 
-.chapter img {
+.globeLink > svg { color: var(--accent); }
+
+.globeLink img {
   display: block;
   width: 100%;
   height: 37px;
@@ -377,32 +319,18 @@
   transition: opacity 180ms ease;
 }
 
-.chapter[data-preview] img,
-.chapter[aria-pressed="true"] img,
-.chapter:hover img,
-.chapter:focus-visible img { opacity: 1; }
+.globeLink:hover img,
+.globeLink:focus-visible img { opacity: 1; }
 
-.chapter > span {
+.globeLink > span {
   display: grid;
   min-width: 0;
   gap: 1px;
 }
 
-.chapter strong { white-space: nowrap; }
-
-.chapter small {
-  color: var(--topic-accent);
-  font: 500 .59rem/1.15 var(--font-mono, monospace);
-}
-
-.credits a:hover { text-decoration: underline; }
+.globeLink strong { white-space: nowrap; }
 
 .credits {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 3px 14px;
   color: var(--muted);
   font-size: .62rem;
   line-height: 1.4;
@@ -413,15 +341,11 @@
   outline-offset: 4px;
 }
 
-.landing[data-paused] .storyText {
-  animation: none;
-}
-
 @media (min-width: 390px) {
   .landing { padding: 16px; }
   .frame { min-height: calc(100svh - 32px); }
-  .chapter { grid-template-columns: 54px minmax(0, 1fr); }
-  .chapter img { height: 38px; }
+  .globeLink { grid-template-columns: 52px minmax(0, 1fr) auto; }
+  .globeLink img { height: 38px; }
 }
 
 @media (min-width: 701px) {
@@ -461,8 +385,6 @@
 
   .topNav > a:hover { color: var(--accent); }
 
-  .topTools { gap: 9px; }
-  .skip { padding: 0 14px; font-size: .77rem; }
 
   .poster img {
     top: 43.5%;
@@ -502,15 +424,13 @@
     line-height: 1.67;
   }
 
-  .primary,
-  .secondary {
+  .primary {
     min-height: 48px;
     padding: 0 18px;
     font-size: .86rem;
   }
 
-  .controlButton,
-  .chapterArrow {
+  .controlButton {
     min-width: 44px;
     height: 44px;
   }
@@ -533,21 +453,21 @@
   .card > img { height: 55px; }
 
   .footer { gap: 11px; }
-  .chapters { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: clamp(9px, 1.5vw, 22px); }
+  .globeLinks { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: clamp(9px, 1.5vw, 22px); }
 
-  .chapter {
+  .globeLink {
     min-height: 63px;
-    grid-template-columns: minmax(40px, 37%) minmax(0, 1fr);
+    grid-template-columns: minmax(36px, 34%) minmax(0, 1fr) auto;
     gap: 9px;
     padding: 6px 8px;
   }
 
-  .chapter img {
+  .globeLink img {
     height: 49px;
     object-position: center 43%;
   }
 
-  .chapter strong { font-size: .83rem; }
+  .globeLink strong { font-size: .83rem; }
   .credits { font-size: .69rem; }
 }
 
@@ -576,15 +496,15 @@
   .card strong { font-size: .87rem; }
   .card div > span { font-size: .71rem; }
 
-  .chapters { max-width: 980px; }
+  .globeLinks { max-width: 980px; }
 
-  .chapter {
+  .globeLink {
     gap: 14px;
-    grid-template-columns: minmax(60px, 42%) minmax(0, 1fr);
+    grid-template-columns: minmax(60px, 42%) minmax(0, 1fr) auto;
   }
 
-  .chapter img { height: 56px; }
-  .chapter strong { font-size: .9rem; }
+  .globeLink img { height: 56px; }
+  .globeLink strong { font-size: .9rem; }
 
   .credits {
     position: absolute;
@@ -598,6 +518,11 @@
 }
 
 @media (max-width: 700px) {
+  .main {
+    /* Keep the analysis cards above the floating assistant. */
+    padding-bottom: 88px;
+  }
+
   .recommended {
     display: block;
     max-width: 33rem;
@@ -613,6 +538,30 @@
     gap: 5px;
     padding: 5px 7px;
   }
+
+  .globeLinks {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .globeLink {
+    min-height: 58px;
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    gap: 3px;
+    padding: 3px 0;
+    text-align: center;
+  }
+
+  .globeLink img {
+    max-width: 58px;
+    height: 33px;
+  }
+
+  .globeLink strong { font-size: .72rem; }
+
+  .globeLink > svg,
+  .globeLink > span > span { display: none; }
 
   .card > img { display: none; }
   .card strong { font-size: .73rem; }
