@@ -1162,11 +1162,15 @@
             bindButtonToConfiguration("#" + p, {projection: p, orientation: ""}, ["projection"]);
         });
 
-        // When touch device changes between portrait and landscape, rebuild globe using the new view size.
-        d3.select(window).on("orientationchange", function() {
-            view = µ.view();
+        // The iframe viewport also changes when the workspace switches layout.
+        d3.select(window).on("resize", _.debounce(function() {
+            var next = µ.view();
+            if (!next.width || !next.height || (next.width === view.width && next.height === view.height)) return;
+            stopCurrentAnimation(true);
+            view = next;
+            d3.selectAll(".fill-screen").attr("width", view.width).attr("height", view.height);
             globeAgent.submit(buildGlobe, configuration.get("projection"));
-        });
+        }, 120));
     }
 
     function start() {

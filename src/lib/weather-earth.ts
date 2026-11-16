@@ -268,11 +268,7 @@ export function weatherValueAtIndex(field: WeatherField, index: number) {
   return decodeWeatherValue(field.values[index], field.encoding);
 }
 
-export type WeatherSampleField = Pick<WeatherFieldBase, "encoding"> & {
-  header: Pick<WeatherGridHeader, "lo1" | "la1" | "dx" | "dy" | "nx" | "ny">;
-} & (Pick<WeatherVectorField, "kind" | "u" | "v"> | Pick<WeatherScalarField, "kind" | "values">);
-
-export function sampleWeatherField(field: WeatherSampleField, lng: number, lat: number) {
+export function sampleWeatherField(field: WeatherField, lng: number, lat: number) {
   const { header } = field;
   const y = (header.la1 - lat) / header.dy;
   if (y < 0 || y > header.ny - 1) {

@@ -20,7 +20,6 @@ export type WorkspaceContext = {
   sector?: string;
   projection?: "globe" | "map";
   weather?: string;
-  weatherMode?: "comparison" | "layers";
   replay?: Exclude<WeatherScene, "globe">;
   replayFrame?: number;
   replayRegion?: ReplayRegionId;
@@ -61,7 +60,6 @@ export function readWorkspaceContext(search: URLSearchParams): WorkspaceContext 
   const technology = search.get("technology");
   const projection = search.get("projection");
   const weather = search.get("weather");
-  const weatherMode = search.get("weatherMode");
   const replay = search.get("replay");
   const replayFrame = search.get("replayFrame");
   const powerView = search.get("powerView");
@@ -88,7 +86,6 @@ export function readWorkspaceContext(search: URLSearchParams): WorkspaceContext 
     sector: readId(search.get("sector")),
     projection: projection === "globe" || projection === "map" ? projection : undefined,
     weather: weather && /^[A-Za-z0-9_,./:@=+%-]{1,180}$/.test(weather) ? weather : undefined,
-    weatherMode: weatherMode === "comparison" || weatherMode === "layers" ? weatherMode : undefined,
     replay: replay && Object.hasOwn(weatherSceneViews, replay) ? replay as keyof typeof weatherSceneViews : undefined,
     replayFrame: replayFrame && /^\d{1,4}$/.test(replayFrame) ? Number(replayFrame) : undefined,
     replayRegion: readReplayRegion(search.get("replayRegion")),
