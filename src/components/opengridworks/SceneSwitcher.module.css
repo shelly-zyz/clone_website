@@ -6,11 +6,9 @@
   overflow-x: auto;
   overscroll-behavior-inline: contain;
   scrollbar-width: none;
-  border: 1px solid #ffffff24;
   border-radius: 999px;
-  background: rgb(47 44 42 / 72%);
-  box-shadow: inset 0 1px 0 #ffffff0d, 0 3px 12px #0003;
-  backdrop-filter: blur(16px);
+  background: linear-gradient(145deg, rgb(85 82 78 / 64%), rgb(57 56 54 / 70%) 56%, rgb(33 34 36 / 76%));
+  backdrop-filter: blur(18px);
 }
 
 .bar > :is(button, a) {
@@ -31,8 +29,9 @@
 }
 
 .bar > :is(button, a):focus-visible {
-  outline: 2px solid currentColor;
-  outline-offset: -3px;
+  outline: none;
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
 
 .scene {
