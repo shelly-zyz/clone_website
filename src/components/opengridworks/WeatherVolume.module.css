@@ -77,3 +77,11 @@
   min-height: clamp(145px, 24vw, 285px);
   background: radial-gradient(ellipse at 50% 54%, #1e384f, #102333 75%);
 }
+
+.layout { background: transparent; }
+.header, .sidebar { border: 0; border-radius: 12px; background: rgba(15, 25, 38, .85); backdrop-filter: blur(15px); }
+.sidebar { margin-left: 8px; }
+.tabs button, .sidebar select, .header select, .profileGrid button, .notice button { border-radius: 7px; border: 0; }
+.tabs button[aria-pressed="true"] { background: #5f506d; color: #faf0f5; }
+.stage { background: radial-gradient(ellipse at 49% 55%, #1c3041, #0c1722 75%); }
+@media (max-width: 900px) { .sidebar { margin: 6px 0 0; } }

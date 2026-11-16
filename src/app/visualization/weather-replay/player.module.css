@@ -225,3 +225,113 @@
   .readingsBody h3 { display: none; }
   .readingsFigure { width: 100%; max-width: 420px; justify-self: center; }
 }
+
+/* The workspace owns the full-screen scene. Cards sit above the same canvas. */
+.embedded {
+  --glass: rgba(15, 25, 38, .86);
+  --glass-card: rgba(33, 37, 54, .80);
+  position: relative;
+  overflow: hidden;
+  background: #09141d;
+}
+
+.stage {
+  background: radial-gradient(ellipse at 48% 52%, #1e3542, #101f2c 68%, #0a141f);
+  color: #cbd7e1;
+}
+
+.header, .controls, .readingsBody, .legend, .emptyNotice {
+  border: 0;
+  background: var(--glass, rgba(15, 25, 38, .94));
+  color: #e5e6ee;
+  border-radius: 12px;
+}
+
+.button, .playButton {
+  border: 0;
+  background: #283345;
+  border-radius: 7px;
+}
+
+.button:hover, .playButton:hover { background: #3a4759; }
+.button[aria-pressed="true"], .playButton { background: #5f506d; }
+.timelineInput, .layers input { accent-color: #cf9caa; }
+
+.embedded .scene, .embedded .stage { position: absolute; inset: 0; min-height: 0; }
+.embedded .scene { display: block; }
+.embedded .canvas { height: 100%; }
+
+.embedded .header, .embedded .controls, .embedded .readings, .embedded .legend {
+  position: absolute;
+  z-index: 2;
+}
+.embedded .header, .embedded .controls, .embedded .readingsBody, .embedded .legend {
+  backdrop-filter: blur(15px);
+  box-shadow: 0 9px 24px #070d1852;
+}
+.embedded .header {
+  top: 71px;
+  left: 50%;
+  width: min(492px, calc(100% - 550px));
+  transform: translateX(-50%);
+}
+.embedded .controls {
+  bottom: calc(var(--og-globe-nav-space, 70px) + 10px);
+  left: 50%;
+  width: min(565px, calc(100% - 550px));
+  padding: 9px 13px;
+  transform: translateX(-50%);
+}
+.embedded .stageLabels { display: none; }
+.embedded .readings {
+  right: 16px;
+  top: 71px;
+  bottom: calc(var(--og-globe-nav-space, 70px) + 69px);
+  width: clamp(225px, 20vw, 285px);
+  background: transparent;
+  border: 0;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.embedded .legend { bottom: calc(var(--og-globe-nav-space, 70px) + 18px); left: auto; right: clamp(245px, 23vw, 306px); width: 122px; }
+
+.legend { padding: 9px; width: 118px; }
+.legendRamp { height: 91px; width: 62px; display: flex; gap: 6px; }
+.legendScale { width: 10px; height: 100%; flex: none; }
+.legendValues { flex-direction: column; padding-block: 1px; line-height: 1; }
+.peak strong { color: #f2b3c4; font-size: 12px; }
+.readingsFigure { border: 0; color: #f1e8f0; background: var(--glass-card, #252938); padding: 7px 8px; }
+.readingsCaption > span:last-child, .readingsSource { color: #b6bacd; }
+.readingsTick { fill: #c0bbcc; }
+.readingsGrid { stroke: #4e5062; }
+.readingsAxes { stroke: #8a8198; }
+.readingsSample, .readingsCurrent { stroke: #202333; }
+
+.metrics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; }
+.metrics div { display: grid; gap: 2px; padding: 7px; background: #4c415862; border-radius: 7px; }
+.metrics span { color: #d3c4d8; font-size: 10px; }
+.metrics strong { color: #f0c1d1; font-size: 14px; }
+.barRow { display: grid; grid-template-columns: 48px minmax(0, 1fr) 22px; gap: 4px; align-items: center; font-size: 9px; color: #c5bfcf; }
+.barRow meter { width: 100%; height: 8px; appearance: none; }
+.barRow meter::-webkit-meter-bar { background: #38394b; border: 0; }
+.barRow meter::-webkit-meter-optimum-value { background: #c299b4; }
+.barRow meter::-moz-meter-bar { background: #c299b4; }
+.barRow span:last-child { text-align: right; }
+
+@media (max-width: 900px) {
+  .embedded .header { top: 106px; left: 9px; right: 9px; width: auto; transform: none; padding: 7px 9px; }
+  .embedded .controls { bottom: calc(var(--og-globe-nav-space, 68px) + 7px); left: 7px; right: 7px; width: auto; transform: none; }
+  .embedded .legend { right: auto; left: 7px; bottom: calc(var(--og-globe-nav-space, 68px) + 137px); width: 87px; }
+  .embedded .legendRamp { height: 75px; }
+  .embedded .readings {
+    inset: 171px 7px auto auto;
+    width: min(270px, calc(100% - 14px));
+    max-height: calc(100% - 352px);
+    z-index: 3;
+    border-radius: 9px;
+    width: fit-content;
+  }
+  .embedded .readings:has([aria-expanded="true"]) { width: min(270px, calc(100% - 14px)); }
+  .embedded .readingsToggle { background: var(--glass); padding: 5px 9px; gap: 9px; }
+  .embedded .readingsBody { border-radius: 0 0 9px 9px; }
+}

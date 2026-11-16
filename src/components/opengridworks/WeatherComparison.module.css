@@ -80,3 +80,7 @@
 @media (pointer: coarse) {
   .timeline button { min-width: 44px; min-height: 44px; }
 }
+
+.comparison { border: 0; background: rgba(14, 25, 38, .90); backdrop-filter: blur(15px); border-radius: 12px; }
+.header, .row { border: 0; }
+.columns { background: #172331; border-radius: 5px; padding-inline: 5px; }

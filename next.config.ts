@@ -14,6 +14,7 @@ const nextConfig: NextConfig = {
   },
   serverExternalPackages: ["mcp-echarts"],
   outputFileTracingIncludes: {
+    "/api/weather-replay": ["./public/data/weather-replay/gfs-*.json"],
     "/api/xiaoyun": ["./src/lib/xiaoyun/skills/*/SKILL.md"],
     "/api/visualization": chartRuntime,
     "/api/mcp/visualization": chartRuntime,

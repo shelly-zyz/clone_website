@@ -87,7 +87,24 @@ async function coastline() {
   return lines;
 }
 
-async function publish() {
+async function downloadDefaultReplay() {
+  const jobs = [];
+  for (let time = start; time <= end; time += hour / 4) {
+    if (time % hour === 0) jobs.push({ source: "satellite", time });
+    jobs.push({ source: "rain", time });
+  }
+  const frames = [];
+  for (let index = 0; index < jobs.length; index += 4) {
+    frames.push(...await Promise.all(jobs.slice(index, index + 4).map(fetchFrame)));
+  }
+  return Buffer.from(JSON.stringify({
+    id, region, bounds, rows, cols, coastline: await coastline(),
+    satellite: frames.filter(frame => frame.source === "satellite"),
+    rain: frames.filter(frame => frame.source === "rain"),
+  }));
+}
+
+async function publish(input) {
   const connection = new URL(required("DATA_AGENT_INGEST_DATABASE_URL"));
   const gateway = process.env.DATA_AGENT_INGEST_DB_HOST;
   if (gateway) connection.hostname = gateway;
@@ -106,21 +123,16 @@ async function publish() {
   try {
     await db.connect();
     connected = true;
-    const jobs = [];
-    for (let time = start; time <= end; time += hour / 4) {
-      if (time % hour === 0) jobs.push({ source: "satellite", time });
-      jobs.push({ source: "rain", time });
-    }
-    const frames = [];
-    for (let index = 0; index < jobs.length; index += 4) {
-      frames.push(...await Promise.all(jobs.slice(index, index + 4).map(fetchFrame)));
-    }
-    const satellite = frames.filter(frame => frame.source === "satellite");
-    const rain = frames.filter(frame => frame.source === "rain");
-    const peak = Math.max(...rain.map(frame => Math.max(...frame.values.map(value => value ?? 0))));
-    const body = Buffer.from(JSON.stringify({
-      id, region, bounds, rows, cols, coastline: await coastline(), satellite, rain,
-    }));
+    const body = input ?? await downloadDefaultReplay();
+    const { id, region, satellite, rain } = JSON.parse(body);
+    if (!/^[a-z0-9][a-z0-9-]{0,79}$/.test(id) || typeof region !== "string" ||
+        !Array.isArray(rain) || rain.length < 2 || !Array.isArray(satellite) || !satellite.length ||
+        body.length > 2_000_000) throw new Error("Invalid replay payload");
+    const first = Date.parse(rain[0].time);
+    const last = Date.parse(rain.at(-1).time);
+    if (!(last > first)) throw new Error("Invalid replay time window");
+    const peak = rain.reduce((max, frame) => frame.values.reduce((p, value) =>
+      Number.isFinite(value) && value > p ? value : p, max), 0);
     const version = sha256(body);
     const Bucket = "raw";
     const Key = `meteo/storm-replay/${version}/${id}.json`;
@@ -146,7 +158,7 @@ async function publish() {
     await db.query(`INSERT INTO catalog.weather_replay
       (id, version, region, start_at, end_at, satellite_frames, rain_frames, peak_rain_rate, object_uri)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT DO NOTHING`,
-    [id, version, region, epoch(start), epoch(end), satellite.length, rain.length, peak, uri]);
+    [id, version, region, epoch(first), epoch(last), satellite.length, rain.length, peak, uri]);
     const result = await db.query(`SELECT version FROM catalog.published_weather_replay
       WHERE id=$1 AND version=$2 AND object_uri=$3 AND sha256=$2 AND size_bytes=$4
         AND satellite_frames=$5 AND rain_frames=$6`, [id, version, uri, body.length, satellite.length, rain.length]);
@@ -159,4 +171,9 @@ async function publish() {
   }
 }
 
-await publish();
+const files = process.argv.slice(2);
+if (files.length) {
+  for (const file of files) await publish(await readFile(file));
+} else {
+  await publish();
+}

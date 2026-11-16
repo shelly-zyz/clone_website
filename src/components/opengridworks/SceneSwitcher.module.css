@@ -87,3 +87,39 @@
   inset: var(--og-carbon-switcher-top) 10px auto;
   max-width: calc(100% - 20px);
 }
+
+.weather {
+  inset: 12px 10px auto;
+  max-width: calc(100% - 20px);
+  width: min(450px, calc(100% - 20px));
+}
+
+.weather .cards {
+  height: 40px;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 12px;
+  background: rgba(18, 28, 41, .86);
+  backdrop-filter: blur(15px);
+}
+
+.weather .card, .weather .card[aria-pressed="true"] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 100%;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.weather .card[aria-pressed="true"] { background: #444253; }
+.weather .card:hover { background: #30384a; }
+.weather .card span { padding: 0; }
+.weather .card img { width: 30px; height: 24px; border-radius: 4px; }
+.weather .positions button { height: 13px; }
+
+@media (max-width: 900px) {
+  .weather { inset-block-start: 53px; }
+}

@@ -5,7 +5,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { WorkspaceFilterSelect } from "@/components/opengridworks/WorkspaceSidebar";
 import { finishGlobeHandoff } from "@/lib/globe-handoff";
 import type { WeatherReplay } from "@/lib/weather-replay/model";
-import { readReplayRegion, replayRegionOptions, type ReplayRegionId } from "@/lib/weather-replay/regions";
+import { readReplayRegion, regionalReplay, replayRegionOptions, type ReplayRegionId } from "@/lib/weather-replay/regions";
 import { updateAnalysisQuery, useAnalysisQuery } from "../useAnalysisLocation";
 import { replayViewOrder, replayViews, type ReplayView } from "@/lib/weather-replay/views";
 import { createReplayScene } from "./replay-canvas";
@@ -29,42 +29,46 @@ export function WeatherReplayPlayer({ query, scene, region, initialFrame, onFram
   const embedded = scene !== undefined;
   const location = useAnalysisQuery(region ? "region=" + region : "");
   const regionId = (embedded ? region : readReplayRegion(location.get("region"))) ?? "archive";
+  const bundled = query ? undefined : regionalReplay(regionId);
+  const caseQuery = bundled ? "id=" + bundled.archive : query;
+  const requestKey = caseQuery + "|" + regionId;
+  const useGlobalGeography = !!bundled || new URLSearchParams(query).get("id")?.startsWith("gfs-") === true;
   const [response, setResponse] = useState<ReplayRequest>();
   const [attempt, setAttempt] = useState(0);
-  const current = response?.query === query ? response : undefined;
+  const current = response?.query === requestKey ? response : undefined;
 
   useEffect(() => {
     const request = new AbortController();
     const signal = request.signal;
     void Promise.all([
       (async () => {
-        const endpoint = query ? "/api/weather-replay?" + query : "/api/weather-replay";
+        const endpoint = caseQuery ? "/api/weather-replay?" + caseQuery : "/api/weather-replay";
         const response = await fetch(endpoint, { signal: query ? signal : AbortSignal.any([signal, AbortSignal.timeout(5_000)]) })
           .catch((error: unknown) => {
             if (query || signal.aborted) throw error;
             return null;
           });
         const localArchive = !query && (!response || response.status === 404 || response.status >= 500);
-        const result = localArchive ? await fetch("/data/weather-replay/atlantic-20260926.json", { signal }) : response;
+        const result = localArchive ? await fetch("/data/weather-replay/" + (bundled?.archive ?? "atlantic-20260926") + ".json", { signal }) : response;
         if (!result?.ok) {
           const payload: { error?: string } = await result?.json().catch(() => undefined) ?? {};
           throw new Error(payload.error || "暂时无法加载区域回放。");
         }
         const replay = await result.json() as WeatherReplay;
         if (!replay.rain?.length || replay.cols < 2 || replay.rows < 2) throw new Error("该案例没有可回放的降水帧。");
-        return { replay, localArchive };
+        return { replay, localArchive: localArchive || result.headers.get("X-Weather-Replay-Source") === "bundled" };
       })(),
-      fetch("/data/weather-replay/regions.geojson", { signal }).then(async result => {
+      fetch(useGlobalGeography ? "/data/natural-earth/ne_50m_admin_0_countries.geojson" : "/data/weather-replay/regions.geojson", { signal }).then(async result => {
         if (!result.ok) throw new Error("区域边界暂不可用。");
         return result.json() as Promise<ReplayGeography>;
       }),
     ]).then(([archive, geography]) => {
-      if (!signal.aborted) setResponse({ query, geography, ...archive });
+      if (!signal.aborted) setResponse({ query: requestKey, geography, ...archive });
     }).catch(error => {
-      if (!signal.aborted) setResponse({ query, error: error instanceof Error ? error.message : "区域回放加载失败。" });
+      if (!signal.aborted) setResponse({ query: requestKey, error: error instanceof Error ? error.message : "区域回放加载失败。" });
     });
     return () => request.abort();
-  }, [attempt, query]);
+  }, [attempt, bundled, caseQuery, query, requestKey, useGlobalGeography]);
 
   useEffect(() => {
     if (!embedded || !current) return;
@@ -82,7 +86,7 @@ export function WeatherReplayPlayer({ query, scene, region, initialFrame, onFram
         </div>
       )}
       {current && "replay" in current ? (
-        <ReplayControls key={query} replay={current.replay} geography={current.geography} region={regionId} view={view}
+        <ReplayControls key={requestKey} replay={current.replay} geography={current.geography} region={regionId} view={view}
           initialFrame={initialFrame} localArchive={current.localArchive} onFrameChange={onFrameChange} onViewChange={embedded ? undefined : setSelectedView} />
       ) : current ? (
         <div className={styles.loadState}>
@@ -112,10 +116,10 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
   const [clouds, setClouds] = useState(true);
   const [precipitation, setPrecipitation] = useState(true);
   const [sourceFrame, setSourceFrame] = useState(initialFrame);
-  const [index, setIndex] = useState(Math.min(initialFrame ?? 8, final));
+  const [index, setIndex] = useState(Math.min(initialFrame ?? (replay.metadata ? 2 : 8), final));
   if (sourceFrame !== initialFrame) {
     setSourceFrame(initialFrame);
-    const restored = Math.min(initialFrame ?? 8, final);
+    const restored = Math.min(initialFrame ?? (replay.metadata ? 2 : 8), final);
     if (index !== restored) {
       setIndex(restored);
       setPlaying(false);
@@ -138,7 +142,9 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
   const accumulationPeaks = useMemo(() => accumulated.map(grid => regionalPeak(grid, area.cells)), [area.cells, accumulated]);
   const accumulationLimit = Math.max(25, Math.ceil(Math.max(0, ...accumulationPeaks.map(value => value ?? 0)) / 25) * 25);
   const legendStops = view === "accumulation" ? accumulationScale : rainScale;
-  const legendMax = view === "accumulation" ? accumulationLimit : 75;
+  const forecast = replay.metadata;
+  const rainLimit = forecast ? Math.max(5, Math.ceil(Math.max(0, ...peaks.map(peak => peak ?? 0)) / 5) * 5) : 75;
+  const legendMax = view === "accumulation" ? accumulationLimit : rainLimit;
   const legendStopMax = legendStops[legendStops.length - 1][0];
 
   useEffect(() => {
@@ -157,8 +163,8 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
   }, [renderAttempt, region]);
 
   useEffect(() => {
-    renderer.current?.update(replay, area, { view, index, clouds, precipitation, totals, accumulationLimit, selectedCell });
-  }, [accumulationLimit, area, clouds, index, precipitation, renderAttempt, replay, selectedCell, totals, view]);
+    renderer.current?.update(replay, area, { view, index, clouds, precipitation, totals, accumulationLimit, rainLimit, selectedCell });
+  }, [accumulationLimit, area, clouds, index, precipitation, rainLimit, renderAttempt, replay, selectedCell, totals, view]);
 
   useEffect(() => {
     if (!playing || !area.hasData) return;
@@ -237,7 +243,7 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
             <div className={styles.stageLabels}>
               <span className={styles.sceneTime}><Compass size={13} aria-hidden="true" /> {utcClock(timestamp)} UTC</span>
               {view === "time" && <span>时间切片 · UTC</span>}
-              {showsRainParticles && <span>粒子密度 · 降水率</span>}
+              {showsRainParticles && <span>雨幕 · 垂直结构示意</span>}
             </div>
           )}
           {drawingFailed ? (
@@ -250,10 +256,10 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
             <div className={styles.legend}>
               <span>{view === "accumulation" ? "累计降水" : "降水率"} · {unit}</span>
               {(view !== "weather" || precipitation) && (
-                <>
+                <div className={styles.legendRamp} role="img" aria-label={`${unit}，0 至 ${legendMax}`}>
                   <svg className={styles.legendScale} aria-hidden="true" focusable="false">
                     <defs>
-                      <linearGradient id={legendId}>
+                      <linearGradient id={legendId} x1="0" x2="0" y1="1" y2="0">
                         {legendStops.map(([value, color]) => (
                           <stop key={value} offset={value / legendStopMax} stopColor={`rgb(${color.join(",")})`} />
                         ))}
@@ -261,12 +267,12 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
                     </defs>
                     <rect width="100%" height="100%" rx="3" fill={`url(#${legendId})`} />
                   </svg>
-                  <span className={styles.legendValues}><span>0</span><span>{legendMax / 2}</span><span>{legendMax}</span></span>
-                </>
+                  <span className={styles.legendValues}><span>{legendMax}</span><span>{legendMax / 2}</span><span>0</span></span>
+                </div>
               )}
               {displayPeak !== null && (
                 <span className={styles.peak}>区域峰值 <strong>{displayPeak.toFixed(1)}</strong> {unit}
-                  {view !== "accumulation" && displayPeak >= 75 && " · 达到数据上限"}
+                  {!forecast && view !== "accumulation" && displayPeak >= 75 && " · PARDIG 档案上限"}
                   {view === "rain" && displayPeak === 0 && " · 无降水"}</span>
               )}
             </div>
@@ -274,14 +280,14 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
         </div>
         {area.hasData && <ReplayReadings replay={replay} view={view} frame={index} cell={selectedCell}
           peaks={view === "accumulation" ? accumulationPeaks : peaks} totals={accumulated}
-          limit={view === "accumulation" ? accumulationLimit : 75} satelliteTime={clouds ? satellite?.time : undefined}
+          limit={legendMax} cells={area.cells} satelliteTime={clouds ? satellite?.time : undefined}
           onFrame={selectFrame} />}
       </div>
       {area.hasData && (
         <div className={styles.controls}>
           {view === "weather" && (
             <div className={styles.layers}>
-              <label><input type="checkbox" checked={clouds} onChange={event => setClouds(event.target.checked)} /> 红外亮温（K）· 云层高度示意</label>
+              <label><input type="checkbox" checked={clouds} onChange={event => setClouds(event.target.checked)} /> {forecast ? "总云量（%）" : "红外亮温（K）"} · 云体重建</label>
               <label><input type="checkbox" checked={precipitation} onChange={event => setPrecipitation(event.target.checked)} /> 降水强度</label>
             </div>
           )}
@@ -303,12 +309,14 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
             </label>
           </div>
           <p className={styles.sources}>
-            {view === "weather" && clouds && satellite && (
+            {!forecast && view === "weather" && clouds && satellite && (
               <a href="https://developers.google.cn/weathernext/guides/satweave">SatWeave · {utcClock(satellite.time)} UTC</a>
             )}
-            {view === "weather" && clouds && (!satellite || regionalPeak(satellite.values, area.cells) === null) && <span>当前区域红外缺测</span>}
-            <a href="https://developers.google.cn/weathernext/guides/pardig">PARDIG-NRT · {utcClock(timestamp)} UTC</a>
-            <span>{area.ocean ? "含沿海与海上网格 · " : "国家覆盖范围 · "}{localArchive ? "内置历史档案" : "历史回放"}</span>
+            {view === "weather" && clouds && (!satellite || regionalPeak(satellite.values, area.cells) === null) && <span>当前区域云场缺测</span>}
+            {forecast ? (
+              <><a href={replay.rain[index].url}>{forecast.product} · 历史模式预报</a><span>起报 {forecast.run.slice(0, 10)} {utcClock(forecast.run)} UTC · {forecast.resolution}°</span></>
+            ) : <a href="https://developers.google.cn/weathernext/guides/pardig">PARDIG-NRT · {utcClock(timestamp)} UTC</a>}
+            <span>{localArchive ? "内置历史档案" : "历史回放"}</span>
           </p>
         </div>
       )}

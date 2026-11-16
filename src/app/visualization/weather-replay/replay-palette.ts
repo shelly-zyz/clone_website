@@ -1,12 +1,10 @@
-export const rainScale = [
-  [0, [247, 224, 175]], [1, [246, 193, 128]], [5, [237, 151, 78]],
-  [15, [218, 83, 48]], [30, [184, 44, 33]], [50, [144, 22, 26]], [75, [97, 13, 20]],
+const precipitationColors = [
+  [0, [109, 137, 129]], [.025, [145, 148, 180]], [.075, [178, 150, 188]],
+  [.18, [212, 137, 166]], [.38, [243, 145, 152]], [.65, [255, 169, 151]], [1, [255, 212, 180]],
 ] as const;
 
-export const accumulationScale = [
-  [0, [247, 224, 175]], [.10, [246, 193, 128]], [.28, [237, 151, 78]],
-  [.48, [218, 83, 48]], [.66, [184, 44, 33]], [.83, [144, 22, 26]], [1, [97, 13, 20]],
-] as const;
+export const rainScale = precipitationColors;
+export const accumulationScale = precipitationColors;
 
 type Scale = readonly (readonly [number, readonly [number, number, number]])[];
 
@@ -21,13 +19,11 @@ export function scaleColor(scale: Scale, value: number) {
 }
 
 type Grid = readonly (number | null)[];
-const rainImages = new WeakMap<Grid, HTMLCanvasElement>();
-const cloudImages = new WeakMap<Grid, HTMLCanvasElement>();
+const rainImages = new WeakMap<Grid, { image: HTMLCanvasElement; limit: number }>();
 
-export function replayTexture(values: Grid, cols: number, rows: number, clouds: boolean) {
-  const cache = clouds ? cloudImages : rainImages;
-  const saved = cache.get(values);
-  if (saved?.width === cols && saved.height === rows) return saved;
+export function replayTexture(values: Grid, cols: number, rows: number, limit: number) {
+  const saved = rainImages.get(values);
+  if (saved?.image.width === cols && saved.image.height === rows && saved.limit === limit) return saved.image;
   const image = document.createElement("canvas");
   image.width = cols;
   image.height = rows;
@@ -35,16 +31,33 @@ export function replayTexture(values: Grid, cols: number, rows: number, clouds: 
   if (!painter) return image;
   const pixels = painter.createImageData(cols, rows);
   values.forEach((value, index) => {
-    if (value == null || (clouds ? value >= 278 : value < .2)) return;
+    if (value == null || value < .2) return;
     const offset = 4 * index;
-    const cold = Math.min(1, (278 - value) / 76);
-    const color = clouds ? [176 - cold * 90, 193 - cold * 82, 207 - cold * 68] : scaleColor(rainScale, value);
-    pixels.data.set(color, offset);
-    pixels.data[offset + 3] = clouds ? Math.round(100 + 149 * cold) : 255;
+    const intensity = Math.min(1, Math.sqrt(value / limit));
+    pixels.data.set(scaleColor(rainScale, value / limit), offset);
+    pixels.data[offset + 3] = Math.round(100 + 155 * intensity);
   });
   painter.putImageData(pixels, 0, 0);
-  cache.set(values, image);
+  rainImages.set(values, { image, limit });
   return image;
+}
+
+const puffs = new Map<string, HTMLCanvasElement>();
+
+export function volumeSprite(colors: readonly string[]) {
+  const key = colors.join("|");
+  const cached = puffs.get(key);
+  if (cached) return cached;
+  const sprite = document.createElement("canvas");
+  sprite.width = sprite.height = 64;
+  const ctx = sprite.getContext("2d");
+  if (!ctx) return sprite;
+  const fade = ctx.createRadialGradient(29, 26, 3, 32, 32, 31);
+  colors.forEach((color, i) => fade.addColorStop(i / (colors.length - 1), color));
+  ctx.fillStyle = fade;
+  ctx.fillRect(0, 0, 64, 64);
+  puffs.set(key, sprite);
+  return sprite;
 }
 
 export function smoothAccumulation(values: Grid, cols: number, rows: number) {

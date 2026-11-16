@@ -6570,7 +6570,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
               <WeatherComparisonPanel />
             </div>
           ) : (
-            <div className="og-weather-replay-stage">
+            <div className={isReplayView(weatherScene) ? "og-weather-replay-stage og-weather-field-stage" : "og-weather-replay-stage"}>
               {weatherScene === "radar" ? <WeatherRadar /> :
                 weatherScene === "wind" ? <WeatherWind /> : <WeatherReplayPlayer query="" scene={weatherScene}
                   region={context.replayRegion} initialFrame={context.replayFrame} onFrameChange={rememberReplayFrame} />}
@@ -6746,7 +6746,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
             </button>
             {weatherScene === "globe" ? <WeatherSidebarFilters frameDocument={weatherDocument} /> : <>
               {isReplayView(weatherScene) && <WorkspaceFilterSelect label="回放区域" value={context.replayRegion ?? "archive"} options={replayRegionOptions}
-                onChange={value => navigate("weather", { replayRegion: readReplayRegion(value) })} />}
+                onChange={value => navigate("weather", { replayRegion: readReplayRegion(value), replayFrame: undefined })} />}
               <p className="og-weather-sidebar-status">{weatherSceneViews[weatherScene].description}</p>
             </>}
           </>

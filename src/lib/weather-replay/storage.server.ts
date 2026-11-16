@@ -41,7 +41,7 @@ export async function listWeatherReplays(id?: string) {
       WHERE ($1::text IS NULL OR id = $1)
       ORDER BY published_at DESC, id, version DESC LIMIT 20`, [id ?? null]);
     return {
-      sources: ["SatWeave infrared brightness temperature", "PARDIG-NRT precipitation rate"],
+      sources: ["SatWeave infrared brightness temperature", "PARDIG-NRT precipitation rate", "NOAA GFS historical forecast"],
       peak_rain_rate_unit: "mm/h",
       replays: result.rows.map(row => ({
         ...row,

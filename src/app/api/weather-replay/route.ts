@@ -1,3 +1,7 @@
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import catalog from "../../../../public/data/weather-replay/regional-catalog.json";
 import { demoReplayId } from "@/lib/weather-replay/model";
 import { readWeatherReplay } from "@/lib/weather-replay/storage.server";
 
@@ -13,14 +17,28 @@ export async function GET(request: Request) {
   if (!/^[a-z0-9][a-z0-9-]{0,79}$/.test(id) || (version !== null && !/^[a-f0-9]{64}$/.test(version))) {
     return Response.json({ error: "无效的案例或版本。" }, { status: 400, headers });
   }
+  const bundled = version === null && catalog.find(item => item.archive === id);
   try {
     const replay = await readWeatherReplay(id, version);
-    if (!replay) return Response.json({ error: "该区域回放尚未发布。" }, { status: 404, headers });
-    return new Response(replay.body, {
+    if (replay) return new Response(replay.body, {
       headers: { ...headers, "Content-Type": "application/json; charset=utf-8", ETag: `"${replay.version}"` },
     });
+    if (!bundled) return Response.json({ error: "该区域回放尚未发布。" }, { status: 404, headers });
   } catch {
-    console.warn("Weather replay storage or catalog query failed.");
-    return Response.json({ error: "气象回放数据暂不可用。" }, { status: 503, headers });
+    if (!bundled) {
+      console.warn("Weather replay storage or catalog query failed.");
+      return Response.json({ error: "气象回放数据暂不可用。" }, { status: 503, headers });
+    }
+  }
+  try {
+    if (!bundled) throw new Error("Missing archive entry");
+    const body = await readFile(join(process.cwd(), "public/data/weather-replay", bundled.archive + ".json"), "utf8");
+    const digest = createHash("sha256").update(body).digest("hex");
+    return new Response(body, {
+      headers: { ...headers, "Content-Type": "application/json; charset=utf-8", ETag: `"${digest}"`,
+        "X-Weather-Replay-Source": "bundled" },
+    });
+  } catch {
+    return Response.json({ error: "该区域的内置气象档案暂不可用。" }, { status: 503, headers });
   }
 }

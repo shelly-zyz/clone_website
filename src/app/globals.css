@@ -3753,3 +3753,71 @@
   font-size: 12px;
 }
 .og-weather-sample button { color: #9eebe5; text-align: left; }
+
+/* Weather workspace controls float over the globe or volume instead of dividing the canvas. */
+.is-earth-project { --og-globe-nav-space: calc(65px + env(safe-area-inset-bottom, 0px)); }
+.is-earth-project .og-workspace-sidebar {
+  background: rgba(13, 23, 33, .85);
+  backdrop-filter: blur(16px);
+  border: 0;
+  border-radius: 13px;
+}
+.is-earth-project .og-workspace-action,
+.is-earth-project .og-filter-select select,
+.is-earth-project .og-weather-sidebar-nav button {
+  border: 0;
+  border-radius: 7px;
+  background: #273544;
+}
+.is-earth-project .og-workspace-action:hover,
+.is-earth-project .og-weather-sidebar-nav button:hover { background: #344352; }
+.is-earth-project .og-weather-sidebar-nav button[aria-pressed="true"] { background: #465266; }
+.is-earth-project .og-weather-sidebar-filters { border: 0; }
+.is-earth-project .og-globe-navigation.is-docked {
+  padding: 4px;
+  gap: 4px;
+  width: min(410px, calc(100% - 20px));
+  left: 50%;
+  background: rgba(13, 24, 35, .87);
+  backdrop-filter: blur(15px);
+  border-radius: 12px;
+}
+.is-earth-project .og-globe-navigation button {
+  height: 40px;
+  min-width: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+}
+.is-earth-project .og-globe-navigation button[aria-pressed="true"] { background: #404354; box-shadow: none; }
+.is-earth-project .og-globe-navigation img { width: 22px; height: 22px; }
+.is-earth-project .og-weather-field-stage { inset: 0; border: 0; border-radius: 0; }
+@media (min-width: 901px) {
+  .is-earth-project .og-weather-globe-stage { display: block; inset: 0; }
+  .is-earth-project .og-weather-globe-stage .og-earth-project {
+    position: absolute;
+    inset: 0 0 var(--og-globe-nav-space);
+  }
+  .is-earth-project .og-weather-globe-stage > aside {
+    position: absolute;
+    top: 72px;
+    right: 16px;
+    bottom: calc(var(--og-globe-nav-space) + 32px);
+    width: clamp(235px, 21vw, 324px);
+    margin: 0;
+  }
+}
+
+@media (max-width: 900px) {
+  .is-earth-project:has(.og-weather-field-stage) .og-assistant-mount {
+    position: fixed;
+    inset: 0;
+    transform: translateY(-122px);
+    pointer-events: none;
+  }
+}

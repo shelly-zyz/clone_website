@@ -12,7 +12,10 @@ const moduleUrl = (text, imports = {}) => {
   for (const [name, url] of Object.entries(imports)) code = code.replaceAll('"' + name + '"', '"' + url + '"');
   return 'data:text/javascript;base64,' + Buffer.from(code).toString('base64');
 };
-const regions = moduleUrl(source('src/lib/weather-replay/regions.ts'));
+const regionalCatalog = source('public/data/weather-replay/regional-catalog.json');
+const regions = moduleUrl(source('src/lib/weather-replay/regions.ts').replace(
+  'import catalog from "../../../public/data/weather-replay/regional-catalog.json";',
+  'const catalog = ' + regionalCatalog));
 const geo = moduleUrl(source('src/app/visualization/weather-replay/replay-geography.ts'), { '@/lib/weather-replay/regions': regions, 'd3-geo': pathToFileURL(require.resolve('d3-geo')).href });
 const { prepareReplayArea } = await import(geo);
 const data = moduleUrl(source('src/app/visualization/weather-replay/replay-data.ts'));
@@ -62,7 +65,7 @@ function recorder() {
   const surfaces = [];
   const fills = new Set();
   const rasters = [];
-  const drops = [];
+  const strokes = [];
   const labels = [];
   let path = [];
   const ctx = new Proxy({
@@ -72,12 +75,12 @@ function recorder() {
       fills.add(this.fillStyle);
       if (this.fillStyle?.startsWith('rgb(')) surfaces.push(this.fillStyle);
     },
-    stroke(){ if (this.strokeStyle === "rgba(127, 56, 40, .82)") drops.push(...path); },
+    stroke(){ strokes.push(path); },
     fillText(label){ labels.push(label); },
-    drawImage(image){ rasters.push(image); },
+    drawImage(image, ...placement){ rasters.push({ image, placement, alpha: this.globalAlpha }); },
   }, {get(target,key){return key in target ? target[key] : () => {}; }});
   ctx.fillStyle = '';
-  return { surfaces, fills, rasters, drops, labels, canvas:{clientWidth:1060,clientHeight:500,width:1060,height:500,getContext:()=>ctx} };
+  return { surfaces, fills, rasters, strokes, labels, canvas:{clientWidth:1060,clientHeight:500,width:1060,height:500,getContext:()=>ctx} };
 }
 
 globalThis.window = {devicePixelRatio:1};
@@ -87,18 +90,18 @@ globalThis.document = {
     canvas.getContext = () => ({
       createImageData: (width, height) => ({ data: new Uint8ClampedArray(width * height * 4) }),
       putImageData: image => { canvas.pixels = image.data; },
+      createRadialGradient: () => ({ addColorStop() {} }), fillRect() {},
     });
     return canvas;
   },
 };
 
-const texture = replayTexture([null, 0, 5, 60], 2, 2, false).pixels;
+const texture = replayTexture([null, 0, 5, 60], 2, 2, 75).pixels;
 assert.equal(texture[3], 0, 'null is transparent');
 assert.equal(texture[7], 0, 'no rain is transparent');
-assert.equal(texture[11], 255, 'weak rain is opaque');
-assert.equal(texture[15], 255, 'strong rain is opaque');
+assert(texture[11] > 0 && texture[15] > texture[11], 'heat map encodes weak and intense rain');
 assert.notDeepEqual([...texture.slice(8, 11)], [...texture.slice(12, 15)], 'palette encodes rain rate');
-assert.equal(replayTexture([null, 289], 2, 1, true).pixels[3], 0);
+
 assert.deepEqual(smoothAccumulation([null, 0, 20, 40], 2, 2).slice(0, 2), [null, 0],
   'smoothing retains missing and dry cells');
 
@@ -106,8 +109,7 @@ const index = Math.min(8, replay.rain.length - 1);
 const common = { index, area: archive, clouds:true, precipitation:true, previous:index, progress:1, rotation:.42 };
 const overlay = recorder();
 paintReplay(overlay.canvas, replay, { ...common, view: 'weather' });
-assert.equal(overlay.rasters.length, 2);
-assert(overlay.drops.length > 0);
+assert(overlay.rasters.length > 3, 'rain and rounded cloud sprites contribute to the volume');
 const stack = recorder();
 paintReplay(stack.canvas, replay, { ...common, view: 'time' });
 const frames = stackFrameIndices(replay, index);
@@ -124,8 +126,8 @@ paintReplay(accumulated.canvas, replay, { ...common, view:'accumulation', totals
 paintReplay(mono.canvas, replay, { ...common, view:'accumulation', totals, accumulationLimit:150 });
 assert(accumulated.surfaces.length > 0);
 for (const recording of [overlay, stack, accumulated, renderRain(1, 0, 'rain')]) {
-  assert(recording.fills.has('#f5f3ef'), 'each mode uses an opaque water surface');
-  assert(recording.fills.has('#c9c6c0'), 'each mode uses opaque land');
+  assert(recording.fills.has('#142630'), 'each mode uses an opaque water surface');
+  assert(recording.fills.has('#293d46'), 'each mode uses opaque land');
 }
 assert.deepEqual(accumulated.surfaces, mono.surfaces, 'a fixed scale yields stable colors for the same archived frame');
 function renderRain(rate, phase, view, precipitation = true) {
@@ -145,15 +147,32 @@ for (const view of ['weather', 'rain']) {
   const light = renderRain(1, 0, view);
   const heavy = renderRain(64, 0, view);
   assert(light.labels.some(label => label.endsWith('°W')) && light.labels.some(label => label.endsWith('°N')));
-  assert.equal(light.drops.length, 4, 'weak rate produces two drops');
-  assert(heavy.drops.length > light.drops.length, 'heavy rate increases drop density');
-  assert.deepEqual(heavy.drops.slice(0, light.drops.length), light.drops, 'intensity does not affect drop height or length');
-  for (let i = 0; i < heavy.drops.length; i += 2) {
-    assert.equal(heavy.drops[i][1], heavy.drops[i + 1][1], 'vertical drop');
-  }
+  assert(light.rasters.length >= 2, 'weak rain draws a footprint and a translucent shaft');
+  assert(heavy.rasters[1].alpha > light.rasters[1].alpha, 'strong rain increases curtain density');
+  assert.equal(heavy.rasters[1].placement[3], light.rasters[1].placement[3], 'rates do not invent measured heights');
   const next = renderRain(64, 0.05, view);
-  assert(heavy.drops.some((point, i) => point[0] === 'M' && next.drops[i][2] > point[2]), 'rain falls');
-  assert.equal(renderRain(0, 0, view).drops.length, 0, 'dry and missing cells stay dry');
+  assert(next.rasters[2].placement[1] > heavy.rasters[2].placement[1], 'mist moves toward the surface');
+  assert.equal(renderRain(0, 0, view).rasters.length, 1, 'zero and missing cells produce no rain volume');
 }
-assert.equal(renderRain(64, 0, 'weather', false).drops.length, 0, 'cloud view honors precipitation toggle');
-console.log('PASS: coastal coverage, geometry, missing masks, multicolor time layers, accumulation and equal-height rain');
+assert.equal(renderRain(64, 0, 'weather', false).rasters.length, 0, 'cloud view honors precipitation toggle');
+
+const globalGeography = JSON.parse(source('public/data/natural-earth/ne_50m_admin_0_countries.geojson'));
+const grids = new Set();
+for (const item of JSON.parse(regionalCatalog)) {
+  const sample = JSON.parse(source('public/data/weather-replay/' + item.archive + '.json'));
+  const area = prepareReplayArea(sample, item.value, globalGeography);
+  const { bounds, rows, cols, rain, satellite, metadata } = sample;
+  assert.deepEqual(area.bounds, bounds);
+  assert(area.hasData && area.mapPolygons.length > 0, item.value + ' has aligned geography and rain');
+  assert(!grids.has(JSON.stringify(rain[2].values)), 'separate region rain matrices');
+  grids.add(JSON.stringify(rain[2].values));
+  assert.equal(metadata.cloudVariable, 'cover');
+  for (const [i, frame] of rain.entries()) {
+    assert.equal(frame.time, satellite[i].time);
+    assert.equal(frame.values.length, rows * cols);
+    assert(frame.values.some(value => value > .2));
+  }
+  const wet = rain[0].values.findIndex((amount, i) => amount != null && rain[1].values[i] != null);
+  assert(Math.abs(accumulateRain(sample)[1][wet] - (rain[0].values[wet] + rain[1].values[wet]) * 1.5) < 1e-9);
+}
+console.log('PASS: geography, regional coverage, volume rendering, masks and integration');

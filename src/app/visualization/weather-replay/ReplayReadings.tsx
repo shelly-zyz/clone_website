@@ -6,7 +6,7 @@ import type { ReplayView } from "@/lib/weather-replay/views";
 import type { WeatherReplay } from "@/lib/weather-replay/model";
 import { gridCoordinate } from "./replay-geography";
 import { utcClock } from "./replay-data";
-import { accumulationScale, rainScale, scaleColor } from "./replay-palette";
+import { rainScale, scaleColor } from "./replay-palette";
 import styles from "./player.module.css";
 
 type Reading = number | null;
@@ -16,7 +16,7 @@ const plot = { left: 25, right: 203, top: 8, bottom: 99 };
 const plotWidth = plot.right - plot.left;
 const value = (reading: Reading, unit: string) => reading == null ? "缺测" : `${reading.toFixed(1)} ${unit}`;
 
-export function ReplayReadings({ replay, view, frame, cell, peaks, totals, limit, satelliteTime, onFrame }: {
+export function ReplayReadings({ replay, view, frame, cell, peaks, totals, limit, cells, satelliteTime, onFrame }: {
   replay: WeatherReplay;
   view: ReplayView;
   frame: number;
@@ -24,6 +24,7 @@ export function ReplayReadings({ replay, view, frame, cell, peaks, totals, limit
   peaks: readonly Reading[];
   totals: readonly Reading[][];
   limit: number;
+  cells: readonly number[];
   satelliteTime?: string;
   onFrame: (frame: number) => void;
 }) {
@@ -38,8 +39,29 @@ export function ReplayReadings({ replay, view, frame, cell, peaks, totals, limit
   const last = points.length - 1;
   const chartX = (index: number) => plot.left + index * plotWidth / Math.max(1, last);
   const chartY = (amount: number) => plot.bottom - Math.max(0, Math.min(1, amount / limit)) * (plot.bottom - plot.top);
-  const colorAt = (amount: number) =>
-    `rgb(${scaleColor(accumulated ? accumulationScale : rainScale, accumulated ? amount / limit : amount).join(",")})`;
+  const colorAt = (amount: number) => `rgb(${scaleColor(rainScale, amount / limit).join(",")})`;
+  const ranges = [0, .2, 2.5, 10, 25];
+  const distribution = ranges.map(() => 0);
+  let observed = 0, total = 0;
+  for (const id of cells) {
+    const amount = replay.rain[frame].values[id];
+    if (amount == null) continue;
+    observed++;
+    total += amount;
+    distribution[ranges.findLastIndex(bound => amount >= bound)]++;
+  }
+  const wet = observed - distribution[0];
+  const wetShare = observed ? wet / observed * 100 : 0;
+  const latitudeBands = [0, 1, 2].map(band => replay.rain.map(item => {
+    let sum = 0, count = 0;
+    for (const id of cells) {
+      if (Math.min(2, Math.floor(Math.floor(id / replay.cols) * 3 / replay.rows)) !== band) continue;
+      const amount = item.values[id];
+      if (amount != null) { sum += amount; count++; }
+    }
+    return count ? sum / count : null;
+  }));
+  const bandMax = Math.max(.2, ...latitudeBands.flat().map(amount => amount ?? 0));
   const segments: { index: number; amount: number }[][] = [];
   let segment: (typeof segments)[number] = [];
   for (const [index, amount] of points.entries()) {
@@ -53,7 +75,7 @@ export function ReplayReadings({ replay, view, frame, cell, peaks, totals, limit
   const timeTicks = [...new Set([0, Math.floor(last / 2), last])];
   const current = points[frame];
   const areaId = `${panelId}-area`;
-  const accent = colorAt(.7 * limit);
+  const accent = "#e8a8bc";
 
   return (
     <aside className={styles.readings} aria-label="当前场景读数">
@@ -63,13 +85,17 @@ export function ReplayReadings({ replay, view, frame, cell, peaks, totals, limit
       </button>
       <div id={panelId} className={styles.readingsBody} data-open={open}>
         <h3>场景读数</h3>
+        <div className={styles.metrics}>
+          <div><span>{seriesName}</span><strong>{value(current, unit)}</strong></div>
+          <div><span>降水格点占比</span><strong>{observed ? wetShare.toFixed(0) + "%" : "缺测"}</strong></div>
+        </div>
         <p className={styles.readingsContext}>{coordinates ? `${coordinates[1].toFixed(2)}°，${coordinates[0].toFixed(2)}°` : "点击地图查看格点"}</p>
         <dl className={styles.readingsValues}>
-          <div><dt>{seriesName}</dt><dd>{value(current, unit)}</dd></div>
+          <div><dt>格点平均降水率</dt><dd>{value(observed ? total / observed : null, "mm/h")}</dd></div>
           <div><dt>有效时刻</dt><dd>{utcClock(replay.rain[frame].time)} UTC</dd></div>
-          {view === "weather" && satelliteTime && <div><dt>红外帧</dt><dd>{utcClock(satelliteTime)} UTC</dd></div>}
+          {view === "weather" && satelliteTime && <div><dt>{replay.metadata ? "总云量帧" : "红外帧"}</dt><dd>{utcClock(satelliteTime)} UTC</dd></div>}
           {accumulated && <div><dt>累计起点</dt><dd>{utcClock(replay.rain[0].time)} UTC</dd></div>}
-          {view === "time" && <div><dt>图层间隔</dt><dd>30 分钟</dd></div>}
+          {view === "time" && <div><dt>图层间隔</dt><dd>{replay.metadata?.stepMinutes ?? 30} 分钟</dd></div>}
         </dl>
         <figure className={styles.readingsFigure}>
           <figcaption className={styles.readingsCaption}>
@@ -85,8 +111,8 @@ export function ReplayReadings({ replay, view, frame, cell, peaks, totals, limit
             }}>
             <defs>
               <linearGradient id={areaId} x1="0" x2="0" y1="0" y2="1" gradientUnits="objectBoundingBox">
-                <stop offset="0" stopColor={colorAt(limit * .4)} stopOpacity=".26" />
-                <stop offset="1" stopColor={colorAt(0)} stopOpacity=".14" />
+                <stop offset="0" stopColor="#cf9caa" stopOpacity=".44" />
+                <stop offset="1" stopColor="#9382a3" stopOpacity=".03" />
               </linearGradient>
             </defs>
             {[0, limit / 2, limit].map(amount => (
@@ -125,8 +151,35 @@ export function ReplayReadings({ replay, view, frame, cell, peaks, totals, limit
             )}
           </svg>
         </figure>
-        <p className={styles.readingsSource}>PARDIG-NRT · {accumulated ? "档案积分" : "历史档案"}</p>
-        <p className={styles.readingsSource}>暂无同区域、同时段的已发布降水预报。</p>
+        <figure className={styles.readingsFigure}>
+          <figcaption className={styles.readingsCaption}><span>降水强度分布</span><span>有效格点 %</span></figcaption>
+          {["<0.2", "0.2–2.5", "2.5–10", "10–25", "≥25"].map((label, i) => (
+            <div key={label} className={styles.barRow}>
+              <span>{label}</span><meter min={0} max={100} value={observed ? distribution[i] / observed * 100 : 0}
+                aria-label={label + " mm/h"} /><span>{observed ? (distribution[i] / observed * 100).toFixed(0) : "—"}</span>
+            </div>
+          ))}
+        </figure>
+        <figure className={styles.readingsFigure}>
+          <figcaption className={styles.readingsCaption}><span>纬带 × 时间</span><span>平均降水率 · mm/h</span></figcaption>
+          <svg viewBox="0 0 224 55" role="img" aria-label={`南中北纬带按时刻的平均降水率，色标 0 至 ${bandMax.toFixed(1)} mm/h`}>
+            {latitudeBands.map((band, row) => (
+              <g key={row}>
+                <text x="1" y={row * 14 + 12} className={styles.readingsTick}>{["南", "中", "北"][row]}</text>
+                {band.map((amount, i) => (
+                  <rect key={i} x={17 + i * 206 / band.length} y={3 + row * 14} width={206 / band.length - 1} height="12"
+                    fill={amount == null ? "#222635" : colorAt(amount / bandMax * limit)}>
+                    <title>{utcClock(replay.rain[i].time)} UTC · {value(amount, "mm/h")}</title>
+                  </rect>
+                ))}
+              </g>
+            ))}
+            <text x="17" y="54" className={styles.readingsTick}>{utcClock(replay.rain[0].time)}</text>
+            <text textAnchor="end" x="222" y="54" className={styles.readingsTick}>{utcClock(replay.rain[last].time)} UTC</text>
+          </svg>
+          <p className={styles.readingsSource}>色阶 0–{bandMax.toFixed(1)} mm/h</p>
+        </figure>
+        <p className={styles.readingsSource}>{replay.metadata ? "NOAA GFS · 历史模式预报" : "PARDIG-NRT · 卫星降水估计"}</p>
       </div>
     </aside>
   );
