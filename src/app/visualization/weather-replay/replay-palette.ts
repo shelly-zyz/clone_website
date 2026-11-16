@@ -1,11 +1,11 @@
 export const rainScale = [
-  [0, [30, 117, 181]], [1, [31, 163, 227]], [5, [32, 201, 182]],
-  [15, [145, 219, 125]], [30, [251, 218, 95]], [50, [251, 131, 62]], [75, [231, 55, 81]],
+  [0, [247, 224, 175]], [1, [246, 193, 128]], [5, [237, 151, 78]],
+  [15, [218, 83, 48]], [30, [184, 44, 33]], [50, [144, 22, 26]], [75, [97, 13, 20]],
 ] as const;
 
 export const accumulationScale = [
-  [0, [25, 111, 177]], [.1, [32, 165, 228]], [.28, [34, 202, 179]],
-  [.48, [158, 221, 115]], [.66, [252, 220, 99]], [.83, [250, 134, 69]], [1, [231, 56, 83]],
+  [0, [247, 224, 175]], [.10, [246, 193, 128]], [.28, [237, 151, 78]],
+  [.48, [218, 83, 48]], [.66, [184, 44, 33]], [.83, [144, 22, 26]], [1, [97, 13, 20]],
 ] as const;
 
 type Scale = readonly (readonly [number, readonly [number, number, number]])[];
@@ -18,10 +18,6 @@ export function scaleColor(scale: Scale, value: number) {
   const [high, b] = scale[index];
   const fraction = (value - low) / (high - low);
   return a.map((channel, i) => Math.round(channel + (b[i] - channel) * fraction));
-}
-
-export function visibleRain(value: number) {
-  return Math.max(0, Math.min(1, Math.log1p(value) / Math.log(76)));
 }
 
 type Grid = readonly (number | null)[];
@@ -42,9 +38,9 @@ export function replayTexture(values: Grid, cols: number, rows: number, clouds: 
     if (value == null || (clouds ? value >= 278 : value < .2)) return;
     const offset = 4 * index;
     const cold = Math.min(1, (278 - value) / 76);
-    const color = clouds ? [115 + cold * 87, 123 + cold * 85, 226 + cold * 21] : scaleColor(rainScale, value);
+    const color = clouds ? [176 - cold * 90, 193 - cold * 82, 207 - cold * 68] : scaleColor(rainScale, value);
     pixels.data.set(color, offset);
-    pixels.data[offset + 3] = clouds ? Math.round(145 * cold) : Math.round(60 + visibleRain(value) * 190);
+    pixels.data[offset + 3] = clouds ? Math.round(100 + 149 * cold) : 255;
   });
   painter.putImageData(pixels, 0, 0);
   cache.set(values, image);

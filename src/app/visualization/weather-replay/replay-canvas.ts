@@ -1,7 +1,7 @@
 import type { WeatherReplay } from "@/lib/weather-replay/model";
 import type { ReplayArea } from "./replay-geography";
 import { satelliteAt, stackFrameIndices } from "./replay-data";
-import { accumulationScale, replayTexture, scaleColor, smoothAccumulation } from "./replay-palette";
+import { accumulationScale, rainScale, replayTexture, scaleColor, smoothAccumulation } from "./replay-palette";
 import type { ReplayView } from "@/lib/weather-replay/views";
 
 type Point = [number, number];
@@ -9,7 +9,9 @@ type World = [number, number, number?];
 
 const rainCeiling = 0.64;
 const rainTail = 0.026;
-const rainStroke = "rgba(199, 228, 255, .48)";
+const rainStroke = "rgba(127, 56, 40, .82)";
+const timeStep = .165;
+const voxelHeight = .055;
 
 function coordinateTicks(start: number, end: number, target: number) {
   const spacing = (end - start) / target;
@@ -54,8 +56,8 @@ function replayCamera(width: number, height: number, area: ReplayArea, view: Rep
   const xs = map.map(point => point[0]);
   const ys = map.map(point => point[1] * tilt);
   const left = Math.min(...xs), right = Math.max(...xs);
-  const bottom = Math.max(...ys), top = Math.min(...ys) - (area.hasData ? view === "time" ? .35 : .30 : 0);
-  const scale = Math.min(width * .90 / (right - left), height * .77 / (bottom - top)) * zoom;
+  const bottom = Math.max(...ys), top = Math.min(...ys) - (area.hasData ? view === "time" ? .43 : .33 : 0);
+  const scale = Math.min(width * (view === "time" ? .84 : .90) / (right - left), height * .79 / (bottom - top)) * zoom;
   const centerX = (left + right) / 2, centerY = (top + bottom) / 2;
   const offsetX = width * .5, offsetY = height * .52;
   const project = ([lon, lat, z = 0]: World): Point => {
@@ -67,7 +69,10 @@ function replayCamera(width: number, height: number, area: ReplayArea, view: Rep
     const depth = ((y - offsetY) / scale + centerY) / tilt;
     return [(vx * cos + depth * sin) / aspect + .5, vx * sin - depth * cos + .5];
   };
-  return { project, unproject, mapCorners, normalizeLat, normalizeLon };
+  const frontX = sin >= 0 ? [1, 2] as const : [3, 0] as const;
+  const frontY = cos >= 0 ? [0, 1] as const : [2, 3] as const;
+  const depth = ([lon, lat, z = 0]: World) => toView([lon, lat])[1] + z * tilt / .48;
+  return { project, unproject, mapCorners, normalizeLat, normalizeLon, frontX, frontY, depth };
 }
 
 export function paintReplay(
@@ -106,7 +111,7 @@ export function paintReplay(
   ctx.clearRect(0, 0, width, height);
 
   const camera = replayCamera(width, height, area, view, rotation, zoom, tilt);
-  const { project, mapCorners, normalizeLat, normalizeLon } = camera;
+  const { project, mapCorners, normalizeLat, normalizeLon, frontX, frontY, depth } = camera;
   const { mapBounds } = area;
   const stack = view === "time";
   const rain = view === "rain";
@@ -122,6 +127,8 @@ export function paintReplay(
     ctx.fillStyle = color;
     ctx.fill();
   };
+  const shade = (color: readonly number[], brightness = 1) =>
+    "rgb(" + color.map(channel => Math.min(255, Math.round(channel * brightness))).join(",") + ")";
   const plane = (z: number) => ([[0, 0, z], [1, 0, z], [1, 1, z], [0, 1, z]] satisfies World[]).map(project);
   const drawTexture = (values: readonly (number | null)[], z: number, alpha: number, cloud = false) => {
     const raster = replayTexture(values, replay.cols, replay.rows, cloud);
@@ -176,13 +183,15 @@ export function paintReplay(
   const gridX = 1 / (replay.cols - 1);
   const gridY = 1 / (replay.rows - 1);
   const map = mapCorners.map(project);
-  if (area.ocean) fill(map, "#142b41");
-  paintLand(area.mapPolygons, "#304257");
+  const lowerMap = mapCorners.map(([lon, lat]) => project([lon, lat, -.034]));
+  fill([map[frontX[0]], map[frontX[1]], lowerMap[frontX[1]], lowerMap[frontX[0]]], "#a8a5a0");
+  fill([map[frontY[0]], map[frontY[1]], lowerMap[frontY[1]], lowerMap[frontY[0]]], "#c8c4bd");
+  fill(map, "#f5f3ef");
+  paintLand(area.mapPolygons, "#c9c6c0");
 
   const current = replay.rain[index];
   const satellite = satelliteAt(replay, current.time);
   if (area.hasData && (rain || view === "weather" && precipitation)) drawTexture(current.values, .008, 1);
-  if (area.hasData && clouds && satellite && view === "weather") drawTexture(satellite.values, .53, .77, true);
 
   const { west: mapWest, south: mapSouth, east: mapEast, north: mapNorth } = mapBounds;
   const tickCount = width < 480 ? 3 : 5;
@@ -191,27 +200,31 @@ export function paintReplay(
   ctx.save();
   ctx.setLineDash([3, 5]);
   ctx.lineWidth = 0.8;
-  ctx.strokeStyle = "rgba(183, 207, 224, .19)";
+  ctx.strokeStyle = "rgba(92, 88, 80, .27)";
   ctx.beginPath();
   for (const lon of longitudes) mapLine(lon, mapSouth, lon, mapNorth);
   for (const lat of latitudes) mapLine(mapWest, lat, mapEast, lat);
   ctx.stroke();
   ctx.restore();
-  paintBoundaries(area.mapPolygons, "#7d97a8", 0.8);
-  paintBoundaries(area.focusPolygons, "#c2d7e5", 1.2);
+  paintBoundaries(area.mapPolygons, "#635e57", 1.15);
+  paintBoundaries(area.focusPolygons, "#3a3732", 1.65);
+  path(map);
+  ctx.strokeStyle = "#777168";
+  ctx.lineWidth = 1.05;
+  ctx.stroke();
 
   // Anchor both scale axes to the nearest corner so labels stay outside the map.
   const corner = map.reduce((nearest, point, i) => point[1] > map[nearest][1] ? i : nearest, 0);
   const edgeLon = corner === 0 || corner === 3 ? mapWest : mapEast;
   const edgeLat = corner < 2 ? mapSouth : mapNorth;
-  ctx.strokeStyle = "#758c9f";
-  ctx.lineWidth = 0.9;
+  ctx.strokeStyle = "#3b3833";
+  ctx.lineWidth = 1.15;
   ctx.beginPath();
   mapLine(mapWest, edgeLat, mapEast, edgeLat);
   mapLine(edgeLon, mapSouth, edgeLon, mapNorth);
   ctx.stroke();
   ctx.font = (width < 480 ? 10 : 11) + "px system-ui, sans-serif";
-  ctx.fillStyle = "#c7d7e3";
+  ctx.fillStyle = "#383530";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   const tick = (point: Point, outward: Point, label: string) => {
@@ -236,29 +249,100 @@ export function paintReplay(
   ctx.font = "12px system-ui, sans-serif";
 
   if (stack && area.hasData) {
-    const indexes = stackFrameIndices(replay, index);
-    for (const [layer, frame] of indexes.entries()) {
-      const z = (layer + 1) * .155;
-      const surface = plane(z);
+    const frames = stackFrameIndices(replay, index);
+    const axis = mapCorners.reduce((right, point) => project(point)[0] > project(right)[0] ? point : right);
+    const ceiling = frames.length * timeStep + voxelHeight + .077;
+    const lift = ([lon, lat]: World, z: number) => project([lon, lat, z]);
+    const axisFloor = project(axis);
+    const axisTop = lift(axis, ceiling);
+    const backIndex = mapCorners.reduce((back, point, i) =>
+      depth(point) < depth(mapCorners[back]) ? i : back, 0);
+    const rear = mapCorners[backIndex];
+    const walls = [mapCorners[(backIndex + 1) % 4], mapCorners[(backIndex + 3) % 4]];
+    for (const [i, end] of walls.entries()) {
+      fill([project(rear), project(end), lift(end, ceiling), lift(rear, ceiling)],
+        i === 0 ? "#efede9" : "#f4f2ef");
+    }
+
+    ctx.save();
+    ctx.setLineDash([4, 5]);
+    ctx.lineWidth = .8;
+    ctx.strokeStyle = "#b7b2a9";
+    ctx.beginPath();
+    for (let layer = 0; layer < frames.length; layer++) {
+      const z = (layer + 1) * timeStep + voxelHeight;
+      ctx.moveTo(...lift(walls[0], z));
+      ctx.lineTo(...lift(rear, z));
+      ctx.lineTo(...lift(walls[1], z));
+    }
+    for (const end of walls) {
+      const columns: World[] = end[1] === rear[1]
+        ? longitudes.map(lon => [normalizeLon(lon), rear[1]])
+        : latitudes.map(lat => [rear[0], normalizeLat(lat)]);
+      for (const point of columns) {
+        ctx.moveTo(...project(point));
+        ctx.lineTo(...lift(point, ceiling));
+      }
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    const voxels: { lon: number; lat: number; z: number; rate: number; depth: number }[] = [];
+    for (const [layer, frame] of frames.entries()) {
+      const z = (layer + 1) * timeStep;
+      for (const [cell, value] of replay.rain[frame].values.entries()) {
+        if (value == null || value < .2) continue;
+        const lon = (cell % replay.cols) * gridX;
+        const lat = Math.floor(cell / replay.cols) * gridY;
+        voxels.push({ lon, lat, z, rate: value, depth: depth([lon, lat, z]) });
+      }
+    }
+    // Paint back to front so the time slabs occlude each other naturally when rotated.
+    voxels.sort((a, b) => a.depth - b.depth);
+    for (const { lon, lat, z, rate } of voxels) {
+      const west = Math.max(0, lon - .48 * gridX);
+      const east = Math.min(1, lon + .48 * gridX);
+      const south = Math.max(0, lat - .48 * gridY);
+      const north = Math.min(1, lat + .48 * gridY);
+      const corners: Point[] = [[west, south], [east, south], [east, north], [west, north]];
+      const bottom = corners.map(([x, y]) => project([x, y, z]));
+      const top = corners.map(([x, y]) => project([x, y, z + voxelHeight]));
+      const color = scaleColor(rainScale, rate);
+      fill([top[frontX[0]], top[frontX[1]], bottom[frontX[1]], bottom[frontX[0]]], shade(color, .69));
+      fill([top[frontY[0]], top[frontY[1]], bottom[frontY[1]], bottom[frontY[0]]], shade(color, .83));
+      fill(top, shade(color));
+    }
+
+    ctx.beginPath();
+    ctx.moveTo(...axisFloor);
+    ctx.lineTo(...axisTop);
+    ctx.strokeStyle = "#574f45";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.textAlign = "left";
+    ctx.font = "600 11px system-ui, sans-serif";
+    ctx.fillStyle = "#3b3731";
+    ctx.fillText("UTC", Math.min(width - 36, axisTop[0] + 6), axisTop[1] - 9);
+    for (const [layer, frame] of frames.entries()) {
+      const [x, y] = project([axis[0], axis[1], (layer + 1) * timeStep + voxelHeight]);
       const active = frame === index;
-      drawTexture(replay.rain[frame].values, z, active ? 1 : .46 + layer * .09);
-      const corner = surface.reduce((right, point) => point[0] > right[0] ? point : right);
-      ctx.strokeStyle = active ? "#96d9e9" : "#58768a";
+      ctx.strokeStyle = active ? "#9f2d22" : "#777168";
       ctx.beginPath();
-      ctx.moveTo(corner[0] - 11, corner[1]);
-      ctx.lineTo(corner[0] + 2, corner[1]);
+      ctx.moveTo(x - 3, y);
+      ctx.lineTo(x + 4, y);
       ctx.stroke();
-      const [x, y] = surface.reduce((right, point) => right[0] > point[0] ? right : point);
-      ctx.textAlign = "left";
-      ctx.fillStyle = active ? "#d9f5fb" : "#a3bdce";
-      ctx.fillText(utcClock(replay.rain[frame].time), Math.min(width - 36, x + 5), y);
+      ctx.fillStyle = active ? "#86291f" : "#453e35";
+      ctx.font = (active ? "650 " : "") + "11px system-ui, sans-serif";
+      ctx.fillText(utcClock(replay.rain[frame].time), Math.min(width - 36, x + 7), y);
     }
   }
+
+  if (area.hasData && clouds && satellite && view === "weather") drawTexture(satellite.values, .53, .92, true);
 
   if (area.hasData && (rain || (view === "weather" && precipitation))) {
     const previousValues = replay.rain[previous].values;
     ctx.strokeStyle = rainStroke;
-    ctx.lineWidth = 0.95;
+    ctx.lineWidth = 1.05;
     ctx.beginPath();
     for (let row = 0; row < replay.rows; row++) {
       for (let col = 0; col < replay.cols; col++) {
@@ -301,7 +385,7 @@ export function paintReplay(
     }
     relief.sort((a, b) => a.depth - b.depth);
     for (const { points, mean } of relief) {
-      const color = "rgb(" + scaleColor(accumulationScale, mean / accumulationLimit).join(",") + ")";
+      const color = shade(scaleColor(accumulationScale, mean / accumulationLimit));
       fill(points, color);
       ctx.strokeStyle = color;
       ctx.lineWidth = .5;
@@ -313,14 +397,14 @@ export function paintReplay(
     const [x, y] = project([(selectedCell % replay.cols) * gridX, Math.floor(selectedCell / replay.cols) * gridY]);
     ctx.beginPath();
     ctx.arc(x, y, 6, 0, Math.PI * 2);
-    ctx.fillStyle = "#121c2b";
+    ctx.fillStyle = "#3f3229";
     ctx.fill();
     ctx.lineWidth = 1.6;
-    ctx.strokeStyle = "#ddf9ff";
+    ctx.strokeStyle = "#fff8ed";
     ctx.stroke();
     ctx.beginPath();
     ctx.arc(x, y, 2, 0, Math.PI * 2);
-    ctx.fillStyle = "#f1fbff";
+    ctx.fillStyle = "#fff8ed";
     ctx.fill();
   }
 

@@ -63,8 +63,8 @@
   min-height: 210px;
   overflow: hidden;
   min-width: 0;
-  background: radial-gradient(ellipse at 47% 58%, #1b3449, #0d1b2a 62%, #09131f);
-  color: #b5cbd9;
+  background: radial-gradient(ellipse at 47% 42%, #fff, #f4f2ee 72%, #eae7e2);
+  color: #423c34;
 }
 
 .canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; }
@@ -75,14 +75,14 @@
   top: 0;
   left: 0;
   padding: 1px 3px;
-  color: #a9c1d3;
-  background: #101c2a8c;
+  color: #4b4338;
+  background: #fffdf9e8;
   border-radius: 2px;
   font-size: 10px;
   line-height: 1.2;
   white-space: nowrap;
 }
-.mapLabels span[data-active="true"] { color: #ebf6fb; font-weight: 650; }
+.mapLabels span[data-active="true"] { color: #312a22; font-weight: 650; }
 .loadState { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px 16px; color: #bbcfdd; font-size: 13px; }
 .emptyNotice {
   position: absolute;
@@ -96,8 +96,9 @@
   margin-inline: auto;
   padding: 5px 8px;
   border-radius: 4px;
-  color: #d9e8ef;
-  background: #0e1b2ad9;
+  border: 1px solid #d8cec4;
+  color: #51463b;
+  background: #fffdfa;
   font-size: 12px;
 }
 .stageLabels { position: absolute; inset: 12px 14px auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; pointer-events: none; }
@@ -108,20 +109,21 @@
   position: absolute;
   bottom: 11px;
   left: 14px;
-  min-width: 105px;
+  width: 184px;
   max-width: calc(100% - 28px);
   display: grid;
   gap: 4px;
   padding: 6px 8px;
   border-radius: 6px;
-  background: #101e2bdd;
-  color: #c3d5e2;
+  border: 1px solid #d8cec4;
+  background: #fffdfa;
+  color: #51463b;
   font-size: 10px;
   pointer-events: none;
 }
 
 .legendValues { display: flex; justify-content: space-between; }
-.peak strong { color: #eff8fe; font-size: 13px; font-weight: 650; }
+.peak strong { color: #302921; font-size: 13px; font-weight: 650; }
 
 .controls { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 9px 16px 10px; border-top: 1px solid #314558; background: #0d1a28; }
 .layers { display: flex; flex-wrap: wrap; gap: 4px 18px; color: #b8cad8; font-size: 12px; }
@@ -144,7 +146,8 @@
   .header, .controls { padding-inline: 9px; }
   .header { padding-block: 7px; }
   .header button { font-size: 11px; min-height: 31px; }
-  .legend { left: 7px; bottom: 7px; }
+  .stage:has(.legend) .canvas { height: calc(100% - 82px); }
+  .legend { left: 7px; bottom: 7px; gap: 2px; padding: 5px 7px; }
   .emptyNotice { inset-block: 33px auto; }
   .cameraControls { gap: 1px; }
   .stageLabels { inset: 7px 8px auto; }
@@ -161,16 +164,9 @@
 }
 
 .legendScale {
-  height: 4px;
-  border-radius: 3px;
-  min-width: 128px;
-  background: linear-gradient(90deg, #1e75b5, #1fa3e3 1.33%, #20c9b6 6.67%,
-    #91db7d 20%, #fbda5f 40%, #fb833e 66.67%, #e73751);
-}
-
-.stage[data-view="accumulation"] .legendScale {
-  background: linear-gradient(90deg, #196fb1, #20a5e4 10%, #22cab3 28%,
-    #9edd73 48%, #fcdc63 66%, #fa8645 83%, #e73853);
+  display: block;
+  width: 100%;
+  height: 7px;
 }
 
 .readings {

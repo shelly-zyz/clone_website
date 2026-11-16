@@ -1,7 +1,7 @@
 "use client";
 
 import { Compass, Minus, Pause, Play, Plus, Rotate3D, Scan } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { WorkspaceFilterSelect } from "@/components/opengridworks/WorkspaceSidebar";
 import { finishGlobeHandoff } from "@/lib/globe-handoff";
 import type { WeatherReplay } from "@/lib/weather-replay/model";
@@ -12,6 +12,7 @@ import { createReplayScene } from "./replay-canvas";
 import { ReplayReadings } from "./ReplayReadings";
 import { accumulateRain, satelliteAt, utcClock } from "./replay-data";
 import { prepareReplayArea, regionalPeak, type ReplayGeography } from "./replay-geography";
+import { accumulationScale, rainScale } from "./replay-palette";
 import styles from "./player.module.css";
 
 type ReplayRequest = { query: string; replay: WeatherReplay; geography: ReplayGeography; localArchive: boolean } | { query: string; error: string };
@@ -103,6 +104,7 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
   initialFrame?: number;
   onFrameChange?: (frame: number) => void;
 }) {
+  const legendId = useId();
   const final = replay.rain.length - 1;
   const [playing, setPlaying] = useState(false);
   const [point, setPoint] = useState<{ cell: number; region: ReplayRegionId }>();
@@ -135,6 +137,9 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
   const accumulationPeak = totals ? regionalPeak(totals, area.cells) : null;
   const accumulationPeaks = useMemo(() => accumulated.map(grid => regionalPeak(grid, area.cells)), [area.cells, accumulated]);
   const accumulationLimit = Math.max(25, Math.ceil(Math.max(0, ...accumulationPeaks.map(value => value ?? 0)) / 25) * 25);
+  const legendStops = view === "accumulation" ? accumulationScale : rainScale;
+  const legendMax = view === "accumulation" ? accumulationLimit : 75;
+  const legendStopMax = legendStops[legendStops.length - 1][0];
 
   useEffect(() => {
     if (!canvas.current || !overlay.current) return;
@@ -246,8 +251,17 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
               <span>{view === "accumulation" ? "累计降水" : "降水率"} · {unit}</span>
               {(view !== "weather" || precipitation) && (
                 <>
-                  <span className={styles.legendScale} aria-hidden="true" />
-                  <span className={styles.legendValues}><span>0</span><span>{view === "accumulation" ? accumulationLimit / 2 : 30}</span><span>{view === "accumulation" ? accumulationLimit : 75}</span></span>
+                  <svg className={styles.legendScale} aria-hidden="true" focusable="false">
+                    <defs>
+                      <linearGradient id={legendId}>
+                        {legendStops.map(([value, color]) => (
+                          <stop key={value} offset={value / legendStopMax} stopColor={`rgb(${color.join(",")})`} />
+                        ))}
+                      </linearGradient>
+                    </defs>
+                    <rect width="100%" height="100%" rx="3" fill={`url(#${legendId})`} />
+                  </svg>
+                  <span className={styles.legendValues}><span>0</span><span>{legendMax / 2}</span><span>{legendMax}</span></span>
                 </>
               )}
               {displayPeak !== null && (

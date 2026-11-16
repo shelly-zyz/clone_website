@@ -60,6 +60,7 @@ assert.deepEqual(archive.bounds, replay.bounds, 'the data retain their geographi
 
 function recorder() {
   const surfaces = [];
+  const fills = new Set();
   const rasters = [];
   const drops = [];
   const labels = [];
@@ -67,13 +68,16 @@ function recorder() {
   const ctx = new Proxy({
     beginPath(){path=[];}, moveTo(...p){path.push(['M',...p]);}, lineTo(...p){path.push(['L',...p]);},
     closePath(){}, arc(){},
-    fill(){ if (this.fillStyle?.startsWith('rgb(')) surfaces.push(this.fillStyle); },
-    stroke(){ if (this.strokeStyle === "rgba(199, 228, 255, .48)") drops.push(...path); },
+    fill(){
+      fills.add(this.fillStyle);
+      if (this.fillStyle?.startsWith('rgb(')) surfaces.push(this.fillStyle);
+    },
+    stroke(){ if (this.strokeStyle === "rgba(127, 56, 40, .82)") drops.push(...path); },
     fillText(label){ labels.push(label); },
     drawImage(image){ rasters.push(image); },
   }, {get(target,key){return key in target ? target[key] : () => {}; }});
   ctx.fillStyle = '';
-  return { surfaces, rasters, drops, labels, canvas:{clientWidth:1060,clientHeight:500,width:1060,height:500,getContext:()=>ctx} };
+  return { surfaces, fills, rasters, drops, labels, canvas:{clientWidth:1060,clientHeight:500,width:1060,height:500,getContext:()=>ctx} };
 }
 
 globalThis.window = {devicePixelRatio:1};
@@ -91,7 +95,8 @@ globalThis.document = {
 const texture = replayTexture([null, 0, 5, 60], 2, 2, false).pixels;
 assert.equal(texture[3], 0, 'null is transparent');
 assert.equal(texture[7], 0, 'no rain is transparent');
-assert(texture[11] > 0 && texture[15] > texture[11], 'valid weak and strong rain are visible');
+assert.equal(texture[11], 255, 'weak rain is opaque');
+assert.equal(texture[15], 255, 'strong rain is opaque');
 assert.notDeepEqual([...texture.slice(8, 11)], [...texture.slice(12, 15)], 'palette encodes rain rate');
 assert.equal(replayTexture([null, 289], 2, 1, true).pixels[3], 0);
 assert.deepEqual(smoothAccumulation([null, 0, 20, 40], 2, 2).slice(0, 2), [null, 0],
@@ -106,13 +111,22 @@ assert(overlay.drops.length > 0);
 const stack = recorder();
 paintReplay(stack.canvas, replay, { ...common, view: 'time' });
 const frames = stackFrameIndices(replay, index);
-assert.equal(stack.rasters.length, frames.length, 'every time layer draws a full raster');
+assert.equal(stack.rasters.length, 0, 'time layers use solid faces');
+const wetCells = frames.reduce((count, frame) =>
+  count + replay.rain[frame].values.filter(value => value != null && value >= .2).length, 0);
+assert.equal(stack.surfaces.length, 3 * wetCells, 'every visible wet cell draws three opaque faces');
+assert(new Set(stack.surfaces).size > 3, 'the time layers retain varied rain intensity and face shading');
+assert(stack.labels.includes('UTC'));
 for (const frame of frames) assert(stack.labels.includes(replay.rain[frame].time.slice(11, 16)));
 const accumulated = recorder(), mono = recorder();
 const totals = accumulateRain(replay)[index];
 paintReplay(accumulated.canvas, replay, { ...common, view:'accumulation', totals, accumulationLimit:150 });
 paintReplay(mono.canvas, replay, { ...common, view:'accumulation', totals, accumulationLimit:150 });
 assert(accumulated.surfaces.length > 0);
+for (const recording of [overlay, stack, accumulated, renderRain(1, 0, 'rain')]) {
+  assert(recording.fills.has('#f5f3ef'), 'each mode uses an opaque water surface');
+  assert(recording.fills.has('#c9c6c0'), 'each mode uses opaque land');
+}
 assert.deepEqual(accumulated.surfaces, mono.surfaces, 'a fixed scale yields stable colors for the same archived frame');
 function renderRain(rate, phase, view, precipitation = true) {
   const recording = recorder();
