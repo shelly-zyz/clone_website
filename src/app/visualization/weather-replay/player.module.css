@@ -277,6 +277,13 @@
   padding: 9px 13px;
   transform: translateX(-50%);
 }
+.embedded .loadState {
+  position: absolute;
+  top: 71px;
+  left: 50%;
+  width: min(492px, calc(100% - 36px));
+  transform: translateX(-50%);
+}
 .embedded .stageLabels { display: none; }
 .embedded .readings {
   right: 16px;
@@ -314,6 +321,7 @@
 .barRow span:last-child { text-align: right; }
 
 @media (max-width: 900px) {
+  .embedded .loadState { top: 106px; }
   .embedded .header { top: 106px; left: 9px; right: 9px; width: auto; transform: none; padding: 7px 9px; }
   .embedded .controls { bottom: calc(var(--og-globe-nav-space, 68px) + 7px); left: 7px; right: 7px; width: auto; transform: none; }
   .embedded .legend { right: auto; left: 7px; bottom: calc(var(--og-globe-nav-space, 68px) + 137px); width: 87px; }

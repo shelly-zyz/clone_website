@@ -6107,7 +6107,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
           </div>
         )}
         {activeProject === "weather" && !resourceScene && weatherScene !== "globe" && (
-          <div className="og-weather-replay-stage og-weather-field-stage">
+          <div className={`og-weather-replay-stage og-weather-field-stage${isReplayView(weatherScene) ? "" : " og-weather-volume-stage"}`}>
             {weatherScene === "radar" ? <WeatherRadar /> :
               weatherScene === "wind" ? <WeatherWind /> : <WeatherReplayPlayer query="" scene={weatherScene}
                 region={context.replayRegion} initialFrame={context.replayFrame} onFrameChange={rememberReplayFrame} />}

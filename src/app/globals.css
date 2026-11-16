@@ -3878,6 +3878,9 @@
 .is-earth-project .og-globe-navigation button[aria-pressed="true"] { background: #404354; box-shadow: none; }
 .is-earth-project .og-globe-navigation img { width: 22px; height: 22px; }
 .is-earth-project .og-weather-field-stage { inset: 0; border: 0; border-radius: 0; }
+.is-earth-project .og-weather-volume-stage {
+  inset: calc(var(--og-workspace-top) + 56px) var(--og-gutter) 0 calc(var(--og-sidebar-width) + 2 * var(--og-gutter));
+}
 .og-weather-globe-stage { position: absolute; inset: 0; }
 @media (min-width: 901px) {
   .is-earth-project.og-globe-workspace:has(.og-weather-field-stage, .og-weather-globe-stage:not([hidden])) {
@@ -3900,6 +3903,7 @@
 }
 
 @media (max-width: 900px) {
+  .is-earth-project .og-weather-volume-stage { inset: 0; }
   .og-weather-globe-stage {
     display: flex;
     flex-direction: column;
