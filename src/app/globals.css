@@ -3699,6 +3699,11 @@
 .is-power-statistics .og-workspace-sidebar { border-radius: 12px; border: 1px solid #93cfc328; }
 .is-power-statistics:not(.is-power-forecast) .og-forecast-region { display: none; }
 .is-power-planar .og-map-vignette, .is-power-planar .og-starfield { display: none; }
+.is-power-planar .maplibregl-ctrl-bottom-right { top: 60px; bottom: auto; }
+.og-globe-workspace.is-power-planar .maplibregl-ctrl-bottom-right { top: 0; }
+.is-power-planar .maplibregl-ctrl-bottom-right .maplibregl-ctrl { margin-top: 8px; }
+.is-power-planar .maplibregl-ctrl-compass { display: none; }
+
 .is-resource-scene { background: #091419; }
 
 @media (max-width: 900px) {

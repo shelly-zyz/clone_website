@@ -83,7 +83,7 @@ const pages = {
     coverage: "SatWeave 和 PARDIG 的西北大西洋档案", filters: { region: Object.keys(replayRegions).join(" / ") } },
   "data-review": { title: "数据批次审核", href: "/data-review", aliases: ["数据批次审核", "数据审核"], coverage: "仅打开审核入口，页面需要独立的审核令牌。" },
   "globe-power": { title: "电源地球", href: workspaceHref("power"), aliases: ["工作台", "电力地球", "电源地球", "地图工作台"],
-    filters: { powerView: "facilities / generation / capacity", region: "省级 ISO 代码（省级发电/装机统计）", projection: "globe / map" } },
+    filters: { powerView: "facilities / generation / capacity", region: "省级 ISO 代码（省级发电/装机统计）", projection: "map（省级统计固定使用二维中国地图）" } },
   "globe-weather": { title: "气象地球", href: workspaceHref("weather"), aliases: ["气象地球", "气象地图"],
     filters: { replay: "weather（气象云图） / time（云雨叠加） / rain（三维雨幕） / accumulation（累计降雨）" } },
   "globe-carbon": { title: "碳排放地球", href: workspaceHref("carbon"), aliases: ["碳排放地球", "碳地球", "碳排放地图"],
@@ -145,6 +145,9 @@ export function resolveSiteNavigation(action: SiteNavigation) {
 
   const url = new URL(target.href, "https://site.invalid");
   for (const [key, value] of entries) url.searchParams.set(key, String(value));
+  if (view === "globe-power" && (powerView === "generation" || powerView === "capacity")) {
+    url.searchParams.set("projection", "map");
+  }
   if (section) url.hash = section;
   return { href: url.pathname + url.search + url.hash,
     label: section ? `${target.title} · ${target.sections?.[section]}` : target.title };

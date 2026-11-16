@@ -38,6 +38,10 @@ export function readMapView(page: ActivePage | undefined) {
     ?? wdi.countries.find(item => item.code === (query.get("country") ?? query.get("region")))?.label;
   const power = query.get("powerView");
   const mapType = power === "generation" ? "省级发电量" : power === "capacity" ? "省级装机容量" : "电源设施";
+  if (page.view === "globe-power") {
+    if (power === "generation" || power === "capacity") query.set("projection", "map");
+    else query.delete("projection");
+  }
   const projection = query.get("projection") === "map" ? "二维" : "三维";
   const geography = place ? " · " + place : "";
   const detail = page.view === "globe-power"
@@ -65,10 +69,13 @@ export function setMapView(page: ActivePage | undefined, patch: z.infer<typeof m
     }
     query.set("powerView", patch.powerView);
     if (patch.powerView === "facilities") query.delete("projection");
+    else query.set("projection", "map");
   }
   const statistics = ["generation", "capacity"].includes(query.get("powerView") ?? "");
   if (patch.projection) {
-    if (view === "globe-power" && !statistics) throw new XiaoyunContextError("请先选择省级发电量或装机容量，再切换地图投影。");
+    if (view === "globe-power" && (!statistics || patch.projection === "globe")) {
+      throw new XiaoyunContextError("电源设施使用三维地球，省级发电量与装机容量使用二维中国地图。请选择对应的电力视图。");
+    }
     query.set("projection", patch.projection);
     changed.push(patch.projection === "map" ? "二维地图" : "三维地球");
   }

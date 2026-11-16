@@ -9,8 +9,8 @@ export type ProvincePowerFrame = {
   regions: readonly { code: string; value: number | null }[];
 };
 
-export const powerMapNoData = "#394b58";
-export const powerMapColors = ["#c6e7fa", "#77bcea", "#378ccf", "#1766af", "#073c7e"] as const;
+export const powerMapNoData = "#e9eef2";
+export const powerMapColors = ["#e2f0fb", "#c6e2f6", "#a2ccea", "#7eb4dd", "#5897cc"] as const;
 export const powerAmount = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 });
 
 export function provincePowerMax(frame: ProvincePowerFrame) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, Factory, Globe2, Layers3, MapIcon, Zap } from "lucide-react";
+import { ArrowUpRight, Factory, Layers3, Zap } from "lucide-react";
 import { chinaProvinces } from "@/lib/china-provinces";
 import {
   type chinaPowerAnnualFrame, powerAmount, provincePowerMax, type ProvincePowerFrame,
@@ -13,17 +13,11 @@ import { WorkspaceFilterSelect } from "./WorkspaceSidebar";
 import styles from "./PowerRegionPanel.module.css";
 
 type PowerView = NonNullable<WorkspaceContext["powerView"]>;
-type Projection = NonNullable<WorkspaceContext["projection"]>;
 type MonthlyData = ReturnType<typeof useReportedGeneration>;
 const viewTabs = [
   { id: "facilities", label: "设施", icon: Factory },
   { id: "generation", label: "发电量", icon: Zap },
   { id: "capacity", label: "装机", icon: Layers3 },
-] as const;
-
-const projectionTabs = [
-  { id: "globe", label: "电力地球", icon: Globe2 },
-  { id: "map", label: "二维电力地图", icon: MapIcon },
 ] as const;
 
 const filterOptions = [
@@ -43,17 +37,11 @@ export function PowerViews({ view, onView }: { view: PowerView; onView: (view: P
   );
 }
 
-export function PowerProjectionSwitcher({ projection, onChange }: {
-  projection: Projection;
-  onChange: (projection: Projection) => void;
-}) {
+export function PowerMapHeading({ frame }: { frame: ProvincePowerFrame }) {
   return (
-    <div className={styles.projection} role="group" aria-label="电力地图投影">
-      {projectionTabs.map(({ id, label, icon: Icon }) => (
-        <button key={id} type="button" aria-pressed={projection === id} onClick={() => onChange(id)}>
-          <Icon size={16} aria-hidden="true" />{label}
-        </button>
-      ))}
+    <div className={styles.mapHeading}>
+      <strong>{frame.period} · {frame.label}</strong>
+      <span>{frame.unit}</span>
     </div>
   );
 }
@@ -128,6 +116,7 @@ function PowerMapLegend({ frame }: { frame: ProvincePowerFrame }) {
   if (maximum <= 0) return null;
   return (
     <div className={styles.legend} aria-label="省级地图图例">
+      <span>尖柱高度与省级数值成正比</span>
       <div className={styles.scale} aria-hidden="true" />
       <div><span>0</span><span>{powerAmount.format(maximum)} {frame.unit}</span></div>
       {frame.regions.some(item => item.value == null) ? <span className={styles.missing}>暂无数据</span> : null}
