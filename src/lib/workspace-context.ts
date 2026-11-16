@@ -1,5 +1,6 @@
 import { resolveWorkspaceTopic, workspaceHref, type WorkspaceTopic } from "./globe-topics";
 import { readReplayRegion, type ReplayRegionId } from "./weather-replay/regions";
+import { weatherSceneViews, type WeatherScene } from "./weather-replay/views";
 
 export type WorkspaceContext = {
   country?: string;
@@ -19,7 +20,8 @@ export type WorkspaceContext = {
   sector?: string;
   projection?: "globe" | "map";
   weather?: string;
-  replay?: "weather" | "time" | "rain" | "accumulation";
+  weatherMode?: "comparison" | "layers";
+  replay?: Exclude<WeatherScene, "globe">;
   replayFrame?: number;
   replayRegion?: ReplayRegionId;
   powerView?: "generation" | "facilities" | "capacity";
@@ -59,6 +61,7 @@ export function readWorkspaceContext(search: URLSearchParams): WorkspaceContext 
   const technology = search.get("technology");
   const projection = search.get("projection");
   const weather = search.get("weather");
+  const weatherMode = search.get("weatherMode");
   const replay = search.get("replay");
   const replayFrame = search.get("replayFrame");
   const powerView = search.get("powerView");
@@ -85,7 +88,8 @@ export function readWorkspaceContext(search: URLSearchParams): WorkspaceContext 
     sector: readId(search.get("sector")),
     projection: projection === "globe" || projection === "map" ? projection : undefined,
     weather: weather && /^[A-Za-z0-9_,./:@=+%-]{1,180}$/.test(weather) ? weather : undefined,
-    replay: replay === "weather" || replay === "time" || replay === "rain" || replay === "accumulation" ? replay : undefined,
+    weatherMode: weatherMode === "comparison" || weatherMode === "layers" ? weatherMode : undefined,
+    replay: replay && Object.hasOwn(weatherSceneViews, replay) ? replay as keyof typeof weatherSceneViews : undefined,
     replayFrame: replayFrame && /^\d{1,4}$/.test(replayFrame) ? Number(replayFrame) : undefined,
     replayRegion: readReplayRegion(search.get("replayRegion")),
     powerView: powerView === "generation" || powerView === "capacity" || powerView === "facilities" ? powerView : undefined,

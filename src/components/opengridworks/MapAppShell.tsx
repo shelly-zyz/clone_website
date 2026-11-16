@@ -63,7 +63,7 @@ import {
 import { generationSeries } from "@/lib/topic-analysis/history";
 import { GlobeNavigation } from "@/components/opengridworks/GlobeNavigation";
 import { readReplayRegion, replayRegionOptions } from "@/lib/weather-replay/regions";
-import { replayViews, type WeatherScene } from "@/lib/weather-replay/views";
+import { isReplayView, weatherSceneViews, type WeatherScene } from "@/lib/weather-replay/views";
 import { WeatherSceneSwitcher } from "./WeatherSceneSwitcher";
 import { WeatherSidebarFilters } from "@/components/opengridworks/WeatherSidebarFilters";
 import { WorkspaceFilterSelect, WorkspaceSidebar } from "@/components/opengridworks/WorkspaceSidebar";
@@ -136,6 +136,9 @@ type BooleanRecord<T extends string> = Record<T, boolean>;
 type ProjectMode = Exclude<WorkspaceTopic, "economy">;
 type PowerView = NonNullable<WorkspaceContext["powerView"]>;
 const WeatherResourceScene = dynamic(() => import("./WeatherResourceScene").then(module => module.WeatherResourceScene));
+const WeatherRadar = dynamic(() => import("./WeatherRadar").then(module => module.WeatherRadar));
+const WeatherWind = dynamic(() => import("./WeatherWind").then(module => module.WeatherWind));
+const WeatherComparison = dynamic(() => import("./WeatherComparison").then(module => module.WeatherComparison));
 const WeatherReplayPlayer = dynamic(() => import("@/app/visualization/weather-replay/WeatherReplayPlayer").then(module => module.WeatherReplayPlayer));
 const powerOverviewCenter: Coordinates = [104, 36];
 const atlasWorldZoom = () => Math.max(0, Math.min(1.55, Math.log2(window.innerWidth / 500)));
@@ -5983,6 +5986,8 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
 
   const { topic: activeProject, context, navigate } = useWorkspaceSelection({ topic: initialProject, context: initialContext }, changeProject);
   const weatherScene: WeatherScene = context.replay ?? "globe";
+  const originalWeather = context.weatherMode === "layers" || (context.weatherMode !== "comparison" && !!context.weather);
+  const globeLayers = weatherScene === "globe" && originalWeather;
   const carbonPlanar = activeProject === "carbon" && context.projection === "map";
   const resourceScene = activeProject === "weather" && context.scene === "resources";
   const powerView = context.powerView ?? "facilities";
@@ -6546,7 +6551,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
   const activePlanned = visibleLayers.plannedUpgrades;
   const sidebarSummary = {
     power: statsActive ? "中国省级电力统计" : `${activeRegion.label} · ${regionStats.totalPlants.toLocaleString()} 个可见项目`,
-    weather: weatherScene === "globe" ? "全球风场与气象覆盖" : replayViews[weatherScene].title,
+    weather: weatherScene === "globe" ? globeLayers ? "全球风场与气象覆盖" : "ERA5 与 GFS 空间对照" : weatherSceneViews[weatherScene].title,
     carbon: "GRACED · 全球 0.1° 网格",
   }[activeProject];
   return (
@@ -6555,15 +6560,14 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
       <GlobeNavigation activeTopic={activeProject} onTopicChange={switchProject} />
       {activeProject === "weather" ? (
         <>
-          <div className="og-weather-original" hidden={weatherScene !== "globe"}>
+          {originalWeather && <div className="og-weather-original" hidden={!globeLayers}>
             <EarthProjectViewport initialHash={context.weather} onLoad={weatherReady} />
-          </div>
-          {weatherScene !== "globe" && (
-            <div className="og-weather-replay-stage">
-              <WeatherReplayPlayer query="" scene={weatherScene} region={context.replayRegion} initialFrame={context.replayFrame}
-                onFrameChange={rememberReplayFrame} />
-            </div>
-          )}
+          </div>}
+          {!globeLayers && <div className="og-weather-replay-stage">
+            {weatherScene === "globe" ? <WeatherComparison /> : weatherScene === "radar" ? <WeatherRadar /> :
+              weatherScene === "wind" ? <WeatherWind /> : <WeatherReplayPlayer query="" scene={weatherScene}
+                region={context.replayRegion} initialFrame={context.replayFrame} onFrameChange={rememberReplayFrame} />}
+          </div>}
           <WeatherSceneSwitcher scene={weatherScene} onChange={replay => navigate("weather", { replay: replay === "globe" ? undefined : replay })} />
         </>
       ) : (
@@ -6732,13 +6736,17 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
               onClick={() => navigate("weather", { scene: "resources" })}>
               <Activity size={16} /> 风光资源情景 <ArrowUpRight size={14} />
             </button>
-            {weatherScene === "globe" ? <WeatherSidebarFilters frameDocument={weatherDocument} /> : (
-              <>
-                <WorkspaceFilterSelect label="回放区域" value={context.replayRegion ?? "archive"} options={replayRegionOptions}
-                  onChange={value => navigate("weather", { replayRegion: readReplayRegion(value) })} />
-                <p className="og-weather-sidebar-status">{replayViews[weatherScene].description}</p>
-              </>
-            )}
+            {weatherScene === "globe" ? <>
+              <button className="og-workspace-action og-secondary-entry" type="button"
+                onClick={() => navigate("weather", { replay: undefined, weatherMode: globeLayers ? "comparison" : "layers" })}>
+                {globeLayers ? "返回全球气象对照" : "查看全球气象图层"}
+              </button>
+              {globeLayers && <WeatherSidebarFilters frameDocument={weatherDocument} />}
+            </> : <>
+              {isReplayView(weatherScene) && <WorkspaceFilterSelect label="回放区域" value={context.replayRegion ?? "archive"} options={replayRegionOptions}
+                onChange={value => navigate("weather", { replayRegion: readReplayRegion(value) })} />}
+              <p className="og-weather-sidebar-status">{weatherSceneViews[weatherScene].description}</p>
+            </>}
           </>
         ) : null}
       </WorkspaceSidebar>}
@@ -6837,8 +6845,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
         </>
       ) : null}
       <HoverBubble tooltip={hoverTooltip} />
-      <XiaoyunAssistant topic={activeProject === "weather" ? "meteo" : activeProject} captureView={saveMapCamera}
-        forecastRegion={activeProject === "weather" && weatherScene !== "globe" ? context.replayRegion ?? "archive" : undefined} />
+      <XiaoyunAssistant topic={activeProject === "weather" ? "meteo" : activeProject} captureView={saveMapCamera} />
       <Toast message={toast} />
       {cinematic ? (
         <div className="og-cinematic-banner">

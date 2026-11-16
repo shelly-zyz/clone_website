@@ -66,21 +66,20 @@ type Workspace = {
   slot: HTMLDivElement;
   topic: Topic;
   captureView: () => void;
-  forecastRegion?: string;
 };
 
 const WorkspaceRegistration = createContext<(workspace: Workspace | null) => void>(() => {});
 
-export function XiaoyunAssistant({ topic, captureView, forecastRegion }: Pick<Workspace, "topic" | "captureView" | "forecastRegion">) {
+export function XiaoyunAssistant({ topic, captureView }: Pick<Workspace, "topic" | "captureView">) {
   const register = useContext(WorkspaceRegistration);
   const slot = useRef<HTMLDivElement>(null);
   const capture = useRef(captureView);
   useLayoutEffect(() => { capture.current = captureView; }, [captureView]);
   useLayoutEffect(() => {
     if (!slot.current) return;
-    register({ slot: slot.current, topic, forecastRegion, captureView: () => capture.current() });
+    register({ slot: slot.current, topic, captureView: () => capture.current() });
     return () => register(null);
-  }, [register, topic, forecastRegion]);
+  }, [register, topic]);
   return <div ref={slot} />;
 }
 
@@ -159,14 +158,14 @@ function XiaoyunRuntime({ workspace }: { workspace: Workspace | null }) {
     return analysisJobSchema.parse(await response.json());
   }, []);
 
-  const loadForecastOverview = useCallback<LoadForecastOverview>(async (forecastTopic, signal, regional) => {
+  const loadForecastOverview = useCallback<LoadForecastOverview>(async (forecastTopic, signal) => {
     const response = await fetch("/api/xiaoyun/forecast-overview", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         ...(token.current ? { Authorization: `Bearer ${token.current}` } : {}),
       },
-      body: JSON.stringify({ topic: forecastTopic, regional }),
+      body: JSON.stringify({ topic: forecastTopic }),
       signal,
     });
     if (response.status === 401) throw new Error("请从已授权的业务预览读取预测数据。");
@@ -458,9 +457,9 @@ function XiaoyunRuntime({ workspace }: { workspace: Workspace | null }) {
   return (
     <>
       <div ref={container} className="[&>.og-assistant-mount]:pointer-events-none [&>.og-assistant-mount]:fixed [&>.og-assistant-mount]:inset-0 [&>.og-assistant-mount]:z-30" />
-      {workspaceElement && workspaceTopic && createPortal(<WorkspaceForecast key={workspaceTopic}
-        topic={workspaceTopic === "meteo" ? "weather" : workspaceTopic}
-        loadOverview={loadForecastOverview} mapRegion={workspace?.forecastRegion} loadAnalysis={loadAnalysis} task={forecasts[workspaceTopic]}
+      {workspaceElement && workspaceTopic && workspaceTopic !== "meteo" && createPortal(<WorkspaceForecast key={workspaceTopic}
+        topic={workspaceTopic}
+        loadOverview={loadForecastOverview} loadAnalysis={loadAnalysis} task={forecasts[workspaceTopic]}
         ready={ready} pending={pendingForecast !== undefined} onRun={runForecast}
         notice={forecastNotice?.topic === workspaceTopic ? forecastNotice.message : undefined} />, workspaceElement)}
       <XiaoyunEvidence items={evidence} active={activeEvidence} onOpen={setActiveEvidence}

@@ -1748,8 +1748,7 @@
   overflow: hidden;
 }
 
-.og-weather-original[hidden],
-.og-app-shell:has(.og-weather-replay-stage) .og-forecast-region[data-topic="weather"] { display: none; }
+.og-weather-original[hidden] { display: none; }
 
 .og-weather-replay-stage {
   position: absolute;

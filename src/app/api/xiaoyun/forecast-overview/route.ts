@@ -43,7 +43,11 @@ async function readRegionalForecast(regional: RegionalForecastFilter): Promise<F
       region.models.includes(regional.model))) return empty;
 
   const query = dataQuerySchema.parse({ topic: "meteo", ...regional, limit: 120 });
-  const data = await queryData(query);
+  const data = await queryData(query).catch((error: unknown) => {
+    if (error instanceof DataAgentError && error.code === "VERSION_NOT_FOUND") return null;
+    throw error;
+  });
+  if (!data) return empty;
   const issue = data.rows[0]?.issue_time;
   if (!issue) return empty;
   const latest = data.rows.findLast(row => row.value !== null);

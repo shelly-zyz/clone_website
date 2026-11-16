@@ -4,6 +4,7 @@ import { regionalWeatherModel, weatherRegionCode, weatherRegionSchema } from "./
 export const regionalForecastFilter = z.strictObject({
   model: regionalWeatherModel,
   region_code: weatherRegionCode,
+  issue_time: z.iso.datetime({ offset: true }).optional(),
 });
 export type RegionalForecastFilter = z.infer<typeof regionalForecastFilter>;
 

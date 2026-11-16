@@ -15,7 +15,7 @@
 
 ## 渲染回归验证
 
-运行 `node scripts/verify-weather-replay-geometry.mjs` 验证底图覆盖、内环、岛屿、沿海观测和等高雨滴。也可传入已下载的真实 API 响应 JSON 路径。该检查还按原数据视口对比红外纹理、降水时空层及累计高度场的历史绘制结果。
+运行 `node scripts/verify-weather-replay-geometry.mjs` 验证底图覆盖、内环、岛屿、沿海观测和等高雨滴。也可传入已下载的真实 API 响应 JSON 路径。该检查同时验证红外与降水纹理的缺测掩膜、时间切片和累计色标。
 
 ## 导入和读取
 
@@ -33,3 +33,19 @@
 首个案例按指定时间窗手动导入。持续抓取、滚动保留和自选区域生成属于后续扩展。
 
 来源为 [SatWeave](https://developers.google.cn/weathernext/guides/satweave) 与 [PARDIG](https://developers.google.cn/weathernext/guides/pardig)，Google DeepMind 和 Google Research，[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)。
+
+## 气象地球与三维产品
+
+`/workspace?topic=weather` 的默认气象地球显示 ERA5 再分析与 NOAA GFS 历史预报对照。页面提供 T2m、U10、Z500 与 T850，在 2022-03-22 的 6、12、18 和 24 小时预报有效时刻同步更新。每行的投影、范围和色标一致。数据按 3° 网格显示，Z500 从 ERA5 位势换算为位势米。原全球图层可通过左栏切换，已有 weather 哈希链接仍打开原图层。
+
+区域回放保留现有 `replay` 和版本链接，新增选点与同一时间轴的详情。降水率底图采用固定 `mm/h` 色标，云的垂直显示位置用于示意。降水时空层画同一区域的真实时间帧，层距对应 30 分钟；累计降水的颜色与曲面高度以完整档案的固定尺度显示。平滑只用于绘制，读数和归档值使用原格点。默认案例在数据服务不可用时可读取内置 CC BY 4.0 历史档案，界面标注来源；指定 id 或版本的请求仍读取发布服务。
+
+- `replay=radar` 使用 2022-03-22 12:01:25 UTC 的 NOAA KHGX Level II 体扫。Py-ART 生成水平 2 km、垂直 1 km 的三维反射率网格。回波体从该网格抽取 20、35、50 dBZ 等值面。可选两点形成 A–B 剖面，切换二维读图与三维位置，也可查看同一体扫的不同海拔切片。缺测保留掩膜。
+- `replay=wind` 使用 NCAR WRF 3.8.1 的墨西哥湾历史样本。U、V、W 从交错网格转至质量点，高度从位势求得，三维箭头和右栏风速同步。右栏 WRF 10 米风速取同一运行的区域格点均值。在预报服务存在同区、同起报、同有效时刻记录时，ClimaX 选项显示匹配的 10 米风速。
+
+### 固定档案与复核
+
+- 全球对照源为 Copernicus 气候变化服务的 ERA5 再分析，经 [WeatherBench 2](https://weatherbench2.readthedocs.io/en/latest/data-guide.html) 提供，以及 [NOAA GFS](https://registry.opendata.aws/noaa-gfs-bdp-pds/) 历史 GRIB。归档中保留每帧 GFS 源文件地址。ERA5 数据包含经处理的 Copernicus Climate Change Service 信息。
+- 雷达源为 [NOAA NEXRAD Level II KHGX](https://arm-doe.github.io/pyart/examples/io/plot_nexrad_data_aws.html)，风场源为 [NCAR WRF 公开样本](https://github.com/xarray-contrib/xwrf-data/blob/7a6100a48ee1b39a3fce3465e4da9e2c2a53cf6c/data/mercator_sample.nc)。衍生归档包含源 SHA-256。
+- 再生成脚本为 `scripts/build-weather-comparison.py`、`scripts/build-weather-radar.py` 和 `scripts/build-weather-wind.py`。在独立 Python 环境执行，全球对照需要 NumPy、numcodecs、PyGRIB；雷达需要 Py-ART 和 scikit-image；WRF 需要 netCDF4 和 NumPy。雷达、WRF 脚本接收原文件与输出路径。
+- 运行 `node scripts/verify-weather-science-archives.mjs` 和 `node scripts/verify-weather-replay-geometry.mjs public/data/weather-replay/atlantic-20260926.json` 复核有效时刻、数据覆盖、缺测、等值面拓扑、风场坐标和雨幕约束。
