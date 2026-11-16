@@ -36,7 +36,23 @@
   gap: 12px;
 }
 
-.hero:has(.heroContent) .topbar { max-width: 1510px; }
+.hero:has(.heroContent) {
+  display: flex;
+  min-height: 100svh;
+  flex-direction: column;
+  background-color: #18394b;
+  background-image: linear-gradient(90deg, rgb(12 35 49 / 17%), transparent 66%), url("/images/opengridworks/topic-analysis-mountains.webp");
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+
+.hero:has(.heroContent) .topbar {
+  width: 100%;
+  max-width: none;
+  min-height: 84px;
+  padding: 18px clamp(24px, 3.35vw, 74px);
+}
 
 .brand,
 .topLinks,
@@ -52,83 +68,94 @@
 .topLinks a { color: #dce6eb; font-size: 13px; white-space: nowrap; }
 .topLinks a:hover { color: #fff; }
 
-.heroContent {
-  display: grid;
-  grid-template-columns: 1fr minmax(290px, 0.8fr);
-  align-items: center;
-  gap: 42px;
-  max-width: 1300px;
-  min-height: 365px;
-  margin-inline: auto;
-  padding: 0 clamp(28px, 6vw, 92px) 24px;
+.hero:has(.heroContent) .brand {
+  gap: clamp(12px, 1.25vw, 27px);
+  font-size: clamp(18px, 1.3vw, 28px);
+  font-weight: 650;
+  letter-spacing: 0.005em;
 }
 
-.heroCopy { padding-bottom: 8px; }
+.brandMark {
+  position: relative;
+  display: block;
+  flex: none;
+  width: 42px;
+  height: 40px;
+  overflow: hidden;
+  border-radius: 1px;
+  background: linear-gradient(145deg, #30233f, #432b56 72%, #603770);
+}
+
+.brandMark::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 100%;
+  height: 87%;
+  background: linear-gradient(135deg, #8b43ae 15%, #e254c1 73%, #f078d1);
+  clip-path: polygon(83% 0, 100% 0, 100% 100%, 27% 100%, 0 94%, 31% 84%, 52% 71%, 68% 52%, 79% 29%);
+  content: "";
+}
+
+.brandMark::after {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 30%;
+  height: 22%;
+  border-radius: 0 0 0 4px;
+  background: linear-gradient(110deg, #12d4d1, #398acc);
+  clip-path: polygon(0 0, 100% 0, 88% 100%, 0 100%);
+  content: "";
+}
+
+.hero:has(.heroContent) .topLinks { gap: clamp(10px, 1.2vw, 20px); }
+.hero:has(.heroContent) .topLinks a { color: #f2f6f8; font-size: clamp(14px, 1.1vw, 22px); }
+.hero:has(.heroContent) .returnLink { gap: 15px; }
+.hero:has(.heroContent) .returnLink svg { width: 24px; height: 24px; }
+
+.heroContent {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  width: 100%;
+  min-height: 0;
+  padding: 0 clamp(28px, 6.4vw, 138px) 12px;
+}
+
+.heroCopy { width: min(100%, 860px); padding-bottom: 0; }
 .heroCopy h1 {
-  font-size: clamp(46px, 5.6vw, 78px);
+  font-size: clamp(64px, 5.45vw, 118px);
   font-weight: 750;
-  line-height: 1.07;
-  letter-spacing: 0.05em;
+  line-height: 1.1;
+  letter-spacing: 0.045em;
 }
 
 .heroCopy p {
-  max-width: 465px;
-  margin-top: 20px;
-  color: #dce9ec;
-  font-size: clamp(15px, 1.65vw, 20px);
-  line-height: 1.68;
+  max-width: 770px;
+  margin-top: clamp(20px, 1.45vw, 32px);
+  color: #edf3f5;
+  font-size: clamp(20px, 1.52vw, 33px);
+  line-height: 1.66;
 }
 
 .browseLink {
   display: inline-flex;
-  min-height: 42px;
+  min-width: 205px;
+  min-height: 70px;
   align-items: center;
+  justify-content: space-between;
   gap: 18px;
-  margin-top: 25px;
-  padding: 8px 14px;
-  border-radius: var(--control-radius);
+  margin-top: clamp(28px, 2vw, 44px);
+  padding: 16px 24px;
+  border-radius: 15px;
   color: var(--control-selected-ink);
   background: var(--control-selected);
-  font-size: 14px;
+  font-size: 22px;
   font-weight: 700;
 }
 
 .browseLink:hover { background: #a2efe4; }
-
-.heroVisual {
-  position: relative;
-  isolation: isolate;
-  display: grid;
-  place-items: center;
-  justify-self: end;
-  width: min(100%, 365px);
-}
-
-.orbit {
-  position: absolute;
-  inset: 2% 9%;
-  z-index: 1;
-  pointer-events: none;
-  border: 1px solid #a9dfe479;
-  border-radius: 50%;
-  transform: rotate(33deg) scaleX(0.7);
-}
-
-.orbit::after {
-  position: absolute;
-  inset: 9% -33%;
-  border: 1px dashed #b3dce868;
-  border-radius: 50%;
-  content: "";
-  transform: rotate(-56deg) scaleX(0.78);
-}
-
-.heroImage {
-  width: 100%;
-  height: auto;
-  mix-blend-mode: screen;
-  mask-image: radial-gradient(circle, #000 60%, transparent 72%);
-}
 
 .groupBar {
   position: sticky;
@@ -477,11 +504,6 @@
 }
 .selectField:has(select:focus-visible:not(:open)) .chevron { color: #f3f8fa; }
 
-@media (min-width: 1320px) {
-  .heroContent { gap: 70px; }
-  .heroVisual { justify-self: center; }
-}
-
 @media (max-width: 1020px) {
   .topicCard { padding: 14px 12px 11px; }
   .cardFooter { flex-wrap: wrap; }
@@ -490,7 +512,6 @@
 
 @media (max-width: 790px) {
   .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .heroContent { grid-template-columns: minmax(0, 1fr) minmax(190px, 0.8fr); min-height: 290px; gap: 20px; }
   .workbench { grid-template-columns: 75px minmax(0, 1fr); }
   .chartGrid { grid-template-columns: minmax(0, 1fr); }
 }
@@ -500,10 +521,18 @@
   .brand { font-size: 14px; gap: 5px; }
   .brand img { width: 23px; height: 23px; }
   .topLinks a { font-size: 12px; }
-  .heroContent { grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr); min-height: 223px; gap: 10px; padding: 5px 14px 20px; }
-  .heroCopy h1 { font-size: clamp(32px, 8.3vw, 47px); letter-spacing: 0.01em; }
-  .heroCopy p { margin-top: 10px; font-size: 13px; }
-  .browseLink { min-height: 35px; margin-top: 13px; padding: 5px 9px; gap: 8px; font-size: 12px; }
+  .hero:has(.heroContent) .topbar { min-height: 72px; padding: 14px 18px; }
+  .hero:has(.heroContent) .brand { gap: 10px; font-size: clamp(14px, 4vw, 17px); }
+  .brandMark { width: 34px; height: 33px; }
+  .hero:has(.heroContent) .topLinks { gap: 8px; }
+  .hero:has(.heroContent) .topLinks a { font-size: 14px; }
+  .hero:has(.heroContent) .returnLink { gap: 5px; }
+  .hero:has(.heroContent) .returnLink svg { width: 18px; height: 18px; }
+  .hero:has(.heroContent) .heroContent { padding: 0 24px 20px; }
+  .hero:has(.heroContent) .heroCopy { width: min(100%, 540px); }
+  .hero:has(.heroContent) .heroCopy h1 { font-size: clamp(54px, 12.5vw, 84px); letter-spacing: 0.035em; }
+  .hero:has(.heroContent) .heroCopy p { margin-top: 18px; font-size: clamp(18px, 4.8vw, 22px); line-height: 1.7; }
+  .hero:has(.heroContent) .browseLink { min-width: 172px; min-height: 56px; margin-top: 26px; padding: 12px 18px; gap: 14px; font-size: 18px; }
   .groupBar a { flex-direction: column; min-height: 47px; gap: 3px; padding: 5px 2px; font-size: 11px; }
   .groupBar svg { width: 17px; height: 17px; }
   .gallery { padding: 22px 12px 38px; }

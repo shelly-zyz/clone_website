@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import { ArrowUpRight, ChartArea, ChevronDown } from "lucide-react";
 import { resolveWorkspaceTopic } from "@/lib/globe-topics";
@@ -55,26 +54,14 @@ export default async function VisualizationPage({ searchParams }: {
   return (
     <main className={styles.page}>
       <div className={styles.hero}>
-        <AnalysisHeader topic={current} />
+        <AnalysisHeader topic={current} landing />
         <section className={styles.heroContent} aria-labelledby="visualization-title">
           <div className={styles.heroCopy}>
             <h1 id="visualization-title">专题分析</h1>
             <p>从发电与气候到排放与贸易，用多年数据看清结构、地域与季节变化。</p>
             <a className={styles.browseLink} href="#energy">
-              浏览专题 <ChevronDown size={17} strokeWidth={1.8} aria-hidden="true" />
+              选择专题 <ChevronDown size={20} strokeWidth={1.8} aria-hidden="true" />
             </a>
-          </div>
-          <div className={styles.heroVisual}>
-            <div className={styles.orbit} aria-hidden="true" />
-            <Image
-              className={styles.heroImage}
-              src="/intro/graced-night-v1.webp"
-              alt="GRACED 全球电力部门碳排放分布"
-              width={960}
-              height={960}
-              sizes="(max-width: 680px) 40vw, 345px"
-              loading="eager"
-            />
           </div>
         </section>
       </div>

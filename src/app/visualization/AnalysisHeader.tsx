@@ -4,11 +4,11 @@ import type { WorkspaceTopic } from "@/lib/globe-topics";
 import { ReturnToGlobe } from "./ReturnToGlobe";
 import styles from "./page.module.css";
 
-export function AnalysisHeader({ topic, detail = false }: { topic: WorkspaceTopic; detail?: boolean }) {
+export function AnalysisHeader({ topic, detail = false, landing = false }: { topic: WorkspaceTopic; detail?: boolean; landing?: boolean }) {
   return (
     <header className={styles.topbar}>
       <Link className={styles.brand} href="/" prefetch={false}>
-        <Image src="/images/opengridworks/logo-dark.webp" alt="" width={28} height={28} />
+        {landing ? <span className={styles.brandMark} aria-hidden="true" /> : <Image src="/images/opengridworks/logo-dark.webp" alt="" width={28} height={28} />}
         <span>OpenGridWorks</span>
       </Link>
       <nav className={styles.topLinks} aria-label="专题分析导航">
