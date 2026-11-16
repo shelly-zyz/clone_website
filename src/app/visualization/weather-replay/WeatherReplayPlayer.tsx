@@ -243,7 +243,7 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
             <div className={styles.stageLabels}>
               <span className={styles.sceneTime}><Compass size={13} aria-hidden="true" /> {utcClock(timestamp)} UTC</span>
               {view === "time" && <span>时间切片 · UTC</span>}
-              {showsRainParticles && <span>雨幕 · 垂直结构示意</span>}
+              {showsRainParticles && <span>粒子密度 · 降水率</span>}
             </div>
           )}
           {drawingFailed ? (
@@ -287,7 +287,7 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
         <div className={styles.controls}>
           {view === "weather" && (
             <div className={styles.layers}>
-              <label><input type="checkbox" checked={clouds} onChange={event => setClouds(event.target.checked)} /> {forecast ? "总云量（%）" : "红外亮温（K）"} · 云体重建</label>
+              <label><input type="checkbox" checked={clouds} onChange={event => setClouds(event.target.checked)} /> {forecast ? "总云量（%）" : "红外亮温（K）"} · 云层高度示意</label>
               <label><input type="checkbox" checked={precipitation} onChange={event => setPrecipitation(event.target.checked)} /> 降水强度</label>
             </div>
           )}

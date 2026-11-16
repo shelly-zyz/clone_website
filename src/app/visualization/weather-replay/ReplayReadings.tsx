@@ -6,10 +6,14 @@ import type { ReplayView } from "@/lib/weather-replay/views";
 import type { WeatherReplay } from "@/lib/weather-replay/model";
 import { gridCoordinate } from "./replay-geography";
 import { utcClock } from "./replay-data";
-import { rainScale, scaleColor } from "./replay-palette";
+import { scaleColor } from "./replay-palette";
 import styles from "./player.module.css";
 
 type Reading = number | null;
+const chartRainScale = [
+  [0, [109, 137, 129]], [.025, [145, 148, 180]], [.075, [178, 150, 188]],
+  [.18, [212, 137, 166]], [.38, [243, 145, 152]], [.65, [255, 169, 151]], [1, [255, 212, 180]],
+] as const;
 const chartWidth = 224;
 const chartHeight = 123;
 const plot = { left: 25, right: 203, top: 8, bottom: 99 };
@@ -39,7 +43,7 @@ export function ReplayReadings({ replay, view, frame, cell, peaks, totals, limit
   const last = points.length - 1;
   const chartX = (index: number) => plot.left + index * plotWidth / Math.max(1, last);
   const chartY = (amount: number) => plot.bottom - Math.max(0, Math.min(1, amount / limit)) * (plot.bottom - plot.top);
-  const colorAt = (amount: number) => `rgb(${scaleColor(rainScale, amount / limit).join(",")})`;
+  const colorAt = (amount: number) => `rgb(${scaleColor(chartRainScale, amount / limit).join(",")})`;
   const ranges = [0, .2, 2.5, 10, 25];
   const distribution = ranges.map(() => 0);
   let observed = 0, total = 0;

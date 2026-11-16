@@ -235,11 +235,6 @@
   background: #09141d;
 }
 
-.stage {
-  background: radial-gradient(ellipse at 48% 52%, #1e3542, #101f2c 68%, #0a141f);
-  color: #cbd7e1;
-}
-
 .header, .controls, .readingsBody, .legend, .emptyNotice {
   border: 0;
   background: var(--glass, rgba(15, 25, 38, .94));
@@ -293,7 +288,7 @@
   overflow: auto;
   scrollbar-width: thin;
 }
-.embedded .legend { bottom: calc(var(--og-globe-nav-space, 70px) + 18px); left: auto; right: clamp(245px, 23vw, 306px); width: 122px; }
+.embedded .legend { bottom: calc(var(--og-globe-nav-space, 70px) + 128px); left: auto; right: clamp(245px, 23vw, 306px); width: 122px; }
 
 .legend { padding: 9px; width: 118px; }
 .legendRamp { height: 91px; width: 62px; display: flex; gap: 6px; }

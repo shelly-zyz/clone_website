@@ -1,10 +1,12 @@
-const precipitationColors = [
-  [0, [109, 137, 129]], [.025, [145, 148, 180]], [.075, [178, 150, 188]],
-  [.18, [212, 137, 166]], [.38, [243, 145, 152]], [.65, [255, 169, 151]], [1, [255, 212, 180]],
+export const rainScale = [
+  [0, [247, 224, 175]], [1, [246, 193, 128]], [5, [237, 151, 78]],
+  [15, [218, 83, 48]], [30, [184, 44, 33]], [50, [144, 22, 26]], [75, [97, 13, 20]],
 ] as const;
 
-export const rainScale = precipitationColors;
-export const accumulationScale = precipitationColors;
+export const accumulationScale = [
+  [0, [247, 224, 175]], [.10, [246, 193, 128]], [.28, [237, 151, 78]],
+  [.48, [218, 83, 48]], [.66, [184, 44, 33]], [.83, [144, 22, 26]], [1, [97, 13, 20]],
+] as const;
 
 type Scale = readonly (readonly [number, readonly [number, number, number]])[];
 
@@ -18,12 +20,17 @@ export function scaleColor(scale: Scale, value: number) {
   return a.map((channel, i) => Math.round(channel + (b[i] - channel) * fraction));
 }
 
-type Grid = readonly (number | null)[];
-const rainImages = new WeakMap<Grid, { image: HTMLCanvasElement; limit: number }>();
+export function rainColor(rate: number, limit: number) {
+  return scaleColor(rainScale, rate / limit * rainScale[rainScale.length - 1][0]);
+}
 
-export function replayTexture(values: Grid, cols: number, rows: number, limit: number) {
-  const saved = rainImages.get(values);
-  if (saved?.image.width === cols && saved.image.height === rows && saved.limit === limit) return saved.image;
+type Grid = readonly (number | null)[];
+export type ReplayTextureLayer = "rain" | "infrared" | "cloudCover";
+const images = new WeakMap<Grid, { image: HTMLCanvasElement; layer: ReplayTextureLayer; limit: number }>();
+
+export function replayTexture(values: Grid, cols: number, rows: number, layer: ReplayTextureLayer, limit = 75) {
+  const saved = images.get(values);
+  if (saved?.image.width === cols && saved.image.height === rows && saved.layer === layer && saved.limit === limit) return saved.image;
   const image = document.createElement("canvas");
   image.width = cols;
   image.height = rows;
@@ -31,33 +38,24 @@ export function replayTexture(values: Grid, cols: number, rows: number, limit: n
   if (!painter) return image;
   const pixels = painter.createImageData(cols, rows);
   values.forEach((value, index) => {
-    if (value == null || value < .2) return;
+    if (value == null) return;
     const offset = 4 * index;
-    const intensity = Math.min(1, Math.sqrt(value / limit));
-    pixels.data.set(scaleColor(rainScale, value / limit), offset);
-    pixels.data[offset + 3] = Math.round(100 + 155 * intensity);
+    if (layer === "rain") {
+      if (value < .2) return;
+      pixels.data.set(rainColor(value, limit), offset);
+      pixels.data[offset + 3] = 255;
+      return;
+    }
+    // GFS reports total cloud cover in percent. The satellite archive uses brightness temperature.
+    const intensity = layer === "cloudCover" ? (value - 38) / 62 : (278 - value) / 76;
+    if (intensity <= 0) return;
+    const strength = Math.min(1, intensity);
+    pixels.data.set([176 - strength * 90, 193 - strength * 82, 207 - strength * 68], offset);
+    pixels.data[offset + 3] = Math.round(100 + 149 * strength);
   });
   painter.putImageData(pixels, 0, 0);
-  rainImages.set(values, { image, limit });
+  images.set(values, { image, layer, limit });
   return image;
-}
-
-const puffs = new Map<string, HTMLCanvasElement>();
-
-export function volumeSprite(colors: readonly string[]) {
-  const key = colors.join("|");
-  const cached = puffs.get(key);
-  if (cached) return cached;
-  const sprite = document.createElement("canvas");
-  sprite.width = sprite.height = 64;
-  const ctx = sprite.getContext("2d");
-  if (!ctx) return sprite;
-  const fade = ctx.createRadialGradient(29, 26, 3, 32, 32, 31);
-  colors.forEach((color, i) => fade.addColorStop(i / (colors.length - 1), color));
-  ctx.fillStyle = fade;
-  ctx.fillRect(0, 0, 64, 64);
-  puffs.set(key, sprite);
-  return sprite;
 }
 
 export function smoothAccumulation(values: Grid, cols: number, rows: number) {

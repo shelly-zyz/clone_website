@@ -1,12 +1,15 @@
 import type { WeatherReplay } from "@/lib/weather-replay/model";
 import type { ReplayArea } from "./replay-geography";
 import { satelliteAt, stackFrameIndices } from "./replay-data";
-import { accumulationScale, rainScale, replayTexture, scaleColor, smoothAccumulation, volumeSprite } from "./replay-palette";
+import { accumulationScale, rainColor, replayTexture, scaleColor, smoothAccumulation, type ReplayTextureLayer } from "./replay-palette";
 import type { ReplayView } from "@/lib/weather-replay/views";
 
 type Point = [number, number];
 type World = [number, number, number?];
 
+const rainCeiling = 0.64;
+const rainTail = 0.026;
+const rainStroke = "rgba(127, 56, 40, .82)";
 const timeStep = .165;
 const voxelHeight = .055;
 
@@ -129,14 +132,15 @@ export function paintReplay(
   const shade = (color: readonly number[], brightness = 1) =>
     "rgb(" + color.map(channel => Math.min(255, Math.round(channel * brightness))).join(",") + ")";
   const plane = (z: number) => ([[0, 0, z], [1, 0, z], [1, 1, z], [0, 1, z]] satisfies World[]).map(project);
-  const drawTexture = (values: readonly (number | null)[], z: number) => {
-    const raster = replayTexture(values, replay.cols, replay.rows, rainLimit);
+  const drawTexture = (values: readonly (number | null)[], z: number, alpha: number, layer: ReplayTextureLayer = "rain") => {
+    const raster = replayTexture(values, replay.cols, replay.rows, layer, rainLimit);
     const [x, y] = project([0, 0, z]);
     const [rightX, rightY] = project([1, 0, z]);
     const [downX, downY] = project([0, 1, z]);
     ctx.save();
     path(plane(z));
     ctx.clip();
+    ctx.globalAlpha = alpha;
     ctx.imageSmoothingEnabled = true;
     ctx.transform((rightX - x) / (replay.cols - 1), (rightY - y) / (replay.cols - 1),
       (downX - x) / (replay.rows - 1), (downY - y) / (replay.rows - 1), x, y);
@@ -181,12 +185,15 @@ export function paintReplay(
   const gridX = 1 / (replay.cols - 1);
   const gridY = 1 / (replay.rows - 1);
   const map = mapCorners.map(project);
-  fill(map, "#142630");
-  paintLand(area.mapPolygons, "#293d46");
+  const lowerMap = mapCorners.map(([lon, lat]) => project([lon, lat, -.034]));
+  fill([map[frontX[0]], map[frontX[1]], lowerMap[frontX[1]], lowerMap[frontX[0]]], "#a8a5a0");
+  fill([map[frontY[0]], map[frontY[1]], lowerMap[frontY[1]], lowerMap[frontY[0]]], "#c8c4bd");
+  fill(map, "#f5f3ef");
+  paintLand(area.mapPolygons, "#c9c6c0");
 
   const current = replay.rain[index];
   const satellite = satelliteAt(replay, current.time);
-  if (area.hasData && (rain || view === "weather" && precipitation)) drawTexture(current.values, .008);
+  if (area.hasData && (rain || view === "weather" && precipitation)) drawTexture(current.values, .008, 1);
 
   const { west: mapWest, south: mapSouth, east: mapEast, north: mapNorth } = mapBounds;
   const tickCount = width < 480 ? 3 : 5;
@@ -195,26 +202,31 @@ export function paintReplay(
   ctx.save();
   ctx.setLineDash([3, 5]);
   ctx.lineWidth = 0.8;
-  ctx.strokeStyle = "rgba(161, 185, 198, .25)";
+  ctx.strokeStyle = "rgba(92, 88, 80, .27)";
   ctx.beginPath();
   for (const lon of longitudes) mapLine(lon, mapSouth, lon, mapNorth);
   for (const lat of latitudes) mapLine(mapWest, lat, mapEast, lat);
   ctx.stroke();
   ctx.restore();
-  paintBoundaries(area.mapPolygons, "#77939d", 1.1);
-  paintBoundaries(area.focusPolygons, "#acc4c8", 1.25);
+  paintBoundaries(area.mapPolygons, "#635e57", 1.15);
+  paintBoundaries(area.focusPolygons, "#3a3732", 1.65);
+  path(map);
+  ctx.strokeStyle = "#777168";
+  ctx.lineWidth = 1.05;
+  ctx.stroke();
+
   // Anchor both scale axes to the nearest corner so labels stay outside the map.
   const corner = map.reduce((nearest, point, i) => point[1] > map[nearest][1] ? i : nearest, 0);
   const edgeLon = corner === 0 || corner === 3 ? mapWest : mapEast;
   const edgeLat = corner < 2 ? mapSouth : mapNorth;
-  ctx.strokeStyle = "#798d95";
+  ctx.strokeStyle = "#3b3833";
   ctx.lineWidth = 1.15;
   ctx.beginPath();
   mapLine(mapWest, edgeLat, mapEast, edgeLat);
   mapLine(edgeLon, mapSouth, edgeLon, mapNorth);
   ctx.stroke();
   ctx.font = (width < 480 ? 10 : 11) + "px system-ui, sans-serif";
-  ctx.fillStyle = "#9eafbd";
+  ctx.fillStyle = "#383530";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   const tick = (point: Point, outward: Point, label: string) => {
@@ -251,13 +263,13 @@ export function paintReplay(
     const walls = [mapCorners[(backIndex + 1) % 4], mapCorners[(backIndex + 3) % 4]];
     for (const [i, end] of walls.entries()) {
       fill([project(rear), project(end), lift(end, ceiling), lift(rear, ceiling)],
-        i === 0 ? "#14222c" : "#162733");
+        i === 0 ? "#efede9" : "#f4f2ef");
     }
 
     ctx.save();
     ctx.setLineDash([4, 5]);
     ctx.lineWidth = .8;
-    ctx.strokeStyle = "#465d6d";
+    ctx.strokeStyle = "#b7b2a9";
     ctx.beginPath();
     for (let layer = 0; layer < frames.length; layer++) {
       const z = (layer + 1) * timeStep + voxelHeight;
@@ -297,7 +309,7 @@ export function paintReplay(
       const corners: Point[] = [[west, south], [east, south], [east, north], [west, north]];
       const bottom = corners.map(([x, y]) => project([x, y, z]));
       const top = corners.map(([x, y]) => project([x, y, z + voxelHeight]));
-      const color = scaleColor(rainScale, rate / rainLimit);
+      const color = rainColor(rate, rainLimit);
       fill([top[frontX[0]], top[frontX[1]], bottom[frontX[1]], bottom[frontX[0]]], shade(color, .69));
       fill([top[frontY[0]], top[frontY[1]], bottom[frontY[1]], bottom[frontY[0]]], shade(color, .83));
       fill(top, shade(color));
@@ -306,95 +318,57 @@ export function paintReplay(
     ctx.beginPath();
     ctx.moveTo(...axisFloor);
     ctx.lineTo(...axisTop);
-    ctx.strokeStyle = "#91a3af";
+    ctx.strokeStyle = "#574f45";
     ctx.lineWidth = 1;
     ctx.stroke();
     ctx.textAlign = "left";
     ctx.font = "600 11px system-ui, sans-serif";
-    ctx.fillStyle = "#9cafbd";
+    ctx.fillStyle = "#3b3731";
     ctx.fillText("UTC", Math.min(width - 36, axisTop[0] + 6), axisTop[1] - 9);
     for (const [layer, frame] of frames.entries()) {
       const [x, y] = project([axis[0], axis[1], (layer + 1) * timeStep + voxelHeight]);
       const active = frame === index;
-      ctx.strokeStyle = active ? "#e09aad" : "#7492a3";
+      ctx.strokeStyle = active ? "#9f2d22" : "#777168";
       ctx.beginPath();
       ctx.moveTo(x - 3, y);
       ctx.lineTo(x + 4, y);
       ctx.stroke();
-      ctx.fillStyle = active ? "#f5b6c8" : "#a5b8c5";
+      ctx.fillStyle = active ? "#86291f" : "#453e35";
       ctx.font = (active ? "650 " : "") + "11px system-ui, sans-serif";
       ctx.fillText(utcClock(replay.rain[frame].time), Math.min(width - 36, x + 7), y);
     }
   }
 
-  if (area.hasData && (rain || view === "weather")) {
-    const cloudValues = clouds && view === "weather" ? satellite?.values : undefined;
-    const rainVisible = rain || precipitation;
-    const before = replay.rain[previous].values;
-    const volume: { x: number; y: number; z: number; size: number; strength: number; cloud: boolean; seed: number }[] = [];
-    const stride = replay.cols > 50 ? 2 : 1;
-    const origin = project([0, 0]);
-    const diagonal = project([gridX, gridY]);
-    const span = Math.hypot(diagonal[0] - origin[0], diagonal[1] - origin[1]) * stride;
-    for (let row = 0; row < replay.rows; row += stride) {
-      for (let col = 0; col < replay.cols; col += stride) {
-        const cell = row * replay.cols + col;
-        const cloudValue = cloudValues?.[cell];
-        const cloudAmount = cloudValue == null ? 0 : replay.metadata
-          ? Math.max(0, (cloudValue - 38) / 62) : Math.max(0, Math.min(1, (276 - cloudValue) / 76));
-        const rate = current.values[cell];
-        const wet = !rainVisible || rate == null ? 0 : (before[cell] ?? rate) * (1 - progress) + rate * progress;
-        const seed = cell + 1;
-        const x = Math.min(1, Math.max(0, (col + .4 * rainRandom(seed, 19) - .2) * gridX));
-        const y = Math.min(1, Math.max(0, (row + .4 * rainRandom(seed, 39) - .2) * gridY));
-        const top = .25 + .34 * cloudAmount;
-        if (wet >= .35) {
-          const strength = Math.min(1, Math.pow(wet / rainLimit, .44));
-          volume.push({ x, y, z: top * .43, size: span, strength, seed, cloud: false });
-        }
-        if (cloudAmount > .26) {
-          const variation = rainRandom(seed, 17);
-          const cloudBase = top + .095 * variation - .055;
-          volume.push({ x, y, z: cloudBase, size: span, strength: cloudAmount * (.64 + .36 * variation), seed, cloud: true });
-          if (cloudAmount > .77 && variation > .75) {
-            volume.push({ x, y, z: cloudBase + .085, size: span * .88, strength: cloudAmount * .88, seed, cloud: true });
-          }
+  if (area.hasData && clouds && satellite && view === "weather") {
+    drawTexture(satellite.values, .53, .92, replay.metadata?.cloudVariable === "cover" ? "cloudCover" : "infrared");
+  }
+
+  if (area.hasData && (rain || (view === "weather" && precipitation))) {
+    const previousValues = replay.rain[previous].values;
+    ctx.strokeStyle = rainStroke;
+    ctx.lineWidth = 1.05;
+    ctx.beginPath();
+    for (let row = 0; row < replay.rows; row++) {
+      for (let col = 0; col < replay.cols; col++) {
+        const cellIndex = row * replay.cols + col;
+        const value = current.values[cellIndex];
+        if (value == null) continue;
+        const before = previousValues[cellIndex] ?? value;
+        const rate = rain ? value : before + (value - before) * progress;
+        if (rate < 0.4) continue;
+        const drops = Math.ceil(Math.sqrt(rate) * 1.62);
+        for (let drop = 0; drop < drops; drop++) {
+          const seed = 1 + cellIndex * 23 + drop;
+          const x = Math.max(0, Math.min(1, (col + (rainRandom(seed, 9) - 0.5) * 0.9) * gridX));
+          const y = Math.max(0, Math.min(1, (row + (rainRandom(seed, 19) - 0.5) * 0.9) * gridY));
+          const age = (phase * 0.78 + rainRandom(seed, 39)) % 1;
+          const head = (1 - age) * rainCeiling;
+          ctx.moveTo(...project([x, y, head]));
+          ctx.lineTo(...project([x, y, Math.min(rainCeiling, head + rainTail)]));
         }
       }
     }
-    volume.sort((a, b) => depth([a.x, a.y, a.z]) - depth([b.x, b.y, b.z]));
-    ctx.save();
-    // Volumes can rise above the projected surface. Grid positions remain geographically registered.
-    const cloudShadow = volumeSprite(["#78859c", "#74809b85", "#74809b00"]);
-    const cloudLight = volumeSprite(["#eef3fa", "#bdc7daab", "#a9b6d000"]);
-    const mist = volumeSprite(["#fff", "#fff7", "#fff0"]);
-    for (const item of volume) {
-      const [x, y] = project([item.x, item.y, item.z]);
-      if (item.cloud) {
-        const width = item.size * (1.55 + item.strength * 1.9);
-        const height = Math.max(8, width * (.49 + .33 * rainRandom(item.seed, 27)));
-        ctx.globalAlpha = .08 + item.strength * .24;
-        ctx.drawImage(cloudShadow, x - width * .53, y - height * .32, width * 1.06, height);
-        ctx.globalAlpha = .04 + item.strength * .28;
-        ctx.drawImage(cloudLight, x - width / 2, y - height * .68, width, height);
-      } else {
-        const bottom = project([item.x, item.y])[1];
-        const height = Math.max(8, (bottom - y) * 2.1);
-        const width = Math.max(5, item.size * (1.1 + item.strength * 1.6));
-        const bucket = Math.min(6, Math.floor(item.strength * 7));
-        const color = scaleColor(rainScale, (bucket / 6) ** 2).join(",");
-        const curtain = volumeSprite([`rgba(${color}, .9)`, `rgba(${color}, .38)`, `rgba(${color}, 0)`]);
-        ctx.globalAlpha = .08 + item.strength * .24;
-        ctx.drawImage(curtain, x - width / 2, bottom - height, width, height * 1.14);
-        if (item.strength > .22) {
-          const age = (phase * .72 + rainRandom(item.seed, 51)) % 1;
-          const size = item.size * (.30 + .27 * item.strength);
-          ctx.globalAlpha = item.strength * .48 * Math.sin(Math.PI * age);
-          ctx.drawImage(mist, x - size / 2, bottom - height * (1 - age), size, size * 1.45);
-        }
-      }
-    }
-    ctx.restore();
+    ctx.stroke();
   }
 
   if (accumulation && area.hasData && totals) {

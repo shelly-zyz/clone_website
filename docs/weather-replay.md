@@ -44,7 +44,7 @@
 
 - 地区菜单由 `public/data/weather-replay/regional-catalog.json` 和原卫星档案生成。区域切换独立裁剪地理边界、请求档案、更新时间轴和读数。历史美国与巴哈马链接继续访问原覆盖区。
 - NOAA GFS 历史模式预报提供中国东南沿海台风格美（2024-07-25）以及北美、南美、欧洲、亚洲、非洲和大洋洲（2022-03-22）的 06–18 UTC、每 3 小时一帧。使用地面瞬时降水率 PRATE（kg m⁻² s⁻¹ 转为 mm/h）和整层总云量 TCDC（%）。中国场景使用源 0.25° 网格，其他区域每隔一格取样至 0.5°。所有帧保留 NOAA 源链接和起报时间，累计为分段梯形积分。
-- 云体和雨幕按格点重建。卫星档案使用红外亮温，GFS 档案使用总云量。体积、高度和下沉微粒用于示意。固定色标随案例和变量切换，参考范围覆盖该案例真实数值。PARDIG 历史裁剪上限明确标出。雷达反射率具有独立的 dBZ 色标。
+- 云雨叠加使用抬升云层和等高下落的雨滴。卫星档案使用红外亮温，GFS 档案使用总云量；云层高度用于示意，粒子密度表示降水率。固定色标随案例和变量切换，参考范围覆盖该案例真实数值。PARDIG 历史裁剪上限明确标出。雷达反射率具有独立的 dBZ 色标。
 - 右侧显示峰值、降水格点占比、区域格点平均值、选点/峰值面积走势、强度直方图与南中北纬带时间热图。图表排除缺测，格点比例和平均为网格计数口径。
 - 使用 `scripts/build-regional-weather.py` 和 PyGRIB、NumPy 再生成 NOAA 文件。API 优先读取发布目录，未发布的已知 NOAA 案例可返回内置档案。带版本的 URL 只读取相应发布版本。具备发布环境后，先应用 `scripts/v11-weather-replay-rate.sql`，再通过 `node scripts/import-weather-replay.mjs public/data/weather-replay/gfs-*.json` 将归档注册到 PostgreSQL 和对象存储。该迁移放开旧卫星档案的 75 mm/h 数据库约束，保留原值。
 
@@ -56,4 +56,4 @@
 - 全球对照源为 Copernicus 气候变化服务的 ERA5 再分析，经 [WeatherBench 2](https://weatherbench2.readthedocs.io/en/latest/data-guide.html) 提供，以及 [NOAA GFS](https://registry.opendata.aws/noaa-gfs-bdp-pds/) 历史 GRIB。归档中保留每帧 GFS 源文件地址。ERA5 数据包含经处理的 Copernicus Climate Change Service 信息。
 - 雷达源为 [NOAA NEXRAD Level II KHGX](https://arm-doe.github.io/pyart/examples/io/plot_nexrad_data_aws.html)，风场源为 [NCAR WRF 公开样本](https://github.com/xarray-contrib/xwrf-data/blob/7a6100a48ee1b39a3fce3465e4da9e2c2a53cf6c/data/mercator_sample.nc)。衍生归档包含源 SHA-256。
 - 再生成脚本为 `scripts/build-weather-comparison.py`、`scripts/build-weather-radar.py` 和 `scripts/build-weather-wind.py`。在独立 Python 环境执行，全球对照需要 NumPy、numcodecs、PyGRIB；雷达需要 Py-ART 和 scikit-image；WRF 需要 netCDF4 和 NumPy。雷达、WRF 脚本接收原文件与输出路径。
-- 运行 `node scripts/verify-weather-science-archives.mjs` 和 `node scripts/verify-weather-replay-geometry.mjs public/data/weather-replay/atlantic-20260926.json` 复核有效时刻、数据覆盖、缺测、等值面拓扑、风场坐标和雨幕约束。
+- 运行 `node scripts/verify-weather-science-archives.mjs` 和 `node scripts/verify-weather-replay-geometry.mjs public/data/weather-replay/atlantic-20260926.json` 复核有效时刻、数据覆盖、缺测、等值面拓扑、风场坐标和雨滴约束。
