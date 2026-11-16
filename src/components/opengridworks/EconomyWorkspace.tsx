@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpRight, ChartNoAxesCombined, Globe2, Search, X } from "lucide-react";
+import { ArrowUpRight, ChartNoAxesCombined, Search, X } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { analysisContextHref, readWorkspaceContext, rememberWorkspace, replaceWorkspaceContext, type WorkspaceContext } from "@/lib/workspace-context";
 import type { MapTheme } from "@/types/opengridworks";
@@ -14,10 +14,11 @@ import {
   type EconomicOutlook, type EconomyCountry, type EconomyMetric, type EconomyRank, type EconomySnapshot, type EconomyValue,
 } from "./economy-data";
 import styles from "./EconomyWorkspace.module.css";
+import switcherStyles from "./SceneSwitcher.module.css";
 
 const views = [
-  { id: "history", label: "统计地图", icon: Globe2 },
-  { id: "outlook", label: "增长展望", icon: ChartNoAxesCombined },
+  { id: "history", label: "统计地图" },
+  { id: "outlook", label: "增长展望" },
 ] as const;
 const metricOptions = Object.entries(economyMetrics).map(([value, { label }]) => ({ value, label }));
 const rankFormat = new Intl.NumberFormat("zh-CN");
@@ -319,17 +320,17 @@ export function EconomyWorkspace({ basemap, onBasemapError, initialContext, onRe
 
   return (
     <>
-      <nav className={styles.viewSwitcher} aria-label="经济地球视图" onKeyDown={event => {
+      <nav className={`${switcherStyles.bar} ${switcherStyles.scene}`} aria-label="经济地球视图" onKeyDown={event => {
         if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Home" && event.key !== "End") return;
         event.preventDefault();
         const next = event.key === "Home" ? "history" : event.key === "End" ? "outlook" : outlookActive ? "history" : "outlook";
         chooseView(next);
         event.currentTarget.querySelector<HTMLButtonElement>(`[data-view="${next}"]`)?.focus();
       }}>
-        {views.map(({ id, label, icon: Icon }) => (
+        {views.map(({ id, label }) => (
           <button key={id} type="button" data-view={id} aria-pressed={outlookActive === (id === "outlook")}
             aria-controls={viewId} onClick={() => chooseView(id)}>
-            <span>{label}</span><span className={styles.viewIcon}><Icon size={19} aria-hidden="true" /></span>
+            {label}
           </button>
         ))}
       </nav>

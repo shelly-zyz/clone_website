@@ -146,7 +146,7 @@
   height: 100svh;
   --og-sidebar-width: clamp(224px, 17vw, 256px);
   --og-forecast-width: clamp(240px, 19vw, 286px);
-  --og-globe-nav-space: calc(108px + env(safe-area-inset-bottom, 0px));
+  --og-globe-nav-space: calc(58px + env(safe-area-inset-bottom, 0px));
   overflow: hidden;
   color: #e2e8f0;
   background: #151d24;
@@ -342,9 +342,6 @@
 }
 
 .og-globe-navigation {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 3px;
   width: min(100%, 420px);
 }
 
@@ -356,49 +353,6 @@
   left: calc(50% + (var(--og-sidebar-width) + 16px) / 2);
   width: min(420px, calc(100% - var(--og-sidebar-width) - 42px));
   transform: translateX(-50%);
-}
-
-.og-globe-navigation :is(button, a) {
-  --topic-color: #f6cd2c;
-  display: grid;
-  min-width: 0;
-  justify-items: center;
-  align-content: center;
-  gap: 4px;
-  padding: 4px 2px 3px;
-  border-bottom: 5px solid var(--topic-color);
-  color: #d6e1e6;
-  background: #0b1015;
-  font-size: 12px;
-  white-space: nowrap;
-  transition: background-color 160ms ease;
-}
-
-.og-globe-navigation [data-topic="weather"] { --topic-color: #24c8db; }
-.og-globe-navigation [data-topic="carbon"] { --topic-color: #78d449; }
-.og-globe-navigation [data-topic="economy"] { --topic-color: #ff7547; }
-
-.og-globe-navigation img {
-  display: block;
-  width: 64px;
-  height: 64px;
-  object-fit: contain;
-  mask-image: radial-gradient(circle closest-side, #000 94%, transparent 100%);
-}
-
-.og-globe-navigation :is(button, a):hover,
-.og-globe-navigation button[aria-pressed="true"] {
-  color: #f7fbfc;
-  background: color-mix(in srgb, var(--topic-color) 18%, #0b1015);
-}
-
-.og-globe-navigation button[aria-pressed="true"] {
-  font-weight: 650;
-}
-
-.og-globe-navigation :is(button, a):focus-visible {
-  outline: 2px solid var(--topic-color);
-  outline-offset: -2px;
 }
 
 .og-workspace-visualization-link {
@@ -1281,18 +1235,12 @@
 
 @media (max-width: 900px) {
   .og-app-shell {
-    --og-globe-nav-space: calc(92px + env(safe-area-inset-bottom, 0px));
     min-height: 100svh;
   }
 
   .og-globe-navigation.is-docked {
     left: 50%;
     width: min(420px, calc(100% - 20px));
-  }
-
-  .og-globe-navigation img {
-    width: 49px;
-    height: 49px;
   }
 
   .og-top-toolbar {
@@ -3601,8 +3549,6 @@
   --og-assistant-bottom: 112px;
   --og-dock-size: min(33svh, 286px);
   --og-switcher-top: var(--og-rail-top);
-  --og-switcher-right: calc(var(--og-forecast-width) + 2 * var(--og-gutter));
-  --og-scene-card-height: clamp(46px, 9svh, 74px);
   --og-visual-background: #060c16;
   --og-stage-transition: 240ms ease;
   background: var(--og-visual-background);
@@ -3616,11 +3562,8 @@
   --og-rail-top: var(--og-workspace-top);
 }
 
-.og-globe-workspace.is-economy-project { --og-stage-top: calc(var(--og-workspace-top) + 44px); }
-
-.og-globe-workspace.is-earth-project {
-  --og-switcher-top: var(--og-workspace-top);
-  --og-stage-top: calc(var(--og-switcher-top) + var(--og-scene-card-height) + 22px);
+.og-globe-workspace:is(.is-earth-project, .is-economy-project, .is-carbon-project, .is-power-statistics) {
+  --og-stage-top: calc(var(--og-switcher-top) + 52px);
 }
 
 .og-globe-workspace.is-earth-project:has(.og-weather-replay-stage),
@@ -3628,12 +3571,7 @@
   --og-stage-right: var(--og-gutter);
 }
 
-.og-globe-workspace.is-power-statistics {
-  --og-stage-top: calc(var(--og-switcher-top) + 52px);
-}
-
 .og-globe-workspace.is-carbon-project {
-  --og-stage-top: calc(var(--og-switcher-top) + var(--og-scene-card-height) + 8px);
   --og-stage-footer: 53px;
 }
 
@@ -3734,9 +3672,7 @@
   .og-globe-workspace {
     --og-stage-left: var(--og-gutter);
     --og-stage-right: var(--og-gutter);
-    --og-switcher-right: var(--og-gutter);
     --og-rail-top: calc(var(--og-workspace-top) + 46px);
-    --og-scene-card-height: clamp(40px, 8svh, 58px);
   }
 
   .og-globe-workspace:is(.is-earth-project, .is-economy-project) {
@@ -3789,11 +3725,9 @@
 
 @media (max-height: 520px) {
   .og-globe-workspace {
-    --og-globe-nav-space: calc(62px + env(safe-area-inset-bottom, 0px));
     --og-dock-size: min(24svh, 190px);
     --og-assistant-bottom: 68px;
   }
-  .og-globe-workspace .og-globe-navigation img { width: 30px; height: 30px; }
   .og-globe-stage .maplibregl-ctrl-group { display: flex; }
   .og-globe-stage .maplibregl-ctrl-group button + button { border-top: 0; border-left: 1px solid #ffffff20; }
 }

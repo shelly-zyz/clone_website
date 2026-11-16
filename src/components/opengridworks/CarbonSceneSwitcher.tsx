@@ -1,11 +1,10 @@
 "use client";
 
-import Image from "next/image";
 import styles from "./SceneSwitcher.module.css";
 
 const scenes = [
-  { projection: "globe", title: "碳排放地球", image: "/images/opengridworks/globes/carbon.webp" },
-  { projection: "map", title: "二维排放地图", image: "/images/opengridworks/carbon-atlas.webp" },
+  { projection: "globe", title: "碳排放地球" },
+  { projection: "map", title: "二维排放地图" },
 ] as const;
 
 type Projection = typeof scenes[number]["projection"];
@@ -15,17 +14,13 @@ export function CarbonSceneSwitcher({ projection, onChange }: {
   onChange: (projection: Projection) => void;
 }) {
   return (
-    <nav aria-label="碳排放视图" className={`${styles.switcher} ${styles.carbon}`}>
-      <div className={styles.cards}>
-        {scenes.map(scene => (
-          <button key={scene.projection} className={styles.card} type="button"
-            aria-pressed={projection === scene.projection} data-planar={scene.projection === "map"}
-            onClick={() => onChange(scene.projection)}>
-            <Image src={scene.image} width={168} height={80} alt="" unoptimized />
-            <span>{scene.title}</span>
-          </button>
-        ))}
-      </div>
+    <nav aria-label="碳排放视图" className={`${styles.bar} ${styles.scene}`}>
+      {scenes.map(scene => (
+        <button key={scene.projection} type="button" aria-pressed={projection === scene.projection}
+          onClick={() => onChange(scene.projection)}>
+          {scene.title}
+        </button>
+      ))}
     </nav>
   );
 }

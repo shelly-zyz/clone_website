@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, Factory, Layers3, Zap } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { chinaProvinces } from "@/lib/china-provinces";
 import {
   type chinaPowerAnnualFrame, powerAmount, provincePowerMax, type ProvincePowerFrame,
@@ -11,13 +11,14 @@ import type { useReportedGeneration } from "@/hooks/use-reported-generation";
 import type { WorkspaceContext } from "@/lib/workspace-context";
 import { WorkspaceFilterSelect } from "./WorkspaceSidebar";
 import styles from "./PowerRegionPanel.module.css";
+import switcherStyles from "./SceneSwitcher.module.css";
 
 type PowerView = NonNullable<WorkspaceContext["powerView"]>;
 type MonthlyData = ReturnType<typeof useReportedGeneration>;
 const viewTabs = [
-  { id: "facilities", label: "设施", icon: Factory },
-  { id: "generation", label: "发电量", icon: Zap },
-  { id: "capacity", label: "装机", icon: Layers3 },
+  { id: "facilities", label: "设施" },
+  { id: "generation", label: "发电量" },
+  { id: "capacity", label: "装机" },
 ] as const;
 
 const filterOptions = [
@@ -27,10 +28,10 @@ const filterOptions = [
 
 export function PowerViews({ view, onView }: { view: PowerView; onView: (view: PowerView) => void }) {
   return (
-    <div className={styles.switcher} role="group" aria-label="电力地图视图">
-      {viewTabs.map(({ id, label, icon: Icon }) => (
+    <div className={`${switcherStyles.bar} ${styles.switcher}`} role="group" aria-label="电力地图视图">
+      {viewTabs.map(({ id, label }) => (
         <button key={id} type="button" aria-pressed={view === id} onClick={() => onView(id)}>
-          <Icon size={14} aria-hidden="true" />{label}
+          {label}
         </button>
       ))}
     </div>
