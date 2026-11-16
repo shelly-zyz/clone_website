@@ -69,6 +69,7 @@
 
 @media (max-width: 900px) {
   .comparison { flex: none; margin-bottom: 0; }
+  .comparison[data-expanded="true"] { margin-bottom: 100px; }
   .comparison[data-expanded="false"] .body { display: none; }
   .comparison[data-expanded="true"] .toggle svg { transform: rotate(180deg); }
   .body { overflow: visible; }
