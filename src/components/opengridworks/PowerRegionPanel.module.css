@@ -3,9 +3,8 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 3px;
   margin-bottom: 12px;
-  padding: 5px;
-  border-radius: 9px;
-  background: #121d22;
+  padding: 3px;
+  background: #171d21;
 }
 .mapHeading {
   position: absolute;
@@ -32,12 +31,11 @@
   align-items: center;
   justify-content: center;
   gap: 5px;
-  border-radius: 6px;
   color: #c5d1d5;
   font-size: 12px;
   white-space: nowrap;
 }
-.period button:hover { background: #28373e; }
+.period button:hover { background: #222a2f; }
 .period button[aria-pressed="true"] { background: #b9eee3; color: #183630; font-weight: 700; }
 .panel { margin-bottom: 12px; color: #eaf4f2; }
 .panel header { margin-top: 12px; }

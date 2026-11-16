@@ -3561,14 +3561,12 @@
 .og-secondary-entry {
   margin-block: 8px;
   justify-content: flex-start;
-  padding: 7px 8px;
-  border: 1px solid #8bcec54a;
-  border-radius: 7px;
-  background: #1a292b;
-  color: #cdf4e8;
+  padding: 7px 10px;
+  background: #171d21;
+  color: #edf0f2;
 }
 .og-secondary-entry svg:last-child { margin-left: auto; }
-.og-secondary-entry:hover { background: #263e3d; }
+.og-secondary-entry:hover { background: #222a2f; }
 
 .og-map-unavailable {
   position: absolute;

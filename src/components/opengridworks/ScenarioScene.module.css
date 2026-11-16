@@ -156,9 +156,7 @@
   max-width: 100%;
   min-width: 0;
   padding: 3px;
-  border: 1px solid #7b8885;
-  border-radius: 26px;
-  background: #0b1111e6;
+  background: #171d21e6;
   pointer-events: auto;
 }
 
@@ -166,7 +164,6 @@
   min-height: 38px;
   min-width: 62px;
   padding: 4px 10px;
-  border-radius: 22px;
   color: #e3e9e5;
   font-size: 13px;
   font-variant-numeric: tabular-nums;

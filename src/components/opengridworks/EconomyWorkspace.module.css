@@ -122,12 +122,10 @@
   align-items: center;
   gap: 7px;
   padding-inline: 10px;
-  border: 1px solid #364146;
-  border-radius: 5px;
-  background: #121b21;
+  background: #171d21;
 }
 
-.searchField:focus-within { border-color: #f0ac75; }
+.searchField:focus-within { outline: 1px solid #f0ac75; }
 
 .searchField input {
   min-height: 38px;
@@ -202,9 +200,8 @@
   min-height: 35px;
   padding: 5px 8px;
   border: 0;
-  border-radius: 5px;
   color: #ccd9d8;
-  background: #182321;
+  background: #171d21;
   text-align: left;
   transition: color 160ms ease, background-color 160ms ease;
 }
