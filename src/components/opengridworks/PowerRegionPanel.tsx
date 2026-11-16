@@ -112,14 +112,17 @@ export function PowerAnnualPanel({ frame, region, onYearChange, onRegionChange, 
 }
 
 function PowerMapLegend({ frame }: { frame: ProvincePowerFrame }) {
-  const maximum = provincePowerMax(frame);
-  if (maximum <= 0) return null;
+  const maximum = frame.scaleMax;
   return (
     <div className={styles.legend} aria-label="省级地图图例">
-      <span>尖柱高度与省级数值成正比</span>
-      <div className={styles.scale} aria-hidden="true" />
-      <div><span>0</span><span>{powerAmount.format(maximum)} {frame.unit}</span></div>
-      {frame.regions.some(item => item.value == null) ? <span className={styles.missing}>暂无数据</span> : null}
+      {maximum > 0 ? (
+        <>
+          <span>柱高与颜色 · 统一量程</span>
+          <div className={styles.scale} aria-hidden="true" />
+          <div><span>0</span><span>{powerAmount.format(maximum / 2)}</span><span>{powerAmount.format(maximum)} {frame.unit}</span></div>
+        </>
+      ) : null}
+      <span className={styles.missing}>暂无数据</span>
     </div>
   );
 }

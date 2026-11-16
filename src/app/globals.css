@@ -3693,13 +3693,7 @@
   background: radial-gradient(circle at center, transparent 48%, #02061755);
 }
 
-.is-carbon-atlas .og-map-vignette, .is-carbon-atlas .og-starfield,
-.is-power-planar .og-map-vignette, .is-power-planar .og-starfield { display: none; }
-.is-power-planar .maplibregl-ctrl-bottom-right { top: 60px; bottom: auto; }
-.og-globe-workspace.is-power-planar .maplibregl-ctrl-bottom-right { top: 0; }
-.is-power-planar .maplibregl-ctrl-bottom-right .maplibregl-ctrl { margin-top: 8px; }
-.is-power-planar .maplibregl-ctrl-compass { display: none; }
-
+.is-carbon-atlas .og-map-vignette, .is-carbon-atlas .og-starfield { display: none; }
 
 .og-globe-workspace .og-layer-cards {
   inset: auto auto calc(var(--og-globe-nav-space) + var(--og-stage-footer) + var(--og-mobile-dock) + 9px)
@@ -3731,6 +3725,7 @@
   width: min(650px, calc(100% - var(--og-stage-left) - var(--og-stage-right)));
 }
 
+.is-power-statistics .og-globe-stage { background: transparent; }
 .is-power-statistics:not(.is-power-forecast) .og-forecast-region { display: none; }
 .og-globe-workspace .og-beta-badge { display: none; }
 .is-resource-scene { background: #091419; }

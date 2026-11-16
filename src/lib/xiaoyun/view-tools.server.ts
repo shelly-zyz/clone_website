@@ -38,14 +38,15 @@ export function readMapView(page: ActivePage | undefined) {
     ?? wdi.countries.find(item => item.code === (query.get("country") ?? query.get("region")))?.label;
   const power = query.get("powerView");
   const mapType = power === "generation" ? "省级发电量" : power === "capacity" ? "省级装机容量" : "电源设施";
+  const statistics = power === "generation" || power === "capacity";
   if (page.view === "globe-power") {
-    if (power === "generation" || power === "capacity") query.set("projection", "map");
+    if (statistics) query.set("projection", "map");
     else query.delete("projection");
   }
   const projection = query.get("projection") === "map" ? "二维" : "三维";
   const geography = place ? " · " + place : "";
   const detail = page.view === "globe-power"
-    ? `${mapType} · ${projection}${geography} · 已打开图层 ${visible.join("、") || "无"}`
+    ? `${mapType} · ${statistics ? "三维中国地图" : "三维地球"}${geography} · 已打开图层 ${visible.join("、") || "无"}`
     : page.view === "globe-carbon" ? `${projection}${geography}`
       : page.view === "globe-economy" ? `${place ?? "全球"} · ${query.get("scene") === "outlook" ? "增长展望" : "统计地图"}`
         : [query.get("replay") ? "区域回放" : "地球视图", Object.entries(replayRegions).find(([id]) => id === query.get("replayRegion"))?.[1].label].filter(Boolean).join(" · ");
@@ -74,10 +75,10 @@ export function setMapView(page: ActivePage | undefined, patch: z.infer<typeof m
   const statistics = ["generation", "capacity"].includes(query.get("powerView") ?? "");
   if (patch.projection) {
     if (view === "globe-power" && (!statistics || patch.projection === "globe")) {
-      throw new XiaoyunContextError("电源设施使用三维地球，省级发电量与装机容量使用二维中国地图。请选择对应的电力视图。");
+      throw new XiaoyunContextError("电源设施使用三维地球，省级发电量与装机容量使用三维中国地图。请选择对应的电力视图。");
     }
     query.set("projection", patch.projection);
-    changed.push(patch.projection === "map" ? "二维地图" : "三维地球");
+    changed.push(view === "globe-power" ? "三维中国地图" : patch.projection === "map" ? "二维地图" : "三维地球");
   }
   if (patch.powerView) changed.push({ facilities: "电源设施", generation: "省级发电量", capacity: "省级装机容量" }[patch.powerView]);
   if (patch.replay) {

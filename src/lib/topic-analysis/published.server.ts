@@ -67,15 +67,23 @@ export function readRegionalGeneration(month: string, expectedVersion: string, p
   return readDataAgent(async client => {
     const version = await resolveVersion(client, { topic: "power", version: expectedVersion });
     const entry = catalogEntry(version);
-    const { rows } = await client.query<RegionalGeneration["regions"][number]>(`
-      SELECT entity_code AS code, COALESCE(NULLIF(source_ref->>'region_name', ''), entity_code) AS name,
-             value::double precision AS value
-      FROM standard.std_data_agent_fact
-      WHERE topic_id = 'power' AND dataset_version_id = $1 AND metric_code = ANY($2::text[])
-        AND series_code = $4 AND entity_code ~ '^[1-9][0-9]0{10}$' AND issue_time IS NULL
-        AND time_start >= $3::date::timestamptz AND time_start < ($3::date + interval '1 month')::timestamptz
-      ORDER BY value DESC NULLS LAST, entity_code
+    const { rows: [statistics] } = await client.query<Pick<RegionalGeneration, "regions" | "scaleMax">>(`
+      WITH observations AS NOT MATERIALIZED (
+        SELECT entity_code AS code, COALESCE(NULLIF(source_ref->>'region_name', ''), entity_code) AS name,
+               value::double precision AS value, time_start
+        FROM standard.std_data_agent_fact
+        WHERE topic_id = 'power' AND dataset_version_id = $1 AND metric_code = ANY($2::text[])
+          AND series_code = $4 AND entity_code ~ '^[1-9][0-9]0{10}$' AND issue_time IS NULL
+      )
+      SELECT (SELECT max(value) FROM observations) AS "scaleMax",
+             COALESCE((
+               SELECT json_agg(json_build_object('code', code, 'name', name, 'value', value)
+                               ORDER BY value DESC NULLS LAST, code)
+               FROM observations
+               WHERE time_start >= $3::date::timestamptz
+                 AND time_start < ($3::date + interval '1 month')::timestamptz
+             ), '[]'::json) AS regions
     `, [version.id, approvedCodes(entry, [generationMetric]), month + "-01", product]);
-    return { ...publication(entry), month, regions: rows };
+    return { ...publication(entry), month, ...statistics };
   });
 }

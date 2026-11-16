@@ -25,6 +25,7 @@ export type RegionalGeneration = {
   version: string;
   publishedAt: string;
   month: string;
+  scaleMax: number | null;
   regions: { code: string; name: string; value: number | null }[];
 };
 

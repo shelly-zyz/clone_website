@@ -6,21 +6,20 @@ export type ProvincePowerFrame = {
   label: string;
   unit: string;
   period: string;
+  scaleMax: number;
   regions: readonly { code: string; value: number | null }[];
 };
 
-export const powerMapNoData = "#e9eef2";
-export const powerMapColors = ["#e2f0fb", "#c6e2f6", "#a2ccea", "#7eb4dd", "#5897cc"] as const;
+export const powerMapNoData = "#46586a";
+export const powerMapColors = ["#b8e2f2", "#7fc9ed", "#549fdb", "#2e78c5", "#1c52a6"] as const;
 export const powerAmount = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 });
 
 export function provincePowerMax(frame: ProvincePowerFrame) {
   return Math.max(0, ...frame.regions.map(row => row.value ?? 0));
 }
 
-export function provincePowerColor(value: number | null | undefined, maximum: number) {
-  if (value == null) return powerMapNoData;
-  const index = maximum > 0 ? Math.floor(value / maximum * powerMapColors.length) : 0;
-  return powerMapColors[Math.min(index, powerMapColors.length - 1)];
+export function provincePowerRatio(value: number, maximum: number) {
+  return maximum > 0 ? Math.max(0, Math.min(1, value / maximum)) : 0;
 }
 
 export function chinaPowerAnnualFrame(metric: ChinaPowerMetric, requestedYear?: number) {
@@ -35,6 +34,7 @@ export function chinaPowerAnnualFrame(metric: ChinaPowerMetric, requestedYear?: 
     years: series.years,
     period: `${series.years[index]} 年`,
     total: series.total[index],
+    scaleMax: Math.max(...Object.values(series.provinces).flat()),
     source: series.source,
     table: series.table,
     regions: chinaProvinces.map(({ code, name }) => ({ code, name, value: series.provinces[code.slice(0, 2)][index] })),
