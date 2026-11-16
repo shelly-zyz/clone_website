@@ -1,8 +1,9 @@
 import type { WeatherReplay } from "@/lib/weather-replay/model";
 import type { ReplayGeography } from "./replay-geography";
 
-async function fetchGeography() {
-  const response = await fetch("/data/weather-replay/regions.geojson", { signal: AbortSignal.timeout(12_000) });
+async function fetchGeography(global: boolean) {
+  const path = global ? "/data/natural-earth/ne_50m_admin_0_countries.geojson" : "/data/weather-replay/regions.geojson";
+  const response = await fetch(path, { signal: AbortSignal.timeout(12_000) });
   if (!response.ok) throw new Error("区域边界暂不可用。");
   return response.json() as Promise<ReplayGeography>;
 }
@@ -21,14 +22,21 @@ async function fetchReplay(query: string) {
     || [...replay.rain, ...replay.satellite].some(frame => frame.values?.length !== cells)) {
     throw new Error("该案例的云图或降水帧不完整。");
   }
-  return replay;
+  return { replay, localArchive: response.headers.get("X-Weather-Replay-Source") === "bundled-archive" };
 }
 
-let geographyRequest: Promise<ReplayGeography> | undefined;
-const requests = new Map<string, { data: Promise<WeatherReplay>; expiresAt: number }>();
+const geographyRequests = new Map<boolean, Promise<ReplayGeography>>();
+const requests = new Map<string, { data: ReturnType<typeof fetchReplay>; expiresAt: number }>();
 
-export async function loadWeatherReplayData(query = "") {
-  geographyRequest ??= fetchGeography().catch(error => { geographyRequest = undefined; throw error; });
+export async function loadWeatherReplayData(query = "", global = false) {
+  let geographyRequest = geographyRequests.get(global);
+  if (!geographyRequest) {
+    geographyRequest = fetchGeography(global).catch(error => {
+      geographyRequests.delete(global);
+      throw error;
+    });
+    geographyRequests.set(global, geographyRequest);
+  }
   let entry = requests.get(query);
   if (!entry || Date.now() >= entry.expiresAt) {
     const next = { data: fetchReplay(query), expiresAt: Infinity };
@@ -47,6 +55,6 @@ export async function loadWeatherReplayData(query = "") {
     }
     entry = next;
   }
-  const [replay, geography] = await Promise.all([entry.data, geographyRequest]);
-  return { replay, geography };
+  const [archive, geography] = await Promise.all([entry.data, geographyRequest]);
+  return { ...archive, geography };
 }

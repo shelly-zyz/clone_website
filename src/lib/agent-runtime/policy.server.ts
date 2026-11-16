@@ -11,7 +11,7 @@ export const agentPolicy = {
       "get_sources", "list_available_datasets", "utc_now", "find_site_views", "navigate_site", "render_mechanism",
       "set_map_view", "set_view_filters", "search_knowledge", "open_evidence", "export_result", "save_project_view"] },
   data: { concurrency: 2, time: 25_000, turns: 4, tools: 5,
-    allow: ["search_semantic_catalog", "query_approved_metric", "report_query_gap"] },
+    allow: ["search_semantic_catalog", "list_weather_forecast_regions", "query_approved_metric", "report_query_gap"] },
   chartPlan: { concurrency: 4, time: 10_000, turns: 1, tools: 1, allow: ["select_chart"] },
   analysisPlan: { concurrency: 4, time: 10_000, turns: 1, tools: 1, allow: ["plan_analysis"] },
   map: { concurrency: 2, time: 25_000, turns: 3, tools: 3, allow: ["utc_now", "list_available_datasets"] },

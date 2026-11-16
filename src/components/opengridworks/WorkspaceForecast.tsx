@@ -8,14 +8,13 @@ import { ForecastSeries, ForecastSidebar, formatForecastDate } from "./ForecastS
 import styles from "./ForecastSidebar.module.css";
 
 const settings = {
-  weather: { title: "全球 10 米风速", detail: "GFS · 格点平均值" },
   power: { title: "全国月度发电量", detail: "国家统计局 · 本期值", grain: "month", horizon: "1 个月" },
   carbon: { title: "电力部门碳排放速率", detail: "GRACED Power · 全球", grain: "day", horizon: "3 天" },
 } as const;
 
 const jobStatus = { queued: "已排队", running: "计算中", succeeded: "已完成", failed: "任务失败" };
 
-export type LoadForecastOverview = (topic: ForecastOverviewTopic, signal: AbortSignal) => Promise<ForecastOverview>;
+export type LoadForecastOverview = (topic: Exclude<ForecastOverviewTopic, "weather">, signal: AbortSignal) => Promise<ForecastOverview>;
 
 function ForecastTask({ task, loadAnalysis }: { task: XiaoyunAnalysisArtifact; loadAnalysis: LoadAnalysis }) {
   const { job, notice, retry } = useAnalysisJob(task, loadAnalysis);
@@ -47,7 +46,7 @@ function ForecastTask({ task, loadAnalysis }: { task: XiaoyunAnalysisArtifact; l
 }
 
 export function WorkspaceForecast({ topic, loadOverview, task, loadAnalysis, onRun, pending, notice, ready }: {
-  topic: ForecastOverviewTopic;
+  topic: Exclude<ForecastOverviewTopic, "weather">;
   loadOverview: LoadForecastOverview;
   task?: XiaoyunAnalysisArtifact;
   loadAnalysis: LoadAnalysis;
@@ -76,8 +75,6 @@ export function WorkspaceForecast({ topic, loadOverview, task, loadAnalysis, onR
   const historicalWindow = Boolean(training && training.end !== latest?.date);
   const grain = topic === "power" ? "month" : "day";
   const horizon = topic === "power" ? settings.power.horizon : settings.carbon.horizon;
-  const weather = topic === "weather";
-  const issued = overview?.issueTime;
   function run() {
     if (!training) return;
     const start = training.start.slice(0, 10);
@@ -98,11 +95,8 @@ export function WorkspaceForecast({ topic, loadOverview, task, loadAnalysis, onR
           重试
         </button>
       )}
-      {overview && !latest && <p className={styles.status}>暂无已发布的{weather ? "预报" : "观测"}。</p>}
-      {overview && latest && (weather ? <>
-        {issued && <p className={styles.status}>{overview.historicalIssue ? "历史起报" : "起报"} {formatForecastDate(issued, "hour")}</p>}
-        <ForecastSeries chart="weather" points={overview.points} unit={overview.unit} grain="hour" label="GFS 预报有效时刻与风速" />
-      </> : <>
+      {overview && !latest && <p className={styles.status}>暂无已发布的观测。</p>}
+      {overview && latest && <>
         <p className={styles.status}>观测截至 {formatForecastDate(latest.date, grain)}</p>
         {!task && <ForecastSeries chart={topic} points={overview.points.slice(-8)} observed unit={overview.unit} grain={grain} label="近期观测值" />}
         {training ? <>
@@ -116,7 +110,7 @@ export function WorkspaceForecast({ topic, loadOverview, task, loadAnalysis, onR
         </> : (
           <p className={styles.muted}>末尾连续观测 {overview.continuous ?? 0} 期。预测需要至少 8 期连续观测。</p>
         )}
-      </>)}
+      </>}
       {overview && <p className={styles.source}>来源 {overview.source} · 版本 {overview.version.slice(0, 12)}</p>}
       {notice && <p className={styles.status} role="status">{notice}</p>}
       {task && <ForecastTask key={task.jobId} task={task} loadAnalysis={loadAnalysis} />}

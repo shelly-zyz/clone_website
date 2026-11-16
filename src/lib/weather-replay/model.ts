@@ -15,6 +15,17 @@ export type WeatherReplay = {
   coastline: [number, number][][];
   satellite: ReplayFrame[];
   rain: ReplayFrame[];
+  metadata?: {
+    product: string;
+    kind: "forecast";
+    run: string;
+    resolution: number;
+    sourceResolution: number;
+    stepMinutes: number;
+    cloudVariable: "cover";
+    rainUnit: "mm/h";
+    cloudUnit: "%";
+  };
 };
 
 export const demoReplayId = "us-southeast-2026-09-26";

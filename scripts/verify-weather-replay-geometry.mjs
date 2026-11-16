@@ -1,7 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
 import ts from 'typescript';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
@@ -14,14 +12,18 @@ const moduleUrl = (text, imports = {}) => {
   for (const [name, url] of Object.entries(imports)) code = code.replaceAll('"' + name + '"', '"' + url + '"');
   return 'data:text/javascript;base64,' + Buffer.from(code).toString('base64');
 };
-const regions = moduleUrl(source('src/lib/weather-replay/regions.ts'));
+const regionalCatalog = source('public/data/weather-replay/regional-catalog.json');
+const regions = moduleUrl(source('src/lib/weather-replay/regions.ts').replace(
+  'import catalog from "../../../public/data/weather-replay/regional-catalog.json";',
+  'const catalog = ' + regionalCatalog));
 const geo = moduleUrl(source('src/app/visualization/weather-replay/replay-geography.ts'), { '@/lib/weather-replay/regions': regions, 'd3-geo': pathToFileURL(require.resolve('d3-geo')).href });
 const { prepareReplayArea } = await import(geo);
 const data = moduleUrl(source('src/app/visualization/weather-replay/replay-data.ts'));
-const { accumulateRain } = await import(data);
-const { paintReplay } = await import(moduleUrl(source('src/app/visualization/weather-replay/replay-canvas.ts'), { './replay-data': data }));
-const original = execFileSync('git', ['show', '6d506a6^:src/app/visualization/weather-replay/replay-canvas.ts'], { encoding: 'utf8' });
-const { paintReplay: paintOriginal } = await import(moduleUrl(original));
+const { accumulateRain, stackFrameIndices } = await import(data);
+const palette = moduleUrl(source('src/app/visualization/weather-replay/replay-palette.ts'));
+const { replayTexture, smoothAccumulation } = await import(palette);
+const { paintReplay } = await import(moduleUrl(source('src/app/visualization/weather-replay/replay-canvas.ts'),
+  { './replay-data': data, './replay-palette': palette }));
 const geography = JSON.parse(source('public/data/weather-replay/regions.geojson'));
 const fixture = {
   bounds: { west: -80, east: -64, south: 23, north: 35 }, cols: 81, rows: 61, coastline: [],
@@ -56,40 +58,84 @@ assert.equal(island.hasData,true,'island inside a hole is preserved');
 assert.equal(island.polygons.length, 1, 'clipping retains the island, not the enclosing hole');
 assert.equal(prepareReplayArea(tiny(0.5,0.5,1,1),'usa',custom).ocean,false,'inland data uses national outline');
 
-// Compare the unchanged data layers within the historical viewport.
-const historicalArea = { ...archive, mapBounds: archive.bounds };
 assert(archive.mapBounds.west < replay.bounds.west, 'the basemap extends landward');
-assert.deepEqual(archive.bounds, replay.bounds, 'the data retain their own geographic extent');
+assert.deepEqual(archive.bounds, replay.bounds, 'the data retain their geographic extent');
+
 function recorder() {
-  const operations = [];
+  const surfaces = [];
+  const fills = new Set();
+  const rasters = [];
   const drops = [];
   const labels = [];
   let path = [];
   const ctx = new Proxy({
     beginPath(){path=[];}, moveTo(...p){path.push(['M',...p]);}, lineTo(...p){path.push(['L',...p]);},
-    closePath(){}, ellipse(...p){path.push(['E',...p]);},
-    fill(){ if (/^(rgba\(224, 117, 52|rgba\(39, 105, 163|hsl\()/.test(this.fillStyle)) operations.push([this.fillStyle,structuredClone(path)]); },
-    stroke(){ if (this.strokeStyle === "rgba(187, 226, 255, .75)") drops.push(...path); },
+    closePath(){}, arc(){},
+    fill(){
+      fills.add(this.fillStyle);
+      if (this.fillStyle?.startsWith('rgb(')) surfaces.push(this.fillStyle);
+    },
+    stroke(){ if (this.strokeStyle === "rgba(127, 56, 40, .82)") drops.push(...path); },
     fillText(label){ labels.push(label); },
-  }, {get(target,key){return key in target ? target[key] : () => {};}});
-  return { operations, drops, labels, canvas:{clientWidth:1060,clientHeight:500,width:1060,height:500,getContext:()=>ctx} };
+    drawImage(image){ rasters.push(image); },
+  }, {get(target,key){return key in target ? target[key] : () => {}; }});
+  ctx.fillStyle = '';
+  return { surfaces, fills, rasters, drops, labels, canvas:{clientWidth:1060,clientHeight:500,width:1060,height:500,getContext:()=>ctx} };
 }
+
 globalThis.window = {devicePixelRatio:1};
-for (const view of ['weather','time','accumulation']) {
-  const current=recorder(), before=recorder();
-  const index=Math.min(8,replay.rain.length-1);
-  const args={index,view,clouds:true,precipitation:true,previous:index,progress:1,phase:0.375,totals:accumulateRain(replay)[index]};
-  paintReplay(current.canvas,replay,{...args,area:historicalArea,rotation:0.42});
-  paintOriginal(before.canvas,replay,{...args,rotation:0});
-  if (view === 'weather') {
-    assert(current.drops.length > 0);
-    before.operations = before.operations.filter(([color]) => color.startsWith('rgba(39, 105, 163'));
-  }
-  const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
-  assert.equal(digest(current.operations),digest(before.operations),view+' matches historical data rendering');
-  assert(current.operations.length>0,view+' renders data');
-  console.log(view+': historical data drawing preserved ('+current.operations.length+' operations)');
+globalThis.document = {
+  createElement() {
+    const canvas = { width: 0, height: 0 };
+    canvas.getContext = () => ({
+      createImageData: (width, height) => ({ data: new Uint8ClampedArray(width * height * 4) }),
+      putImageData: image => { canvas.pixels = image.data; },
+    });
+    return canvas;
+  },
+};
+
+const texture = replayTexture([null, 0, 5, 60], 2, 2, "rain").pixels;
+assert.equal(texture[3], 0, 'null is transparent');
+assert.equal(texture[7], 0, 'no rain is transparent');
+assert.equal(texture[11], 255, 'weak rain is opaque');
+assert.equal(texture[15], 255, 'strong rain is opaque');
+assert.deepEqual([...texture.slice(8, 11)], [237, 151, 78], '5 mm/h uses the original ochre');
+assert.deepEqual([...replayTexture([20], 1, 1, "rain", 20).pixels], [97, 13, 20, 255], 'regional color limit matches the legend');
+assert.equal(replayTexture([null, 289], 2, 1, "infrared").pixels[3], 0);
+const cover = replayTexture([null, 0, 65, 100], 2, 2, "cloudCover").pixels;
+assert.equal(cover[3], 0, 'missing cloud cover is transparent');
+assert.equal(cover[7], 0, 'clear sky is transparent');
+assert(cover[11] > 0 && cover[15] > cover[11], 'more cloud cover increases the layer opacity');
+assert.deepEqual(smoothAccumulation([null, 0, 20, 40], 2, 2).slice(0, 2), [null, 0],
+  'smoothing retains missing and dry cells');
+
+const index = Math.min(8, replay.rain.length - 1);
+const common = { index, area: archive, clouds:true, precipitation:true, previous:index, progress:1, rotation:.42 };
+const overlay = recorder();
+paintReplay(overlay.canvas, replay, { ...common, view: 'weather' });
+assert.equal(overlay.rasters.length, 2);
+assert(overlay.drops.length > 0);
+const stack = recorder();
+paintReplay(stack.canvas, replay, { ...common, view: 'time' });
+const frames = stackFrameIndices(replay, index);
+assert.equal(stack.rasters.length, 0, 'time layers use solid faces');
+const wetCells = frames.reduce((count, frame) =>
+  count + replay.rain[frame].values.filter(value => value != null && value >= .2).length, 0);
+assert.equal(stack.surfaces.length, 3 * wetCells, 'every visible wet cell draws three opaque faces');
+assert(new Set(stack.surfaces).size > 3, 'the time layers retain varied rain intensity and face shading');
+assert(stack.labels.includes('UTC'));
+for (const frame of frames) assert(stack.labels.includes(replay.rain[frame].time.slice(11, 16)));
+const accumulated = recorder(), mono = recorder();
+const totals = accumulateRain(replay)[index];
+paintReplay(accumulated.canvas, replay, { ...common, view:'accumulation', totals, accumulationLimit:150 });
+paintReplay(mono.canvas, replay, { ...common, view:'accumulation', totals, accumulationLimit:150 });
+assert(accumulated.surfaces.length > 0);
+for (const recording of [overlay, stack, accumulated, renderRain(1, 0, 'rain')]) {
+  assert(recording.fills.has('#f5f3ef'), 'each mode uses an opaque water surface');
+  assert(recording.fills.has('#c9c6c0'), 'each mode uses opaque land');
 }
+assert.deepEqual(accumulated.surfaces, mono.surfaces, 'a fixed scale yields stable colors for the same archived frame');
 function renderRain(rate, phase, view, precipitation = true) {
   const recording = recorder();
   // Only one wet grid cell. Weak and strong rain share the same trajectories
@@ -118,4 +164,24 @@ for (const view of ['weather', 'rain']) {
   assert.equal(renderRain(0, 0, view).drops.length, 0, 'dry and missing cells stay dry');
 }
 assert.equal(renderRain(64, 0, 'weather', false).drops.length, 0, 'cloud view honors precipitation toggle');
-console.log('PASS: basemap coordinates, coastal coverage, polygon holes and islands, and density-only rain');
+
+const globalGeography = JSON.parse(source('public/data/natural-earth/ne_50m_admin_0_countries.geojson'));
+const grids = new Set();
+for (const item of JSON.parse(regionalCatalog)) {
+  const sample = JSON.parse(source('public/data/weather-replay/' + item.archive + '.json'));
+  const area = prepareReplayArea(sample, item.value, globalGeography);
+  const { bounds, rows, cols, rain, satellite, metadata } = sample;
+  assert.deepEqual(area.bounds, bounds);
+  assert(area.hasData && area.mapPolygons.length > 0, item.value + ' has aligned geography and rain');
+  assert(!grids.has(JSON.stringify(rain[2].values)), 'separate region rain matrices');
+  grids.add(JSON.stringify(rain[2].values));
+  assert.equal(metadata.cloudVariable, 'cover');
+  for (const [i, frame] of rain.entries()) {
+    assert.equal(frame.time, satellite[i].time);
+    assert.equal(frame.values.length, rows * cols);
+    assert(frame.values.some(value => value > .2));
+  }
+  const wet = rain[0].values.findIndex((amount, i) => amount != null && rain[1].values[i] != null);
+  assert(Math.abs(accumulateRain(sample)[1][wet] - (rain[0].values[wet] + rain[1].values[wet]) * 1.5) < 1e-9);
+}
+console.log('PASS: geography, regional coverage, classic four-mode rendering, masks and integration');

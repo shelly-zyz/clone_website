@@ -84,6 +84,12 @@ body {
     will-change: transform;
 }
 
+/* Put the animated strokes over the scalar field, below geographic markers. */
+#map { z-index: 0; }
+#overlay { z-index: 1; }
+#animation { z-index: 2; pointer-events: none; }
+#foreground { z-index: 3; }
+
 #sponsor {
     position: absolute;
     text-align: right;

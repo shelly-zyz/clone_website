@@ -85,14 +85,14 @@ export function setMapView(page: ActivePage | undefined, patch: z.infer<typeof m
     query.delete("replayFrame");
     if (patch.replay === "globe") query.delete("replay");
     else query.set("replay", patch.replay);
-    changed.push({ globe: "气象地球", weather: "气象云图", time: "云雨叠加", rain: "三维雨幕", accumulation: "累计降雨" }[patch.replay]);
+    changed.push({ globe: "气象地球", weather: "云雨叠加", time: "降水时空层", rain: "三维雨幕", accumulation: "累计降雨", radar: "三维雷达", wind: "三维风场" }[patch.replay]);
   }
   if (patch.place) {
     const place = patch.place;
     if (view === "globe-weather") {
       const region = Object.entries(replayRegions).find(([key, item]) =>
         match(key, place) || match(item.label.split(" · ")[0], place));
-      if (!region || region[0] === "china" || !query.has("replay")) throw new XiaoyunContextError("气象定位支持区域回放中的档案地区，请先选对应回放。");
+      if (!region || region[0] === "china" || !["weather", "time", "rain", "accumulation"].includes(query.get("replay") ?? "")) throw new XiaoyunContextError("气象定位支持区域回放中的档案地区，请先选对应回放。");
       query.set("replayRegion", region[0]);
       query.delete("replayFrame");
       changed.push(region[1].label);

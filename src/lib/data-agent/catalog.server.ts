@@ -2,6 +2,7 @@ import "server-only";
 
 import type { PoolClient } from "pg";
 import { datasets, metricSchema, type DataQuery, type Topic } from "./contracts";
+import { weatherModelDatasets } from "../weather-model-forecast";
 import { DataAgentError } from "./database.server";
 import { withMetricRules } from "./metric-rules";
 
@@ -37,7 +38,18 @@ export function catalogEntry(row: VersionRow) {
   };
 }
 
-export async function resolveVersion(client: PoolClient, query: Pick<DataQuery, "topic" | "version">) {
+export async function resolveVersion(client: PoolClient, query: Pick<DataQuery, "topic" | "version"> & Partial<Pick<Extract<DataQuery, { topic: "meteo" }>, "model" | "region_code" | "issue_time">>) {
+  if (query.topic === "meteo" && query.model && query.region_code) {
+    const { rows } = await client.query<VersionRow>(`${versionSelect}
+      JOIN catalog.weather_model_releases r ON r.dataset_version_id = v.id
+      WHERE v.topic_id = 'meteo' AND v.dataset_id = $1 AND r.region_code = $2
+        AND ($3::text IS NULL OR v.version = $3)
+        AND ($4::timestamptz IS NULL OR r.issue_time = $4)
+      ORDER BY r.issue_time DESC, r.published_at DESC, v.id DESC LIMIT 1`,
+    [weatherModelDatasets[query.model], query.region_code, query.version ?? null, query.issue_time ?? null]);
+    if (!rows[0]) throw new DataAgentError("VERSION_NOT_FOUND", "没有找到该模型和地区已发布的预报。");
+    return rows[0];
+  }
   const { rows } = await client.query<VersionRow>(`${versionSelect}
     WHERE v.topic_id = $1 AND v.dataset_id = $2
       AND (($3::text IS NULL AND v.is_current) OR v.version = $3)`,

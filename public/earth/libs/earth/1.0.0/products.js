@@ -107,6 +107,79 @@ var products = function() {
         }
     }
 
+    var WAVE_HOURS = [6, 9, 12, 15, 18];
+
+    function waveDate(hour) {
+        return new Date(Date.UTC(2022, 2, 22, hour));
+    }
+
+    function decodeWaveField(file, key) {
+        var bytes = Uint8Array.from(atob(file[key]), function(c) { return c.charCodeAt(0); });
+        if (bytes.byteLength !== 2 * file.header.nx * file.header.ny) {
+            throw new Error("Invalid GFS-Wave grid");
+        }
+        return new DataView(bytes.buffer);
+    }
+
+    function waveProduct(attr, isHeight) {
+        var hour = WAVE_HOURS[0];
+        var requested = attr.date === "current" ? Infinity : +gfsDate(attr);
+        WAVE_HOURS.forEach(function(candidate) {
+            if (+waveDate(candidate) <= requested) hour = candidate;
+        });
+        return buildProduct({
+            type: isHeight ? "wave_height" : "waves",
+            field: isHeight ? "scalar" : "vector",
+            description: localize({
+                name: isHeight ? {en: "有效波高", ja: "有義波高"} : {en: "主波周期", ja: "卓越波周期"},
+                qualifier: {en: " @ 海面", ja: " @ 海面"}
+            }),
+            paths: ["/earth/data/waves/20220322-" + (hour < 10 ? "0" : "") + hour + ".json"],
+            date: waveDate(hour),
+            navigate: function(step) {
+                var index = step < -1 ? 0 : step > 1 ? WAVE_HOURS.length - 1 : WAVE_HOURS.indexOf(hour) + step;
+                return WAVE_HOURS[index] === undefined ? null : waveDate(WAVE_HOURS[index]);
+            },
+            builder: function(file) {
+                var values = decodeWaveField(file, isHeight ? "height" : "period");
+                var direction = isHeight ? null : decodeWaveField(file, "direction");
+                return {
+                    header: file.header,
+                    interpolate: isHeight ? bilinearInterpolateScalar : function(x, y, a, b, c, d) {
+                        var vector = bilinearInterpolateVector(x, y, a, b, c, d);
+                        vector[2] = bilinearInterpolateScalar(x, y, a[2], b[2], c[2], d[2]);
+                        return vector;
+                    },
+                    data: function(i) {
+                        var raw = values.getInt16(2 * i, true);
+                        if (raw === -32768) return null;
+                        if (isHeight) return raw / 100;
+                        var heading = direction.getInt16(2 * i, true);
+                        if (heading === -32768) return null;
+                        // DIRPW gives where the waves come from. Use the opposite bearing to advance crests.
+                        var angle = (heading / 10 + 180) * Math.PI / 180;
+                        var period = raw / 10;
+                        var speed = 9.80665 * period / (4 * Math.PI);
+                        return [Math.sin(angle) * speed, Math.cos(angle) * speed, period];
+                    }
+                };
+            },
+            units: [{label: isHeight ? "m" : "s", conversion: function(x) { return x; }, precision: 1}],
+            scale: isHeight ? {
+                bounds: [0, 12],
+                gradient: µ.segmentedColorScale([
+                    [0, [9, 36, 67]], [2, [37, 117, 154]], [4, [45, 188, 176]], [7, [245, 197, 100]], [12, [242, 106, 102]]
+                ])
+            } : {
+                bounds: [0, 22],
+                gradient: µ.segmentedColorScale([
+                    [0, [11, 33, 68]], [6, [32, 72, 145]], [10, [39, 152, 164]], [15, [91, 210, 186]], [22, [246, 217, 148]]
+                ])
+            },
+            particles: {velocityScale: 1/38000, maxIntensity: 18}
+        });
+    }
+
     var FACTORIES = {
 
         "wind": {
@@ -492,6 +565,16 @@ var products = function() {
                     });
                 });
             }
+        },
+
+        "waves": {
+            matches: _.matches({param: "ocean", surface: "surface", level: "waves"}),
+            create: function(attr) { return waveProduct(attr, false); }
+        },
+
+        "wave_height": {
+            matches: _.matches({param: "ocean", level: "waves", overlayType: "wave_height"}),
+            create: function(attr) { return waveProduct(attr, true); }
         },
 
         "off": {

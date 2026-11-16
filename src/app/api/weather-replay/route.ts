@@ -1,16 +1,21 @@
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import catalog from "../../../../public/data/weather-replay/regional-catalog.json";
 import { demoReplayId } from "@/lib/weather-replay/model";
 import { readBundledReplay, readWeatherReplay } from "@/lib/weather-replay/storage.server";
 
 export const runtime = "nodejs";
 
 const noStore = { "Cache-Control": "private, no-store" };
-const archiveLookups = new Map<string | null, ReturnType<typeof readWeatherReplay>>();
+const archiveLookups = new Map<string, ReturnType<typeof readWeatherReplay>>();
 
 async function preferPublishedReplay(id: string, version: string | null, archive: NonNullable<Awaited<ReturnType<typeof readBundledReplay>>>) {
-  let lookup = archiveLookups.get(version);
+  const key = id + ":" + (version ?? "latest");
+  let lookup = archiveLookups.get(key);
   if (!lookup) {
-    lookup = readWeatherReplay(id, version).catch(() => null).finally(() => archiveLookups.delete(version));
-    archiveLookups.set(version, lookup);
+    lookup = readWeatherReplay(id, version).catch(() => null).finally(() => archiveLookups.delete(key));
+    archiveLookups.set(key, lookup);
   }
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), 1200); });
@@ -28,8 +33,13 @@ export async function GET(request: Request) {
   if (!/^[a-z0-9][a-z0-9-]{0,79}$/.test(id) || (version !== null && !/^[a-f0-9]{64}$/.test(version))) {
     return Response.json({ error: "无效的案例或版本。" }, { status: 400, headers: noStore });
   }
+  const bundled = version === null && catalog.find(item => item.archive === id);
   try {
-    const archive = await readBundledReplay(id, version).catch(() => null);
+    let archive = await readBundledReplay(id, version).catch(() => null);
+    if (!archive && bundled) {
+      const body = await readFile(join(process.cwd(), "public/data/weather-replay", bundled.archive + ".json"), "utf8");
+      archive = { body, version: createHash("sha256").update(body).digest("hex"), source: "bundled-archive" };
+    }
     const replay = archive ? await preferPublishedReplay(id, version, archive) : await readWeatherReplay(id, version);
     if (!replay) return Response.json({ error: "该区域回放尚未发布。" }, { status: 404, headers: noStore });
     return new Response(replay.body, {

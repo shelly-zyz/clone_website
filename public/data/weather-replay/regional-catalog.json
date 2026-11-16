@@ -1,0 +1,37 @@
+[
+  {
+    "value": "china",
+    "label": "中国东南沿海 · 台风格美",
+    "archive": "gfs-china"
+  },
+  {
+    "value": "north-america",
+    "label": "北美 · 美国中东部",
+    "archive": "gfs-north-america"
+  },
+  {
+    "value": "south-america",
+    "label": "南美 · 亚马孙流域",
+    "archive": "gfs-south-america"
+  },
+  {
+    "value": "europe",
+    "label": "欧洲 · 西欧",
+    "archive": "gfs-europe"
+  },
+  {
+    "value": "asia",
+    "label": "亚洲 · 孟加拉湾",
+    "archive": "gfs-asia"
+  },
+  {
+    "value": "africa",
+    "label": "非洲 · 刚果盆地",
+    "archive": "gfs-africa"
+  },
+  {
+    "value": "oceania",
+    "label": "大洋洲 · 澳大利亚东岸",
+    "archive": "gfs-oceania"
+  }
+]

@@ -481,8 +481,8 @@ function XiaoyunRuntime({ workspace, children }: { workspace: Workspace | null; 
     <ChartRequest value={ready ? runCustomChart : null}>
       {children}
       <div ref={container} className="[&>.og-assistant-mount]:pointer-events-none [&>.og-assistant-mount]:fixed [&>.og-assistant-mount]:inset-0 [&>.og-assistant-mount]:z-30" />
-      {workspaceElement && workspaceTopic && createPortal(<WorkspaceForecast key={workspaceTopic}
-        topic={workspaceTopic === "meteo" ? "weather" : workspaceTopic}
+      {workspaceElement && workspaceTopic && workspaceTopic !== "meteo" && createPortal(<WorkspaceForecast key={workspaceTopic}
+        topic={workspaceTopic}
         loadOverview={loadForecastOverview} loadAnalysis={loadAnalysis} task={forecasts[workspaceTopic]}
         ready={ready} pending={pendingForecast !== undefined} onRun={runForecast}
         notice={forecastNotice?.topic === workspaceTopic ? forecastNotice.message : undefined} />, workspaceElement)}

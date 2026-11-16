@@ -74,7 +74,18 @@ function clipPolygons(polygons: Rings[], bounds: ReplayBounds): Rings[] {
 }
 
 export function prepareReplayArea(replay: WeatherReplay, id: ReplayRegionId, geography: ReplayGeography) {
-  const { label, land } = replayRegions[id];
+  if (replay.metadata) {
+    const { bounds, region: label } = replay;
+    const polygons = clipPolygons(countryPolygons(geography), bounds);
+    const cells = Array.from({ length: replay.rows * replay.cols }, (_, cell) => cell)
+      .filter(cell => replay.rain.some(frame => frame.values[cell] != null));
+    return {
+      id, label, bounds, rings: polygons.flat(), polygons, mapBounds: bounds, mapPolygons: polygons,
+      focusPolygons: [], cells, hasData: cells.length > 0, ocean: true,
+      contains: (lon: number, lat: number) => lon >= bounds.west && lon <= bounds.east && lat >= bounds.south && lat <= bounds.north,
+    };
+  }
+  const { label, land } = replayRegions[id as keyof typeof replayRegions] ?? replayRegions.archive;
   const selected = countryPolygons(geography, land);
   const inCountry = (lon: number, lat: number) => selected.some(polygon => ringsContain(polygon, lon, lat));
   const observed: number[] = [];

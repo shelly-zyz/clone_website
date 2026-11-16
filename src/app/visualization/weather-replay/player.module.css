@@ -62,9 +62,9 @@
   flex: 1 1 430px;
   min-height: 210px;
   overflow: hidden;
-  background:
-    radial-gradient(ellipse at 50% 55%, #243b50 0%, #162738 44%, #0a1421 100%);
-  color: #b5cbd9;
+  min-width: 0;
+  background: radial-gradient(ellipse at 47% 42%, #fff, #f4f2ee 72%, #eae7e2);
+  color: #423c34;
 }
 
 .canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; }
@@ -75,14 +75,14 @@
   top: 0;
   left: 0;
   padding: 1px 3px;
-  color: #a9c1d3;
-  background: #101c2a8c;
+  color: #4b4338;
+  background: #fffdf9e8;
   border-radius: 2px;
   font-size: 10px;
   line-height: 1.2;
   white-space: nowrap;
 }
-.mapLabels span[data-active="true"] { color: #ebf6fb; font-weight: 650; }
+.mapLabels span[data-active="true"] { color: #312a22; font-weight: 650; }
 .loadState { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px 16px; color: #bbcfdd; font-size: 13px; }
 .emptyNotice {
   position: absolute;
@@ -96,8 +96,9 @@
   margin-inline: auto;
   padding: 5px 8px;
   border-radius: 4px;
-  color: #d9e8ef;
-  background: #0e1b2ad9;
+  border: 1px solid #d8cec4;
+  color: #51463b;
+  background: #fffdfa;
   font-size: 12px;
 }
 .stageLabels { position: absolute; inset: 12px 14px auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; pointer-events: none; }
@@ -108,32 +109,26 @@
   position: absolute;
   bottom: 11px;
   left: 14px;
-  min-width: 105px;
+  width: 184px;
   max-width: calc(100% - 28px);
   display: grid;
   gap: 4px;
   padding: 6px 8px;
   border-radius: 6px;
-  background: #101e2bdd;
-  color: #c3d5e2;
+  border: 1px solid #d8cec4;
+  background: #fffdfa;
+  color: #51463b;
   font-size: 10px;
   pointer-events: none;
 }
 
-.legendScale { height: 4px; border-radius: 3px; background: linear-gradient(90deg, #e075341a, #e07534f2); }
-.stage[data-view="accumulation"] .legendScale { background: linear-gradient(90deg, hsl(194 67% 36%), hsl(121 76% 56%), hsl(49 85% 76%)); }
 .legendValues { display: flex; justify-content: space-between; }
-.peak strong { color: #eff8fe; font-size: 13px; font-weight: 650; }
+.peak strong { color: #302921; font-size: 13px; font-weight: 650; }
 
 .controls { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 9px 16px 10px; border-top: 1px solid #314558; background: #0d1a28; }
 .layers { display: flex; flex-wrap: wrap; gap: 4px 18px; color: #b8cad8; font-size: 12px; }
 .layers label { display: flex; align-items: center; gap: 6px; min-height: 24px; }
 .layers input { width: 14px; height: 14px; accent-color: #72bdd1; }
-.profileRow { display: flex; align-items: center; gap: 10px; color: #bed2e2; font-size: 10px; }
-.profile { flex: 1; min-width: 0; height: 22px; }
-.baseline { stroke: #334d63; fill: none; }
-.profileLine { fill: none; stroke: #82cbf5; stroke-width: 1.3; vector-effect: non-scaling-stroke; }
-.playhead { stroke: #c7e4ed; stroke-width: 1; vector-effect: non-scaling-stroke; }
 .timelineTimes { display: flex; justify-content: space-between; align-items: baseline; gap: 5px; color: #9db3c7; font-size: 10px; }
 .timelineTimes strong { color: #e3edf7; font-size: 12px; font-weight: 650; }
 .timelineInput { width: 100%; height: 18px; accent-color: #5aaebe; cursor: pointer; }
@@ -148,7 +143,8 @@
   .header, .controls { padding-inline: 9px; }
   .header { padding-block: 7px; }
   .header button { font-size: 11px; min-height: 31px; }
-  .legend { left: 7px; bottom: 7px; }
+  .stage:has(.legend) .canvas { height: calc(100% - 82px); }
+  .legend { left: 7px; bottom: 7px; gap: 2px; padding: 5px 7px; }
   .emptyNotice { inset-block: 33px auto; }
   .cameraControls { gap: 1px; }
   .stageLabels { inset: 7px 8px auto; }
@@ -156,4 +152,181 @@
   .layers { gap: 0 9px; font-size: 10px; }
   .layers label { min-height: 20px; }
   .sources { font-size: 9px; }
+}
+
+.scene {
+  display: flex;
+  flex: 1 0 380px;
+  min-height: 0;
+}
+
+.legendScale {
+  display: block;
+  width: 100%;
+  height: 7px;
+}
+
+.readings {
+  width: clamp(190px, 19vw, 265px);
+  flex: none;
+  background: #0b1622;
+  border-left: 1px solid #213449;
+  color: #dcecf6;
+}
+
+.readingsBody { display: grid; gap: 9px; padding: 15px 14px 18px; }
+.readingsBody h3 { font-size: 14px; font-weight: 640; }
+.readingsContext, .readingsSource { color: #a5bccd; font-size: 11px; }
+.readingsValues { display: grid; gap: 7px; font-size: 11px; }
+.readingsValues > div { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
+.readingsValues dt { color: #a5bccd; }
+.readingsValues dd { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.readingsFigure {
+  min-width: 0;
+  margin: 3px 0 0;
+  padding: 8px 7px 1px;
+  border: 1px solid #ded6cb;
+  border-radius: 7px;
+  background: #fffdfa;
+  color: #443a31;
+}
+
+.readingsCaption {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 0 3px 5px;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.readingsCaption > span:last-child { color: #74665a; font-size: 10px; font-weight: 500; }
+.readingsChart { display: block; width: 100%; height: auto; cursor: crosshair; touch-action: pan-y; }
+.readingsTick { fill: #675b50; font-size: 10px; font-variant-numeric: tabular-nums; }
+.readingsGrid { stroke: #e5dcd2; stroke-width: .75; stroke-dasharray: 2 3; }
+.readingsAxes { fill: none; stroke: #a3978b; stroke-width: .8; }
+.readingsLine { fill: none; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; }
+.readingsSample { stroke: #fffdfa; stroke-width: .75; }
+.readingsPlayhead { stroke-width: 1; stroke-dasharray: 3 2; opacity: .67; }
+.readingsCurrent { stroke: #fffdfa; stroke-width: 1.35; }
+.readingsToggle { display: none; }
+
+@media (max-width: 900px) {
+  .scene { display: contents; }
+  .stage { order: 1; min-height: 258px; flex: 1 0 258px; }
+  .controls { order: 2; flex: none; }
+  .readings { order: 3; flex: none; }
+  .readings { width: 100%; border-left: 0; border-top: 1px solid #213449; }
+  .readingsToggle { display: flex; justify-content: space-between; align-items: center; width: 100%; min-height: 44px; padding: 0 12px; font-size: 12px; }
+  .readingsToggle > span:last-child { display: flex; align-items: center; gap: 5px; }
+  .readingsBody[data-open="false"] { display: none; }
+  .readingsBody h3 { display: none; }
+  .readingsFigure { width: 100%; max-width: 420px; justify-self: center; }
+}
+
+/* The workspace owns the full-screen scene. Cards sit above the same canvas. */
+.embedded {
+  --glass: rgba(15, 25, 38, .86);
+  --glass-card: rgba(33, 37, 54, .80);
+  position: relative;
+  overflow: hidden;
+  background: #09141d;
+}
+
+.header, .controls, .readingsBody, .legend, .emptyNotice {
+  border: 0;
+  background: var(--glass, rgba(15, 25, 38, .94));
+  color: #e5e6ee;
+  border-radius: 12px;
+}
+
+.button, .playButton {
+  border: 0;
+  background: #283345;
+  border-radius: 7px;
+}
+
+.button:hover, .playButton:hover { background: #3a4759; }
+.button[aria-pressed="true"], .playButton { background: #5f506d; }
+.timelineInput, .layers input { accent-color: #cf9caa; }
+
+.embedded .scene, .embedded .stage { position: absolute; inset: 0; min-height: 0; }
+.embedded .scene { display: block; }
+.embedded .canvas { height: 100%; }
+
+.embedded .header, .embedded .controls, .embedded .readings, .embedded .legend {
+  position: absolute;
+  z-index: 2;
+}
+.embedded .header, .embedded .controls, .embedded .readingsBody, .embedded .legend {
+  backdrop-filter: blur(15px);
+  box-shadow: 0 9px 24px #070d1852;
+}
+.embedded .header {
+  top: 71px;
+  left: 50%;
+  width: min(492px, calc(100% - 550px));
+  transform: translateX(-50%);
+}
+.embedded .controls {
+  bottom: calc(var(--og-globe-nav-space, 70px) + 10px);
+  left: 50%;
+  width: min(565px, calc(100% - 550px));
+  padding: 9px 13px;
+  transform: translateX(-50%);
+}
+.embedded .stageLabels { display: none; }
+.embedded .readings {
+  right: 16px;
+  top: 71px;
+  bottom: calc(var(--og-globe-nav-space, 70px) + 69px);
+  width: clamp(225px, 20vw, 285px);
+  background: transparent;
+  border: 0;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.embedded .legend { bottom: calc(var(--og-globe-nav-space, 70px) + 128px); left: auto; right: clamp(245px, 23vw, 306px); width: 122px; }
+
+.legend { padding: 9px; width: 118px; }
+.legendRamp { height: 91px; width: 62px; display: flex; gap: 6px; }
+.legendScale { width: 10px; height: 100%; flex: none; }
+.legendValues { flex-direction: column; padding-block: 1px; line-height: 1; }
+.peak strong { color: #f2b3c4; font-size: 12px; }
+.readingsFigure { border: 0; color: #f1e8f0; background: var(--glass-card, #252938); padding: 7px 8px; }
+.readingsCaption > span:last-child, .readingsSource { color: #b6bacd; }
+.readingsTick { fill: #c0bbcc; }
+.readingsGrid { stroke: #4e5062; }
+.readingsAxes { stroke: #8a8198; }
+.readingsSample, .readingsCurrent { stroke: #202333; }
+
+.metrics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; }
+.metrics div { display: grid; gap: 2px; padding: 7px; background: #4c415862; border-radius: 7px; }
+.metrics span { color: #d3c4d8; font-size: 10px; }
+.metrics strong { color: #f0c1d1; font-size: 14px; }
+.barRow { display: grid; grid-template-columns: 48px minmax(0, 1fr) 22px; gap: 4px; align-items: center; font-size: 9px; color: #c5bfcf; }
+.barRow meter { width: 100%; height: 8px; appearance: none; }
+.barRow meter::-webkit-meter-bar { background: #38394b; border: 0; }
+.barRow meter::-webkit-meter-optimum-value { background: #c299b4; }
+.barRow meter::-moz-meter-bar { background: #c299b4; }
+.barRow span:last-child { text-align: right; }
+
+@media (max-width: 900px) {
+  .embedded .header { top: 106px; left: 9px; right: 9px; width: auto; transform: none; padding: 7px 9px; }
+  .embedded .controls { bottom: calc(var(--og-globe-nav-space, 68px) + 7px); left: 7px; right: 7px; width: auto; transform: none; }
+  .embedded .legend { right: auto; left: 7px; bottom: calc(var(--og-globe-nav-space, 68px) + 137px); width: 87px; }
+  .embedded .legendRamp { height: 75px; }
+  .embedded .readings {
+    inset: 171px 7px auto auto;
+    width: min(270px, calc(100% - 14px));
+    max-height: calc(100% - 352px);
+    z-index: 3;
+    border-radius: 9px;
+    width: fit-content;
+  }
+  .embedded .readings:has([aria-expanded="true"]) { width: min(270px, calc(100% - 14px)); }
+  .embedded .readingsToggle { background: var(--glass); padding: 5px 9px; gap: 9px; }
+  .embedded .readingsBody { border-radius: 0 0 9px 9px; }
 }

@@ -13,7 +13,7 @@ export async function listDataCatalog(topic?: Topic, version?: string) {
     const versions = await client.query<VersionRow>(`${versionSelect}
       WHERE ($1::text IS NULL OR v.topic_id = $1)
         AND (CASE WHEN $2::text IS NULL THEN v.is_current ELSE v.version = $2 END)
-      ORDER BY v.topic_id`, [topic ?? null, version ?? null]);
+      ORDER BY v.topic_id, (v.dataset_id = 'meteo_gfs_forecast') DESC, v.dataset_id`, [topic ?? null, version ?? null]);
     const catalog = versions.rows.map(catalogEntry);
     const power = versions.rows.find((row) => row.topic_id === "power");
     if (!power || topic !== "power") return { datasets: catalog };
@@ -90,7 +90,7 @@ async function executeDataQuery(query: DataQuery) {
     if (comparison && metric.time_grain !== "month") {
       throw new DataAgentError("INVALID_METRIC", "省级比较仅支持同一月份、同一口径的月度指标。");
     }
-    const entity = query.topic === "power" ? query.region_code : "global";
+    const entity = query.topic === "power" ? query.region_code : query.topic === "meteo" ? query.region_code ?? "global" : "global";
     if (query.topic === "power" && entity !== "000000000000") {
       const region = await client.query(`
         SELECT 1 FROM standard.std_data_agent_fact
@@ -102,6 +102,11 @@ async function executeDataQuery(query: DataQuery) {
     if (!seriesCodes.includes(series)) throw new DataAgentError("INVALID_SERIES", "该指标在所选版本中没有发布此产品序列。");
     const filters = [query.topic, version.id, metric.metric_code, entity, series, query.start_date ?? null, query.end_date ?? null];
     let issueTime = query.topic === "meteo" && query.issue_time ? new Date(query.issue_time).toISOString() : null;
+    if (query.topic === "meteo" && query.model && issueTime === null) {
+      const run = await client.query<{ issue_time: Date }>(
+        "SELECT issue_time FROM catalog.weather_model_releases WHERE dataset_version_id = $1", [version.id]);
+      issueTime = run.rows[0].issue_time.toISOString();
+    }
     if (query.topic === "meteo" && issueTime === null) {
       const latest = await client.query<{ issue_time: Date | null }>(`
         SELECT max(issue_time) AS issue_time FROM standard.std_data_agent_fact
@@ -134,6 +139,7 @@ async function executeDataQuery(query: DataQuery) {
       limit: query.limit,
       ...(query.topic === "power" ? { region_code: entity, product: series, ...(comparison ? { province_comparison: true as const } : {}) } : {}),
       ...(query.topic === "meteo" && issueTime ? { issue_time: issueTime } : {}),
+      ...(query.topic === "meteo" && query.model ? { model: query.model, region_code: entity } : {}),
       // Keep the legacy replay hash for a version's default metric.
       ...(metric.metric_code !== entry.metric.metric_code ? { metric_code: metric.metric_code } : {}),
     };

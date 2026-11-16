@@ -79,7 +79,8 @@
                 class="text-button" id="nav-forward"> › </span> – <span
                 class="text-button" id="nav-forward-more"> » </span><span
                 class="text-button" id="show-location" title="当前位置">〖◯〗</span><span
-                class="text-button" id="option-show-grid" title="显示或隐藏网格点">网格</span>
+                class="text-button" id="option-show-grid" title="显示或隐藏网格点">网格</span> <span
+                class="text-button" id="option-pause-animation">暂停动画</span>
             </p>
             <p>模式 | <span
                 class="text-button" id="wind-mode-enable">大气</span> – <span
@@ -108,14 +109,17 @@
                 class="text-button" id="overlay-total_cloud_water" title="云水量">云水量</span> – <span
                 class="text-button" id="overlay-mean_sea_level_pressure" title="海平面气压">海平面气压</span>
             </p>
-            <p class="ocean-mode invisible">动画 | <span
-                class="text-button" id="animate-currents" title="海流">海流</span>
+            <p>动画 | <span
+                class="text-button" id="animate-wind">风</span> – <span
+                class="text-button" id="animate-currents">洋流</span> – <span
+                class="text-button" id="animate-waves">波浪</span>
             </p>
             <p class="ocean-mode invisible">覆盖指标 | <span
                 class="text-button" id="overlay-ocean-off">无</span> – <span
-                class="text-button" id="overlay-currents" title="海流">海流</span>
+                class="text-button currents-overlay" id="overlay-currents" title="洋流速度">洋流速度</span><span
+                class="text-button waves-overlay invisible" id="overlay-wave-period" title="主波周期">主波周期</span> <span
+                class="text-button waves-overlay invisible" id="overlay-wave_height" title="有效波高">有效波高</span>
             </p>
-            <p class="ocean-mode invisible"><span style="visibility:hidden">覆盖指标</span> |</p>
             <p>投影 | <span
                 class="proj text-button" id="atlantis" title="亚特兰蒂斯投影">A</span> – <span
                 class="proj text-button" id="azimuthal_equidistant" title="方位等距投影">AE</span> – <span

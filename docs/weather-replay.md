@@ -15,7 +15,7 @@
 
 ## 渲染回归验证
 
-运行 `node scripts/verify-weather-replay-geometry.mjs` 验证底图覆盖、内环、岛屿、沿海观测和等高雨滴。也可传入已下载的真实 API 响应 JSON 路径。该检查还按原数据视口对比红外纹理、降水时空层及累计高度场的历史绘制结果。
+运行 `node scripts/verify-weather-replay-geometry.mjs` 验证底图覆盖、内环、岛屿、沿海观测和等高雨滴。也可传入已下载的真实 API 响应 JSON 路径。该检查同时验证红外与降水纹理的缺测掩膜、时间切片和累计色标。
 
 ## 导入和读取
 
@@ -35,3 +35,27 @@
 首个案例按指定时间窗手动导入。持续抓取、滚动保留和自选区域生成属于后续扩展。
 
 来源为 [SatWeave](https://developers.google.cn/weathernext/guides/satweave) 与 [PARDIG](https://developers.google.cn/weathernext/guides/pardig)，Google DeepMind 和 Google Research，[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)。
+
+## 气象地球与三维产品
+
+`/workspace?topic=weather` 默认使用 [cambecc/earth](https://github.com/cambecc/earth) 的交互地球。左栏支持风、洋流、波浪及各自的覆盖指标，进入或切换时自动运行动画。GFS 地表风和 OSCAR 洋流显示各自的有效时刻。波浪使用 [NOAA GFS-Wave](https://www.nco.ncep.noaa.gov/pmb/products/wave/) 2022-03-22 00 UTC 起报的五个历史时次（06–18 UTC，每 3 小时一帧），以主波周期和方向绘制传播中的波峰，另有有效波高着色。档案由 0.25° 原场抽样至 1°，保留陆地及其他缺测掩膜。通过 `scripts/build-earth-waves.py` 可用 NumPy 与 PyGRIB 重新归档。
+
+气象地球右侧的「空间对照」并排显示同一有效时刻的 ERA5 再分析与 NOAA GFS 历史预报，提供 T2m、U10、Z500 与 T850，每行使用相同的投影、空间范围和色标。对照使用独立的历史时轴，四个时次为 2022-03-22 06、12、18 UTC 和次日 00 UTC。左侧图层筛选、动画及投影控制气象地球。手机端可从地球下方展开空间对照。已有 `weatherMode=comparison` 链接进入合并后的页面，`weather` 与 `replay` 链接仍可恢复原地球状态和回放场景。
+
+区域回放使用全屏 Canvas 与悬浮控制、统计和色标。拖动旋转、滚轮缩放、Shift 或右键拖动平移，触控支持双指缩放和平移。
+
+- 地区菜单由 `public/data/weather-replay/regional-catalog.json` 和原卫星档案生成。区域切换独立裁剪地理边界、请求档案、更新时间轴和读数。历史美国与巴哈马链接继续访问原覆盖区。
+- NOAA GFS 历史模式预报提供中国东南沿海台风格美（2024-07-25）以及北美、南美、欧洲、亚洲、非洲和大洋洲（2022-03-22）的 06–18 UTC、每 3 小时一帧。使用地面瞬时降水率 PRATE（kg m⁻² s⁻¹ 转为 mm/h）和整层总云量 TCDC（%）。中国场景使用源 0.25° 网格，其他区域每隔一格取样至 0.5°。所有帧保留 NOAA 源链接和起报时间，累计为分段梯形积分。
+- 云雨叠加使用抬升云层和等高下落的雨滴。卫星档案使用红外亮温，GFS 档案使用总云量；云层高度用于示意，粒子密度表示降水率。固定色标随案例和变量切换，参考范围覆盖该案例真实数值。PARDIG 历史裁剪上限明确标出。雷达反射率具有独立的 dBZ 色标。
+- 右侧显示峰值、降水格点占比、区域格点平均值、选点/峰值面积走势、强度直方图与南中北纬带时间热图。图表排除缺测，格点比例和平均为网格计数口径。
+- 使用 `scripts/build-regional-weather.py` 和 PyGRIB、NumPy 再生成 NOAA 文件。API 优先读取发布目录，未发布的已知 NOAA 案例可返回内置档案。带版本的 URL 只读取相应发布版本。具备发布环境后，先应用 `scripts/v11-weather-replay-rate.sql`，再通过 `node scripts/import-weather-replay.mjs public/data/weather-replay/gfs-*.json` 将归档注册到 PostgreSQL 和对象存储。该迁移放开旧卫星档案的 75 mm/h 数据库约束，保留原值。
+
+- `replay=radar` 使用 2022-03-22 12:01:25 UTC 的 NOAA KHGX Level II 体扫。Py-ART 生成水平 2 km、垂直 1 km 的三维反射率网格。回波体从该网格抽取 20、35、50 dBZ 等值面。可选两点形成 A–B 剖面，切换二维读图与三维位置，也可查看同一体扫的不同海拔切片。缺测保留掩膜。
+- `replay=wind` 使用 NCAR WRF 3.8.1 的墨西哥湾历史样本。U、V、W 从交错网格转至质量点，高度从位势求得，三维箭头和右栏风速同步。右栏 WRF 10 米风速取同一运行的区域格点均值。在预报服务存在同区、同起报、同有效时刻记录时，ClimaX 选项显示匹配的 10 米风速。
+
+### 固定档案与复核
+
+- 全球对照源为 Copernicus 气候变化服务的 ERA5 再分析，经 [WeatherBench 2](https://weatherbench2.readthedocs.io/en/latest/data-guide.html) 提供，以及 [NOAA GFS](https://registry.opendata.aws/noaa-gfs-bdp-pds/) 历史 GRIB。归档中保留每帧 GFS 源文件地址。ERA5 数据包含经处理的 Copernicus Climate Change Service 信息。
+- 雷达源为 [NOAA NEXRAD Level II KHGX](https://arm-doe.github.io/pyart/examples/io/plot_nexrad_data_aws.html)，风场源为 [NCAR WRF 公开样本](https://github.com/xarray-contrib/xwrf-data/blob/7a6100a48ee1b39a3fce3465e4da9e2c2a53cf6c/data/mercator_sample.nc)。衍生归档包含源 SHA-256。
+- 再生成脚本为 `scripts/build-weather-comparison.py`、`scripts/build-weather-radar.py` 和 `scripts/build-weather-wind.py`。在独立 Python 环境执行，全球对照需要 NumPy、numcodecs、PyGRIB；雷达需要 Py-ART 和 scikit-image；WRF 需要 netCDF4 和 NumPy。雷达、WRF 脚本接收原文件与输出路径。
+- 运行 `node scripts/verify-weather-science-archives.mjs` 和 `node scripts/verify-weather-replay-geometry.mjs public/data/weather-replay/atlantic-20260926.json` 复核有效时刻、数据覆盖、缺测、等值面拓扑、风场坐标和雨滴约束。
