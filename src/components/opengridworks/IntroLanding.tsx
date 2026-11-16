@@ -97,7 +97,7 @@ export function IntroLanding() {
             <span>OpenGridWorks</span>
           </div>
           <nav className={styles.topNav} aria-label="平台导航">
-            <Link href="#intro-globes">四个地球</Link>
+            <Link href="#intro-globes">多维视图</Link>
             <Link href="/visualization">专题分析</Link>
           </nav>
           {status === "ready" && (
