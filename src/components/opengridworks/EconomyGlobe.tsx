@@ -4,6 +4,10 @@ import Image from "next/image";
 import maplibregl, { type ExpressionSpecification, type Map as MapLibreMap, type Marker } from "maplibre-gl";
 import type { FeatureCollection, Point } from "geojson";
 import { useEffect, useRef, useState } from "react";
+import {
+  globeBoundaryLayers, globeContinentLabels, globeCountryLabels, globeGeographySources,
+  globeGlyphs, globeProvinceLabels, globeSky,
+} from "@/lib/globe-geography";
 import { observeMapViewport, overviewZoom } from "@/lib/globe-viewport";
 import { applyRasterBasemap } from "@/lib/raster-basemap";
 import { readWorkspaceCamera, replaceWorkspaceContext } from "@/lib/workspace-context";
@@ -13,7 +17,7 @@ import styles from "./EconomyWorkspace.module.css";
 
 const globeCenter: [number, number] = [79, 22];
 const missingValue = -1000;
-const bounds = "/data/natural-earth/ne_50m_admin_0_countries.geojson";
+const maxZoom = 8;
 const featuredEconomies = new Set(["CHN", "USA", "DEU", "BRA", "ZAF"]);
 
 function mapLayers(values: EconomyValue[], metric: EconomyMetric, outlook: boolean) {
@@ -37,8 +41,8 @@ function mapLayers(values: EconomyValue[], metric: EconomyMetric, outlook: boole
     ? ["match", ["get", "ADM0_A3"], first[0], first[1], ...rest.flat(), missingValue]
     : ["literal", missingValue];
   const step: ExpressionSpecification = outlook
-    ? ["interpolate", ["linear"], levelByCountry, -6, "#c97663", 0, "#80a4a0", 4, "#62ac80", 10, "#d4ee74"]
-    : ["interpolate", ["linear"], levelByCountry, 0, "#513727", 0.5, "#a05a36", 1, "#e9a04f"];
+    ? ["interpolate", ["linear"], levelByCountry, -6, "#f56d52", 0, "#598f89", 4, "#37ce77", 10, "#d4f54b"]
+    : ["interpolate", ["linear"], levelByCountry, 0, "#653019", 0.5, "#d46a25", 1, "#ffad32"];
   const fill: ExpressionSpecification = ["case", ["==", levelByCountry, missingValue], "#252b2d", step];
   return { fill, points };
 }
@@ -73,37 +77,33 @@ export function EconomyGlobe({ basemap, onBasemapError, values, metric, outlook,
       view = new maplibregl.Map({
         container: element,
         center: camera?.center ?? globeCenter,
-        zoom: camera ? Math.min(6, camera.zoom) : overviewZoom(element, "globe", globeCenter[1]),
+        zoom: camera ? Math.min(maxZoom, camera.zoom) : overviewZoom(element, "globe", globeCenter[1]),
         pitch: camera?.pitch ?? 0,
         bearing: camera?.bearing ?? 0,
         minZoom: -2,
         trackResize: false,
-        maxZoom: 6,
+        maxZoom,
         dragRotate: false,
         touchPitch: false,
-        attributionControl: { compact: true, customAttribution: "Natural Earth" },
+        attributionControl: { compact: true },
         style: {
           version: 8,
+          glyphs: globeGlyphs,
           projection: { type: "globe" },
-          sky: {
-            "sky-color": "#101821",
-            "horizon-color": "#1e293b",
-            "fog-color": "#0f172a",
-            "atmosphere-blend": 0.28,
-          },
+          sky: globeSky,
           sources: {
-            countries: { type: "geojson", data: bounds },
+            ...globeGeographySources,
             indicators: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
           },
           layers: [
             { id: "background", type: "background", paint: { "background-color": "#020711" } },
-            { id: "countries", type: "fill", source: "countries", paint: {
+            { id: "countries", type: "fill", source: "ne-countries", paint: {
               "fill-color": "#25262a",
               "fill-opacity": 0.42,
               "fill-color-transition": { duration: 210 },
             } },
-            { id: "borders", type: "line", source: "countries", paint: { "line-color": "#8e735b", "line-opacity": 0.38, "line-width": 0.7 } },
-            { id: "selected-country", type: "line", source: "countries", filter: ["==", ["get", "ADM0_A3"], ""],
+            ...globeBoundaryLayers,
+            { id: "selected-country", type: "line", source: "ne-countries", filter: ["==", ["get", "ADM0_A3"], ""],
               paint: { "line-color": "#ffdb96", "line-width": 2, "line-opacity": 0.96 } },
             { id: "indicator-glow", type: "circle", source: "indicators", paint: {
               "circle-radius": ["interpolate", ["linear"], ["get", "level"], 0, 4, 1, 18],
@@ -114,6 +114,9 @@ export function EconomyGlobe({ basemap, onBasemapError, values, metric, outlook,
               "circle-color": ["interpolate", ["linear"], ["get", "level"], 0, "#b98150", 1, "#ffe9b2"],
               "circle-opacity": 0.96, "circle-blur": 0.18,
             } },
+            globeCountryLabels,
+            globeProvinceLabels,
+            globeContinentLabels,
           ],
         },
       });
@@ -172,25 +175,13 @@ export function EconomyGlobe({ basemap, onBasemapError, values, metric, outlook,
   useEffect(() => {
     const view = map.current;
     if (!view || status !== "ready") return;
-    view.setPaintProperty("background", "background-color", outlook ? "#143d3c" : basemap.background);
-    if (view.getLayer("basemap-raster")) {
-      const rasterOpacity = outlook ? basemap.rasterOpacity * 0.39 : basemap.rasterOpacity;
-      view.setPaintProperty("basemap-raster", "raster-opacity", rasterOpacity);
-    }
-    view.setSky({
-      "sky-color": outlook ? "#1a3c38" : "#101821",
-      "horizon-color": outlook ? "#537e6b" : "#1e293b",
-      "fog-color": outlook ? "#234f49" : "#0f172a",
-      "atmosphere-blend": outlook ? 0.35 : 0.28,
-    });
-    view.setPaintProperty("countries", "fill-opacity", outlook ? 0.73 : 0.42);
-    view.setPaintProperty("borders", "line-color", outlook ? "#a7c9aa" : "#8e735b");
+    view.setPaintProperty("countries", "fill-opacity", outlook ? 0.58 : 0.56);
     view.setPaintProperty("selected-country", "line-color", outlook ? "#e3ff7e" : "#ffdb96");
     view.setPaintProperty("indicator-glow", "circle-color", outlook ? "#b5ef79" : "#efaa64");
     view.setPaintProperty("indicator-points", "circle-color", outlook
       ? ["case", ["<", ["get", "amount"], 0], "#ffc2a3", "#e5ff9c"]
       : ["interpolate", ["linear"], ["get", "level"], 0, "#b98150", 1, "#ffe9b2"]);
-  }, [basemap, outlook, status]);
+  }, [outlook, status]);
 
   useEffect(() => {
     const view = map.current;
@@ -224,7 +215,7 @@ export function EconomyGlobe({ basemap, onBasemapError, values, metric, outlook,
       const restored = readWorkspaceCamera(camera);
       appliedCamera.current = camera;
       if (restored) {
-        view.jumpTo({ ...restored, zoom: Math.min(6, restored.zoom) });
+        view.jumpTo({ ...restored, zoom: Math.min(maxZoom, restored.zoom) });
         return;
       }
     }

@@ -28,10 +28,6 @@
 .map { position: absolute; inset: 0; }
 .map[data-ready="false"] { visibility: hidden; }
 
-.viewport[data-outlook="true"] .map :global(.maplibregl-canvas) {
-  mask-image: radial-gradient(ellipse 88% 86% at 50% 50%, #000 72%, transparent 100%);
-}
-
 :global(.is-economy-project):has(.viewport[data-outlook="true"]) :is(:global(.og-layer-cards), :global(.og-maptype-panel)) {
   display: none;
 }
@@ -97,7 +93,7 @@
 
 .scale {
   height: 6px;
-  background: linear-gradient(90deg, #513727, #a05a36, #e9a04f);
+  background: linear-gradient(90deg, #653019, #d46a25, #ffad32);
   border-radius: 3px;
 }
 
