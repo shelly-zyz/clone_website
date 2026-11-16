@@ -44,6 +44,32 @@
   line-height: 1.55;
 }
 
+.agent {
+  display: grid;
+  gap: 15px clamp(16px, 3vw, 43px);
+  min-width: 0;
+  padding: clamp(14px, 2.4vw, 30px);
+  background: linear-gradient(126deg, #f1f4fb, #f3f9fb 65%, #f2f8f8);
+}
+.agentIntro > span { display: inline-flex; align-items: center; gap: 6px; color: #4d6290; font-size: 12px; font-weight: 700; }
+.agentIntro h2 { margin-top: 3px; color: #263442; font-size: clamp(19px, 2.05vw, 28px); font-weight: 730; line-height: 1.25; }
+.agentIntro p { margin-top: 5px; color: #546b82; font-size: 13px; line-height: 1.65; }
+.agentForm { display: grid; gap: 5px; min-width: 0; }
+.agentForm label { color: #344d6f; font-size: 12px; font-weight: 700; }
+.agentForm textarea { width: 100%; min-height: 65px; resize: vertical; border: 1px solid #d6e0ee; padding: 8px 10px; background: #fff; font-size: 13px; }
+.agentForm textarea:focus-visible { outline: 2px solid #7b91c7; outline-offset: 1px; }
+.agentActions { display: flex; justify-content: space-between; gap: 8px; }
+.agentActions button { display: inline-flex; align-items: center; gap: 5px; min-height: 34px; padding: 4px 10px; font-size: 12px; font-weight: 670; cursor: pointer; }
+.agentExample { color: #45608b; background: #e6edfa; }
+.agentButton { color: #fff; background: #425b88; }
+.agentButton:disabled { opacity: 0.6; cursor: default; }
+.agentNotice { color: #40597a; font-size: 12px; }
+.agentOutput { grid-column: 1 / -1; min-width: 0; padding: 12px; background: #fff; }
+.agentOutput h3 { color: #263442; font-size: 16px; font-weight: 710; }
+.localTitle { padding-top: 6px; color: var(--text); font-size: 17px; font-weight: 730; }
+
+@media (min-width: 800px) { .agent { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); } }
+
 .upload {
   display: flex;
   flex-wrap: wrap;

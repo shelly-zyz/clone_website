@@ -15,6 +15,8 @@ import {
   type ChartData, type ChartField, type ChartFields, type ChartTemplate,
 } from "@/lib/topic-analysis/custom-chart";
 import { buildChart, palettes, type PaletteName } from "./chart-options";
+import type { WorkspaceTopic } from "@/lib/globe-topics";
+import { AgentChartStudio } from "./AgentChartStudio";
 import styles from "./studio.module.css";
 
 registerCharts([
@@ -55,7 +57,7 @@ function FieldSelect({ data, kind, field, label, fields, onChange }: {
   );
 }
 
-export function CustomChartStudio({ topicName, backHref }: { topicName: string; backHref: string }) {
+export function CustomChartStudio({ topic, topicName, backHref }: { topic: WorkspaceTopic; topicName: string; backHref: string }) {
   const [data, setData] = useState(sampleData);
   const [kind, setKind] = useState<ChartTemplate>("heatmap");
   const [mappings, setMappings] = useState<Partial<Record<ChartTemplate, ChartFields>>>({});
@@ -193,7 +195,7 @@ export function CustomChartStudio({ topicName, backHref }: { topicName: string; 
         <div>
           <Link href={backHref} className={styles.back}><ArrowLeft size={15} aria-hidden />{topicName}</Link>
           <h1 id="studio-title">自定义制图</h1>
-          <p>上传 CSV，用自己的数据试用适合的图表。</p>
+          <p>用小云生成带依据的图文结果，也可在本地用 CSV 手动制图。</p>
         </div>
         {data !== sampleData && <button className={styles.secondaryButton} type="button" onClick={() => {
           request.current++;
@@ -202,6 +204,9 @@ export function CustomChartStudio({ topicName, backHref }: { topicName: string; 
           selectDataset(sampleData);
         }}>查看示例数据 <ArrowUpRight size={15} aria-hidden /></button>}
       </div>
+
+      <AgentChartStudio topic={topic} />
+      <h2 className={styles.localTitle}>本地 CSV 制图</h2>
 
       <div className={styles.upload} data-dragging={dragging} onDragOver={event => {
         event.preventDefault();

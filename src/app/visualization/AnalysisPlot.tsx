@@ -35,9 +35,10 @@ function loadWorld() {
   return worldRequest;
 }
 
-export function AnalysisPlot({ spec, compact = false, onCategory }: {
+export function AnalysisPlot({ spec, compact = false, onCategory, highlight }: {
   spec: AnalysisChartSpec;
   compact?: boolean;
+  highlight?: string;
   onCategory?: (label: string, row?: string) => void;
 }) {
   const container = useRef<HTMLDivElement>(null);
@@ -76,7 +77,7 @@ export function AnalysisPlot({ spec, compact = false, onCategory }: {
     const instance = chart.current;
     if (!instance) return;
     if (spec.kind !== "map") {
-      instance.setOption(chartOptions(spec, compact), { notMerge: true });
+      instance.setOption(chartOptions(spec, compact, highlight), { notMerge: true });
       if (!onCategory || compact) return;
       const onClick = (event: ECElementEvent) => {
         if (spec.kind === "heatmap" && Array.isArray(event.value)) {
@@ -84,6 +85,9 @@ export function AnalysisPlot({ spec, compact = false, onCategory }: {
           const label = typeof column === "number" ? spec.labels[column] : undefined;
           const group = typeof row === "number" ? spec.series[row]?.name : undefined;
           if (label && group) onCategory(label, group);
+        } else if (spec.kind === "sankey" && event.dataType === "edge") {
+          const link = spec.links[event.dataIndex];
+          if (link) onCategory(link.source, link.target);
         } else if (event.name) onCategory(event.name);
       };
       instance.on("click", onClick);
@@ -104,7 +108,7 @@ export function AnalysisPlot({ spec, compact = false, onCategory }: {
       active = false;
       instance.off("click", onClick);
     };
-  }, [visible, spec, compact, mapAttempt, onCategory]);
+  }, [visible, spec, compact, mapAttempt, onCategory, highlight]);
 
   return (
     <div className={compact ? styles.previewPlot : styles.chartPlot} data-chart-kind={spec.kind}>

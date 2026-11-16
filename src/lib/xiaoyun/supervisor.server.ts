@@ -19,7 +19,8 @@ import { listDataCatalog } from "@/lib/data-agent/query.server";
 import { profileDataResult, type DataResult } from "@/lib/data-agent/result-profile";
 import { askDataSession, resolveDataResult } from "@/lib/data-agent/state.server";
 import wdi from "../../../public/data/economy/wdi.json" with { type: "json" };
-import { chartBackends, chartTypes } from "@/lib/visualization-agent/contracts";
+import { chartBackends, chartTypes, customChartPalettes, customChartTemplates } from "@/lib/visualization-agent/contracts";
+import { callCustomChartMcp, customChartTool } from "@/lib/visualization-agent/custom-mcp.server";
 import { visualizeResult } from "@/lib/visualization-agent/visualization.server";
 import { chartReference, createTurnContext, targets, XiaoyunContextError, type ChartReference, type Target } from "./context.server";
 import type { XiaoyunBusinessResult, XiaoyunReply, XiaoyunRequest } from "./contracts";
@@ -35,6 +36,7 @@ const targetInput = { topic: topicSchema, target: z.enum(targets) };
 const forecastSkill = "forecast-review";
 const dashboardSkill = "bigdata-dashboard";
 const anatomySkill = "anatomy";
+const storytellingSkill = "data-storytelling";
 const chartInput = z.strictObject({
   ...targetInput, chart: z.enum(chartTypes).optional(), renderer: z.enum(chartBackends).optional(),
 });
@@ -63,6 +65,7 @@ const instructions = [
   "用户指定天或月时 plan.horizonUnit 使用 day 或 month；只说多少期用 period。只要求找更准模型用 select_model，要求用更准模型预测用 forecast 且 strategy=auto，两者都不传 model。指定模型与基线对比用 compare。",
   "涉及查看已发布预报、新预测、回测、基线比较或修改预测时，先用 load_skill 读取 forecast-review，再决定路径。仅查看任务进度时直接用 get_analysis。",
   "明确要求生成数据大屏、看板或驾驶舱时，先用 load_skill 读取 bigdata-dashboard，再用 render_dashboard 出屏。普通绘图直接用 render_chart。",
+  "用户明确要求自定义制图、科研配色、趋势带、排序点图或为新图配文字分析时，先 load_skill data-storytelling。按该技能通过 render_custom_chart 出图。修改已选自定义图时保持数据引用，并继承未明确修改的图型和配色。",
   "只用工具回执中的真实数据与执行状态。概念、地图和工具能力问题可以直接用中文回答；涉及站点的数据范围时先看目录。",
 ].join("\n");
 
@@ -382,13 +385,15 @@ async function runXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal, gua
       pageChange = { page: stored.page, status: `项目视图「${plainMarkdown(args.name)}」`, expected: activePage };
       if (stored.chart) {
         const session = await context.session(state, "visualization");
+        const result = stored.chart.selection.custom ? await resolveDataResult(state.scope.project_id, stored.chart.result_id, state.scope.project_key) : undefined;
         const output = await visualizeResult({
           action: "render_session", project_id: state.scope.project_id, session_id: session.session_id, revision: session.revision,
           result_id: stored.chart.result_id, ...stored.chart.selection, instruction: "恢复项目视图",
         }, state.scope.project_key, signal, artifactId("chart", state.scope.project_id, input.requestId));
         if ("status" in output && output.status === "ok" && "chart_id" in output && output.chart_id) {
           artifacts.push({ kind: "chart", chartId: output.chart_id, topic, title: args.name,
-            renderer: output.renderer, options: output.options, version: output.data_ref.version });
+            renderer: output.renderer, options: output.options, version: output.data_ref.version,
+            ...("story" in output && output.story && result ? { story: output.story, sources: resultSources(result) } : {}) });
           lastRoute = "visualization";
         } else notes.set("project_chart", "已保存的图表暂时无法恢复。");
       }
@@ -410,14 +415,15 @@ async function runXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal, gua
       navigationLabel = target.label;
       return { status: "ok", view: action.view, title: target.label };
     }),
-    tool("load_skill", "forecast-review 用于预报和预测；bigdata-dashboard 用于数据看板；anatomy 用于互动机制示意。", z.strictObject({
-      name: z.enum([forecastSkill, dashboardSkill, anatomySkill]),
+    tool("load_skill", "forecast-review 用于预测；bigdata-dashboard 用于看板；anatomy 用于机制示意；data-storytelling 用于自定义制图和图文解读。", z.strictObject({
+      name: z.enum([forecastSkill, dashboardSkill, anatomySkill, storytellingSkill]),
     }), async ({ name }) => {
       if (loadedSkills.has(name)) return { status: "ok", name, already_loaded: true };
       const instructions = await readFile(join(process.cwd(), "src/lib/xiaoyun/skills", name, "SKILL.md"), "utf8");
       loadedSkills.add(name);
       if (name === forecastSkill) notes.delete("forecast_skill_required");
       if (name === dashboardSkill) notes.delete("dashboard_skill_required");
+      if (name === storytellingSkill) notes.delete("storytelling_skill_required");
       return { status: "ok", name, instructions };
     }),
     tool("render_mechanism", "按因果顺序把复杂机制呈现成可旋转的实体部件和步骤。先加载 anatomy。", mechanismSchema, scene => {
@@ -501,6 +507,34 @@ async function runXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal, gua
       }),
     tool("render_chart", "按已检查的单指标结果生成图表。修改旧图时用 chart 目标并继承它的输入与设置。", chartInput,
       args => renderChart(args)),
+    tool(customChartTool, "从已检查的数据结果调用制图 MCP，生成可交互的图表和有依据的文字。先加载 data-storytelling。", z.strictObject({
+      ...targetInput, template: z.enum(customChartTemplates).optional(), palette: z.enum(customChartPalettes).optional(),
+    }), async ({ topic, target, template, palette }) => {
+      if (!loadedSkills.has(storytellingSkill)) return note("storytelling_skill_required", "请先使用 load_skill 读取 data-storytelling。", "needs_skill");
+      if (forecastSkillRequired()) return note("forecast_skill_required", "请先使用 load_skill 读取 forecast-review。", "needs_skill");
+      const entry = actionable(topic, target);
+      if (artifacts.some(item => item.kind === "chart")) return note(customChartTool, "本轮图表已生成。", "needs_input");
+      if (!entry.profile.chart) return note(customChartTool, "该结果没有可绘制的有效数值。", "empty");
+      const state = await context.get(topic);
+      if (!state) throw new XiaoyunContextError("请先查询数据。");
+      const prior = entry.chart?.selection.custom;
+      const category = entry.profile.shape === "category";
+      const session = await context.session(state, "visualization");
+      const output = await callCustomChartMcp({ project_id: state.scope.project_id, result_id: entry.id,
+        template: template ?? prior?.template ?? (category ? "rank" : entry.profile.valid >= 2 ? "ribbon" : "column"),
+        palette: palette ?? prior?.palette,
+      }, { key: state.scope.project_key, signal, session: { session_id: session.session_id, revision: session.revision,
+        instruction: input.message, chartId: artifactId("chart", state.scope.project_id, input.requestId) } });
+      if (output.status !== "ok") return note(customChartTool, output.error);
+      if (output.result_id !== entry.id) return note(customChartTool, "该请求已绑定其他结果，请发起一条新的制图请求。");
+      lastRoute = "visualization";
+      const region = category ? "各省" : entry.result.rows[0]?.source_ref.region_name;
+      const title = [typeof region === "string" ? region : "", entry.result.metric.name].filter(Boolean).join(" · ");
+      artifacts.push({ kind: "chart", chartId: output.chart_id, topic, title, renderer: output.renderer, options: output.options,
+        version: entry.result.data_ref.version, story: output.story, sources: resultSources(entry.result) });
+      return { status: "ok", chart_id: output.chart_id, result_id: output.result_id, template: output.template_id,
+        finding: output.story.highlights[0]?.text };
+    }),
     tool("render_dashboard", "用已检查的单指标查询结果生成可全屏查看的看板，保留质量、版本和来源。需先加载 bigdata-dashboard。", chartInput, args => {
       if (!loadedSkills.has(dashboardSkill)) {
         return note("dashboard_skill_required", "请先使用 load_skill 读取 bigdata-dashboard。", "needs_skill");

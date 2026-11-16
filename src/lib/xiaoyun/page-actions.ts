@@ -31,6 +31,7 @@ export const mapPatchSchema = z.strictObject({
 
 export const filterPatchSchema = z.strictObject({
   ...siteNavigationSchema.shape.filters.unwrap().partial().shape,
+  source: siteNavigationSchema.shape.filters.unwrap().shape.source.nullable(),
   version: version.optional(),
   grain: z.enum(["day", "month"]).optional(),
   compareRegion: province.nullable().optional(),
@@ -99,7 +100,9 @@ export function pageLocation(page: ActivePage) {
       if (parsed !== undefined) url.searchParams.set(key, String(parsed));
     }
   }
-  if (page.section && resolveSiteNavigation({ view: page.view, section: page.section })) url.hash = page.section;
+  if (page.section && resolveSiteNavigation({ view: page.view, section: page.section })) {
+    url.hash = page.view === "power" && page.section === "capacity-share" ? "capacity-mix" : page.section;
+  }
   return { href: url.pathname + url.search + url.hash, label: target.label, url };
 }
 

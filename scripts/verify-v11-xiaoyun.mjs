@@ -461,6 +461,46 @@ if (live) {
 }
 
 if (!live) {
+  await test("Data Storytelling 经 MCP 出图，保留缺测、版本及旧图输入", async () => {
+    scope("power");
+    const id = data("power", "江苏", [1, 2, 3, 4]);
+    const source = fixtures.results.get(id);
+    source.rows[1].value = null;
+    source.data_ref.quality.missing_rows = 1;
+    const skill = ["load_skill", { name: "data-storytelling" }];
+    const draw = ["render_custom_chart", { ...selection, template: "ribbon", palette: "ice" }];
+    const withoutSkill = await turn([query, draw]);
+    assert.equal(withoutSkill.artifacts, undefined);
+    assert.equal(fixtures.output.at(-1).status, "needs_skill");
+
+    const response = await turn([skill, query, draw], { message: "做江苏发电量自定义图并配分析" });
+    assert.deepEqual(fixtures.calls, ["load_skill", "query_data", "render_custom_chart"]);
+    assert.equal(response.route, "visualization", JSON.stringify(fixtures.output.at(-1)));
+    const card = response.artifacts[0];
+    assert.deepEqual(card.options.series[0].data, [1, null, 3, 4]);
+    assert.match(card.story.highlights[0].text, /2026-01-04.+4 unit.+增加 1 unit/);
+    assert.equal(card.story.sections.length, 4);
+    assert.equal(card.sources[0].url, "https://example.test/dataset");
+    assert.equal(card.version, source.data_ref.version);
+    const session = fixtures.sessions.get(response.session.scope.visualization.session_id);
+    assert.equal(session.summary.result_id, id);
+    assert.deepEqual(session.summary.selection.custom, { template: "ribbon", palette: "ice" });
+
+    data("power", "湖北", [1, 2, 3]);
+    await turn([query]);
+    const selectedChart = { topic: "power", chart_id: card.chartId };
+    const target = { topic: "power", target: "chart" };
+    const redo = await turn([skill, ["inspect_data", target], ["render_custom_chart", { ...target, palette: "mint" }]], { selectedChart });
+    assert.match(redo.artifacts[0].title, /江苏/);
+    assert.deepEqual(redo.artifacts[0].options.series[0].data, card.options.series[0].data);
+    assert.notEqual(redo.artifacts[0].options.series[0].lineStyle.color, card.options.series[0].lineStyle.color);
+    assert.equal(fixtures.output.at(-1).result_id, id);
+
+    const invalid = await turn([skill, ["inspect_data", target], ["render_custom_chart", { ...target, template: "rank" }]], { selectedChart });
+    assert.equal(invalid.artifacts, undefined);
+    assert.match(invalid.summary, /排序点图需要同口径的类别数据/);
+  });
+
   await test("小云看板复用同一授权数据和图表模板，保留质量与来源", async () => {
     scope("power");
     const original = data("power", "江苏", [1, 2, 3]);

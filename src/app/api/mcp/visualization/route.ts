@@ -1,13 +1,14 @@
 import { z } from "zod";
 import { mcpResult, serveAgentMcp } from "@/lib/agent-runtime/mcp.server";
 import { chartBackends, chartTypes, sceneFields } from "@/lib/visualization-agent/contracts";
+import { registerCustomChart, visualizationMcpName } from "@/lib/visualization-agent/custom-mcp.server";
 import { visualizeResult } from "@/lib/visualization-agent/visualization.server";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   const key = request.headers.get("x-data-project-key");
-  return serveAgentMcp(request, "opengridworks-visualization", server => {
+  return serveAgentMcp(request, visualizationMcpName, server => {
     const inputSchema = z.strictObject({ project_id: z.uuid(), result_id: z.uuid(), chart: z.enum(chartTypes) });
     for (const renderer of chartBackends) {
       server.registerTool(`render_${renderer}`, {
@@ -17,5 +18,6 @@ export async function POST(request: Request) {
     server.registerTool("build_power_globe_scene", {
       description: "按已发布 OSM 电力点构建 MapLibre 地球或 Three.js 三维点图。", inputSchema: z.strictObject(sceneFields),
     }, args => mcpResult(() => visualizeResult({ action: "scene", ...args }, key, request.signal)));
+    registerCustomChart(server, { key, signal: request.signal });
   });
 }

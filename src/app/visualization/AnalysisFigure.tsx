@@ -12,7 +12,7 @@ export function hasChartValues(spec: AnalysisChartSpec) {
   return spec.series.some(series => series.values.some(value => value !== null));
 }
 
-function AnalysisTable({ spec }: { spec: AnalysisChartSpec }) {
+export function AnalysisTable({ spec }: { spec: AnalysisChartSpec }) {
   const [expanded, setExpanded] = useState(false);
   const names = spec.kind === "heatmap" ? spec.labels.map(String) : spec.series.map((series, index) => {
     const unit = series.unit ?? (spec.kind === "bubble" && index === 0 ? spec.xUnit : spec.unit);

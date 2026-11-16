@@ -24,9 +24,9 @@ const commonEconomicFilters = { country: "经济体 ISO3 代码", year: "结束�
 const topics: Record<typeof analysisTopicOrder[number], Pick<View, "coverage" | "sections" | "filters">> = {
   power: {
     coverage: "全国年度电源装机与发电结构，2020–2025 年。各省发电量和装机地图请用 globe-power。",
-    sections: { "capacity-comparison": "多年装机走势", "capacity-share": "风光装机比重", "capacity-waterfall": "装机增量",
+    sections: { "capacity-comparison": "多年装机走势", "capacity-share": "装机组成", "capacity-waterfall": "装机增量",
       "capacity-mix": "装机组成", "generation-by-source": "分电源发电排行", "renewable-capacity-share": "多年风光占比" },
-    filters: { year: "2020–2025" },
+    filters: { year: "2020–2025", source: "thermal-power / hydro-power / nuclear-power / wind-power / solar-power / other" },
   },
   generation: {
     coverage: "月度长期走势和季节图为全国口径。省级筛选用于同月省际排行及比较，不能展示省级多年走势。",
@@ -98,7 +98,7 @@ for (const id of analysisTopicOrder) {
   const { title, label, description } = analysisTopics[id];
   const href = analysisHref(id);
   views.set(id, { title, href, aliases: [label, title], ...topics[id], coverage: topics[id].coverage ?? description });
-  views.set(`custom-${id}`, { title: `${label} · 自定义制图`, href: href + "/custom", coverage: "上传数据、选择并编辑图表模板。" });
+  views.set(`custom-${id}`, { title: `${label} · 自定义制图`, href: href + "/custom", coverage: "用小云将授权指标制成图文报告，或在浏览器内手动制作 CSV 图表。" });
 }
 
 export function siteViewCatalog() {
@@ -116,6 +116,7 @@ export const siteNavigationSchema = z.strictObject({
     country: iso3.optional(), year: year.optional(), startYear: year.optional(), targetYear: year.optional(), region: region.optional(),
     month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(), date: z.iso.date().optional(),
     product: z.enum(generationSeries.map(item => item.id)).optional(), fuel: z.enum(fuelSeries.map(item => item.id)).optional(),
+    source: z.enum(["thermal-power", "hydro-power", "nuclear-power", "wind-power", "solar-power", "other"]).optional(),
     technology: z.enum(["wind", "solar"]).optional(), metric: z.enum(["gdp", "perCapita"]).optional(),
     powerView: z.enum(["facilities", "generation", "capacity"]).optional(), projection: z.enum(["globe", "map"]).optional(),
     scene: z.literal("outlook").optional(), replay: z.enum(["weather", "time", "rain", "accumulation"]).optional(),

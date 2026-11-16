@@ -18,7 +18,7 @@ const models = { statsforecast: "StatsForecast", timesfm: "TimesFM", chronos2: "
 const statuses = { queued: "排队中", running: "计算中", succeeded: "已完成", failed: "任务失败" };
 const formatNumber = new Intl.NumberFormat("zh-CN", { maximumSignificantDigits: 8 });
 
-function ChartPreview({ chart, size = "card" }: { chart: Chart; size?: "card" | "dialog" | "fullscreen" }) {
+export function XiaoyunChartPreview({ chart, size = "card" }: { chart: Chart; size?: "card" | "dialog" | "fullscreen" }) {
   const container = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState(false);
 
@@ -76,6 +76,24 @@ function ChartPreview({ chart, size = "card" }: { chart: Chart; size?: "card" | 
   );
 }
 
+export function XiaoyunChartStory({ chart }: { chart: Chart }) {
+  if (!chart.story) return null;
+  return <div className="space-y-2 text-sm text-slate-700">
+    <p className="bg-[#f2f5fb] px-3 py-2 leading-relaxed">{chart.story.highlights[0]?.text}</p>
+    <details>
+      <summary className="cursor-pointer font-semibold text-slate-800">图表解读与依据</summary>
+      <dl className="space-y-2 py-2">
+        {chart.story.sections.map(({ label, text }) => <div key={label}>
+          <dt className="font-medium text-slate-900">{label}</dt><dd className="leading-relaxed">{text}</dd>
+        </div>)}
+      </dl>
+      {(chart.sources?.length ?? 0) > 0 && <ul className="space-y-1">
+        {chart.sources?.map(item => <li key={item.url}><a href={item.url} target="_blank" rel="noreferrer" className="text-sky-800 underline">{item.title}</a></li>)}
+      </ul>}
+    </details>
+  </div>;
+}
+
 export function XiaoyunDashboardDialog({ chart, onClose }: { chart: Chart; onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
@@ -113,7 +131,7 @@ export function XiaoyunDashboardDialog({ chart, onClose }: { chart: Chart; onClo
         </dl>
         <p className="text-sm text-slate-700">数据覆盖 {coverage}{details.truncated && " · 查询结果已截断"}</p>
         <div className="rounded-lg border border-slate-200 bg-white p-2 sm:p-4">
-          <ChartPreview chart={chart} size={fullscreen ? "fullscreen" : "dialog"} />
+          <XiaoyunChartPreview chart={chart} size={fullscreen ? "fullscreen" : "dialog"} />
         </div>
         {details.sources.length > 0 && <ul className="space-y-1 text-sm">
           {details.sources.map(({ url, title }) => (
@@ -246,7 +264,8 @@ export function XiaoyunBusinessCard({ results, loadAnalysis, selectedChartId, on
                   label={selectedChartId === result.chartId ? "已选中" : "选中追问"} onClick={() => onSelectChart(result)} />
               </div>
               {result.dashboard && <Button size="sm" variant="secondary" label="打开看板" onClick={() => onOpenDashboard(result)} />}
-              <ChartPreview chart={result} />
+              <XiaoyunChartPreview chart={result} />
+              <XiaoyunChartStory chart={result} />
             </section>
           ) : (
             <section key={result.jobId} className="border-t border-slate-200 pt-2">

@@ -13,6 +13,7 @@ import { profileDataResult } from "@/lib/data-agent/result-profile";
 import { assertDataProject, resolveDataResult } from "@/lib/data-agent/state.server";
 import { chartBackends, chartReferenceSchema, chartSelectionSchema, chartTypes, type ChartBackend, type ChartType, type visualizationRequestSchema } from "./contracts";
 import { chartTools, generateChartOption } from "./echarts-mcp.server";
+import { chartStory, researchChart } from "./custom-chart";
 import { powerScene } from "./scene.server";
 
 type Request = z.infer<typeof visualizationRequestSchema>;
@@ -119,15 +120,20 @@ async function executeVisualization(request: Request, projectKey: string | null,
       return { status: "unsupported" as const, error: "当前模板支持对已保存结果绘制折线图或柱状图。" };
     }
     const chart = selection.chart;
+    const custom = replay ? replay.selection.custom : direct ? request.custom : undefined;
     if (category && chart !== "bar") return { status: "unsupported" as const, error: "同月省级比较请用柱状图。" };
-    const renderer = replay?.selection.renderer ?? request.renderer ?? selection.renderer ?? previous?.renderer ?? "echarts";
+    if (custom && (custom.template === "rank" && !category || custom.template === "ribbon" && (category || profile.valid < 2))) {
+      return { status: "unsupported" as const, error: "排序点图需要同口径的类别数据；趋势带需要至少两个有效时间点。" };
+    }
+    const renderer = custom ? "echarts" : replay?.selection.renderer ?? request.renderer ?? selection.renderer ?? previous?.renderer ?? "echarts";
     const location = category ? `${rows[0]?.time_start.slice(0, 7)} 各省` : rows[0]?.source_ref.region_name;
     const issue = rows[0]?.issue_time;
     const title = [typeof location === "string" ? location : "", metric.name,
       forecast && issue ? `GFS 起报 ${issue.slice(0, 16).replace("T", " ")} UTC` : ""].filter(Boolean).join(" · ");
-    const spec = await renderOptions(chart, renderer, points, title, metric.unit, timeAxis, signal);
+    const spec = custom ? { renderer: "echarts" as const, tool: "render_custom_chart", options: researchChart(custom, points, title, metric.unit, timeAxis, forecast) }
+      : await renderOptions(chart, renderer, points, title, metric.unit, timeAxis, signal);
     signal.throwIfAborted();
-    const reference = { chart_id: chartId ?? randomUUID(), result_id: resultId, selection: { chart, renderer } };
+    const reference = { chart_id: chartId ?? randomUUID(), result_id: resultId, selection: { chart, renderer, ...(custom && { custom }) } };
     const saved = session && scoped && !replay
       ? await advanceAgentSession(session, "visualization", reference,
         { instruction: request.instruction, status: "ok", selection: reference })
@@ -135,8 +141,9 @@ async function executeVisualization(request: Request, projectKey: string | null,
     if (saved?.status === "conflict") throw new DataAgentError("SESSION_CONFLICT", "可视化会话已有新消息，请刷新后重试。");
     return {
       status: "ok" as const, mode: direct ? "direct" : "pi", ...spec, result_id: resultId,
-      template_id: `${renderer}.${chart}.${category ? "category" : "time-series"}`, template_version: "1",
+      template_id: `${renderer}.${custom?.template ?? chart}.${category ? "category" : "time-series"}`, template_version: "1",
       data_ref: result.data_ref, field_mapping: { x: category ? "entity_code" : "time_start", y: "value" }, events: [],
+      ...(custom ? { story: chartStory(result, points, category) } : {}),
       ...(replay ? { chart_id: replay.chart_id, session_id: session?.session_id, revision: session?.revision } : {}),
       ...(saved?.status === "saved" ? { chart_id: reference.chart_id, session_id: session?.session_id, revision: saved.revision } : {}),
     };

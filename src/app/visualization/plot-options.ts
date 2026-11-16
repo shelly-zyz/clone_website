@@ -8,9 +8,10 @@ import type {
 } from "echarts/components";
 import type { ComposeOption } from "echarts/core";
 import type { AnalysisChartSpec } from "@/lib/topic-analysis/model";
+import { powerPlotOptions } from "./power-plot-options";
 
 export const worldMap = "ogw-topic-world";
-type ChartOptions = ComposeOption<BarSeriesOption | BoxplotSeriesOption | CustomSeriesOption | HeatmapSeriesOption
+export type ChartOptions = ComposeOption<BarSeriesOption | BoxplotSeriesOption | CustomSeriesOption | HeatmapSeriesOption
   | LineSeriesOption | MapSeriesOption | PieSeriesOption | SankeySeriesOption | ScatterSeriesOption
   | TreemapSeriesOption | CalendarComponentOption | DataZoomComponentOption | GridComponentOption | LegendComponentOption
   | MarkLineComponentOption | PolarComponentOption | TitleComponentOption | TooltipComponentOption | VisualMapComponentOption>;
@@ -77,7 +78,8 @@ function heatmap(spec: AnalysisChartSpec, compact: boolean, tooltip: TooltipComp
   const min = numbers.length ? Math.min(...numbers) : 0;
   const max = numbers.length ? Math.max(...numbers) : 1;
   const zoom = !compact && latestStart > 0;
-  const palette = spec.id.startsWith("carbon-") || spec.id.startsWith("emission-") ? emissionColors : heatColors;
+  const palette = spec.id === "power-explorer" ? ["#eef3fa", "#cad9ec", "#91b7d5", "#9698c9", "#5d6193"]
+    : spec.id.startsWith("carbon-") || spec.id.startsWith("emission-") ? emissionColors : heatColors;
   return {
     tooltip: {
       ...tooltip, trigger: "item", formatter: params => {
@@ -499,7 +501,9 @@ function cartesian(spec: AnalysisChartSpec, compact: boolean, tooltip: TooltipCo
   };
 }
 
-export function chartOptions(spec: AnalysisChartSpec, compact: boolean): ChartOptions {
+export function chartOptions(spec: AnalysisChartSpec, compact: boolean, highlight?: string): ChartOptions {
+  const power = powerPlotOptions(spec, compact, highlight);
+  if (power) return power;
   const tooltip: TooltipComponentOption = {
     show: !compact, confine: true, renderMode: "richText", trigger: "axis",
     textStyle: { color: ink, fontSize: 12 }, valueFormatter: value => readValue(value, spec.unit),

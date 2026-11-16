@@ -29,7 +29,7 @@ export default async function CustomChartPage({ params, searchParams }: {
   return (
     <main className={pageStyles.page}>
       <div className={pageStyles.hero}><AnalysisHeader topic={config.globe} detail /></div>
-      <CustomChartStudio topicName={config.title} backHref={analysisHref(key) + (query.size ? "?" + query.toString() : "")} />
+      <CustomChartStudio topic={config.globe} topicName={config.title} backHref={analysisHref(key) + (query.size ? "?" + query.toString() : "")} />
     </main>
   );
 }

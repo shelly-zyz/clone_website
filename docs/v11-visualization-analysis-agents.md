@@ -9,7 +9,7 @@
 | 板块 | 执行职责 | 当前支持范围 |
 | --- | --- | --- |
 | 查数与口径 | **数据库 Agent 查目录、校验条件并查询** | 气象、电力、碳三个发布专题。成功结果包含 `result_id`、`DataRef`、实际条件及质量。数据库需要澄清时，保存待续请求。详见 [共用数据库 Agent](./v11-data-agent.md)。 |
-| 可视化 | **小云选图，模板服务生成配置** | 按数据形状和用户目标选择单指标折线或柱状。ECharts、VChart 和 AntV 是渲染器选项。重绘旧图时沿用图表引用的数据和未修改的设置。OSM 电力点场景有独立入口。 |
+| 可视化 | **小云选图，模板服务生成配置** | 常规单指标图支持 ECharts、VChart 和 AntV。自定义制图由 Data Storytelling 选择趋势带、排序点图或柱状模板，通过项目 ECharts MCP 出图并附文字解读。重绘旧图沿用图表引用的数据与未修改的设置。 |
 | 统计与聚类 | **小云选操作，分析服务校验，Worker 执行** | 描述统计与单变量数值聚类。输入为已保存的数据结果，任务卡提供状态和计算结果。 |
 | 预测与回测 | **小云按需读技能、预检和提交，Worker 异步计算** | 区分已发布预报与历史外推。回测根据连续期数和留出窗口确定可行方案，任务锁定数据快照及模型参数。 |
 | 通用问答与来源 | **小云组织解释，工具提供站点目录与数据来源** | `list_available_datasets` 核对已发布指标的口径与范围，`get_sources` 沿数据、图表或分析引用追溯。`search_knowledge` 和 `open_evidence` 提供已审核证据检索和段落回看。 |
@@ -23,10 +23,11 @@
 
 | 工具 | 输入与约束 |
 | --- | --- |
-| `load_skill` | 按名称加载 [预测与回测](../src/lib/xiaoyun/skills/forecast-review/SKILL.md) 或 [数据看板](../src/lib/xiaoyun/skills/bigdata-dashboard/SKILL.md) 技能。常规查数、绘图和查看任务状态直接用相应工具。 |
+| `load_skill` | 按名称加载 [预测与回测](../src/lib/xiaoyun/skills/forecast-review/SKILL.md)、[数据看板](../src/lib/xiaoyun/skills/bigdata-dashboard/SKILL.md) 或 [Data Storytelling](../src/lib/xiaoyun/skills/data-storytelling/SKILL.md)。常规查数、绘图和查看任务状态直接用相应工具。 |
 | `query_data` | 查数要求和可选基准。数据库 Agent 负责语义目录、指标口径与版本。成功返回已保存的 DataRef、质量和可用能力。 |
 | `inspect_data` | 读取本轮查询、之前的数据、原图或上次分析的输入。传入 `plan` 时用提交服务同一套规则预检，并返回实际留出上限等原因，无需入队。 |
 | `render_chart` | 复用单指标折线或柱状模板。修改旧图使用原输入和未改的渲染设置。GFS 图按有效时间展示并标注起报。 |
+| `render_custom_chart` | 先加载 `data-storytelling`，再用当前或已检查的结果引用出图。可选 `template` 和 `palette`；跟进旧图时继承原设置。回执包含模板、数据引用和基于实际数值的发现。 |
 | `render_dashboard` | 加载 `bigdata-dashboard` 后，从授权的单指标结果生成可全屏查看的看板，显示质量、数据版本和来源。 |
 | `submit_analysis`、`get_analysis` | 提交或查询项目内任务。GFS 预报帧可做描述统计。预测与回测使用连续的日度或月度历史；回测留出后至少保留 8 期训练数据。 |
 | `get_sources` | 按所引用的数据、图表或分析输入追溯数据版本与来源。 |
@@ -44,6 +45,18 @@
 
 ## 可视化
 
+### 电力专题与文字解读
+
+`/visualization/power` 以 Three.js 分层装机曲带为主图，搭配 ECharts 分层环图、净增量桑基、风光装机份额趋势带和发电量排序点图。全部使用国家统计局年度公报。点击曲带采样点、图例或热力矩阵会更新年份及电源筛选。装机总量与已列分项的差额单独显示，减少项从桑基流带中抵扣，未单列的发电量留空。2026 年 9 月值是国家能源局的单独阶段披露，未加入年度序列。
+
+文字解读参考 [Tableau Pulse 的洞察类型](https://help.tableau.com/current/online/en-us/pulse_insights_platform_insight_types.htm)：用程序在当前筛选范围内计算期间变化、主要贡献、结构份额等事实，再填入「核心发现、结构与趋势分析、关联分析、结论与依据」。历史偏离采用四分位距提示，历史可比期不足时不判断。年份、指标、缺测说明和直接来源可展开；装机与发电量的口径差异不作为因果依据。
+
+### 自定义制图
+
+各专题的「自定义制图」表单提交给小云，结果回到当前页。也可在小云对话中说「用国家统计局 2025 年 3 月各省发电量本期值做冰蓝色排序点图，附文字分析」。Pi 先加载项目适配版 [Data Storytelling 技能](../src/lib/xiaoyun/skills/data-storytelling/SKILL.md)，再查询或检查选中的结果。它以 MCP 客户端调用 `render_custom_chart`，与 HTTP MCP 共用同一工具注册及权限校验。MCP 接收受检的项目、结果、图型和配色，返回 ECharts 配置、DataRef 和四段解读。项目会话持久化图型、配色和数据引用，可以按原版本重绘。
+
+当前智能体模板支持项目已发布的单指标结果。趋势带需要有效时间序列，排名点图需要可比类别，柱状图也适用于单值。CSV 手动工作区仍在浏览器内解析文件、映射字段并导出；本地文件不会进入项目 MCP。
+
 ### 小云数据看板
 
 在工作台对小云说「用国家统计局 2025 年 3 月全国发电量本期值做一张数据看板」发起新查询，或选中已有图表后说「把这张图做成驾驶舱」复用原结果。看板生成后自动弹出，窗内可切换全屏。关闭后可以从业务结果卡重新打开。天气和碳排放也可使用各自专题已经发布的指标。
@@ -57,6 +70,7 @@
 `/api/mcp/visualization` 提供：
 
 - `render_echarts`：通过本地 `mcp-echarts` 生成折线/柱状图配置。
+- `render_custom_chart`：从授权 `project_id`、`result_id`、`template`（`ribbon` / `rank` / `column`）和可选 `palette` 生成相应配置及文字事实。
 - `render_vchart`：生成官方 `@visactor/vchart` 配置。
 - `render_antv`：生成官方 `@antv/g2` 配置。
 - `build_power_globe_scene`：返回 MapLibre Globe 矢量瓦片层或 Three.js 设施点位场景。
@@ -99,6 +113,8 @@ OGW_ANALYSIS_DEVICE=cuda npm run analysis:worker
 ## 验证
 
 `node --test scripts/verify-v11-xiaoyun.mjs` 使用实际的 Pi 循环、图表配置和分析预检代码，替换模型和 PostgreSQL 边界。用例覆盖技能加载、同轮查数出图和入队、旧图输入绑定、GFS 展示、预测预检、澄清恢复及空结果。
+
+`node --test scripts/verify-topic-power.mjs scripts/verify-v11-xiaoyun.mjs` 另验证公报数值与文字、桑基净增量守恒、缺测处理及 Pi 经 MCP 重绘时保留来源和旧输入。
 
 配置 `DEEPSEEK_API_KEY` 后运行 `node scripts/verify-v11-xiaoyun.mjs --live`，用同一模型和固定数据对照技能版与提交 `a4b5b8e`。输出记录已有 GFS 预报、历史风速外推和十期月度数据回测三期的工具路径。对照只替换模型响应，数据和队列仍使用固定样例。
 

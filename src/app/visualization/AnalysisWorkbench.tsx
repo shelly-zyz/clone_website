@@ -28,7 +28,10 @@ import { PeriodComparison } from "./PeriodComparison";
 import { updateAnalysisQuery, useAnalysisQuery } from "./useAnalysisLocation";
 import { AnalysisFigure, hasChartValues } from "./AnalysisFigure";
 import { useAnalysisAnchor } from "./useAnalysisAnchor";
+import { powerSources, residualSource } from "@/lib/topic-analysis/power";
+import { InterimPowerRelease, PowerDashboard } from "./PowerDashboard";
 import styles from "./page.module.css";
+import powerStyles from "./power.module.css";
 
 const chartIcons = {
   area: ChartArea, "stacked-area": ChartArea, line: ChartLine, column: ChartColumn, horizontal: ChartBar,
@@ -255,9 +258,11 @@ function ProvinceComparison({ data, pending, available, primary, alternate, scop
 export function AnalysisWorkbench({ topic, initialQuery }: { topic: AnalysisTopic; initialQuery: string }) {
   const query = useAnalysisQuery(initialQuery);
   const context = readWorkspaceContext(query);
-  const view = useAnalysisAnchor();
+  const anchor = useAnalysisAnchor();
+  const view = topic === "power" && anchor === "capacity-share" ? "capacity-mix" : anchor;
   const year = String(context.year ?? "");
   const powerYear = displayDate(year, powerYears, powerYears[0]);
+  const powerSource = [...powerSources, residualSource].find(item => item.id === query.get("source"))?.id;
   const product = generationSeries.find(item => item.id === context.product) ?? generationSeries[0];
   const fuel = fuelSeries.find(item => item.id === query.get("fuel"))?.id ?? fuelSeries[0].id;
   const windRegion = context.region === "north" || context.region === "south" ? context.region : "global";
@@ -320,9 +325,15 @@ export function AnalysisWorkbench({ topic, initialQuery }: { topic: AnalysisTopi
   switch (topic) {
     case "power":
       analysis = buildPowerAnalysis(powerYear);
-      filters = <AnalysisFilter label="统计年份" value={powerYear} onChange={value => select(value, "year")}>
-        {powerYears.map(item => <option key={item} value={item}>{item} 年</option>)}
-      </AnalysisFilter>;
+      filters = <>
+        <AnalysisFilter label="统计年份" value={powerYear} onChange={value => select(value, "year")}>
+          {powerYears.map(item => <option key={item} value={item}>{item} 年</option>)}
+        </AnalysisFilter>
+        <AnalysisFilter label="关注电源" value={powerSource ?? ""} onChange={value => select(value || undefined, "source")}>
+          <option value="">全部电源</option>
+          {[...powerSources, residualSource].map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+        </AnalysisFilter>
+      </>;
       break;
     case "generation":
       analysis = buildGenerationAnalysis(product.id, displayedMonth, history, regional.data, primaryRegion);
@@ -494,7 +505,7 @@ export function AnalysisWorkbench({ topic, initialQuery }: { topic: AnalysisTopi
   }
 
   return (
-    <div className={styles.workbench} data-topic={topic} data-published-version={history?.version}>
+    <div className={topic === "power" ? `${styles.workbench} ${powerStyles.workbench}` : styles.workbench} data-topic={topic} data-published-version={history?.version}>
       <aside className={styles.workbenchNav}>
         <nav aria-label="专题图表视图" className={styles.chartNav}>
           <a href="#topic-filters" aria-current={!selected && !comparisonActive ? "location" : undefined} onClick={event => selectView(event, "")}>
@@ -518,6 +529,7 @@ export function AnalysisWorkbench({ topic, initialQuery }: { topic: AnalysisTopi
         <div className={styles.filters} id="topic-filters">
           <div className={styles.filterControls} role="group" aria-label="分析筛选">{filters}</div>
           <div className={styles.dataStatus} role="status">
+            {topic === "power" && <InterimPowerRelease />}
             {dataStatus && <span data-ready={Boolean(history || scenario.data?.origin === "database")}>{dataStatus}</span>}
             {hasPublishedQuery && !published.pending && !history && (
               <button onClick={published.retry} type="button" aria-label="重新读取数据库">
@@ -556,7 +568,7 @@ export function AnalysisWorkbench({ topic, initialQuery }: { topic: AnalysisTopi
         </div>
         {analysis ? (
           <>
-            <dl className={styles.metrics} aria-live="polite">
+            <dl className={topic === "power" ? `${styles.metrics} ${powerStyles.metrics}` : styles.metrics} aria-live="polite">
               {analysis.metrics.map(item => (
                 <div key={item.label}>
                   <dt>{item.label}</dt>
@@ -564,14 +576,17 @@ export function AnalysisWorkbench({ topic, initialQuery }: { topic: AnalysisTopi
                 </div>
               ))}
             </dl>
-            <div className={styles.chartWorkspace}>
-              {comparisonActive ? renderComparison() : first && renderFigure(first, true)}
+            <div className={topic === "power" ? `${styles.chartWorkspace} ${powerStyles.workspace}` : styles.chartWorkspace}>
+              {topic === "power" ? <PowerDashboard charts={analysis.charts} active={selected?.id} year={powerYear} source={powerSource}
+                update={(nextYear, nextSource) => updateAnalysisQuery({ ...(nextYear && { year: nextYear }),
+                  ...(nextSource !== undefined && { source: nextSource || undefined }) })} />
+                : comparisonActive ? renderComparison() : first && renderFigure(first, true)}
               {selected || comparisonActive ? (
                 <nav className={styles.moreViews} aria-label="其他图表视图">
                   {comparisonId && !comparisonActive && <ComparisonLink id={comparisonId} />}
                   {(comparisonActive ? analysis.charts : otherCharts).map(spec => <ChartLink key={spec.id} spec={spec} />)}
                 </nav>
-              ) : (
+              ) : topic !== "power" && (
                 <>
                   {comparisonId && <div className={styles.comparisonBelow}><ComparisonLink id={comparisonId} /></div>}
                   <div className={styles.chartGrid}>

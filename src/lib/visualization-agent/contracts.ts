@@ -5,13 +5,18 @@ export const chartTypes = ["line", "bar"] as const;
 export type ChartType = (typeof chartTypes)[number];
 export const chartBackends = ["echarts", "vchart", "antv"] as const;
 export type ChartBackend = (typeof chartBackends)[number];
-export const chartSelectionSchema = z.strictObject({ chart: z.enum(chartTypes), renderer: z.enum(chartBackends) });
+export const customChartTemplates = ["ribbon", "rank", "column"] as const;
+export const customChartPalettes = ["lavender", "ice", "mint", "champagne", "rose"] as const;
+export const customChartSchema = z.strictObject({ template: z.enum(customChartTemplates), palette: z.enum(customChartPalettes) });
+export type CustomChart = z.infer<typeof customChartSchema>;
+export const chartSelectionSchema = z.strictObject({ chart: z.enum(chartTypes), renderer: z.enum(chartBackends), custom: customChartSchema.optional() });
 export const chartReferenceSchema = z.strictObject({
   chart_id: z.uuid(), result_id: z.uuid(), selection: chartSelectionSchema,
 });
 
 const resultScope = { project_id: z.uuid(), result_id: z.uuid() };
-const renderFields = { ...resultScope, chart: z.enum(chartTypes), renderer: z.enum(chartBackends).optional() };
+const renderFields = { ...resultScope, chart: z.enum(chartTypes), renderer: z.enum(chartBackends).optional(), custom: customChartSchema.optional() };
+export const customMcpInputSchema = z.strictObject({ ...resultScope, template: z.enum(customChartTemplates), palette: z.enum(customChartPalettes).optional() });
 const instruction = z.string().trim().min(1).max(300);
 export const sceneFields = {
   project_id: z.uuid(), renderer: z.enum(["maplibre", "three"]),

@@ -69,6 +69,12 @@ type Workspace = {
 };
 
 const WorkspaceRegistration = createContext<(workspace: Workspace | null) => void>(() => {});
+type ChartResponse = { summary: string; chart?: Extract<XiaoyunBusinessResult, { kind: "chart" }> };
+const ChartRequest = createContext<((message: string) => Promise<ChartResponse>) | null>(null);
+
+export function useXiaoyunChartRequest() {
+  return useContext(ChartRequest);
+}
 
 export function XiaoyunAssistant({ topic, captureView }: Pick<Workspace, "topic" | "captureView">) {
   const register = useContext(WorkspaceRegistration);
@@ -87,8 +93,7 @@ export function XiaoyunSiteAssistant({ children }: { children: ReactNode }) {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   return (
     <WorkspaceRegistration value={setWorkspace}>
-      {children}
-      <XiaoyunRuntime workspace={workspace} />
+      <XiaoyunRuntime workspace={workspace}>{children}</XiaoyunRuntime>
     </WorkspaceRegistration>
   );
 }
@@ -112,7 +117,7 @@ function readCurrentPage() {
   return active && location ? { ...active, search: location.url.search, section: location.url.hash.slice(1) || undefined } : undefined;
 }
 
-function XiaoyunRuntime({ workspace }: { workspace: Workspace | null }) {
+function XiaoyunRuntime({ workspace, children }: { workspace: Workspace | null; children: ReactNode }) {
   const container = useRef<HTMLDivElement>(null);
   const mount = useRef<HTMLDivElement | null>(null);
   const pathname = usePathname();
@@ -122,6 +127,7 @@ function XiaoyunRuntime({ workspace }: { workspace: Workspace | null }) {
   const selectedChart = useRef<{ topic: Topic; chart_id: string } | undefined>(undefined);
   const retry = useRef<{ id: string; message: string; topic: Topic; view?: SiteViewId; chartId?: string } | undefined>(undefined);
   const forecastRequest = useRef<{ topic: Topic; message: string; answered: boolean } | null>(null);
+  const chartRequest = useRef<{ message: string; response?: ChartResponse } | null>(null);
   const forecastRefs = useRef<Forecasts>({});
   const page = useRef({ workspace, router });
   const token = useRef("");
@@ -218,6 +224,19 @@ function XiaoyunRuntime({ workspace }: { workspace: Workspace | null }) {
     });
   }
 
+  const runCustomChart = useCallback(async (message: string): Promise<ChartResponse> => {
+    const assistant = voice.current;
+    if (!assistant) return { summary: "小云正在初始化，请稍后再试。" };
+    const pending: NonNullable<typeof chartRequest.current> = { message };
+    chartRequest.current = pending;
+    try {
+      await assistant.submitText(message);
+      return pending.response ?? { summary: "制图请求未完成，请重试。" };
+    } finally {
+      if (chartRequest.current === pending) chartRequest.current = null;
+    }
+  }, []);
+
   useLayoutEffect(() => {
     page.current = { workspace, router };
     const slot = workspace?.slot ?? container.current;
@@ -286,6 +305,7 @@ function XiaoyunRuntime({ workspace }: { workspace: Workspace | null }) {
             const activeTopic = viewTopic(activeView) ?? context.current.lastTopic ?? "power";
             const pending = forecastRequest.current;
             const fromSidebar = pending?.topic === activeTopic && pending.message === message;
+            const studio = chartRequest.current?.message === message && activeView?.startsWith("custom-") ? chartRequest.current : null;
             const chart = fromSidebar ? undefined : selectedChart.current;
             const previous = retry.current;
             const id = previous?.message === message && previous.topic === activeTopic && previous.view === activeView && previous.chartId === chart?.chart_id
@@ -304,6 +324,7 @@ function XiaoyunRuntime({ workspace }: { workspace: Workspace | null }) {
             signal.throwIfAborted();
             if (!response.ok) {
               if (response.status === 401) setRequiresToken(true);
+              if (studio) studio.response = { summary: reply.error ?? "暂时无法提交制图。" };
               if (fromSidebar) {
                 pending.answered = true;
                 setForecastNotice({ topic: activeTopic, message: reply.error ?? "暂时无法提交预测。" });
@@ -356,7 +377,8 @@ function XiaoyunRuntime({ workspace }: { workspace: Workspace | null }) {
                 setForecastNotice({ topic: activeTopic, message: reply.summary });
               }
             }
-            const floatingResults = results.filter(result => !isWorkspaceForecast(result) || result.topic !== page.current.workspace?.topic);
+            const studioChart = studio ? results.find(result => result.kind === "chart") : undefined;
+            const floatingResults = results.filter(result => result !== studioChart && (!isWorkspaceForecast(result) || result.topic !== page.current.workspace?.topic));
             if (floatingResults.length) setBusiness(current => {
               const next = current.filter(item => !floatingResults.some(result => result.topic === item.topic && (
                 result.kind === "analysis" && item.kind === "analysis" && result.jobId === item.jobId
@@ -433,6 +455,7 @@ function XiaoyunRuntime({ workspace }: { workspace: Workspace | null }) {
                 summary = target ? `当前页面已变化，未自动打开${target.label}。` : "无法识别要打开的页面。";
               }
             }
+            if (studio) studio.response = { summary, chart: studioChart };
             return { summary, markdown: reply.markdown, data: reply.data, sources: reply.sources };
           },
         },
@@ -455,7 +478,8 @@ function XiaoyunRuntime({ workspace }: { workspace: Workspace | null }) {
   const visibleBusiness = business.filter(result => !isWorkspaceForecast(result) || result.topic !== workspaceTopic);
   const workspaceElement = workspace?.slot.parentElement;
   return (
-    <>
+    <ChartRequest value={ready ? runCustomChart : null}>
+      {children}
       <div ref={container} className="[&>.og-assistant-mount]:pointer-events-none [&>.og-assistant-mount]:fixed [&>.og-assistant-mount]:inset-0 [&>.og-assistant-mount]:z-30" />
       {workspaceElement && workspaceTopic && createPortal(<WorkspaceForecast key={workspaceTopic}
         topic={workspaceTopic === "meteo" ? "weather" : workspaceTopic}
@@ -489,6 +513,6 @@ function XiaoyunRuntime({ workspace }: { workspace: Workspace | null }) {
           小云加载失败，请刷新页面重试。
         </p>
       )}
-    </>
+    </ChartRequest>
   );
 }

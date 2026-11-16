@@ -1,16 +1,14 @@
-import { analysisTopics } from "./catalog";
 import { fuelSeries, generationSeries, generationYoyMetric, type PublishedFact, type PublishedHistory, type RegionalGeneration } from "./history";
 import { metric, relativeIndex, type Analysis, type AnalysisChartSpec, type Source } from "./model";
 import annual from "./nbs-annual.json";
 import monthly from "./nbs-monthly.json";
 
-const officialAnnual = { label: "国家统计局 · 年度统计公报", href: "https://www.stats.gov.cn/sj/tjgb/ndtjgb/qgndtjgb/index.html" };
+import { annualLabels, annualSource, officialAnnual } from "./power";
+export { buildPowerAnalysis, powerYears } from "./power";
+
 const officialMonthly = { label: "国家统计局 · 国家数据月度库", href: "https://data.stats.gov.cn/easyquery.htm?cn=A01" };
 export const officialProvincial = { label: "国家统计局 · 国家数据分省月度库", href: "https://data.stats.gov.cn/easyquery.htm?cn=E0101" };
 const mix = generationSeries.slice(1);
-const otherCapacity = { name: "其他及口径差额", color: "#668391" };
-const annualLabels = annual.map(row => String(row.year));
-export const powerYears = annualLabels.toReversed();
 export const monthLabels = Array.from({ length: 12 }, (_, index) => `${index + 1} 月`);
 export type GenerationProduct = typeof generationSeries[number]["id"];
 export type Fuel = typeof fuelSeries[number]["id"];
@@ -45,89 +43,6 @@ export function seasonalSeries(facts: PublishedFact[], series: string, dates: st
       return value === undefined || value === null ? null : value / scale;
     }),
   }));
-}
-
-function annualSource(row: typeof annual[number]): Source {
-  return { label: `国家统计局 · ${row.year} 年统计公报`, href: row.source };
-}
-
-function capacityValues(row: typeof annual[number]) {
-  const [total, ...parts] = row.capacityGw;
-  const residual = total - parts.reduce((sum, value) => sum + value, 0);
-  return [...parts, +residual.toFixed(2)];
-}
-
-export function buildPowerAnalysis(year: string): Analysis {
-  const data = annual.find(row => String(row.year) === year) ?? annual[annual.length - 1];
-  const previous = annual.find(row => row.year === data.year - 1);
-  const color = analysisTopics.power.color;
-  const windSolarShare = (data.capacityGw[4] + data.capacityGw[5]) / data.capacityGw[0] * 100;
-  const composition = [...mix, otherCapacity];
-  const capacity = capacityValues(data);
-  const priorCapacity = previous ? capacityValues(previous) : [];
-  const generation = mix.map(({ name, color }, index) => ({ name, color, value: data.generationTwh[index + 1] }))
-    .toSorted((a, b) => (b.value ?? -1) - (a.value ?? -1));
-  return {
-    scope: `中国全国 · 国家统计局年度公报 · ${annualLabels[0]}–${annualLabels.at(-1)} 年`,
-    metrics: [
-      metric(`${data.year} 年末发电装机`, data.capacityGw[0], "GW"),
-      metric(`${data.year} 年规上工业发电量`, data.generationTwh[0], "TWh"),
-      metric("风电与太阳能装机占比", windSolarShare, "%"),
-    ],
-    charts: [
-      {
-        id: "capacity-share", label: "装机占比环图", title: `${data.year} 年风光装机占比`,
-        caption: "环心显示风电与太阳能占全国年末装机的比重。环段按各电源容量划分，末项为公报总量与已列分项之差。",
-        kind: "donut", labels: composition.map(item => item.name), categoryColors: composition.map(item => item.color),
-        unit: "GW", color, center: { label: "风光装机占比", value: windSolarShare, unit: "%" },
-        series: [{ name: "年末装机", values: capacity }], sources: [annualSource(data)],
-      },
-      {
-        id: "capacity-waterfall", label: "装机增量", title: `${data.year} 年全国电源装机增量`,
-        caption: previous
-          ? `与 ${previous.year} 年末相比，柱段显示各电源净变化，最后一柱为全国装机净增量。其他项含公报口径与四舍五入差额。`
-          : "年度增量需要连续两年公报。请选择 2021 年及以后的统计年份。",
-        kind: "waterfall", labels: [...mix.map(item => item.name), "其他", "净增量"], unit: "GW", color,
-        categoryColors: composition.map(item => item.color),
-        series: [{ name: "较上年变化", values: previous
-          ? [...capacity.map((value, index) => +(value - priorCapacity[index]).toFixed(2)), +(data.capacityGw[0] - previous.capacityGw[0]).toFixed(2)]
-          : Array.from({ length: composition.length + 1 }, () => null) }],
-        sources: previous ? [annualSource(previous), annualSource(data)] : [annualSource(data)],
-      },
-      {
-        id: "capacity-mix", label: "装机组成", title: `${data.year} 年全国电源装机组成`,
-        caption: "面积表示公报列出的五类电源装机。风电、太阳能按各年度公报的统计口径展示。",
-        kind: "treemap", labels: mix.map(item => item.name), categoryColors: mix.map(item => item.color), unit: "GW", color,
-        series: [{ name: "年末装机", values: data.capacityGw.slice(1) }], sources: [annualSource(data)],
-      },
-      {
-        id: "capacity-comparison", label: "多年变化", title: "各类电源的装机扩张",
-        caption: "各色面积的厚度表示该类电源当年的年末装机，虚线标记所选年份。",
-        kind: "stacked-area", labels: annualLabels, unit: "GW", color, focus: String(data.year),
-        series: mix.map((item, index) => ({
-          name: item.name, color: item.color, values: annual.map(row => row.capacityGw[index + 1]),
-        })),
-        sources: [officialAnnual, annualSource(data)],
-      },
-      {
-        id: "generation-by-source", label: "发电排行", title: `${data.year} 年规上工业分电源发电量`,
-        caption: "按统计公报列出的发电量排序。公报未单列的电源在数据表中留空。",
-        kind: "horizontal", labels: generation.map(({ name }) => name),
-        categoryColors: generation.map(item => item.color), unit: "TWh", color,
-        series: [{ name: "规上工业发电量", values: generation.map(item => item.value) }], sources: [annualSource(data)],
-      },
-      {
-        id: "renewable-capacity-share", label: "风光占比", title: "风电与太阳能的装机占比",
-        caption: "用各类电源的年末容量除以同年全国发电装机容量。",
-        kind: "area", labels: annualLabels, unit: "%", color, focus: String(data.year),
-        series: [
-          { name: "风电", color: mix[3].color, values: annual.map(row => row.capacityGw[4] / row.capacityGw[0] * 100) },
-          { name: "太阳能", color: mix[4].color, values: annual.map(row => row.capacityGw[5] / row.capacityGw[0] * 100) },
-        ],
-        sources: [officialAnnual, annualSource(data)],
-      },
-    ],
-  };
 }
 
 const monthlyFacts: PublishedFact[] = monthly.flatMap(row => Object.entries(row.values).map(([series, value]) => ({

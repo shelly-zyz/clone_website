@@ -7,6 +7,7 @@ import { siteViewIdSchema, type SiteNavigation } from "./site-views";
 import type { Mechanism } from "./anatomy";
 import { activePageSchema, type PageChange } from "./page-actions";
 import type { Evidence, ExportReference } from "./assistant-artifacts";
+import type { DataStory } from "@/lib/topic-analysis/data-story";
 
 const businessSessionSchema = z.strictObject({ session_id: z.uuid() });
 
@@ -77,7 +78,8 @@ type DashboardDetails = {
 };
 
 export type XiaoyunBusinessResult =
-  | { kind: "chart"; topic: Topic; chartId: string; title: string; renderer: "echarts" | "mcp-echarts" | "vchart" | "antv"; options: Record<string, unknown>; version: string; dashboard?: DashboardDetails }
+  | { kind: "chart"; topic: Topic; chartId: string; title: string; renderer: "echarts" | "mcp-echarts" | "vchart" | "antv";
+      options: Record<string, unknown>; version: string; dashboard?: DashboardDetails; story?: DataStory; sources?: TaskSource[] }
   | XiaoyunAnalysisArtifact;
 
 export type XiaoyunReply = {
