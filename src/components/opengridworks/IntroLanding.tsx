@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, ArrowUpRight, Pause, Play, RotateCcw } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpRight, Pause, Play } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -13,9 +13,7 @@ import type { IntroScene } from "./intro-particles";
 import styles from "./IntroLanding.module.css";
 
 type SceneStatus = "loading" | "ready" | "static";
-type NavigateEvent = { preventDefault: () => void };
 const brandTitle = ["看见地球", "的变化"] as const;
-const frameBudget = 760;
 
 export function IntroLanding() {
   const router = useRouter();
@@ -25,14 +23,11 @@ export function IntroLanding() {
   const [committedTopic, setCommittedTopic] = useState<IntroTopic>(null);
   const [status, setStatus] = useState<SceneStatus>("loading");
   const [paused, setPaused] = useState(false);
-  const [entering, setEntering] = useState(false);
   const canvas = useRef<HTMLCanvasElement>(null);
   const scene = useRef<IntroScene | null>(null);
   const currentTopic = useRef<IntroTopic>(null);
   const pausedRef = useRef(false);
   const staticRef = useRef(false);
-  const pendingFlight = useRef(false);
-  const flightTimer = useRef<number>(undefined);
   const textTimer = useRef<number>(undefined);
   const chapterButtons = useRef<Partial<Record<WorkspaceTopic, HTMLButtonElement>>>({});
   const chapter = displayed ? introChapters[displayed] : null;
@@ -84,7 +79,6 @@ export function IntroLanding() {
     return () => {
       cancelled = true;
       window.clearTimeout(stopLoading);
-      window.clearTimeout(flightTimer.current);
       window.clearTimeout(textTimer.current);
       motion.removeEventListener("change", prepare);
       renderer?.dispose();
@@ -96,18 +90,9 @@ export function IntroLanding() {
     router.prefetch(workspaceHref(target));
   }, [router, target]);
 
-  function cancelFlight() {
-    if (!pendingFlight.current) return;
-    pendingFlight.current = false;
-    window.clearTimeout(flightTimer.current);
-    scene.current?.cancelFlight();
-    setEntering(false);
-  }
-
   function choose(next: IntroTopic, commit: boolean) {
     if (commit) setCommittedTopic(next);
     if (next === currentTopic.current) return;
-    cancelFlight();
     currentTopic.current = next;
     setTopic(next);
     scene.current?.focus(next);
@@ -132,33 +117,8 @@ export function IntroLanding() {
     scene.current?.pause(next);
   }
 
-  function replay() {
-    if (status !== "ready") return;
-    if (pausedRef.current) playPause();
-    scene.current?.replay();
-  }
-
-  function openWorkspace(event: NavigateEvent, next: WorkspaceTopic, fly: boolean) {
-    if (!fly || status !== "ready" || pausedRef.current || !scene.current || document.hidden) {
-      if (!staticRef.current) beginGlobeHandoff(next);
-      return;
-    }
-
-    event.preventDefault();
-    if (pendingFlight.current) return;
-    pendingFlight.current = true;
-    setEntering(true);
-
-    function navigate(frame?: string) {
-      if (!pendingFlight.current) return;
-      pendingFlight.current = false;
-      window.clearTimeout(flightTimer.current);
-      beginGlobeHandoff(next, frame);
-      router.push(workspaceHref(next));
-    }
-
-    flightTimer.current = window.setTimeout(() => navigate(), frameBudget);
-    scene.current.fly(next, navigate);
+  function openWorkspace() {
+    if (!staticRef.current) beginGlobeHandoff(target);
   }
 
   function goToChapters(event: React.MouseEvent<HTMLAnchorElement>) {
@@ -189,12 +149,9 @@ export function IntroLanding() {
       aria-label="OpenGridWorks 开屏"
       data-scene={status}
       data-topic={topic ?? "overview"}
-      data-entering={entering ? "" : undefined}
       data-paused={paused ? "" : undefined}
       onKeyDown={event => {
-        if (event.key !== "Escape") return;
-        if (pendingFlight.current) cancelFlight();
-        else choose(null, true);
+        if (event.key === "Escape") choose(null, true);
       }}
     >
       <div className={styles.space} aria-hidden="true">
@@ -232,7 +189,7 @@ export function IntroLanding() {
             <Link
               className={styles.skip}
               href={workspaceHref(target)}
-              onNavigate={event => openWorkspace(event, target, false)}
+              onNavigate={openWorkspace}
             >
               跳过导览 <ArrowUpRight size={15} aria-hidden="true" />
             </Link>
@@ -253,8 +210,8 @@ export function IntroLanding() {
               </div>
             </div>
             <div className={styles.actions}>
-              <Link className={styles.primary} href={workspaceHref(target)} onNavigate={event => openWorkspace(event, target, true)}>
-                {entering ? "正在打开工作区…" : topic ? `进入${globeTopics[topic].label}` : "进入平台"}
+              <Link className={styles.primary} href={workspaceHref(target)} onNavigate={openWorkspace}>
+                {topic ? `进入${globeTopics[topic].label}` : "进入平台"}
                 <ArrowUpRight size={17} aria-hidden="true" />
               </Link>
               {chapter ? (
@@ -330,11 +287,6 @@ export function IntroLanding() {
           <div className={styles.credits}>
             <p>{chapter ? <a href={chapter.sourceUrl} target="_blank" rel="noreferrer">{chapter.source}</a> : "NASA · Blue Marble / VIIRS 2012"}</p>
             {chapter && <p>地球影像 · NASA</p>}
-            {status === "ready" && (
-              <button className={styles.replay} type="button" onClick={replay}>
-                <RotateCcw size={14} aria-hidden="true" /> 重播聚合
-              </button>
-            )}
           </div>
         </footer>
 

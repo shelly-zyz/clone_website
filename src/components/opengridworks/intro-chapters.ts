@@ -9,9 +9,7 @@ type IntroChapter = {
   sourceUrl: string;
   views: readonly [AnalysisTopic, AnalysisTopic];
   center: readonly [longitude: number, latitude: number];
-  handoffCenter: readonly [longitude: number, latitude: number];
   night: number;
-  particleColor: string;
 };
 
 export const introChapters = {
@@ -23,9 +21,7 @@ export const introChapters = {
     sourceUrl: "https://www.openstreetmap.org/copyright",
     views: ["power", "generation"],
     center: [97, 26],
-    handoffCenter: [55, 24],
     night: 0.68,
-    particleColor: "#ffe0a0",
   },
   weather: {
     title: ["追踪全球", "风场变化"],
@@ -35,9 +31,7 @@ export const introChapters = {
     sourceUrl: "https://www.ncei.noaa.gov/products/weather-climate-models/global-forecast",
     views: ["weather", "renewables"],
     center: [116, 17],
-    handoffCenter: [105, 22],
     night: 0.18,
-    particleColor: "#9bf5e8",
   },
   carbon: {
     title: ["看见碳排放", "的分布"],
@@ -47,9 +41,7 @@ export const introChapters = {
     sourceUrl: "https://carbonmonitor-graced.com/datasets.html",
     views: ["carbon", "generation"],
     center: [25, 24],
-    handoffCenter: [55, 24],
     night: 0.96,
-    particleColor: "#c8fa86",
   },
   economy: {
     title: ["比较各地", "经济变化"],
@@ -59,9 +51,7 @@ export const introChapters = {
     sourceUrl: "https://data.worldbank.org/indicator/NY.GDP.MKTP.CD",
     views: ["economy", "outlook"],
     center: [69, 28],
-    handoffCenter: [79, 22],
     night: 0.6,
-    particleColor: "#ffc296",
   },
 } as const satisfies Record<WorkspaceTopic, IntroChapter>;
 
