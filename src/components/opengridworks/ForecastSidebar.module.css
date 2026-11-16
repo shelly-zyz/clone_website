@@ -152,3 +152,42 @@
 
   .panel[data-open="false"] { display: none; }
 }
+
+.modelChoices {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+  margin-bottom: 10px;
+}
+
+.modelChoices button {
+  min-height: 40px;
+  padding: 4px;
+  background: #171e24;
+  color: #e5ebee;
+  font-weight: 620;
+}
+
+.modelChoices button[aria-pressed="true"] {
+  background: var(--forecast-accent);
+  color: #10171a;
+}
+
+.regionChoice {
+  display: grid;
+  gap: 3px;
+  color: #aebbc1;
+  margin-bottom: 10px;
+}
+
+.regionChoice select {
+  min-height: 40px;
+  min-width: 0;
+  padding: 0 8px;
+  background: #171e24;
+  color: #edf0f2;
+}
+
+@media (pointer: coarse) {
+  .modelChoices button, .regionChoice select { min-height: 44px; }
+}
