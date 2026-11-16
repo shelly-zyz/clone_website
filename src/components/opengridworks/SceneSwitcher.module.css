@@ -127,7 +127,10 @@
 }
 
 .weather {
+  position: absolute;
+  z-index: 47;
   inset: 12px 10px auto;
+  margin-inline: auto;
   max-width: calc(100% - 20px);
   width: min(450px, calc(100% - 20px));
 }

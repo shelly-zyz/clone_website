@@ -3854,11 +3854,11 @@
 .is-earth-project .og-weather-sidebar-nav button:hover { background: #344352; }
 .is-earth-project .og-weather-sidebar-nav button[aria-pressed="true"] { background: #465266; }
 .is-earth-project .og-weather-sidebar-filters { border: 0; }
-.is-earth-project .og-globe-navigation.is-docked {
+.og-globe-workspace.is-earth-project .og-globe-navigation.is-docked {
   padding: 4px;
   gap: 4px;
   width: min(410px, calc(100% - 20px));
-  left: 50%;
+  inset-inline: 0;
   background: rgba(13, 24, 35, .87);
   backdrop-filter: blur(15px);
   border-radius: 12px;
