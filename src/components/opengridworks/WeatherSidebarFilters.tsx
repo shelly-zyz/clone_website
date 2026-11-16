@@ -18,14 +18,20 @@ function readWeatherMenu(document: Document) {
   const text = (id: string) => document.getElementById(id)?.textContent?.trim() ?? "";
   const mode = readChoices(document, ":is(#wind-mode-enable, #ocean-mode-enable)");
   const isOcean = mode.value === "ocean-mode-enable";
+  const animation = readChoices(document, ":is(#animate-wind, #animate-currents, #animate-waves)");
+  const isWave = animation.value === "animate-waves";
+  const overlaySelector = isWave ? ".ocean-mode :is(#overlay-ocean-off, .waves-overlay)"
+    : isOcean ? ".ocean-mode :is(#overlay-ocean-off, .currents-overlay)" : ".wind-mode [id^='overlay-']";
   const time = document.getElementById("data-date");
   const valid = time?.getAttribute("data-valid-utc");
 
   return {
     mode,
     isOcean,
+    isWave,
+    animation,
     height: readChoices(document, ".surface"),
-    overlay: readChoices(document, `${isOcean ? ".ocean-mode" : ".wind-mode"} [id^='overlay-']`),
+    overlay: readChoices(document, overlaySelector),
     projection: readChoices(document, ".proj"),
     date: text("data-date").replace(/Local$/, "本地时间"),
     valid,
@@ -39,6 +45,7 @@ function readWeatherMenu(document: Document) {
     layer: text("data-layer"),
     source: text("data-center"),
     status: text("status"),
+    paused: document.getElementById("option-pause-animation")?.classList.contains("highlighted") ?? false,
     showGrid: document.getElementById("option-show-grid")?.classList.contains("highlighted") ?? false,
   };
 }
@@ -46,7 +53,7 @@ function readWeatherMenu(document: Document) {
 export function WeatherSidebarFilters({ frameDocument }: { frameDocument: Document | null }) {
   const [menu, setMenu] = useState<ReturnType<typeof readWeatherMenu> | null>(null);
   const colorScale = useRef<HTMLCanvasElement>(null);
-  const menuReady = menu !== null;
+  const menuReady = !!menu?.animation.value;
 
   useEffect(() => {
     const sourceMenu = frameDocument?.getElementById("menu");
@@ -83,10 +90,10 @@ export function WeatherSidebarFilters({ frameDocument }: { frameDocument: Docume
     return () => source.removeEventListener("weather-scale-change", copyScale);
   }, [frameDocument, menuReady]);
 
-  if (!frameDocument || !menu) return <p className="og-weather-sidebar-status" role="status">正在加载气象筛选…</p>;
+  if (!frameDocument || !menu?.animation.value) return <p className="og-weather-sidebar-status" role="status">正在加载气象筛选…</p>;
 
   const select = (id: string) => frameDocument.getElementById(id)?.click();
-  const timeSteps = menu.isOcean ? ["一个月", "五天"] : ["一天", "三小时"];
+  const timeSteps = menu.isOcean && !menu.isWave ? ["一个月", "五天"] : ["一天", "三小时"];
 
   return (
     <div className="og-weather-sidebar-filters">
@@ -103,14 +110,24 @@ export function WeatherSidebarFilters({ frameDocument }: { frameDocument: Docume
         {menu.archived && menu.issue && !menu.isOcean
           ? <p className="og-weather-sidebar-status">归档 GFS · {menu.height.value === "surface-level" ? "10 米风场" : "高空风场"}</p> : null}
         <div className="og-weather-sidebar-nav" aria-label="时间控制">
-          <button type="button" aria-label={`后退${timeSteps[0]}`} onClick={() => select("nav-backward-more")}><ChevronsLeft size={17} /></button>
+          <button type="button" aria-label={menu.isWave ? "波浪首帧" : `后退${timeSteps[0]}`} onClick={() => select("nav-backward-more")}><ChevronsLeft size={17} /></button>
           <button type="button" aria-label={`后退${timeSteps[1]}`} onClick={() => select("nav-backward")}><ChevronLeft size={16} /></button>
-          <button type="button" onClick={() => select("nav-now")}>当前</button>
+          <button type="button" onClick={() => select("nav-now")}>{menu.isOcean ? "最近" : "当前"}</button>
           <button type="button" aria-label={`前进${timeSteps[1]}`} onClick={() => select("nav-forward")}><ChevronRight size={16} /></button>
-          <button type="button" aria-label={`前进${timeSteps[0]}`} onClick={() => select("nav-forward-more")}><ChevronsRight size={17} /></button>
+          <button type="button" aria-label={menu.isWave ? "波浪末帧" : `前进${timeSteps[0]}`} onClick={() => select("nav-forward-more")}><ChevronsRight size={17} /></button>
         </div>
       </div>
       <WorkspaceFilterSelect label="模式" {...menu.mode} onChange={select} />
+      <div className="og-weather-sidebar-time">
+        <p>动画</p>
+        <div role="group" aria-label="动画" className="og-weather-sidebar-nav og-weather-sidebar-animation">
+          {menu.animation.options.map(({ value, label }) => (
+            <button key={value} type="button" aria-pressed={value === menu.animation.value} onClick={() => select(value)}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
       {menu.isOcean ? null : (
         <WorkspaceFilterSelect label="高度" {...menu.height} options={menu.height.options.map((option) => (
           option.value.startsWith("isobaric-") ? { ...option, label: `${option.label} hPa` } : option
@@ -121,6 +138,9 @@ export function WeatherSidebarFilters({ frameDocument }: { frameDocument: Docume
       <div className="og-weather-sidebar-nav og-weather-sidebar-tools">
         <button type="button" aria-pressed={menu.showGrid} onClick={() => select("option-show-grid")}>网格点</button>
         <button type="button" onClick={() => select("show-location")}>当前位置</button>
+        <button type="button" aria-pressed={menu.paused} onClick={() => select("option-pause-animation")}>
+          {menu.paused ? "继续动画" : "暂停动画"}
+        </button>
       </div>
       {menu.status ? <p className="og-weather-sidebar-status" role="status">{menu.status === "No Data" ? "当前筛选暂无气象数据" : menu.status}</p> : null}
       {menu.layer ? <p className="og-weather-sidebar-status">{menu.layer}</p> : null}

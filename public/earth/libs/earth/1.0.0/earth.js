@@ -17,10 +17,10 @@
     var MIN_MOVE = 4;                         // slack before a drag operation beings (pixels)
     var MOVE_END_WAIT = 1000;                 // time to wait for a move operation to be considered done (millis)
 
-    var OVERLAY_ALPHA = Math.floor(0.4*255);  // overlay transparency (on scale [0, 255])
+    var OVERLAY_ALPHA = Math.floor(0.31*255);  // overlay transparency (on scale [0, 255])
     var INTENSITY_SCALE_STEP = 10;            // step size of particle intensity color scale
     var MAX_PARTICLE_AGE = 100;               // max number of frames a particle is drawn before regeneration
-    var PARTICLE_LINE_WIDTH = 1.0;            // line width of a drawn particle
+    var PARTICLE_LINE_WIDTH = 1.25;            // line width of a drawn particle
     var PARTICLE_MULTIPLIER = 7;              // particle count scalar (completely arbitrary--this values looks nice)
     var PARTICLE_REDUCTION = 0.75;            // reduce particle count to this much of normal for mobile devices
     var FRAME_RATE = 40;                      // desired milliseconds per frame
@@ -546,19 +546,24 @@
         return d.promise;
     }
 
+    var animationPaused = false;
+
     function animate(globe, field, grids) {
         if (!globe || !field || !grids) return;
 
         var cancel = this.cancel;
         var bounds = globe.bounds(view);
-        // maxIntensity is the velocity at which particle color intensity is maximum
+        var product = grids.primaryGrid;
+        var waveCrests = product.type === "waves";
+        var trailColor = waveCrests ? "224, 251, 255" : product.type === "currents" ? "194, 255, 235" : "247, 251, 254";
+        // maxIntensity controls particle brightness for each product.
         var colorStyles = µ.windIntensityColorScale(INTENSITY_SCALE_STEP, grids.primaryGrid.particles.maxIntensity);
         var buckets = colorStyles.map(function() { return []; });
         var particleCount = Math.round(bounds.width * PARTICLE_MULTIPLIER);
         if (µ.isMobile()) {
             particleCount *= PARTICLE_REDUCTION;
         }
-        var fadeFillStyle = µ.isFF() ? "rgba(0, 0, 0, 0.95)" : "rgba(0, 0, 0, 0.97)";  // FF Mac alpha behaves oddly
+        var fadeFillStyle = waveCrests ? "rgba(0, 0, 0, 0.80)" : "rgba(0, 0, 0, 0.93)";
 
         log.debug("particle count: " + particleCount);
         var particles = [];
@@ -599,7 +604,7 @@
         }
 
         var g = d3.select("#animation").node().getContext("2d");
-        g.lineWidth = PARTICLE_LINE_WIDTH;
+        g.lineCap = "round";
         g.fillStyle = fadeFillStyle;
 
         function draw() {
@@ -613,13 +618,30 @@
             buckets.forEach(function(bucket, i) {
                 if (bucket.length > 0) {
                     g.beginPath();
-                    g.strokeStyle = colorStyles[i];
                     bucket.forEach(function(particle) {
-                        g.moveTo(particle.x, particle.y);
-                        g.lineTo(particle.xt, particle.yt);
+                        if (waveCrests) {
+                            // A crest lies across the projected direction of travel.
+                            var dx = particle.xt - particle.x, dy = particle.yt - particle.y;
+                            var length = Math.sqrt(dx * dx + dy * dy);
+                            if (length > 0.18) {
+                                var half = 1.5 + 2 * i / (buckets.length - 1);
+                                var nx = -dy / length * half, ny = dx / length * half;
+                                g.moveTo(particle.xt - nx, particle.yt - ny);
+                                g.lineTo(particle.xt + nx, particle.yt + ny);
+                            }
+                        }
+                        else {
+                            g.moveTo(particle.x, particle.y);
+                            g.lineTo(particle.xt, particle.yt);
+                        }
                         particle.x = particle.xt;
                         particle.y = particle.yt;
                     });
+                    g.strokeStyle = "rgba(4, 14, 23, .38)";
+                    g.lineWidth = 2.15;
+                    g.stroke();
+                    g.strokeStyle = "rgba(" + trailColor + ", " + (.77 + .22 * i / (buckets.length - 1)) + ")";
+                    g.lineWidth = PARTICLE_LINE_WIDTH;
                     g.stroke();
                 }
             });
@@ -631,8 +653,10 @@
                     field.release();
                     return;
                 }
-                evolve();
-                draw();
+                if (!animationPaused && !document.hidden) {
+                    evolve();
+                    draw();
+                }
                 setTimeout(frame, FRAME_RATE);
             }
             catch (e) {
@@ -1031,7 +1055,7 @@
             animatorAgent.submit(animate, globeAgent.value(), field, gridAgent.value());
         });
         animatorAgent.listenTo(rendererAgent, "start", stopCurrentAnimation.bind(null, true));
-        animatorAgent.listenTo(gridAgent, "submit", stopCurrentAnimation.bind(null, false));
+        animatorAgent.listenTo(gridAgent, "submit", stopCurrentAnimation.bind(null, true));
         animatorAgent.listenTo(fieldAgent, "submit", stopCurrentAnimation.bind(null, false));
 
         overlayAgent.listenTo(fieldAgent, "update", function() {
@@ -1053,57 +1077,46 @@
         fieldAgent.on("update", updateLocationDetails);
         d3.select("#location-close").on("click", _.partial(clearLocationDetails, true));
 
-        // Modify menu depending on what mode we're in.
-        configuration.on("change:param", function(context, mode) {
-            d3.selectAll(".ocean-mode").classed("invisible", mode !== "ocean");
-            d3.selectAll(".wind-mode").classed("invisible", mode !== "wind");
-            switch (mode) {
-                case "wind":
-                    d3.select("#nav-backward-more").attr("title", "-1 Day");
-                    d3.select("#nav-backward").attr("title", "-3 Hours");
-                    d3.select("#nav-forward").attr("title", "+3 Hours");
-                    d3.select("#nav-forward-more").attr("title", "+1 Day");
-                    break;
-                case "ocean":
-                    d3.select("#nav-backward-more").attr("title", "-1 Month");
-                    d3.select("#nav-backward").attr("title", "-5 Days");
-                    d3.select("#nav-forward").attr("title", "+5 Days");
-                    d3.select("#nav-forward-more").attr("title", "+1 Month");
-                    break;
-            }
-        });
+        function selectAnimation(param, level) {
+            if (configuration.get("param") === param && configuration.get("level") === level) return;
+            // Wind, OSCAR currents, and GFS-Wave have independent archive dates.
+            configuration.save({param: param, surface: "surface", level: level,
+                date: "current", hour: "", overlayType: "default"});
+        }
 
-        // Add handlers for mode buttons.
-        d3.select("#wind-mode-enable").on("click", function() {
-            if (configuration.get("param") !== "wind") {
-                configuration.save({param: "wind", surface: "surface", level: "level", overlayType: "default"});
-            }
+        configuration.on("change", function(model) {
+            var param = model.get("param"), level = model.get("level");
+            var ocean = param === "ocean", wave = ocean && level === "waves";
+            d3.selectAll(".ocean-mode").classed("invisible", !ocean);
+            d3.selectAll(".wind-mode").classed("invisible", ocean);
+            d3.selectAll(".waves-overlay").classed("invisible", !wave);
+            d3.selectAll(".currents-overlay").classed("invisible", wave);
+            d3.select("#wind-mode-enable").classed("highlighted", !ocean);
+            d3.select("#ocean-mode-enable").classed("highlighted", ocean);
+            d3.select("#animate-wind").classed("highlighted", !ocean);
+            d3.select("#animate-currents").classed("highlighted", ocean && !wave);
+            d3.select("#animate-waves").classed("highlighted", wave);
+            var earlier = wave ? "首帧" : ocean ? "后退一个月" : "后退一天";
+            var later = wave ? "末帧" : ocean ? "前进一个月" : "前进一天";
+            d3.select("#nav-backward-more").attr("title", earlier);
+            d3.select("#nav-forward-more").attr("title", later);
+            d3.select("#nav-backward").attr("title", ocean && !wave ? "后退五天" : "后退三小时");
+            d3.select("#nav-forward").attr("title", ocean && !wave ? "前进五天" : "前进三小时");
         });
-        configuration.on("change:param", function(x, param) {
-            d3.select("#wind-mode-enable").classed("highlighted", param === "wind");
+        d3.select("#wind-mode-enable").on("click", function() {
+            if (configuration.get("param") !== "wind") selectAnimation("wind", "level");
         });
         d3.select("#ocean-mode-enable").on("click", function() {
-            if (configuration.get("param") !== "ocean") {
-                // When switching between modes, there may be no associated data for the current date. So we need
-                // find the closest available according to the catalog. This is not necessary if date is "current".
-                // UNDONE: this code is annoying. should be easier to get date for closest ocean product.
-                var ocean = {param: "ocean", surface: "surface", level: "currents", overlayType: "default"};
-                var attr = _.clone(configuration.attributes);
-                if (attr.date === "current") {
-                    configuration.save(ocean);
-                }
-                else {
-                    when.all(products.productsFor(_.extend(attr, ocean))).spread(function(product) {
-                        if (product.date) {
-                            configuration.save(_.extend(ocean, µ.dateToConfig(product.date)));
-                        }
-                    }).otherwise(report.error);
-                }
-                stopCurrentAnimation(true);  // cleanup particle artifacts over continents
-            }
+            if (configuration.get("param") !== "ocean") selectAnimation("ocean", "currents");
         });
-        configuration.on("change:param", function(x, param) {
-            d3.select("#ocean-mode-enable").classed("highlighted", param === "ocean");
+        d3.select("#animate-wind").on("click", function() {
+            if (configuration.get("param") !== "wind") selectAnimation("wind", "level");
+        });
+        d3.select("#animate-currents").on("click", function() { selectAnimation("ocean", "currents"); });
+        d3.select("#animate-waves").on("click", function() { selectAnimation("ocean", "waves"); });
+        d3.select("#option-pause-animation").on("click", function() {
+            animationPaused = !animationPaused;
+            d3.select(this).classed("highlighted", animationPaused).text(animationPaused ? "继续动画" : "暂停动画");
         });
 
         // Add logic to disable buttons that are incompatible with each other.
@@ -1135,9 +1148,6 @@
             bindButtonToConfiguration("#" + id, {param: "wind", surface: parts[0], level: parts[1]});
         });
 
-        // Add handlers for ocean animation types.
-        bindButtonToConfiguration("#animate-currents", {param: "ocean", surface: "surface", level: "currents"});
-
         // Add handlers for all overlay buttons.
         products.overlayTypes.forEach(function(type) {
             bindButtonToConfiguration("#overlay-" + type, {overlayType: type});
@@ -1145,6 +1155,7 @@
         bindButtonToConfiguration("#overlay-wind", {param: "wind", overlayType: "default"});
         bindButtonToConfiguration("#overlay-ocean-off", {overlayType: "off"});
         bindButtonToConfiguration("#overlay-currents", {overlayType: "default"});
+        bindButtonToConfiguration("#overlay-wave-period", {overlayType: "default"});
 
         // Add handlers for all projection buttons.
         globes.keys().forEach(function(p) {

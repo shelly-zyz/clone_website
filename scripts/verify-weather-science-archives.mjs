@@ -29,6 +29,28 @@ for (const [i, frame] of global.frames.entries()) {
   }
 }
 
+for (const hour of [6, 9, 12, 15, 18]) {
+  const stamp = String(hour).padStart(2, "0");
+  const wave = JSON.parse(readFileSync(new URL(`../public/earth/data/waves/20220322-${stamp}.json`, import.meta.url)));
+  assert.deepEqual([wave.header.lo1, wave.header.la1, wave.header.dx, wave.header.dy, wave.header.nx, wave.header.ny],
+    [0, 90, 1, 1, 360, 181]);
+  assert.equal(wave.header.forecastTime, hour);
+  assert.equal(new Date(wave.header.refTime).toISOString(), "2022-03-22T00:00:00.000Z");
+  assert.match(wave.source, new RegExp(`noaa-gfs-bdp-pds.+f0${stamp}\\.grib2$`));
+  const packed = ["period", "direction", "height"].map(key => unpack(wave[key]));
+  assert(packed.every(field => field.length === 360 * 181 * 2));
+  let masked = 0, water = 0;
+  for (let offset = 0; offset < packed[0].length; offset += 2) {
+    const [period, direction, height] = packed.map(field => field.readInt16LE(offset));
+    if (period === -32768 || direction === -32768 || height === -32768) masked++;
+    else {
+      assert(period > 0 && direction >= 0 && direction <= 3600 && height >= 0);
+      water++;
+    }
+  }
+  assert(water > 25000 && masked > 10000, "GFS-Wave includes an ocean field and a real land mask");
+}
+
 const radar = data("radar-khgx-20220322.json");
 assert.match(radar.sha256, /^[a-f0-9]{64}$/);
 assert.deepEqual([radar.x.length, radar.y.length, radar.z.length], [91, 91, 19]);
@@ -58,4 +80,4 @@ for (const frame of wind.frames) {
   assert(vertical.some(value => value > 20) && vertical.some(value => value < -20), "archive resolves both vertical directions");
   assert(frame.surfaceMean >= 10 && frame.surfaceMean <= 20);
 }
-console.log("PASS: paired ERA5/GFS valid times, NEXRAD masks and mesh topology, WRF U/V/W and km coordinates");
+console.log("PASS: paired ERA5/GFS valid times, GFS-Wave archive and masks, NEXRAD masks and mesh topology, WRF U/V/W and km coordinates");

@@ -3125,8 +3125,11 @@ function EarthProjectViewport({ initialHash, onLoad }: { initialHash?: string; o
     }
     window.addEventListener("message", receiveReady);
     syncDocument();
-    return () => window.removeEventListener("message", receiveReady);
-  }, [syncDocument]);
+    return () => {
+      window.removeEventListener("message", receiveReady);
+      onLoad(null);
+    };
+  }, [onLoad, syncDocument]);
 
   return (
     <section className="og-earth-project" aria-label="earth 原版气象项目">
@@ -5986,8 +5989,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
 
   const { topic: activeProject, context, navigate } = useWorkspaceSelection({ topic: initialProject, context: initialContext }, changeProject);
   const weatherScene: WeatherScene = context.replay ?? "globe";
-  const originalWeather = context.weatherMode === "layers" || (context.weatherMode !== "comparison" && !!context.weather);
-  const globeLayers = weatherScene === "globe" && originalWeather;
+  const globeLayers = weatherScene === "globe" && context.weatherMode !== "comparison";
   const carbonPlanar = activeProject === "carbon" && context.projection === "map";
   const resourceScene = activeProject === "weather" && context.scene === "resources";
   const powerView = context.powerView ?? "facilities";
@@ -6551,7 +6553,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
   const activePlanned = visibleLayers.plannedUpgrades;
   const sidebarSummary = {
     power: statsActive ? "中国省级电力统计" : `${activeRegion.label} · ${regionStats.totalPlants.toLocaleString()} 个可见项目`,
-    weather: weatherScene === "globe" ? globeLayers ? "全球风场与气象覆盖" : "ERA5 与 GFS 空间对照" : weatherSceneViews[weatherScene].title,
+    weather: weatherScene === "globe" ? globeLayers ? "全球风场、洋流与波浪" : "ERA5 与 GFS 空间对照" : weatherSceneViews[weatherScene].title,
     carbon: "GRACED · 全球 0.1° 网格",
   }[activeProject];
   return (
@@ -6560,9 +6562,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
       <GlobeNavigation activeTopic={activeProject} onTopicChange={switchProject} />
       {activeProject === "weather" ? (
         <>
-          {originalWeather && <div className="og-weather-original" hidden={!globeLayers}>
-            <EarthProjectViewport initialHash={context.weather} onLoad={weatherReady} />
-          </div>}
+          {globeLayers && <EarthProjectViewport initialHash={context.weather} onLoad={weatherReady} />}
           {!globeLayers && <div className="og-weather-replay-stage">
             {weatherScene === "globe" ? <WeatherComparison /> : weatherScene === "radar" ? <WeatherRadar /> :
               weatherScene === "wind" ? <WeatherWind /> : <WeatherReplayPlayer query="" scene={weatherScene}
@@ -6739,7 +6739,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
             {weatherScene === "globe" ? <>
               <button className="og-workspace-action og-secondary-entry" type="button"
                 onClick={() => navigate("weather", { replay: undefined, weatherMode: globeLayers ? "comparison" : "layers" })}>
-                {globeLayers ? "返回全球气象对照" : "查看全球气象图层"}
+                {globeLayers ? "查看全球气象对照" : "返回动态气象地球"}
               </button>
               {globeLayers && <WeatherSidebarFilters frameDocument={weatherDocument} />}
             </> : <>

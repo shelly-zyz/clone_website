@@ -54,7 +54,6 @@ export function animateComparisonWind(canvas: HTMLCanvasElement, field: Comparis
     context.fillStyle = "rgba(0, 0, 0, .84)";
     context.fillRect(0, 0, size, size);
     context.globalCompositeOperation = "source-over";
-    context.lineWidth = .9;
     context.lineCap = "round";
     const paths = strokes.map(() => new Path2D());
 
@@ -87,8 +86,14 @@ export function animateComparisonWind(canvas: HTMLCanvasElement, field: Comparis
       path.lineTo(...to);
     }
 
+    for (const path of paths) {
+      context.strokeStyle = "rgba(12, 24, 34, .55)";
+      context.lineWidth = 2.2;
+      context.stroke(path);
+    }
     for (const [index, path] of paths.entries()) {
       context.strokeStyle = strokes[index];
+      context.lineWidth = 1.1;
       context.stroke(path);
     }
   }

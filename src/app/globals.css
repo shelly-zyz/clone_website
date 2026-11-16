@@ -491,9 +491,12 @@
   background: #203639;
 }
 
-.og-weather-sidebar-tools {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.og-weather-sidebar-tools,
+.og-weather-sidebar-animation {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
+
+.og-weather-sidebar-animation { margin-top: 4px; }
 
 .og-weather-sidebar-scale {
   display: block;
@@ -1747,8 +1750,6 @@
   z-index: 1;
   overflow: hidden;
 }
-
-.og-weather-original[hidden] { display: none; }
 
 .og-weather-replay-stage {
   position: absolute;
