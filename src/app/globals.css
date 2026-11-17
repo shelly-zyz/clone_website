@@ -3824,8 +3824,6 @@
 
 /* Weather workspace controls float over the globe or volume instead of dividing the canvas. */
 .is-earth-project {
-  --og-globe-nav-space: calc(65px + env(safe-area-inset-bottom, 0px));
-  --og-weather-card-height: clamp(50px, 10svh, 80px);
   --og-weather-control-fill: rgb(255 255 255 / 10%);
   --og-weather-control-hover: rgb(255 255 255 / 17%);
 }
@@ -3851,43 +3849,15 @@
   text-underline-offset: 3px;
 }
 .is-earth-project .og-weather-sidebar-filters { border: 0; }
-.og-globe-workspace.is-earth-project .og-globe-navigation.is-docked {
-  padding: 4px;
-  gap: 4px;
-  width: min(410px, calc(100% - 20px));
-  inset-inline: 0;
-  background: rgba(13, 24, 35, .87);
-  backdrop-filter: blur(15px);
-  border-radius: 12px;
-}
-.is-earth-project .og-globe-navigation button {
-  height: 40px;
-  min-width: 0;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-}
-.is-earth-project .og-globe-navigation button[aria-pressed="true"] {
-  background: var(--og-weather-control-fill);
-  color: #fff;
-  box-shadow: none;
-}
-.is-earth-project .og-globe-navigation img { width: 22px; height: 22px; }
 .is-earth-project .og-weather-field-stage { inset: 0; border: 0; border-radius: 0; }
 .is-earth-project .og-weather-volume-stage {
-  inset: calc(var(--og-workspace-top) + 56px) var(--og-gutter) 0 calc(var(--og-sidebar-width) + 2 * var(--og-gutter));
+  inset: var(--og-stage-top) var(--og-gutter) 0 var(--og-stage-left);
 }
 .og-weather-globe-stage { position: absolute; inset: 0; }
 @media (min-width: 901px) {
-  .is-earth-project.og-globe-workspace:has(.og-weather-field-stage, .og-weather-globe-stage:not([hidden])) {
-    --og-stage-top: 0px;
-    --og-stage-left: 0px;
-    --og-stage-right: 0px;
+  .is-earth-project > .og-globe-stage:has(.og-weather-field-stage, .og-weather-globe-stage:not([hidden])) {
+    top: 0;
+    inset-inline: 0;
   }
   .is-earth-project .og-weather-globe-stage .og-earth-project {
     position: absolute;
