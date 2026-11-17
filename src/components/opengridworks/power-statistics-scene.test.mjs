@@ -75,6 +75,9 @@ const hooks = registerHooks({
     return next(specifier, context);
   },
   load(url, context, next) {
+    if (url.startsWith(root.href) && url.endsWith(".json")) {
+      return { format: "module", shortCircuit: true, source: `export default ${readFileSync(new URL(url), "utf8")};` };
+    }
     if (url.endsWith("PowerStatisticsMap.module.css")) return { format: "module", shortCircuit: true, source: "export default {};" };
     if (url.endsWith("GlobeLoading.tsx")) return { format: "module", shortCircuit: true, source: "export function GlobeLoading() { return null; }" };
     if (url.endsWith("power-statistics-scene.ts") || url.endsWith("PowerStatisticsMap.tsx")) {
