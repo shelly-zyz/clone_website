@@ -9,17 +9,23 @@ export function useReportedGeneration(enabled: boolean, selectedMonth: string | 
     ? "/api/topic-analysis?topic=generation" + (version ? "&version=" + version : "")
     : null);
   const published = resource.data?.facts.some(row => row.series === "electricity" && row.value !== null) ? resource.data : null;
+  const path = enabled && published
+    ? `/api/topic-analysis?topic=generation&month=${selectedMonth ?? "latest"}&version=${published.version}&product=${product}`
+    : null;
+  const regional = useWorkspaceResource<RegionalGeneration>(path);
 
   const availableMonths = version && !published ? [] : generationMonths(published, product);
-  const months = selectedMonth && !availableMonths.includes(selectedMonth) ? [...availableMonths, selectedMonth].sort() : availableMonths;
-  const month = selectedMonth ?? months.at(-1) ?? "";
-  const path = enabled && published && month ? `/api/topic-analysis?topic=generation&month=${month}&version=${published.version}&product=${product}` : null;
-  const regional = useWorkspaceResource<RegionalGeneration>(path);
+  const pending = resource.pending || regional.pending;
+  const fallbackMonth = pending ? "" : availableMonths.at(-1) ?? "";
+  const month = selectedMonth ?? (regional.data?.month || fallbackMonth);
+  const latestRegionalMonth = regional.data?.latestRegionalMonth ?? null;
+  const months = [...new Set([...availableMonths, month, latestRegionalMonth ?? ""].filter(Boolean))].sort();
   const byType = new Map(published?.facts.filter(row => row.month === month).map(row => [row.series, row.value]));
 
   return {
-    month, months, published, regional: regional.data, regionalPending: regional.pending,
+    month, months, published, regional: regional.data, regionalPending: regional.pending, latestRegionalMonth,
     publishedPending: resource.pending,
+    regionalUnavailable: enabled && !pending && !regional.data,
     versionUnavailable: !!version && !resource.pending && !published,
     total: byType.get("electricity"),
     yoy: byType.get(generationYoyMetric),

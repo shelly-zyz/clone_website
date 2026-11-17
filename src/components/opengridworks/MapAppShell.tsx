@@ -476,6 +476,10 @@ function hiddenVoltageState() {
   }, {} as BooleanRecord<VoltageClass>);
 }
 
+function voltageClassesOrDefault(current: BooleanRecord<VoltageClass>) {
+  return Object.values(current).some(Boolean) ? current : voltageState();
+}
+
 function formatMw(value: number) {
   if (value >= 1000) {
     return `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}GW`;
@@ -3270,7 +3274,9 @@ function MapViewport({
       return;
     }
 
-    getGeoJsonSource(map, "energy-assets")?.setData(buildEnergyCollection(powerData.energyAssets, visibleTechnologies, activeSizeMin));
+    getGeoJsonSource(map, "energy-assets")?.setData(activeProject === "power"
+      ? buildEnergyCollection(powerData.energyAssets, visibleTechnologies, activeSizeMin)
+      : emptyPointCollection());
     getGeoJsonSource(map, "data-centers")?.setData(buildDataCenterCollection(powerData.dataCenters, visibleLayers));
     getGeoJsonSource(map, "grid-lines")?.setData(
       buildGridLineCollection(powerData.gridLines, visibleLayers, visibleSourceLayers, visibleVoltageClasses),
@@ -3282,6 +3288,7 @@ function MapViewport({
     getGeoJsonSource(map, "landing-points")?.setData(buildLandingPointCollection(visibleLayers));
   }, [
     activeSizeMin,
+    activeProject,
     powerData,
     ready,
     visibleCustomLayers,
@@ -5436,7 +5443,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
   initialContext?: WorkspaceContext;
 }) {
   const startingCamera = contextCamera(initialProject, initialContext);
-  const [visibleTechnologies, setVisibleTechnologies] = useState(() => switchList(hiddenTechnologyState(), initialContext.tech));
+  const [visibleTechnologies, setVisibleTechnologies] = useState(() => switchList(technologyState(), initialContext.tech));
   const [visibleLayers, setVisibleLayers] = useState(() => switchList(hiddenLayerState(), initialContext.layers));
   const [visibleCustomLayers, setVisibleCustomLayers] = useState<BooleanRecord<CustomLayerKey>>({
     customCorridor: false,
@@ -5444,8 +5451,8 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
   });
   const [openLegendSections, setOpenLegendSections] = useState<BooleanRecord<LegendSectionKey>>(legendSectionState);
   const [visibleSourceLayers, setVisibleSourceLayers] = useState(sourceLayerState);
-  const [visibleVoltageClasses, setVisibleVoltageClasses] = useState(hiddenVoltageState);
-  const [visibleSubstationClasses, setVisibleSubstationClasses] = useState(hiddenVoltageState);
+  const [visibleVoltageClasses, setVisibleVoltageClasses] = useState(() => visibleLayers.transmission ? voltageState() : hiddenVoltageState());
+  const [visibleSubstationClasses, setVisibleSubstationClasses] = useState(() => visibleLayers.substations ? voltageState() : hiddenVoltageState());
   const [activeRegion, setActiveRegion] = useState<RegionMeta>(() => regions.find(region => region.id === initialContext.region) ?? defaultRegion);
   const [focusedRegion, setFocusedRegion] = useState<RegionTargetId>(() => regionTargets.find(item => item.id === initialContext.region)?.id ?? defaultRegion.id);
   const [mapCamera, setMapCamera] = useState<MapCameraState>(startingCamera ?? defaultRegion);
@@ -5505,8 +5512,11 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
     setCarbonPlaying(false);
     if (topic === "economy") setEconomyMapTheme(themeForContext(context, "economy"));
     if (topic === "power") {
-      setVisibleLayers(switchList(hiddenLayerState(), context.layers));
-      setVisibleTechnologies(switchList(hiddenTechnologyState(), context.tech));
+      const layers = switchList(hiddenLayerState(), context.layers);
+      setVisibleLayers(layers);
+      if (layers.transmission) setVisibleVoltageClasses(voltageClassesOrDefault);
+      if (layers.substations) setVisibleSubstationClasses(voltageClassesOrDefault);
+      setVisibleTechnologies(switchList(technologyState(), context.tech));
       setActiveSizeMin(context.minMw ?? null);
       setLabelSettings({
         ...initialLabelSettings,
@@ -5946,14 +5956,8 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
 
   const toggleLayer = (key: LayerKey) => {
     const enablingLayer = !visibleLayers[key];
-    if (enablingLayer && key === "transmission") {
-      if (!Object.values(visibleVoltageClasses).some(Boolean)) {
-        setVisibleVoltageClasses(voltageState());
-      }
-    }
-    if (enablingLayer && key === "substations" && !Object.values(visibleSubstationClasses).some(Boolean)) {
-      setVisibleSubstationClasses(voltageState());
-    }
+    if (enablingLayer && key === "transmission") setVisibleVoltageClasses(voltageClassesOrDefault);
+    if (enablingLayer && key === "substations") setVisibleSubstationClasses(voltageClassesOrDefault);
     setVisibleLayers((state) => ({ ...state, [key]: !state[key] }));
   };
 
@@ -6017,6 +6021,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
       }, {} as BooleanRecord<TechnologyKey>),
     );
     setVisibleLayers((state) => ({ ...state, transmission: true, plannedUpgrades: true, gasPipelines: false }));
+    setVisibleVoltageClasses(voltageClassesOrDefault);
     setActiveSizeMin(null);
     flyToRegion(regionTargets[0]);
     showToast("已应用“清洁能源增长”预设。");
@@ -6024,6 +6029,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
 
   const applyPlannedPreset = () => {
     setVisibleLayers((state) => ({ ...state, plannedUpgrades: true, dataCenters: true, transmission: true, gasPipelines: true }));
+    setVisibleVoltageClasses(voltageClassesOrDefault);
     setVisibleTechnologies(
       technologies.reduce((state, item) => {
         state[item.key] = ["solar", "wind", "offshore", "storage", "gas"].includes(item.key);
@@ -6081,6 +6087,8 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
     .some((item) => visibleTechnologies[item.key]);
   const activeGas = visibleTechnologies.gas || visibleLayers.gasPipelines;
   const activePlanned = visibleLayers.plannedUpgrades;
+  const hasFacilityLayers = generationHeatmapEnabled || Object.values(visibleTechnologies).some(Boolean)
+    || Object.values(visibleLayers).some(Boolean) || Object.values(visibleCustomLayers).some(Boolean);
   const sidebarSummary = {
     power: statsActive ? "中国省级电力统计" : `${activeRegion.label} · ${regionStats.totalPlants.toLocaleString()} 个可见项目`,
     weather: weatherScene === "globe" ? "全球风场、洋流与波浪" : replayViews[weatherScene].title,
@@ -6264,7 +6272,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
               onCategory={product => {
                 const next = powerProduct === product ? "electricity" : product;
                 setVisibleTechnologies(switchList(hiddenTechnologyState(), generationTechnologies(next).join(",")));
-                navigate("power", { product: next }, true);
+                navigate("power", { product: next, month: context.month ?? (reported.month || undefined) }, true);
               }} /> : null}
             {statsActive ? <button className="og-workspace-action og-secondary-entry" type="button"
               aria-pressed={powerForecast} disabled={monthlyDemo} onClick={() => setPowerForecast(value => !value)}>
@@ -6272,6 +6280,13 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
             </button> : null}
             {activeProject === "power" && powerView === "facilities" ? (
               <>
+              {!hasFacilityLayers && (
+                <button className="og-workspace-action" type="button" onClick={() => {
+                  setVisibleTechnologies(technologyState());
+                  setActiveSizeMin(null);
+                  replaceWorkspaceContext({ tech: technologies.map(item => item.key).join(","), minMw: null });
+                }}><Zap size={16} /> 显示电站</button>
+              )}
               {powerAssetsStatus !== "ready" && (
                 <p className="og-weather-sidebar-status" role="status">
                   {powerAssetsStatus === "loading" ? "正在读取电力设施数据…" : "数据库设施数据暂未同步，当前为本地样本。"}

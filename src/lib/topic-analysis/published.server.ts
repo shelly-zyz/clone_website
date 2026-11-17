@@ -1,5 +1,6 @@
 import "server-only";
 
+import { chinaProvinces } from "@/lib/china-provinces";
 import { catalogEntry, resolveVersion } from "@/lib/data-agent/catalog.server";
 import { readDataAgent } from "@/lib/data-agent/database.server";
 import {
@@ -10,6 +11,7 @@ import {
 const national = "000000000000";
 const generationMetric = "electricity_generation_current";
 const fuelMetrics = fuelSeries.map(item => item.code);
+const provinceCodes = chinaProvinces.map(item => item.code);
 
 function approvedCodes(entry: ReturnType<typeof catalogEntry>, codes: readonly string[]) {
   return entry.metrics.filter(metric => codes.includes(metric.metric_code)).map(metric => metric.metric_code);
@@ -67,23 +69,32 @@ export function readRegionalGeneration(month: string, expectedVersion: string, p
   return readDataAgent(async client => {
     const version = await resolveVersion(client, { topic: "power", version: expectedVersion });
     const entry = catalogEntry(version);
-    const { rows: [statistics] } = await client.query<Pick<RegionalGeneration, "regions" | "scaleMax">>(`
+    const { rows: [statistics] } = await client.query<Omit<RegionalGeneration, "dataset" | "version" | "publishedAt">>(`
       WITH observations AS NOT MATERIALIZED (
         SELECT entity_code AS code, COALESCE(NULLIF(source_ref->>'region_name', ''), entity_code) AS name,
                value::double precision AS value, time_start
         FROM standard.std_data_agent_fact
         WHERE topic_id = 'power' AND dataset_version_id = $1 AND metric_code = ANY($2::text[])
           AND series_code = $4 AND entity_code ~ '^[1-9][0-9]0{10}$' AND issue_time IS NULL
+      ), coverage AS (
+        SELECT max(value) AS "scaleMax",
+               date_trunc('month', max(time_start) FILTER (WHERE value IS NOT NULL AND code = ANY($5::text[]))) AS latest
+        FROM observations
+      ), period AS (
+        SELECT "scaleMax", latest, COALESCE($3::date::timestamptz, latest) AS selected
+        FROM coverage
       )
-      SELECT (SELECT max(value) FROM observations) AS "scaleMax",
+      SELECT "scaleMax", to_char(latest, 'YYYY-MM') AS "latestRegionalMonth",
+             COALESCE(to_char(selected, 'YYYY-MM'), '') AS month,
              COALESCE((
                SELECT json_agg(json_build_object('code', code, 'name', name, 'value', value)
                                ORDER BY value DESC NULLS LAST, code)
                FROM observations
-               WHERE time_start >= $3::date::timestamptz
-                 AND time_start < ($3::date + interval '1 month')::timestamptz
+               WHERE time_start >= period.selected
+                 AND time_start < period.selected + interval '1 month'
              ), '[]'::json) AS regions
-    `, [version.id, approvedCodes(entry, [generationMetric]), month + "-01", product]);
-    return { ...publication(entry), month, ...statistics };
+      FROM period
+    `, [version.id, approvedCodes(entry, [generationMetric]), month === "latest" ? null : month + "-01", product, provinceCodes]);
+    return { ...publication(entry), ...statistics };
   });
 }

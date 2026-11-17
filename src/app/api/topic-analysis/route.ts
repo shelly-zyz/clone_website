@@ -19,7 +19,7 @@ export async function GET(request: Request) {
     if (topic === "renewables" && month === null && version === null && product === null) {
       return Response.json(await readRenewableScenario(), { headers: cacheHeaders });
     }
-    if (topic === "generation" && month && /^[1-9][0-9]{3}-(0[1-9]|1[0-2])$/.test(month)
+    if (topic === "generation" && month && (month === "latest" || /^[1-9][0-9]{3}-(0[1-9]|1[0-2])$/.test(month))
       && version && releaseVersion.test(version) && selectedProduct) {
       return Response.json(await readRegionalGeneration(month, version, selectedProduct.id), { headers: cacheHeaders });
     }

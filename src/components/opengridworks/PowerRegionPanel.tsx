@@ -140,7 +140,9 @@ export function PowerMonthlyPanel({ frame, data, region, category, onRegionChang
 }) {
   const demo = frame.demo === true;
   const displayMonth = demo ? frame.period : data.month;
-  const monthOptions = [...new Set([...data.months, displayMonth].filter(Boolean))].sort().toReversed();
+  const monthOptions = [...new Set([...data.months, displayMonth].filter(Boolean))].sort().toReversed()
+    .map(value => ({ value, label: value }));
+  const pending = data.publishedPending || data.regionalPending;
   const monthlyReport = demo || data.versionUnavailable ? undefined : monthly.find(item => item.date === data.month);
   const local = frame.regions.find(item => item.code === region);
   const selected = chinaProvinces.find(item => item.code === region);
@@ -154,17 +156,22 @@ export function PowerMonthlyPanel({ frame, data, region, category, onRegionChang
   const source = demo ? undefined : data.published ? "https://data.stats.gov.cn/easyquery.htm?cn=" + (selected ? "E0101" : "A01") : monthlyReport?.source;
   const yoy = selected || demo ? null : data.published
     ? product.id === "electricity" ? data.yoy : null : monthlyReport?.yoy[product.id];
+  const hasRegionalData = frame.regions.some(item => item.value != null);
+  const latestRegionalMonth = !demo && !hasRegionalData && data.latestRegionalMonth !== data.month ? data.latestRegionalMonth : null;
   const monthlyStatus = demo ? powerDemoNotice : data.versionUnavailable ? "该发布版本暂不可读取。"
-    : data.publishedPending || data.regionalPending ? "正在读取月度发布数据…"
+    : pending ? "正在读取月度发布数据…"
+    : data.regionalUnavailable ? "暂时无法读取分省月度数据。"
+    : !hasRegionalData ? "本月暂无分省发布数据。"
     : selected && total == null ? "该省本月暂无同口径数据。"
-    : frame.regions.every(item => item.value == null) ? "暂无可用的分省月度发布数据，可切换到年度合计。"
     : null;
 
   return (
     <section className={styles.panel} aria-label="月度发电量">
       <div className={styles.filters}>
         <WorkspaceFilterSelect label="统计月份" value={displayMonth}
-          options={monthOptions.map(value => ({ value, label: value }))} onChange={onMonthChange} />
+          options={displayMonth ? monthOptions : [
+            { value: "", label: pending ? "读取中…" : "暂无月份", disabled: true }, ...monthOptions,
+          ]} onChange={onMonthChange} />
         <WorkspaceFilterSelect label="地区" value={region} options={filterOptions} onChange={onRegionChange} />
       </div>
       <label className={styles.demoMode}>
@@ -180,7 +187,12 @@ export function PowerMonthlyPanel({ frame, data, region, category, onRegionChang
         {typeof yoy === "number" ? <span className={styles.yoy}>同比 {yoy > 0 ? "+" : ""}{powerAmount.format(yoy)}%</span> : null}
       </div>
       {monthlyStatus ? <p className={styles.note}>{monthlyStatus}</p> : null}
-      <PowerMapLegend frame={frame} />
+      {latestRegionalMonth ? (
+        <button type="button" className="og-workspace-action" onClick={() => onMonthChange(latestRegionalMonth)}>
+          查看有分省数据的 {latestRegionalMonth}
+        </button>
+      ) : null}
+      {hasRegionalData ? <PowerMapLegend frame={frame} /> : null}
       <section className={styles.mix} aria-label="全国电源结构">
         <h3>{demo ? "演示电源类型" : "全国已公布分项"}</h3>
         {demo ? generationSeries.map(item => (
