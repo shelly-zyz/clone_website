@@ -2,7 +2,7 @@
 
 import { Minus, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { ProvincePowerFrame } from "@/lib/china-power-statistics";
+import { powerDemoNotice, type ProvincePowerFrame } from "@/lib/china-power-statistics";
 import type { MapCameraState } from "@/types/opengridworks";
 import { GlobeLoading } from "./GlobeLoading";
 import type { ChinaPowerGeography } from "./power-statistics-geometry";
@@ -14,7 +14,7 @@ type Props = Parameters<typeof createPowerStatisticsScene>[2] & {
   frame: ProvincePowerFrame;
   selected?: string;
   initialCamera?: MapCameraState;
-  focus?: { nonce: number; camera?: MapCameraState };
+  focus?: { nonce: number; camera?: MapCameraState; provinceCode?: string };
   screenshotRequest: number;
   onScreenshotComplete: (message: string) => void;
 };
@@ -48,7 +48,11 @@ export function PowerStatisticsMap(props: Props) {
         });
         scene.current = map;
         map.update(current.frame, current.selected);
-        map.focus(current.focus && current.focus.nonce !== initialFocus.current ? current.focus.camera : current.initialCamera, false);
+        if (current.focus && current.focus.nonce !== initialFocus.current) {
+          map.focus(current.focus.camera, false, current.focus.provinceCode);
+        } else {
+          map.focus(current.initialCamera, false, current.initialCamera ? undefined : current.selected);
+        }
         setStatus("ready");
       })
       .catch(() => {
@@ -66,7 +70,10 @@ export function PowerStatisticsMap(props: Props) {
 
   const focusNonce = props.focus?.nonce;
   useEffect(() => {
-    if (focusNonce != null && focusNonce !== initialFocus.current) scene.current?.focus(latest.current.focus?.camera);
+    if (focusNonce != null && focusNonce !== initialFocus.current) {
+      const focus = latest.current.focus;
+      scene.current?.focus(focus?.camera, true, focus?.provinceCode);
+    }
   }, [focusNonce]);
 
   useEffect(() => {
@@ -82,6 +89,7 @@ export function PowerStatisticsMap(props: Props) {
   return (
     <section className={styles.viewport} aria-label="中国省级电力统计三维地图" data-map-ready={status === "ready"}>
       <canvas ref={canvas} className={styles.canvas} aria-hidden="true" />
+      {props.frame.demo && <p className={styles.demoNotice} role="status">{powerDemoNotice}</p>}
       {status === "loading" && <GlobeLoading label="正在加载中国省级电力地图" />}
       {status === "error" && <p className={styles.status} role="status">当前浏览器无法绘制三维地图，可在筛选栏查看统计。</p>}
       {status === "ready" && (

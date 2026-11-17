@@ -1,6 +1,8 @@
 import { ArrowDownToLine, ArrowRightLeft } from "lucide-react";
 import type { ReactNode } from "react";
-import { formatAnalysisValue, type Source, type Value } from "@/lib/topic-analysis/model";
+import { chartStory } from "@/lib/topic-analysis/chart-story";
+import { formatAnalysisValue, type AnalysisChartSpec, type Value } from "@/lib/topic-analysis/model";
+import { AnalysisInsights, AnalysisNarrative } from "./AnalysisNarrative";
 import styles from "./page.module.css";
 
 type ComparisonSide = {
@@ -10,17 +12,16 @@ type ComparisonSide = {
   detail: string;
 };
 
-export function PeriodComparison({ id, title, caption, first, second, unit, source, onSwap, exportHref }: {
-  id: string;
-  title: string;
-  caption: string;
+export function PeriodComparison({ spec, first, second, empty, onSwap, exportHref }: {
+  spec: AnalysisChartSpec;
+  empty?: string;
   first: ComparisonSide;
   second: ComparisonSide;
-  unit: string;
-  source: Source;
   onSwap?: () => void;
   exportHref?: string;
 }) {
+  const { id, title, caption, unit, sources } = spec;
+  const story = chartStory(spec, empty);
   const delta = first.value !== null && second.value !== null ? second.value - first.value : null;
   const percentage = delta !== null && first.value !== null && first.value > 0 ? delta / first.value * 100 : null;
 
@@ -50,6 +51,7 @@ export function PeriodComparison({ id, title, caption, first, second, unit, sour
           </div>
         ))}
       </div>
+      <AnalysisInsights id={id} story={story} />
       <footer className={styles.comparisonFooter}>
         <div aria-live="polite">
           <span>B 相对 A</span>
@@ -61,7 +63,6 @@ export function PeriodComparison({ id, title, caption, first, second, unit, sour
           )}
         </div>
         <div>
-          <a href={source.href} target="_blank" rel="noreferrer">{source.label}</a>
           {exportHref && (
             <a className={styles.compareAction} href={exportHref} download={id + ".csv"}>
               <ArrowDownToLine size={15} aria-hidden="true" />下载 CSV
@@ -69,6 +70,7 @@ export function PeriodComparison({ id, title, caption, first, second, unit, sour
           )}
         </div>
       </footer>
+      <AnalysisNarrative story={story} caption={caption} sources={sources} />
     </section>
   );
 }

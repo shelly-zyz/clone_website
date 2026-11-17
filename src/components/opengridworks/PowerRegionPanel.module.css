@@ -63,6 +63,8 @@
 .panel footer, .source { display: grid; gap: 4px; padding-top: 7px; }
 :is(.panel footer, .source) a { display: inline-flex; gap: 3px; align-items: center; color: #b8f0de; }
 :is(.panel footer, .source) a:hover { text-decoration: underline; }
+.demoMode { display: flex; align-items: start; gap: 7px; margin-top: 9px; padding: 8px; background: #304033; color: #dfecd6; font-size: 12px; }
+.demoMode input { flex: none; margin-top: 2px; accent-color: #b9eee3; }
 .mobileSelection { display: none; }
 @media (max-width: 900px) {
   .mobileSelection {

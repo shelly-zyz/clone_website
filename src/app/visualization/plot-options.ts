@@ -8,6 +8,7 @@ import type {
 } from "echarts/components";
 import type { ComposeOption } from "echarts/core";
 import type { AnalysisChartSpec } from "@/lib/topic-analysis/model";
+import { interpolateColor, researchColors, researchInk, researchRule, verticalFill } from "@/lib/topic-analysis/research-palette";
 import { powerPlotOptions } from "./power-plot-options";
 
 export const worldMap = "ogw-topic-world";
@@ -18,16 +19,18 @@ export type ChartOptions = ComposeOption<BarSeriesOption | BoxplotSeriesOption |
 
 const format = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 });
 const compactFormat = new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 1 });
-const ink = "#263c4c";
-const gridColor = "#e3ebee";
+const ink = researchInk;
+const gridColor = researchRule;
 const axisLabel = { color: ink, fontSize: 11, hideOverlap: true };
 const valueAxis = {
   type: "value" as const, axisLabel: { ...axisLabel, formatter: (value: number) => compactFormat.format(value) },
   splitLine: { lineStyle: { color: gridColor } },
 };
-const heatColors = ["#dcf5f1", "#68e0c8", "#0fb1bd", "#3976d1", "#6242bc"];
-const emissionColors = ["#fff2e1", "#ffd77a", "#ffab53", "#ec655a", "#aa3c81"];
-const mapColors = ["#c2f1ed", "#64ded3", "#14adbd", "#3781d6", "#6149b5"];
+const { ice, lavender, mint, sage, champagne, rose: roseTone } = researchColors;
+const heatColors = ["#f0f7f7", mint.light, ice.base, lavender.base, lavender.ink];
+const emissionColors = ["#fcf6ed", champagne.light, "#dcb199", roseTone.base, roseTone.ink];
+const mapColors = ["#e8f0f5", ice.light, ice.base, lavender.base, "#5f6299"];
+const categorical = [ice.ink, lavender.ink, mint.ink, roseTone.ink, champagne.ink, sage.ink];
 const categoryAxis = (labels: readonly string[], compact: boolean) => ({
   type: "category" as const, data: [...labels],
   axisTick: { show: false }, axisLine: { lineStyle: { color: gridColor } },
@@ -169,7 +172,7 @@ function bubble(spec: Extract<AnalysisChartSpec, { kind: "bubble" }>, compact: b
     return [{
       name, value: [x, y, spec.sizes[index]], symbolSize: (compact ? 5 : 7) + Math.sqrt(spec.sizes[index] / maximum) * (compact ? 17 : 42),
       itemStyle: {
-        color: focused ? "#f37448" : spec.categoryColors?.[index] ?? "#20b8bc",
+        color: focused ? roseTone.ink : spec.categoryColors?.[index] ?? ice.base,
         ...(focused ? { opacity: 1, borderColor: "#fff", borderWidth: 1.5 } : {}),
       },
       label: focused && !compact ? { show: true, formatter: name, color: ink, position: "top" as const } : undefined,
@@ -197,8 +200,8 @@ function bubble(spec: Extract<AnalysisChartSpec, { kind: "bubble" }>, compact: b
       nameTextStyle: { color: ink, align: "left" }, nameGap: 16,
     },
     series: [{
-      type: "scatter", data: data.sort((a, b) => Number(a.name === spec.focus) - Number(b.name === spec.focus) || b.value[2] - a.value[2]), silent: compact, color: "#31b4bc",
-      itemStyle: { opacity: 0.76, borderColor: "#397b98", borderWidth: 0.65 },
+      type: "scatter", data: data.sort((a, b) => Number(a.name === spec.focus) - Number(b.name === spec.focus) || b.value[2] - a.value[2]), silent: compact, color: ice.base,
+      itemStyle: { opacity: 0.79, borderColor: ice.ink, borderWidth: 0.65 },
       emphasis: { focus: "self", scale: 1.12, label: { show: true, formatter: "{b}", position: "top", color: ink } },
     }],
   };
@@ -223,7 +226,7 @@ function treemap(spec: AnalysisChartSpec, compact: boolean, tooltip: TooltipComp
 }
 
 function rose(spec: AnalysisChartSpec, compact: boolean, tooltip: TooltipComponentOption): ChartOptions {
-  const colors = ["#45bac0", "#319bd0", "#637edc", "#9a80d7", "#e98277", "#ecae59", "#5ab99d", "#30a8aa"];
+  const colors = [mint.base, ice.base, ice.ink, lavender.base, roseTone.base, champagne.base, sage.base, mint.ink];
   return {
     polar: { radius: compact ? "65%" : "69%", center: ["50%", "50%"] },
     angleAxis: {
@@ -285,7 +288,7 @@ function sankey(spec: Extract<AnalysisChartSpec, { kind: "sankey" }>, compact: b
       label: { color: ink, fontSize: compact ? 9 : 12, distance: compact ? 3 : 7 },
       data: spec.nodes.map(({ name, value, color }) => ({ name, value, itemStyle: { color } })),
       links: spec.links,
-      lineStyle: { color: "gradient", curveness: 0.55, opacity: 0.35 },
+      lineStyle: { color: "gradient", curveness: 0.55, opacity: 0.46 },
       emphasis: { focus: "adjacency", lineStyle: { opacity: 0.75 } },
     }],
   };
@@ -399,12 +402,12 @@ function boxplot(spec: Extract<AnalysisChartSpec, { kind: "boxplot" }>, compact:
     yAxis: { ...valueAxis, scale: true },
     series: [{
       type: "boxplot", name: "各年同月分布", silent: compact, boxWidth: [8, 32],
-      itemStyle: { color: "#8dd9cf", borderColor: "#177f82", borderWidth: 1.5 },
+      itemStyle: { color: mint.light, borderColor: mint.ink, borderWidth: 1.5 },
       data: spec.labels.map((_, index) => [minimum, lower, median, upper, maximum]
         .map(item => item.values[index] ?? "-")),
     }, {
       type: "scatter", name: selected.name, silent: compact, symbol: "diamond", symbolSize: compact ? 6 : 10,
-      itemStyle: { color: selected.color ?? "#d38a38", opacity: 1, borderColor: "#fff", borderWidth: 1 },
+      itemStyle: { color: lavender.ink, opacity: 1, borderColor: "#fff", borderWidth: 1 },
       data: selected.values.map((value, index) => [index, value]),
     }],
   };
@@ -437,7 +440,7 @@ function rangeBand(spec: Extract<AnalysisChartSpec, { kind: "range-band" }>, com
           const bottom = lower.values[index];
           return value === null || bottom === null ? null : value - bottom;
         }),
-        color: "#8ad6cb", areaStyle: { opacity: 0.55 }, lineStyle: { opacity: 0 },
+        color: lavender.light, areaStyle: { opacity: 0.7 }, lineStyle: { opacity: 0 },
       },
       { type: "line", name: median.name, color: median.color, data: [...median.values], symbol: "circle", symbolSize: 5, silent: compact },
       {
@@ -465,13 +468,14 @@ function cartesian(spec: AnalysisChartSpec, compact: boolean, tooltip: TooltipCo
     axisLabel: { ...axisLabel, fontSize: compact ? 9 : 11, width: horizontal ? (compact ? 54 : 91) : 78, overflow: "truncate" as const },
   };
   const series: (BarSeriesOption | LineSeriesOption)[] = spec.series.map((item, index) => {
-    const color = item.color ?? spec.color;
+    const color = item.color ?? (index === 0 ? spec.color : categorical[index % categorical.length]);
     if (line) {
       return {
         type: "line", name: item.name, data: [...item.values], color, silent: compact,
         stack: stacked ? "composition" : undefined,
         lineStyle: { width: stacked ? 1.2 : compact ? 2 : 2.5, type: spec.forecast ? "dashed" : "solid" },
-        areaStyle: filled ? { opacity: stacked ? 0.9 : 0.2 } : undefined,
+        areaStyle: filled ? { color: verticalFill(interpolateColor(color, "#ffffff", stacked ? 0.26 : 0.62), interpolateColor(color, "#ffffff", stacked ? 0.57 : 0.94)),
+          opacity: stacked ? 0.85 : 0.72 } : undefined,
         showSymbol: spec.labels.length <= 15, symbolSize: compact ? 4 : 6,
         markLine: spec.focus && !compact && index === 0 ? {
           silent: true, symbol: "none", label: { show: false }, lineStyle: { color: "#657686", type: "dashed" },
@@ -481,6 +485,7 @@ function cartesian(spec: AnalysisChartSpec, compact: boolean, tooltip: TooltipCo
     }
     return {
       type: "bar", name: item.name, color, silent: compact,
+      itemStyle: { color: interpolateColor(color, "#ffffff", 0.28), borderRadius: horizontal ? [0, 3, 3, 0] : [3, 3, 0, 0] },
       data: item.values.map((value, index) => spec.categoryColors?.[index]
         ? { value, itemStyle: { color: spec.categoryColors[index] } } : value),
       barMaxWidth: horizontal ? (compact ? 13 : 22) : (compact ? 26 : 48),

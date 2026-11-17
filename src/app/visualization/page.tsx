@@ -54,15 +54,16 @@ export default async function VisualizationPage({ searchParams }: {
   return (
     <main className={styles.page}>
       <div className={styles.hero}>
-        <AnalysisHeader topic={current} landing />
+        <AnalysisHeader topic={current} />
         <section className={styles.heroContent} aria-labelledby="visualization-title">
           <div className={styles.heroCopy}>
             <h1 id="visualization-title">专题分析</h1>
             <p>从发电与气候到排放与贸易，用多年数据看清结构、地域与季节变化。</p>
             <a className={styles.browseLink} href="#energy">
-              选择专题 <ChevronDown size={20} strokeWidth={1.8} aria-hidden="true" />
+              浏览专题 <ChevronDown size={17} strokeWidth={1.8} aria-hidden="true" />
             </a>
           </div>
+          <div className={styles.heroSpacer} aria-hidden="true" />
         </section>
       </div>
       <AnalysisGroupNav />

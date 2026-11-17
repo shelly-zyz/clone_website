@@ -25,7 +25,7 @@ export function ForecastHeading({ topic, title, imageSrc, children }: {
   topic: WorkspaceTopic; title?: string; imageSrc?: string; children?: ReactNode;
 }) {
   return (
-    <header className={styles.header}>
+    <header className={styles.header} data-topic={topic}>
       <Image className={styles.thumbnail} src={imageSrc ?? `/images/opengridworks/forecasts/${topic}.webp`}
         alt="" width={74} height={74} unoptimized />
       <h2>{title ?? headings[topic]}</h2>

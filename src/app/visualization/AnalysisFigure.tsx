@@ -2,15 +2,11 @@
 
 import { ChevronDown, Table2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import { formatAnalysisValue, type AnalysisChartSpec } from "@/lib/topic-analysis/model";
+import { chartStory } from "@/lib/topic-analysis/chart-story";
+import { formatAnalysisValue, hasChartValues, type AnalysisChartSpec } from "@/lib/topic-analysis/model";
+import { AnalysisInsights, AnalysisNarrative } from "./AnalysisNarrative";
 import { AnalysisPlot } from "./AnalysisPlot";
 import styles from "./page.module.css";
-
-export function hasChartValues(spec: AnalysisChartSpec) {
-  if (spec.kind === "sankey") return spec.links.length > 0;
-  if (spec.kind === "boxplot") return spec.series[2].values.some(value => value !== null);
-  return spec.series.some(series => series.values.some(value => value !== null));
-}
 
 export function AnalysisTable({ spec }: { spec: AnalysisChartSpec }) {
   const [expanded, setExpanded] = useState(false);
@@ -64,6 +60,7 @@ export function AnalysisFigure({ spec, primary, empty, onCategory, controls }: {
   onCategory?: (label: string, row?: string) => void;
 }) {
   const hasValues = hasChartValues(spec);
+  const story = chartStory(spec, empty);
   return (
     <figure id={spec.id} className={primary ? styles.primaryChart : styles.chartCard} data-active-view={primary || undefined} aria-labelledby={spec.id + "-title"}>
       <div className={styles.chartHead}>
@@ -71,15 +68,14 @@ export function AnalysisFigure({ spec, primary, empty, onCategory, controls }: {
         <span className={styles.chartUnit}>{spec.kind === "bubble" ? "交互气泡图" : spec.unit}</span>
       </div>
       {controls && <div className={styles.chartControls} role="group" aria-label="对比筛选">{controls}</div>}
-      {hasValues ? <AnalysisPlot spec={spec} onCategory={onCategory} />
-        : <p className={styles.chartEmpty}>{empty ?? "当前筛选范围暂无已发布数值。"}</p>}
+      <div className={styles.figureAnalysis}>
+        {hasValues ? <AnalysisPlot spec={spec} onCategory={onCategory} />
+          : <p className={styles.chartEmpty}>{empty ?? "当前筛选范围暂无已发布数值。"}</p>}
+        <AnalysisInsights id={spec.id} story={story} />
+      </div>
       <figcaption className={styles.chartCaption}>{spec.caption}</figcaption>
       <div className={styles.chartFooter}>
-        <div className={styles.chartSources}>
-          {spec.sources.map(({ label, href }) => (
-            <a key={href} href={href} target="_blank" rel="noreferrer">{label}</a>
-          ))}
-        </div>
+        <AnalysisNarrative story={story} caption={spec.caption} sources={spec.sources} />
         {hasValues && <AnalysisTable spec={spec} />}
       </div>
     </figure>
