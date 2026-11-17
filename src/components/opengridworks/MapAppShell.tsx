@@ -228,7 +228,6 @@ type HoverTooltip = {
 type LegendSectionKey =
   | "generation"
   | "technology"
-  | "size"
   | "dataCenters"
   | "fiber"
   | "transmission"
@@ -432,7 +431,6 @@ function legendSectionState() {
   return {
     generation: false,
     technology: false,
-    size: false,
     dataCenters: false,
     fiber: false,
     transmission: false,
@@ -447,7 +445,6 @@ function generationFocusLegendState() {
   return {
     generation: true,
     technology: false,
-    size: false,
     dataCenters: false,
     fiber: false,
     transmission: false,
@@ -673,20 +670,24 @@ function generationFeatureFromEntry(entry: GenerationHeatmapEntry, frame: Genera
   };
 }
 
-function nextGenerationFrame(frame: GenerationFrame, years: number[]) {
-  if (frame.mode === "monthly") {
-    return {
-      ...frame,
-      month: frame.month >= 12 ? 1 : frame.month + 1,
-    };
-  }
+function generationPlaybackPeriods(
+  summary: ClimateVreSummary | null,
+  technology: GenerationTechnology,
+  monthlyYear: number | undefined,
+) {
+  const periods = new Set<number>();
+  for (const row of summary?.annual ?? []) {
+    if (!generationIsoCode(row.regionId) || (technology !== "total" && row.technology !== technology)) continue;
 
-  const minYear = years[0] ?? 2021;
-  const maxYear = years.at(-1) ?? 2060;
-  return {
-    ...frame,
-    year: frame.year >= maxYear ? minYear : frame.year + 1,
-  };
+    if (monthlyYear === undefined) {
+      if (row.annualGenerationGwh > 0) periods.add(row.year);
+    } else if (row.year === monthlyYear) {
+      for (const { month, generationGwh } of row.monthlyMeans) {
+        if (generationGwh > 0) periods.add(month);
+      }
+    }
+  }
+  return [...periods].sort((a, b) => a - b);
 }
 
 function localizeStatus(value: string) {
@@ -3360,7 +3361,7 @@ function MapViewport({
       return;
     }
 
-    const heatmapVisible = activeProject === "power" && generationHeatmapActive && Boolean(generationHeatmapData?.entries.length);
+    const heatmapVisible = activeProject === "power" && generationHeatmapActive && (generationHeatmapData?.maxGwh ?? 0) > 0;
     setLayerVisibility(map, "generation-heat-fill", heatmapVisible);
     setLayerVisibility(map, "generation-heat-border", heatmapVisible);
     setLayerVisibility(map, "generation-heat-hover", heatmapVisible);
@@ -3969,12 +3970,15 @@ function LegendSection({
   open?: boolean;
   onOpenToggle?: () => void;
 }) {
+  const toggleOpen = onOpenToggle ?? onToggle;
   return (
     <section className={`og-legend-section ${open ? "" : "is-collapsed"}`}>
       <div className="og-section-title">
-        <button type="button" onClick={onOpenToggle ?? onToggle} aria-expanded={open}>
-          {title}
-        </button>
+        {toggleOpen ? (
+          <button type="button" onClick={toggleOpen} aria-expanded={open}>{title}</button>
+        ) : (
+          <h3 className="og-section-static-title">{title}</h3>
+        )}
         {typeof enabled === "boolean" && onToggle ? (
           <button
             className="og-section-enabled-toggle"
@@ -4056,6 +4060,7 @@ function SizeLegend({
             type="button"
             key={row.minMw}
             className={activeSizeMin === row.minMw ? "is-active" : ""}
+            aria-pressed={activeSizeMin === row.minMw}
             onClick={() => onSizeFilter(activeSizeMin === row.minMw ? null : row.minMw)}
             onMouseEnter={() => onHover({ kind: "size", minMw: row.minMw })}
             onMouseLeave={() => onHover(null)}
@@ -4078,6 +4083,7 @@ function GenerationLegendPanel({
   loading,
   error,
   playing,
+  canPlay,
   onHeatmapToggle,
   onPlayingChange,
   onFrameChange,
@@ -4090,6 +4096,7 @@ function GenerationLegendPanel({
   loading: boolean;
   error: string | null;
   playing: boolean;
+  canPlay: boolean;
   onHeatmapToggle: () => void;
   onPlayingChange: (playing: boolean) => void;
   onFrameChange: (frame: GenerationFrame) => void;
@@ -4151,16 +4158,17 @@ function GenerationLegendPanel({
         ))}
         <span>{frameLabel}</span>
       </div>
-      <button
-        className="og-generation-play"
-        type="button"
-        aria-pressed={playing}
-        disabled={!heatmapEnabled}
-        onClick={() => onPlayingChange(!playing)}
-      >
-        {!heatmapEnabled ? <X size={14} /> : playing ? <Pause size={14} /> : <Play size={14} />}
-        {!heatmapEnabled ? "热力图关闭" : playing ? "暂停播放" : frame.mode === "monthly" ? "播放月份" : "播放年份"}
-      </button>
+      {canPlay && (
+        <button
+          className="og-generation-play"
+          type="button"
+          aria-pressed={playing}
+          onClick={() => onPlayingChange(!playing)}
+        >
+          {playing ? <Pause size={14} /> : <Play size={14} />}
+          {playing ? "暂停播放" : frame.mode === "monthly" ? "播放月份" : "播放年份"}
+        </button>
+      )}
       <label className="og-generation-slider">
         <span>年份</span>
         <input
@@ -4196,7 +4204,7 @@ function GenerationLegendPanel({
           <span>正在读取发电量数据...</span>
         ) : error ? (
           <span>{error}</span>
-        ) : data ? (
+        ) : data && data.maxGwh > 0 ? (
           <>
             <strong>{generationLabel(data.nationalGwh)}</strong>
             <span>最高 {data.topRegion?.label ?? "暂无"} · {data.topRegion ? generationLabel(data.topRegion.valueGwh) : "0 GWh"}</span>
@@ -4233,6 +4241,7 @@ function PowerLegendPanel({
   generationLoading,
   generationError,
   generationPlaying,
+  canPlayGeneration,
   generationHeatmapEnabled,
   onToggleSection,
   onOpenGeneration,
@@ -4262,6 +4271,7 @@ function PowerLegendPanel({
   generationLoading: boolean;
   generationError: string | null;
   generationPlaying: boolean;
+  canPlayGeneration: boolean;
   generationHeatmapEnabled: boolean;
   onToggleSection: (key: LegendSectionKey) => void;
   onOpenGeneration: () => void;
@@ -4295,6 +4305,7 @@ function PowerLegendPanel({
           loading={generationLoading}
           error={generationError}
           playing={generationPlaying}
+          canPlay={canPlayGeneration}
           onHeatmapToggle={onToggleGenerationHeatmap}
           onPlayingChange={onGenerationPlayingChange}
           onFrameChange={onGenerationFrameChange}
@@ -4331,7 +4342,7 @@ function PowerLegendPanel({
         </ul>
       </LegendSection>
 
-      <LegendSection title="规模（MW）" open={openSections.size} onOpenToggle={() => onToggleSection("size")}>
+      <LegendSection title="规模（MW）">
         <SizeLegend
           activeSizeMin={activeSizeMin}
           bubbleScale={currentBubbleScale}
@@ -5409,6 +5420,7 @@ function MobileGenerationSheet({
   loading,
   error,
   playing,
+  canPlay,
   onHeatmapToggle,
   onPlayingChange,
   onFrameChange,
@@ -5421,6 +5433,7 @@ function MobileGenerationSheet({
   loading: boolean;
   error: string | null;
   playing: boolean;
+  canPlay: boolean;
   onHeatmapToggle: () => void;
   onPlayingChange: (playing: boolean) => void;
   onFrameChange: (frame: GenerationFrame) => void;
@@ -5440,6 +5453,7 @@ function MobileGenerationSheet({
         loading={loading}
         error={error}
         playing={playing}
+        canPlay={canPlay}
         onHeatmapToggle={onHeatmapToggle}
         onPlayingChange={onPlayingChange}
         onFrameChange={onFrameChange}
@@ -5743,17 +5757,27 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
     };
   }, [generationHeatmapEnabled]);
 
+  const monthlyPlaybackYear = generationFrame.mode === "monthly" ? generationFrame.year : undefined;
+  const generationPeriods = useMemo(
+    () => generationPlaybackPeriods(generationSummary, generationFrame.technology, monthlyPlaybackYear),
+    [generationSummary, generationFrame.technology, monthlyPlaybackYear],
+  );
+  const canPlayGeneration = activeProject === "power" && powerView === "facilities" &&
+    generationHeatmapEnabled && !generationLoading && !generationError && generationPeriods.length > 1;
+
   useEffect(() => {
-    if (!generationPlaying || !generationHeatmapEnabled) {
-      return;
-    }
+    if (!generationPlaying || !canPlayGeneration) return;
 
     const timer = window.setInterval(() => {
-      setGenerationFrame((frame) => nextGenerationFrame(frame, generationManifest?.years ?? []));
-    }, generationFrame.mode === "monthly" ? 850 : 950);
+      setGenerationFrame((frame) => {
+        const key = frame.mode === "monthly" ? "month" : "year";
+        const nextPeriod = generationPeriods.find(period => period > frame[key]) ?? generationPeriods[0];
+        return { ...frame, [key]: nextPeriod };
+      });
+    }, monthlyPlaybackYear === undefined ? 950 : 850);
 
     return () => window.clearInterval(timer);
-  }, [generationFrame.mode, generationHeatmapEnabled, generationManifest?.years, generationPlaying]);
+  }, [canPlayGeneration, generationPeriods, generationPlaying, monthlyPlaybackYear]);
 
   useEffect(() => {
     if (!carbonPlaying || activeProject !== "carbon" || carbonLoading) return;
@@ -5966,6 +5990,14 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
     } else {
       setGenerationPlaying(false);
     }
+  };
+
+  const changeGenerationPlayback = (playing: boolean) => {
+    if (playing && (mapCamera.zoom < 3 || getRegionForCoordinates(...mapCamera.center).id !== "china")) {
+      setFocusedRegion("china");
+      requestFocus(powerOverviewCenter, 3.75);
+    }
+    setGenerationPlaying(playing);
   };
 
   const toggleLayer = (key: LayerKey) => {
@@ -6329,11 +6361,12 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
                 generationLoading={generationLoading}
                 generationError={generationError}
                 generationPlaying={generationPlaying}
+                canPlayGeneration={canPlayGeneration}
                 generationHeatmapEnabled={generationHeatmapEnabled}
                 onToggleSection={toggleLegendSection}
                 onOpenGeneration={openGenerationView}
                 onToggleGenerationHeatmap={toggleGenerationHeatmap}
-                onGenerationPlayingChange={setGenerationPlaying}
+                onGenerationPlayingChange={changeGenerationPlayback}
                 onGenerationFrameChange={setGenerationFrame}
                 onToggleTechnology={toggleTechnology}
                 onToggleTechnologyGroup={toggleTechnologyGroup}
@@ -6498,8 +6531,9 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
               loading={generationLoading}
               error={generationError}
               playing={generationPlaying}
+              canPlay={canPlayGeneration}
               onHeatmapToggle={toggleGenerationHeatmap}
-              onPlayingChange={setGenerationPlaying}
+              onPlayingChange={changeGenerationPlayback}
               onFrameChange={setGenerationFrame}
             />
           ) : null}
