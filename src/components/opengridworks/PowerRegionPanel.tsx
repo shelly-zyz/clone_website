@@ -1,14 +1,14 @@
 "use client";
 
-import { ArrowDownUp, ArrowRight, ArrowUpRight, BarChart3, CircleHelp, Layers3, Map, Pause, Play, X } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { ArrowDownUp, ArrowRight, ArrowUpRight, BarChart3, CircleHelp, Layers3, Map, PanelRightClose, PanelRightOpen, Pause, Play, X } from "lucide-react";
+import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import type { PowerAnalysis } from "@/hooks/use-power-analysis";
 import { chinaProvinces } from "@/lib/china-provinces";
 import { powerDemoNotice } from "@/lib/china-power-statistics";
 import {
   comparisonScatter, emberMethod, formatPowerNumber as number, nationalPowerCode, powerDifference, powerFuels,
-  powerLegendColors, powerMeasureLabels, powerPeriodLabel, powerProductAmount, powerRegionName, powerSelectionColors,
-  powerSeriesKeys, readPowerMeasure, type PowerGrain, type PowerMeasure, type PowerObservation,
+  powerLegendColors, powerRampColor, powerMeasureLabels, powerPeriodLabel, powerProductAmount, powerRegionName, powerSelectionColors,
+  powerSeriesKeys, readPowerMeasure, type PowerGrain, type PowerMeasure, type PowerObservation, type PowerPalette,
 } from "@/lib/power-analysis";
 import { generationSeries } from "@/lib/topic-analysis/history";
 import { analysisContextHref, type WorkspaceContext } from "@/lib/workspace-context";
@@ -25,15 +25,15 @@ const regionOptions = chinaProvinces.map(({ code, name }) => ({ value: code, lab
 
 export function PowerViews({ view, onView }: { view: PowerView; onView: (view: PowerView) => void }) {
   return (
-    <nav className={switcherStyles.bar + " " + switcherStyles.scene} aria-label="电力地图视图">
+    <nav className={switcherStyles.bar + " " + switcherStyles.scene + " " + styles.viewTabs} aria-label="电力地图视图">
       <button type="button" aria-pressed={view === "facilities"} onClick={() => onView("facilities")}>设备</button>
       <button type="button" aria-pressed={view !== "facilities"} onClick={() => { if (view === "facilities") onView("generation"); }}>电力分析</button>
     </nav>
   );
 }
 
-export function PowerAnalysisFilters({ data, selection, presentation, update, onChoose, onClear }: {
-  data: PowerAnalysis; selection: readonly string[]; presentation: Presentation; update: Update;
+export function PowerAnalysisFilters({ data, selection, presentation, palette, update, onChoose, onClear }: {
+  data: PowerAnalysis; selection: readonly string[]; presentation: Presentation; palette: PowerPalette; update: Update;
   onChoose: (code: string) => void; onClear: () => void;
 }) {
   const isGeneration = !data.capacity;
@@ -91,6 +91,9 @@ export function PowerAnalysisFilters({ data, selection, presentation, update, on
           aria-pressed={presentation === "split"} onClick={() => changePresentation("split")}><ArrowDownUp size={12} />双期</button>
       </div>
     </div>
+    {data.frame.encoding !== "diverging" && <WorkspaceFilterSelect label="地图配色" value={palette}
+      options={[{ value: "plasma", label: "Plasma · 紫红熔岩" }, { value: "turbo", label: "Turbo · 彩虹热力" }]}
+      onChange={value => update({ powerPalette: value === "turbo" ? "turbo" : undefined })} />}
     {(data.measure === "change" || presentation) && data.referenceOptions.length > 0 &&
       <WorkspaceFilterSelect label="基准期" value={data.reference} options={data.referenceOptions.toReversed()
         .map(value => ({ value, label: powerPeriodLabel(value, data.grain) }))}
@@ -150,12 +153,13 @@ export function PowerTimeline({ data, update }: { data: PowerAnalysis; update: U
   </section>;
 }
 
-export function PowerMapLegend({ data, presentation, bin, onBin }: {
-  data: PowerAnalysis; presentation: Presentation; bin: number | null; onBin: (bin: number | null) => void;
+export function PowerMapLegend({ data, presentation, bin, palette, onBin }: {
+  data: PowerAnalysis; presentation: Presentation; bin: number | null; palette: PowerPalette; onBin: (bin: number | null) => void;
 }) {
   const frame = data.split?.b ?? data.frame;
   const diverging = frame.encoding === "diverging";
-  const colors = powerLegendColors(diverging);
+  const colors = powerLegendColors(diverging, palette);
+  const gradientId = useId();
   const begin = diverging ? -frame.scaleMax : 0;
   const end = frame.scaleMax;
   const middle = diverging ? 0 : end / 2;
@@ -175,9 +179,19 @@ export function PowerMapLegend({ data, presentation, bin, onBin }: {
               <rect width="20" height="8" fill={color} />
             </svg></button>;
         })}
-      </div> : <div className={diverging ? styles.diverging : styles.sequential} aria-hidden="true" />}
+      </div> : <svg className={styles.ramp} viewBox="0 0 200 6" preserveAspectRatio="none" aria-hidden="true">
+        <defs><linearGradient id={gradientId}>
+          {Array.from({ length: 33 }, (_, index) => <stop key={index} offset={index / 32}
+            stopColor={powerRampColor(index / 32, diverging, palette)} />)}
+        </linearGradient></defs>
+        <rect width="200" height="6" fill={"url(#" + gradientId + ")"} />
+      </svg>}
       <div className={styles.legendTicks}><span>{number(begin, "", diverging)}</span><span>{number(middle)}</span><span>{number(end, "", diverging)}</span></div>
     </> : null}
+    {!presentation && end > 0 && <span className={styles.legendNote}>
+      {diverging ? "高度按指标绝对值平方根缩放" : "高度按指标平方根缩放"}{data.measure === "growth" ? " · 超量程值封顶" : ""}
+    </span>}
+    {presentation && data.measure === "growth" && <span className={styles.legendNote}>超量程值归入两端分组</span>}
     {presentation ? <button type="button" className={styles.missing} aria-pressed={bin === -1} onClick={() => onBin(bin === -1 ? null : -1)}>无数据</button>
       : <span className={styles.missing}>无数据</span>}
   </div>;
@@ -207,6 +221,7 @@ const mixKeys = [
 ] as const;
 
 function PowerMix({ data, codes, update }: { data: PowerAnalysis; codes: readonly string[]; update: Update }) {
+  const descriptionId = useId();
   const fuels = (data.source === "nbs" ? mixKeys.filter(item => !["coal", "gas", "other", "bio"].includes(item.id))
     : powerFuels).filter(({ id }) => codes.some(code => data.current[code]?.mix?.[id] != null));
   if (!fuels.length) return <AnalysisCard title={data.capacity ? "装机结构" : "电源结构"}>
@@ -223,7 +238,7 @@ function PowerMix({ data, codes, update }: { data: PowerAnalysis; codes: readonl
       return <div key={code} className={styles.mixRow}>
         <span>{powerRegionName(code)}</span>
         {(total != null && total > 0 && available) ? <svg viewBox="0 0 100 9" preserveAspectRatio="none"
-          aria-label={powerRegionName(code) + "电源结构"} aria-describedby={"power-mix-" + code}>
+          aria-label={powerRegionName(code) + "电源结构"} aria-describedby={descriptionId + "-" + code}>
           <rect width="100" height="9" rx="1" fill="#334251" />
           {fuels.map(({ id, label, color }) => {
             const value = row?.mix?.[id];
@@ -235,7 +250,7 @@ function PowerMix({ data, codes, update }: { data: PowerAnalysis; codes: readonl
             return <rect key={id} x={left} width={share} height="9" fill={color}><title>{label + " · " + number(value / total * 100, "%")}</title></rect>;
           })}
         </svg> : <small>{failText}</small>}
-        {total != null && total > 0 && available && <div id={"power-mix-" + code} className={styles.mixReadout}>
+        {total != null && total > 0 && available && <div id={descriptionId + "-" + code} className={styles.mixReadout}>
           {fuels.map(({ id, label }) => <span key={id}>{label} {number(row?.mix?.[id] == null ? null : row.mix[id] / total * 100, "%")}</span>)}
         </div>}
       </div>;
@@ -446,6 +461,8 @@ export function PowerAnalysisRail({ data, selection, update, onChoose }: {
   data: PowerAnalysis; selection: readonly string[]; update: Update; onChoose: (code: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const railId = useId();
   const codes = selection.length ? selection : [nationalPowerCode];
   const code = codes[0];
   const summary = summaryFor(data, code);
@@ -454,12 +471,18 @@ export function PowerAnalysisRail({ data, selection, update, onChoose }: {
   const warning = data.missingArchive ? "分省档案暂不可读取。请稍后重试。"
     : data.missingVersion ? "所选发布版本暂不可读取。" : data.pending ? "正在读取统计数据…"
       : !data.coverage ? "本期暂无分省数据。" : null;
-  return <div className={styles.railRegion} data-power-analysis-dock={open ? "open" : "closed"}>
-    <button type="button" className={styles.mobileRail} aria-expanded={open} onClick={() => setOpen(value => !value)}>
+  return <div className={styles.railRegion} data-power-analysis-dock={open ? "open" : "closed"}
+    data-power-rail-collapsed={collapsed ? "true" : undefined}>
+    <button type="button" className={styles.mobileRail} aria-expanded={open} aria-controls={railId} onClick={() => setOpen(value => !value)}>
       <BarChart3 size={16} /> {open ? "收起电力解读" : "查看电力解读"}
     </button>
-    <aside className={styles.rail} aria-label="电力统计解读">
-      <header className={styles.railHeader}><span>中国电力时空分析</span><h2>{powerRegionName(code)}</h2>
+    <button type="button" className={styles.desktopRail} aria-expanded={!collapsed} aria-controls={railId}
+      aria-label={collapsed ? "展开电力解读" : "折叠电力解读"} title={collapsed ? "展开电力解读" : "折叠电力解读"}
+      onClick={() => setCollapsed(value => !value)}>
+      {collapsed ? <PanelRightOpen size={17} /> : <PanelRightClose size={17} />}
+    </button>
+    <aside id={railId} className={styles.rail} aria-label="电力统计解读">
+      <header className={styles.railHeader}><h2>{powerRegionName(code)}</h2>
         <span>{data.frame.period} · {data.demo ? "演示" : subtitle}</span>
       </header>
       {data.demo ? <AnalysisCard title="演示数据"><p className={styles.muted}>{powerDemoNotice}</p></AnalysisCard> : <>
@@ -474,20 +497,28 @@ export function PowerAnalysisRail({ data, selection, update, onChoose }: {
           {!data.pending && !data.coverage && data.latestRegionalMonth && data.period !== data.latestRegionalMonth &&
             <button type="button" onClick={() => update({ month: data.latestRegionalMonth ?? undefined })}>查看最近分省月份</button>}
         </p>}
-        <PowerMix data={data} codes={codes} update={update} />
-        <Trend data={data} codes={codes} update={update} />
-        <RegionComparison data={data} selection={selection} onChoose={onChoose} />
-        <ChangeWaterfall data={data} onChoose={onChoose} />
-        {data.capacity && <MatchScatter data={data} selection={selection} onChoose={onChoose} />}
-        <AnalysisCard title="本期观察" subtitle="由统计数据计算">
+        <PowerMix data={data} codes={[code]} update={update} />
+        <Trend data={data} codes={[code]} update={update} />
+        <details className={styles.disclosure}>
+          <summary>省际比较 {selection.length > 1 && <span>{selection.length} 个省份</span>}</summary>
+          {selection.length > 1 && <>
+            <PowerMix data={data} codes={codes} update={update} />
+            <Trend data={data} codes={codes} update={update} />
+          </>}
+          <RegionComparison data={data} selection={selection} onChoose={onChoose} />
+          <ChangeWaterfall data={data} onChoose={onChoose} />
+          {data.capacity && <MatchScatter data={data} selection={selection} onChoose={onChoose} />}
+        </details>
+        <details className={styles.disclosure}>
+          <summary>本期观察</summary>
           <ol className={styles.insights}>
             <li>{summary.total == null ? "当前范围没有可核实的总量。" : powerRegionName(code) + "的" + subtitle + "为 " + number(summary.total, data.valueUnit) + "。"}</li>
             <li>{summary.growth == null ? "缺少同口径同比。" : "与上年同期相比" + (summary.growth < 0 ? "下降 " : summary.growth > 0 ? "增长 " : "持平 ") + number(Math.abs(summary.growth), "%") + "。"}</li>
             {largest && <li><button type="button" onClick={() => onChoose(largest.code)}>{powerRegionName(largest.code)} <ArrowRight size={12} /></button>在 {data.coverage} 个有数据地区中「{data.frame.label}」数值最高。</li>}
             <li>{data.note}</li>
           </ol>
-        </AnalysisCard>
-        <details className={styles.provenance} open><summary><CircleHelp size={14} /> 数据来源与口径</summary>
+        </details>
+        <details className={styles.provenance}><summary><CircleHelp size={14} /> 数据来源与口径</summary>
           <a href={data.sourceHref} target="_blank" rel="noreferrer">{data.sourceLabel} <ArrowUpRight size={12} /></a>
           <span>{data.sourceDetail && (data.source === "yearbook" ? data.sourceDetail : "发布 " + data.sourceDetail + " · ")}
             {data.source === "yearbook" && data.sourceDetail ? " · " : ""}分省覆盖 {data.coverage}/31</span>

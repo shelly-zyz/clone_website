@@ -1,4 +1,4 @@
-import type { PowerMeasure } from "./power-analysis";
+import type { PowerMeasure, PowerPalette } from "./power-analysis";
 import { resolveWorkspaceTopic, workspaceHref, type WorkspaceTopic } from "./globe-topics";
 import { readReplayRegion, type ReplayRegionId } from "./weather-replay/regions";
 import { replayViews, type WeatherScene } from "./weather-replay/views";
@@ -29,6 +29,7 @@ export type WorkspaceContext = {
   powerPeriod?: "monthly" | "ytd";
   powerSource?: "ember" | "yearbook" | "nbs";
   powerMeasure?: PowerMeasure;
+  powerPalette?: PowerPalette;
   powerReference?: string;
   powerPresentation?: "flat" | "split";
   powerPeers?: string;
@@ -108,6 +109,7 @@ export function readWorkspaceContext(search: URLSearchParams): WorkspaceContext 
     powerSource: powerSource === "ember" || powerSource === "yearbook" || powerSource === "nbs" ? powerSource : undefined,
     powerMeasure: powerMeasure === "growth" || powerMeasure === "change" || powerMeasure === "clean" || powerMeasure === "windsolar" ? powerMeasure : undefined,
     powerReference: powerReference && /^\d{4}(?:-(0[1-9]|1[0-2]))?$/.test(powerReference) ? powerReference : undefined,
+    powerPalette: search.get("powerPalette") === "turbo" ? "turbo" : undefined,
     powerPresentation: powerPresentation === "flat" || powerPresentation === "split" ? powerPresentation : undefined,
     powerPeers: readList(search.get("powerPeers")),
     powerDemo: powerView === "generation" && search.get("powerDemo") === "monthly" ? "monthly" : undefined,

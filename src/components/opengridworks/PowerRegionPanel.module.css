@@ -1,4 +1,4 @@
-.filters { display: grid; gap: 12px; margin: 4px 0 12px; }
+.filters { display: grid; gap: 8px; margin: 4px 0 12px; }
 .field { display: grid; gap: 5px; }
 .field > span { color: #b3c3d1; font-size: 12px; }
 .segment {
@@ -44,12 +44,26 @@
   outline: 2px solid #9de3e9; outline-offset: 2px;
 }
 
+.viewTabs[class] {
+  min-height: 36px;
+  background: #13182ac9;
+  backdrop-filter: blur(12px);
+}
+.filters :global(.og-filter-select) select { min-height: 31px; padding-block: 5px; }
+.stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 13px;
+  background: radial-gradient(ellipse at 50% 51%, #211932 0%, #121525 51%, #0a101b 81%);
+}
+
 .mapArea {
   position: absolute;
   inset: 0 0 65px;
   overflow: hidden;
   border-radius: 13px;
-  background: radial-gradient(ellipse at 50% 42%, #132435 0, #09131f 52%, #070f19 100%);
+
 }
 :global(.is-cinematic) .mapArea { inset: 0; border-radius: 0; }
 .map3d, .retainedMap { position: absolute; inset: 0; }
@@ -88,9 +102,8 @@
 }
 .legendHead, .legendTicks { display: flex; justify-content: space-between; gap: 4px; }
 .legendHead strong { font-weight: 650; color: #e3eff5; }
-.sequential, .diverging { height: 6px; border-radius: 2px; }
-.sequential { background: linear-gradient(to right in srgb-linear, #264e6d, #27638b, #327ca4, #499ec1, #78d1e2); }
-.diverging { background: linear-gradient(to right in srgb-linear, #e47a50, #a14d43, #606879, #2a877d, #6fdec0); }
+.ramp { display: block; width: 100%; height: 6px; border-radius: 2px; }
+.legendNote { color: #a9bbcc; }
 .bins { display: flex; gap: 3px; }
 .bins button { flex: 1 1 0; min-width: 0; min-height: 12px; }
 .bins:has(button[aria-pressed="true"]) button[aria-pressed="false"],
@@ -122,11 +135,11 @@
 
 .timeline {
   position: absolute;
-  inset: auto 0 3px;
+  inset: auto 10px 7px;
   min-height: 53px;
   padding: 6px 11px;
   border-radius: 8px;
-  background: #0e1c29;
+  background: #11192bb8;
 }
 .timelineMain { display: flex; gap: 10px; align-items: center; min-height: 38px; }
 .timelineRange { display: grid; flex: 1 1 auto; min-width: 0; gap: 1px; font-size: 9px; color: #a5bacb; }
@@ -169,13 +182,13 @@
   gap: 9px;
   padding: 11px 10px;
   border-radius: 12px;
-  background: #0d1927f2;
+  background: #121b2ac2;
+  backdrop-filter: blur(18px);
   color: #ecf5f9;
 }
 .rail > * { flex: none; }
-.railHeader { display: grid; gap: 4px; padding: 3px 2px 4px; }
+.railHeader { display: grid; gap: 4px; padding: 3px 32px 4px 2px; }
 .railHeader span { font-size: 11px; color: #a9c2d3; }
-.railHeader span:first-child { color: #8dd4df; font-weight: 620; }
 .railHeader h2 { font-size: 21px; line-height: 1.2; margin: 0; font-weight: 700; }
 .kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
 .kpis > div {
@@ -222,11 +235,34 @@
 .provenance summary svg { display: inline-block; vertical-align: middle; margin-right: 3px; }
 .provenance a svg { display: inline; vertical-align: middle; }
 .forecastLink { display: flex; justify-content: space-between; align-items: center; padding: 6px 7px; border-radius: 5px; font-size: 12px; }
+.desktopRail {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  display: grid;
+  width: 31px;
+  height: 31px;
+  place-items: center;
+  border-radius: 7px;
+  background: #1a2538;
+  color: #c9d7ef;
+}
+.desktopRail:hover { background: #2d3951; }
+.disclosure { padding: 5px 3px; color: #dbe6f2; font-size: 12px; }
+.disclosure summary { cursor: pointer; padding: 4px 0; }
+.disclosure summary span { margin-left: 4px; color: #a8b9d3; font-size: 10px; }
+.disclosure[open] > * + * { margin-top: 7px; }
 .mobileRail { display: none; }
+@media (min-width: 901px) {
+  .railRegion[data-power-rail-collapsed="true"] { width: 39px; height: 40px; }
+  .railRegion[data-power-rail-collapsed="true"] .rail { display: none; }
+}
 
 @media (max-width: 900px) {
   .mapArea { inset: 0 0 58px; border-radius: 9px; }
-  .timeline { min-height: 46px; padding: 4px 6px; }
+  .desktopRail { display: none; }
+  .timeline { inset-inline: 4px; min-height: 46px; padding: 4px 6px; }
   .timelineMain { gap: 6px; min-height: 35px; }
   .timelineRange > div { font-size: 8px; }
   .timeline select { max-width: 42%; }

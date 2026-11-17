@@ -5551,6 +5551,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
   const statsActive = activeProject === "power" && powerView !== "facilities";
   const powerAnalysis = usePowerAnalysis(statsActive, context);
   const powerPresentation = context.powerPresentation;
+  const powerPalette = context.powerPalette ?? "plasma";
   const powerSelection = useMemo(() => selectedProvince ? [selectedProvince,
     ...new Set((context.powerPeers ?? "").split(",").flatMap(id => {
       const code = findChinaProvince(id)?.code;
@@ -5893,7 +5894,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
     navigate("power", {
       region: "china", year: undefined, month: undefined, version: undefined,
       product: undefined, powerPeriod: undefined, powerDemo: undefined, camera: undefined, projection: "map",
-      powerMeasure: undefined, powerReference: undefined, powerPresentation: undefined, powerPeers: undefined, powerSource: undefined,
+      powerMeasure: undefined, powerReference: undefined, powerPresentation: undefined, powerPalette: undefined, powerPeers: undefined, powerSource: undefined,
     }, true);
     const { center, zoom } = powerOverviewCamera();
     requestFocus(center, zoom, 0, 0, "china");
@@ -6183,17 +6184,17 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
           </div>
         )}
         {statsActive && (
-          <>
+          <div className={powerAnalysisStyles.stage}>
             <div className={powerAnalysisStyles.mapArea}>
               <div className={powerPresentation ? powerAnalysisStyles.retainedMap : powerAnalysisStyles.map3d} aria-hidden={Boolean(powerPresentation)}>
                 <PowerStatisticsMap
-                  frame={powerAnalysis.frame} selected={selectedProvince} peers={powerPeers} suspended={Boolean(powerPresentation)}
+                  frame={powerAnalysis.frame} selected={selectedProvince} peers={powerPeers} palette={powerPalette} suspended={Boolean(powerPresentation)}
                   initialCamera={readWorkspaceCamera(context.camera) ?? undefined}
                   focus={focusRequest ? {
                     nonce: focusRequest.nonce,
                     provinceCode: focusRequest.provinceCode,
                     camera: focusRequest.overview === "china" ? undefined : {
-                      center: focusRequest.center, zoom: focusRequest.zoom, pitch: 0, bearing: 0,
+                      center: focusRequest.center, zoom: focusRequest.zoom, pitch: focusRequest.pitch ?? 0, bearing: focusRequest.bearing ?? 0,
                     },
                   } : undefined}
                   screenshotRequest={screenshotRequest}
@@ -6205,17 +6206,17 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
                 />
               </div>
               {powerPresentation && <PowerThematicMap frame={powerAnalysis.frame} split={powerAnalysis.split}
-                selection={powerSelection} bin={currentPowerBin} onSelect={choosePowerProvince}
+                selection={powerSelection} bin={currentPowerBin} palette={powerPalette} onSelect={choosePowerProvince}
                 screenshotRequest={screenshotRequest} onScreenshotComplete={showToast} />}
               {!cinematic && <>
                 <PowerMapCaption data={powerAnalysis} presentation={powerPresentation} selection={powerSelection} update={updatePowerAnalysis} />
-                <PowerMapLegend data={powerAnalysis} presentation={powerPresentation} bin={currentPowerBin}
+                <PowerMapLegend data={powerAnalysis} presentation={powerPresentation} bin={currentPowerBin} palette={powerPalette}
                   onBin={value => setPowerBin({ key: analysisBinKey, value })} />
               </>}
             </div>
             {!cinematic && <PowerTimeline key={powerView + ":" + powerAnalysis.grain + ":" + powerAnalysis.source + ":" + powerAnalysis.product.id}
               data={powerAnalysis} update={updatePowerAnalysis} />}
-          </>
+          </div>
         )}
         {retainedStages.map && (
           <div className="og-workspace-map-layer" hidden={!sharedMapActive}>
@@ -6305,7 +6306,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
               />
             ) : undefined}
           >
-            {statsActive && <PowerAnalysisFilters data={powerAnalysis} selection={powerSelection} presentation={powerPresentation}
+            {statsActive && <PowerAnalysisFilters data={powerAnalysis} selection={powerSelection} presentation={powerPresentation} palette={powerPalette}
               update={updatePowerAnalysis} onChoose={choosePowerProvince}
               onClear={() => updatePowerAnalysis({ region: "china", powerPeers: undefined })} />}
             {activeProject === "power" && powerView === "facilities" ? (

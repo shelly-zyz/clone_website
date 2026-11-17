@@ -1,8 +1,9 @@
 "use client";
 
-import { Minus, Plus } from "lucide-react";
+import { Minus, Plus, RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { powerDemoNotice, type ProvincePowerFrame } from "@/lib/china-power-statistics";
+import type { PowerPalette } from "@/lib/power-analysis";
 import type { MapCameraState } from "@/types/opengridworks";
 import { GlobeLoading } from "./GlobeLoading";
 import type { ChinaPowerGeography } from "./power-statistics-geometry";
@@ -14,6 +15,7 @@ type Props = Parameters<typeof createPowerStatisticsScene>[2] & {
   frame: ProvincePowerFrame;
   selected?: string;
   peers?: readonly string[];
+  palette?: PowerPalette;
   suspended?: boolean;
   onOpenThematicMap?: () => void;
   initialCamera?: MapCameraState;
@@ -50,7 +52,7 @@ export function PowerStatisticsMap(props: Props) {
           onSelect: code => latest.current.onSelect(code),
         });
         scene.current = map;
-        map.update(current.frame, current.selected, current.peers);
+        map.update(current.frame, current.selected, current.peers, current.palette);
         if (current.focus && current.focus.nonce !== initialFocus.current) {
           map.focus(current.focus.camera, false, current.focus.provinceCode);
         } else {
@@ -69,7 +71,7 @@ export function PowerStatisticsMap(props: Props) {
     };
   }, []);
 
-  useEffect(() => { scene.current?.update(props.frame, props.selected, props.peers); }, [props.frame, props.selected, props.peers]);
+  useEffect(() => { scene.current?.update(props.frame, props.selected, props.peers, props.palette); }, [props.frame, props.selected, props.peers, props.palette]);
 
   const focusNonce = props.focus?.nonce;
   useEffect(() => {
@@ -100,9 +102,10 @@ export function PowerStatisticsMap(props: Props) {
         {props.onOpenThematicMap && <button type="button" onClick={props.onOpenThematicMap}>打开二维专题地图</button>}</p>}
       {status === "ready" && (
         <>
-          <div className={styles.controls} role="group" aria-label="电力地图缩放">
+          <div className={styles.controls} role="group" aria-label="三维地图控制">
             <button type="button" aria-label="放大地图" onClick={() => scene.current?.zoom(1.25)}><Plus size={17} /></button>
             <button type="button" aria-label="缩小地图" onClick={() => scene.current?.zoom(.8)}><Minus size={17} /></button>
+            <button type="button" aria-label="恢复全国视角" title="恢复全国视角" onClick={() => scene.current?.focus(undefined)}><RotateCcw size={14} /></button>
           </div>
           <span className={styles.insetLabel}>南海诸岛</span>
         </>

@@ -33,7 +33,6 @@ export function chinaPowerMonthlyDemoFrame(month: string, product: string = "ele
 }
 
 export const powerMapNoData = "#46586a";
-export const powerMapColors = ["#b8e2f2", "#7fc9ed", "#549fdb", "#2e78c5", "#1c52a6"] as const;
 export const powerAmount = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 });
 
 export function provincePowerMax(frame: ProvincePowerFrame) {

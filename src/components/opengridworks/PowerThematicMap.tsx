@@ -4,7 +4,7 @@ import { geoMercator } from "d3-geo";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useWorkspaceResource } from "@/hooks/use-workspace-resource";
 import type { ProvincePowerFrame } from "@/lib/china-power-statistics";
-import { formatPowerNumber, powerBin, powerClassColor, powerSelectionColors } from "@/lib/power-analysis";
+import { formatPowerNumber, powerBin, powerClassColor, powerSelectionColors, type PowerPalette } from "@/lib/power-analysis";
 import type { ChinaPowerGeography } from "./power-statistics-geometry";
 import styles from "./PowerRegionPanel.module.css";
 
@@ -48,11 +48,12 @@ function buildPaths(geo: ChinaPowerGeography) {
   };
 }
 
-export function PowerThematicMap({ frame, split, selection, bin, onSelect, screenshotRequest, onScreenshotComplete }: {
+export function PowerThematicMap({ frame, split, selection, bin, palette, onSelect, screenshotRequest, onScreenshotComplete }: {
   frame: ProvincePowerFrame;
   split?: { a: ProvincePowerFrame; b: ProvincePowerFrame };
   selection: readonly string[];
   bin: number | null;
+  palette: PowerPalette;
   onSelect: (code: string) => void;
   screenshotRequest: number;
   onScreenshotComplete: (message: string) => void;
@@ -99,7 +100,7 @@ export function PowerThematicMap({ frame, split, selection, bin, onSelect, scree
         row?.detail].filter(Boolean).join(" · ");
       return (
         <g key={code}>
-          <path d={path} fill={powerClassColor(value, data.scaleMax, signed)} fillRule="evenodd"
+          <path d={path} fill={powerClassColor(value, data.scaleMax, signed, palette)} fillRule="evenodd"
             opacity={isMuted ? .23 : !selected && selection.length ? .55 : 1}
             className={styles.provincePath} role="button" tabIndex={tab ? 0 : -1} aria-label={label}
             aria-pressed={selected} data-province={code} onClick={() => onSelect(code)}

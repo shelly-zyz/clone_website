@@ -1,3 +1,4 @@
+import { interpolatePlasma, interpolateTurbo } from "d3-scale-chromatic";
 import { chinaProvinces } from "./china-provinces";
 import { chinaPowerAnnualFrame, powerAmount, powerMapNoData, type ProvincePowerFrame } from "./china-power-statistics";
 
@@ -153,16 +154,57 @@ export function readPowerMeasure(measure: PowerMeasure, current?: PowerObservati
   }
 }
 
-export const powerSequential = ["#264e6d", "#27638b", "#327ca4", "#499ec1", "#78d1e2"];
-export const powerDiverging = ["#e47a50", "#a14d43", "#606879", "#2a877d", "#6fdec0"];
-export const powerSelectionColors = ["#fbf1d5", "#c4a3ff", "#ffc28c"];
-export const powerLegendColors = (diverging: boolean) => diverging ? powerDiverging : powerSequential;
+export function powerHistoricalExtent(history: PowerSeries, product: string, compareCalendarMonth: boolean) {
+  const peaks = new Map<string, [number, number]>();
+  const growth: number[] = [];
+  for (const [period, frame] of Object.entries(history)) {
+    for (const { code } of chinaProvinces) {
+      const value = powerProductAmount(frame[code], product);
+      if (value == null) continue;
+      const key = compareCalendarMonth ? code + period.slice(4) : code;
+      const limits = peaks.get(key);
+      if (limits) {
+        limits[0] = Math.min(limits[0], value);
+        limits[1] = Math.max(limits[1], value);
+      } else peaks.set(key, [value, value]);
+      const change = powerGrowth(value, powerProductAmount(history[previousPowerYear(period)]?.[code], product));
+      if (change != null) growth.push(Math.abs(change));
+    }
+  }
+  growth.sort((a, b) => a - b);
+  // Use the full archive's P95 to keep near-zero baselines from flattening the map's color range.
+  const p95 = growth[Math.floor((growth.length - 1) * .95)] ?? 0;
+  const growthLimit = Math.max(10, Math.ceil(p95 / 5) * 5);
+  const changeLimit = Math.max(0, ...Array.from(peaks.values(), ([min, max]) => max - min));
+  return { growthLimit, changeLimit };
+}
+
+export type PowerPalette = "plasma" | "turbo";
+const divergingStops = [[52, 148, 228], [68, 87, 164], [88, 87, 103], [192, 70, 102], [255, 181, 65]];
+export const powerSelectionColors = ["#f5f9ff", "#abc4e5", "#9f9bd6"];
+
+export function powerRampColor(ratio: number, diverging: boolean, palette: PowerPalette = "plasma") {
+  if (!diverging) {
+    return palette === "turbo" ? interpolateTurbo(ratio) : interpolatePlasma(.12 + ratio * .86);
+  }
+  const position = ratio * (divergingStops.length - 1);
+  const index = Math.min(divergingStops.length - 2, Math.floor(position));
+  const blend = position - index;
+  const channels = divergingStops[index].map((channel, i) =>
+    Math.round(channel + (divergingStops[index + 1][i] - channel) * blend));
+  return "rgb(" + channels.join(", ") + ")";
+}
+
+export const powerLegendColors = (diverging: boolean, palette: PowerPalette = "plasma") =>
+  Array.from({ length: 5 }, (_, index) => powerRampColor((index + .5) / 5, diverging, palette));
 export const powerMagnitude = (value: number | null, max: number, diverging: boolean) =>
   value == null || max <= 0 ? (diverging ? .5 : 0) : Math.max(0, Math.min(1, diverging ? (value / max + 1) / 2 : value / max));
 export const powerBin = (value: number | null, max: number, diverging: boolean) =>
   value == null ? -1 : Math.min(4, Math.floor(powerMagnitude(value, max, diverging) * 5));
-export const powerClassColor = (value: number | null, max: number, diverging: boolean) =>
-  powerLegendColors(diverging)[powerBin(value, max, diverging)] ?? powerMapNoData;
+export const powerClassColor = (value: number | null, max: number, diverging: boolean, palette: PowerPalette = "plasma") => {
+  const index = powerBin(value, max, diverging);
+  return index < 0 ? powerMapNoData : powerRampColor((index + .5) / 5, diverging, palette);
+};
 
 export function formatPowerNumber(value: number | null | undefined, unit = "", signed = false) {
   return value == null ? "—" : (signed && value > 0 ? "+" : "") + powerAmount.format(value) + (unit === "%" ? "%" : unit ? " " + unit : "");
@@ -202,7 +244,7 @@ export function powerAnalysisMapFrame({ current, previous, reference, period, gr
       ].join(" · "),
     };
   });
-  const peak = Math.max(0, ...regions.map(row => Math.abs(row.value ?? 0)), scaleMax ?? 0);
+  const peak = scaleMax ?? Math.max(0, ...regions.map(row => Math.abs(row.value ?? 0)));
   return {
     label, period: powerPeriodLabel(period, grain), unit: percent ? "%" : valueUnit,
     scaleMax: measure === "clean" || measure === "windsolar" ? 100 : peak, regions,

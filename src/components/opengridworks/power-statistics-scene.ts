@@ -1,21 +1,59 @@
 import {
-  Box2, Box3, CanvasTexture, Color,
-  Mesh, MOUSE, OrthographicCamera, Raycaster, Scene, Sprite, SpriteMaterial, SRGBColorSpace, TOUCH,
-  Vector2, Vector3, WebGLRenderer, type BufferGeometry, type Material,
+  Box3, CanvasTexture, Color, DirectionalLight, HemisphereLight, LineSegments, MathUtils,
+  Mesh, MOUSE, OrthographicCamera, PCFShadowMap, PlaneGeometry, Raycaster, Scene, ShaderMaterial,
+  Sprite, SpriteMaterial, SRGBColorSpace, TOUCH, Vector2, Vector3, WebGLRenderer, type BufferGeometry, type Material,
 } from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { powerDemoNotice, powerMapNoData, type ProvincePowerFrame } from "@/lib/china-power-statistics";
-import { formatPowerNumber, powerLegendColors, powerMagnitude, powerSelectionColors } from "@/lib/power-analysis";
+import { formatPowerNumber, powerMagnitude, powerRampColor, type PowerPalette } from "@/lib/power-analysis";
 import type { MapCameraState } from "@/types/opengridworks";
 import {
-  buildPowerGeography, fitPowerMapBounds, powerProjection, projectPowerPoint,
-  type ChinaPowerGeography, type PowerFitPadding,
+  buildPowerGeography, fitPowerMapBounds, powerMapDepth, powerMapRelief, powerPlatformBottom, powerProjection,
+  powerProvinceHeight, powerSelectionLift, projectPowerPoint, type ChinaPowerGeography, type PowerFitPadding,
 } from "./power-statistics-geometry";
 
-const cameraOffset = new Vector3(0, -11, 24);
+const initialPitch = 49;
+const initialBearing = 12;
+const cameraDistance = 34;
 const pixelsPerUnit = 512 / (Math.PI * 2 * powerProjection.scale());
-const palettes = [false, true].map(signed => powerLegendColors(signed).map(color => new Color(color)));
 const noData = new Color(powerMapNoData);
+const transitionDuration = 420;
+
+function cameraOffset(pitch = initialPitch, bearing = initialBearing) {
+  const polar = MathUtils.degToRad(pitch);
+  const azimuth = MathUtils.degToRad(bearing);
+  return new Vector3(Math.sin(polar) * Math.sin(azimuth), -Math.sin(polar) * Math.cos(azimuth), Math.cos(polar))
+    .multiplyScalar(cameraDistance);
+}
+
+function floorLight(width: number, height: number, center: Vector2) {
+  const glow = new Mesh(
+    new PlaneGeometry(width * 1.55, height * 1.64),
+    new ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      vertexShader: `
+        varying vec2 surfaceUv;
+        void main() {
+          surfaceUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }`,
+      fragmentShader: `
+        varying vec2 surfaceUv;
+        void main() {
+          vec2 offset = (surfaceUv - vec2(0.5)) * 2.0;
+          float distance = length(offset);
+          float falloff = 1.0 - smoothstep(0.16, 1.0, distance);
+          float shadow = 1.0 - smoothstep(0.15, 0.67, distance);
+          vec3 color = mix(vec3(0.055, 0.036, 0.13), vec3(0.006, 0.006, 0.021), shadow);
+          gl_FragColor = vec4(color, falloff * 0.58);
+          #include <colorspace_fragment>
+        }`,
+    }),
+  );
+  glow.position.set(center.x, center.y + .08, powerPlatformBottom - .24);
+  return glow;
+}
 
 type View = { center: Vector3; zoom: number };
 type Callbacks = {
@@ -24,14 +62,7 @@ type Callbacks = {
   onSelect: (code: string) => void;
 };
 
-function scaleColor(value: number, max: number, signed: boolean) {
-  const palette = palettes[Number(signed)];
-  const stop = powerMagnitude(value, max, signed) * (palette.length - 1);
-  const left = Math.min(palette.length - 2, Math.floor(stop));
-  return palette[left].clone().lerp(palette[left + 1], stop - left);
-}
-
-function makeLabel(text: string, textColor = "#e5f2ff") {
+function makeLabel(text: string, selected: boolean) {
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d")!;
   const font = "600 22px Inter, system-ui, sans-serif";
@@ -39,12 +70,12 @@ function makeLabel(text: string, textColor = "#e5f2ff") {
   canvas.width = Math.ceil(ctx.measureText(text).width) + 24;
   canvas.height = 36;
   ctx.font = font;
-  ctx.fillStyle = "#102236";
+  ctx.fillStyle = selected ? "#212339" : "#111526";
   ctx.beginPath();
   ctx.roundRect(0, 0, canvas.width, canvas.height, 7);
   ctx.fill();
   ctx.textBaseline = "middle";
-  ctx.fillStyle = textColor;
+  ctx.fillStyle = "#f4f3fe";
   ctx.fillText(text, 12, 19);
   const map = new CanvasTexture(canvas);
   map.colorSpace = SRGBColorSpace;
@@ -54,14 +85,9 @@ function makeLabel(text: string, textColor = "#e5f2ff") {
   return { sprite, width: canvas.width / 2, height: canvas.height / 2 };
 }
 
-function mapCenter(bounds: Box2) {
-  const center = bounds.getCenter(new Vector2());
-  return new Vector3(center.x, center.y + .28, 0);
-}
-
 function measureFitPadding(canvas: HTMLCanvasElement): PowerFitPadding {
   const rect = canvas.getBoundingClientRect();
-  const margin = Math.max(16, Math.min(32, Math.min(rect.width, rect.height) * .04));
+  const margin = Math.max(14, Math.min(26, Math.min(rect.width, rect.height) * .035));
   const padding = { left: margin, right: margin, top: margin, bottom: margin };
   const shell = canvas.closest(".og-app-shell");
   const stage = shell?.querySelector(".og-globe-stage")?.getBoundingClientRect();
@@ -92,33 +118,61 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
   const renderer = new WebGLRenderer({ canvas, alpha: true, antialias: true, preserveDrawingBuffer: true });
   renderer.autoClear = false;
   renderer.setClearColor(0, 0);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
-  const { main, inset, bounds, insetBounds, provinces } = buildPowerGeography(geo);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.6));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = PCFShadowMap;
+  const { main, inset, platform, bounds, insetBounds, provinces } = buildPowerGeography(geo);
   const scene = new Scene();
   const insetScene = new Scene();
   const insetCamera = new OrthographicCamera(-1, 1, 1, -1, .1, 20);
   const insetCenter = insetBounds.getCenter(new Vector2());
   insetCamera.position.set(insetCenter.x, insetCenter.y, 5);
   insetScene.add(inset);
-  scene.add(main);
+  const midpoint = bounds.getCenter(new Vector2());
+  const extent = bounds.getSize(new Vector2());
+  scene.add(main, platform, floorLight(extent.x, extent.y, midpoint));
+  scene.add(new HemisphereLight("#fff4fa", "#443362", 1.55));
+  const key = new DirectionalLight("#fff0df", 1.6);
+  key.position.set(midpoint.x - 8, midpoint.y - 6, 18);
+  key.target.position.set(midpoint.x, midpoint.y, 0);
+  key.castShadow = true;
+  key.shadow.mapSize.set(1024, 1024);
+  const span = extent.length() * .58;
+  Object.assign(key.shadow.camera, { left: -span, right: span, bottom: -span, top: span, near: .1, far: 46 });
+  key.shadow.normalBias = .012;
+  key.shadow.bias = -.0002;
+  key.shadow.intensity = .43;
+  key.shadow.radius = 2;
+  key.shadow.autoUpdate = false;
+  key.shadow.needsUpdate = true;
+  scene.add(key, key.target);
+  const fill = new DirectionalLight("#b2b9ff", .45);
+  fill.position.set(12, 8, 7);
+  scene.add(fill);
 
   const camera = new OrthographicCamera(-1, 1, 1, -1, .1, 100);
   camera.up.set(0, 0, 1);
-  const center = mapCenter(bounds);
-  camera.position.copy(center).add(cameraOffset);
+  const center = new Vector3(midpoint.x, midpoint.y, 0);
+  camera.position.copy(center).add(cameraOffset());
   const controls = new OrbitControls(camera, canvas);
   controls.target.copy(center);
-  controls.enableRotate = false;
+  controls.minPolarAngle = MathUtils.degToRad(25);
+  controls.maxPolarAngle = MathUtils.degToRad(64);
+  controls.rotateSpeed = .52;
   controls.screenSpacePanning = false;
-  controls.mouseButtons = { LEFT: MOUSE.PAN, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN };
-  controls.touches = { ONE: TOUCH.PAN, TWO: TOUCH.DOLLY_PAN };
+  controls.mouseButtons = { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN };
+  controls.touches = { ONE: TOUCH.ROTATE, TWO: TOUCH.DOLLY_PAN };
   controls.zoomSpeed = .85;
   controls.update();
 
-  const parts = provinces.map(province => ({ ...province, value: null as number | null, detail: undefined as string | undefined }));
+  const parts = provinces.map(province => ({
+    ...province, value: null as number | null, detail: undefined as string | undefined,
+    fromColor: new Color(), toColor: new Color(),
+    fromHeight: 1, toHeight: 1, fromLift: 0, toLift: 0,
+  }));
   const byCode = new Map(parts.map(part => [part.code, part]));
   const targets = parts.map(part => part.mesh);
-  const labels: ReturnType<typeof makeLabel>[] = [];
+  const labels: (ReturnType<typeof makeLabel> & { part: typeof parts[number] })[] = [];
   const ray = new Raycaster();
   let width = 1;
   let height = 1;
@@ -126,6 +180,8 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
   let animation = 0;
   let drawRequest = 0;
   let frame: ProvincePowerFrame | undefined;
+  let selection: string[] = [];
+  let transitionStart: number | null = null;
   let automaticFocus: string | null = "national";
   let interacting = false;
 
@@ -133,6 +189,8 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
     const selected = byCode.get(provinceCode);
     const fitBounds = new Box3();
     for (const part of selected ? [selected] : parts) fitBounds.union(part.fitBounds);
+    fitBounds.max.z = powerMapDepth + powerMapRelief + powerSelectionLift + .045;
+    if (!selected) fitBounds.min.z = powerPlatformBottom;
     return fitPowerMapBounds(fitBounds, { width, height, padding: measureFitPadding(canvas) }, camera.quaternion);
   }
 
@@ -145,13 +203,33 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
     if (!drawRequest) drawRequest = requestAnimationFrame(draw);
   }
 
-  function draw() {
+  function updateRelief(elapsed: number) {
+    const fraction = Math.min(1, Math.max(0, elapsed / transitionDuration));
+    const progress = 1 - (1 - fraction) ** 3;
+    for (const part of parts) {
+      if (part.fromHeight !== part.toHeight || part.fromLift !== part.toLift) key.shadow.needsUpdate = true;
+      part.fill.color.lerpColors(part.fromColor, part.toColor, progress);
+      part.side.color.copy(part.fill.color).multiplyScalar(.34);
+      part.side.emissive.copy(part.fill.color).multiplyScalar(part.toLift ? .12 : .055);
+      part.mesh.scale.z = MathUtils.lerp(part.fromHeight, part.toHeight, progress);
+      part.mesh.position.z = MathUtils.lerp(part.fromLift, part.toLift, progress);
+    }
+    if (fraction === 1) transitionStart = null;
+  }
+
+  function draw(time = performance.now()) {
     cancelAnimationFrame(drawRequest);
     drawRequest = 0;
+    if (transitionStart != null) {
+      updateRelief(time - transitionStart);
+      if (transitionStart != null) queueRender();
+    }
     camera.updateMatrixWorld();
     const mobile = width < 540;
     const regions: { left: number; right: number; top: number; bottom: number }[] = [];
     for (const label of labels) {
+      label.sprite.position.copy(label.part.anchor);
+      label.sprite.position.z = powerMapDepth * label.part.mesh.scale.z + label.part.mesh.position.z + .16;
       const position = label.sprite.position.clone().project(camera);
       const x = (position.x + 1) * width / 2;
       const y = (1 - position.y) * height / 2;
@@ -181,12 +259,16 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
 
   function reportCamera() {
     const lngLat = powerProjection.invert?.([controls.target.x, -controls.target.y]);
-    if (lngLat) callbacks.onCamera({ center: lngLat, zoom: Math.log2(camera.zoom / pixelsPerUnit), pitch: 0, bearing: 0 });
+    const offset = camera.position.clone().sub(controls.target);
+    const pitch = MathUtils.radToDeg(Math.atan2(Math.hypot(offset.x, offset.y), offset.z));
+    const bearing = MathUtils.radToDeg(Math.atan2(offset.x, -offset.y));
+    if (lngLat) callbacks.onCamera({ center: lngLat, zoom: Math.log2(camera.zoom / pixelsPerUnit), pitch, bearing });
   }
 
   function applyView(view: View) {
+    const offset = camera.position.clone().sub(controls.target);
     controls.target.copy(view.center);
-    camera.position.copy(view.center).add(cameraOffset);
+    camera.position.copy(view.center).add(offset);
     camera.zoom = view.zoom;
     camera.updateProjectionMatrix();
     controls.update();
@@ -262,7 +344,7 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
     if (!start || start.id !== event.pointerId || Math.hypot(event.clientX - start.x, event.clientY - start.y) > 6) return;
     const part = locate(event);
     if (part) callbacks.onSelect(part.code);
-    if (event.pointerType === "touch" && part?.value == null) pointerMove(event);
+    if (event.pointerType === "touch" && part) pointerMove(event);
   }
   const hideHover = () => callbacks.onHover(null);
   const cameraChanged = () => {
@@ -295,7 +377,16 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
 
   return {
     focus(view: MapCameraState | undefined, animate = true, provinceCode?: string) {
-      if (provinceCode || !view) {
+      if (view || !provinceCode) {
+        const pitch = view?.pitch ? MathUtils.clamp(view.pitch, 25, 64) : initialPitch;
+        const bearing = view?.pitch ? view.bearing : initialBearing;
+        camera.position.copy(controls.target).add(cameraOffset(pitch, bearing));
+        controls.update();
+      }
+      // Former national links stored a flat pitch and viewport-dependent zoom.
+      const legacyOverview = view && view.pitch === 0 && view.zoom >= 2.5 && view.zoom <= 3.4
+        && Math.abs(view.center[0] - 104) < 1 && Math.abs(view.center[1] - 37.5) < 1;
+      if (provinceCode || !view || legacyOverview) {
         automaticFocus = provinceCode ? byCode.get(provinceCode.padEnd(12, "0"))?.code ?? "national" : "national";
         moveTo(fittedView(automaticFocus), animate);
       } else {
@@ -311,43 +402,65 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
         zoom: Math.min(controls.maxZoom, Math.max(controls.minZoom, camera.zoom * factor)),
       });
     },
-    update(next: ProvincePowerFrame, selected?: string, peers: readonly string[] = []) {
+    update(next: ProvincePowerFrame, selected?: string, peers: readonly string[] = [], palette: PowerPalette = "plasma") {
+      const previousFrame = frame;
+      const previousSelection = selection;
       frame = next;
+      selection = [selected, ...peers].filter((code): code is string => Boolean(code));
+      const selectionChanged = selection.join(",") !== previousSelection.join(",");
       hideHover();
       clearLabels();
-      const selection = [selected, ...peers].filter(Boolean);
       const signed = next.encoding === "diverging";
       const values = new Map(next.regions.map(row => [row.code, row]));
       for (const part of parts) {
         const row = values.get(part.code);
         const value = row?.value ?? null;
-        const index = selection.indexOf(part.code);
-        const base = value == null ? noData : scaleColor(value, next.scaleMax, signed);
+        const isSelected = selection.includes(part.code);
         part.value = value;
         part.detail = row?.detail;
-        part.fill.color.copy(base).multiplyScalar(selection.length && index < 0 ? .52 : 1);
-        part.side.color.copy(part.fill.color).multiplyScalar(.43);
+        part.fromColor.copy(part.fill.color);
+        part.toColor.copy(value == null ? noData : new Color(powerRampColor(powerMagnitude(value, next.scaleMax, signed), signed, palette)));
+        part.fromHeight = part.mesh.scale.z;
+        part.toHeight = powerProvinceHeight(value, next.scaleMax) / powerMapDepth;
+        part.fromLift = part.mesh.position.z;
+        part.toLift = isSelected ? powerSelectionLift : 0;
+        part.edge.material.opacity = isSelected ? .68 : .16;
+        part.edge.material.color.set(isSelected ? "#f9eaff" : "#c4a8ce");
+      }
+      if (!previousFrame || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        updateRelief(transitionDuration);
+      } else {
+        transitionStart = performance.now();
       }
 
       const ranked = parts.filter(part => part.value != null).sort((a, b) => Math.abs(b.value!) - Math.abs(a.value!)).slice(0, 3);
       const annotated = selection.length ? selection.flatMap(code => {
-        const part = code ? byCode.get(code) : undefined;
+        const part = byCode.get(code);
         return part ? [part] : [];
       }) : ranked;
-      for (const part of annotated) {
+      for (const [index, part] of annotated.entries()) {
         const name = part.name.replace(/(?:壮族|回族|维吾尔)?自治区$|特别行政区$|[省市]$/u, "");
-        const label = makeLabel(
-          name + " " + formatPowerNumber(part.value, next.unit === "%" ? "%" : "", signed),
-          powerSelectionColors[selection.indexOf(part.code)],
-        );
-        label.sprite.position.copy(part.anchor);
-        label.sprite.position.z += .15;
-        labels.push(label);
+        const prefix = selection.length > 1 ? String(index + 1) + " · " : "";
+        const text = prefix + name + " " + formatPowerNumber(part.value, next.unit === "%" ? "%" : "", signed);
+        const label = makeLabel(text, selection.length > 0);
+        labels.push({ ...label, part });
         scene.add(label.sprite);
       }
-      fit = fittedView().zoom;
-      if (automaticFocus != null) moveTo(fittedView(automaticFocus), false);
-      else setZoomLimits();
+
+      if (previousFrame && selectionChanged) {
+        const overview = fittedView();
+        if (selection.length && annotated.length) {
+          const target = new Vector3();
+          for (const part of annotated) target.add(part.anchor);
+          target.multiplyScalar(1 / annotated.length).setZ(0);
+          const shift = target.sub(overview.center).multiplyScalar(.16).clampLength(0, 12 / overview.zoom);
+          automaticFocus = null;
+          moveTo({ center: overview.center.clone().add(shift), zoom: overview.zoom * .98 });
+        } else {
+          automaticFocus = "national";
+          moveTo(overview);
+        }
+      }
       queueRender();
     },
     screenshot() {
@@ -380,13 +493,14 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
       const geometries = new Set<BufferGeometry>();
       const materials = new Set<Material>();
       for (const root of [scene, insetScene]) root.traverse(object => {
-        if (object instanceof Mesh) {
+        if (object instanceof Mesh || object instanceof LineSegments) {
           geometries.add(object.geometry);
           for (const material of Array.isArray(object.material) ? object.material : [object.material]) materials.add(material);
         }
       });
       geometries.forEach(geometry => geometry.dispose());
       materials.forEach(material => material.dispose());
+      key.shadow.dispose();
       renderer.dispose();
       renderer.forceContextLoss();
     },

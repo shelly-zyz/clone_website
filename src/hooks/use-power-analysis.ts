@@ -3,7 +3,7 @@ import { chinaProvinces } from "@/lib/china-provinces";
 import { chinaPowerAnnualFrame, chinaPowerMonthlyDemoFrame, type ProvincePowerFrame } from "@/lib/china-power-statistics";
 import {
   capacityUnit, cumulativePowerSeries, emberSource, generationUnit, nationalPowerCode, powerAnalysisMapFrame,
-  powerMeasureLabels, powerProductAmount, powerSeriesKeys, powerSources, previousPowerYear, readEmberSeries,
+  powerHistoricalExtent, powerMeasureLabels, powerProductAmount, powerSeriesKeys, powerSources, previousPowerYear, readEmberSeries,
   readPowerMeasure, yearbookCapacity, yearbookGeneration, type EmberArchive, type PowerGrain, type PowerMeasure,
   type PowerObservation, type PowerPeriod, type PowerSeries,
 } from "@/lib/power-analysis";
@@ -125,12 +125,17 @@ export function usePowerAnalysis(enabled: boolean, context: WorkspaceContext) {
   const sharedScale = Math.max(regionalScale, ...chinaProvinces.flatMap(({ code }) =>
     [powerProductAmount(current[code], product.id) ?? 0, powerProductAmount(referenceFrame?.[code], product.id) ?? 0]));
 
+  const historicalExtent = useMemo(() => powerHistoricalExtent(history, product.id, grain === "ytd"), [history, product.id, grain]);
+  const growthScale = source === "nbs" ? 100 : historicalExtent.growthLimit;
+  const changeScale = source === "nbs" ? sharedScale : historicalExtent.changeLimit;
+  const scaleMax = measure === "total" ? sharedScale : measure === "growth" ? growthScale : measure === "change" ? changeScale : undefined;
+
   const frame = useMemo(() => demo ? {
     ...chinaPowerMonthlyDemoFrame(period, product.id), encoding: "sequential" as const,
   } : powerAnalysisMapFrame({
     current, previous: previousFrame, reference: referenceFrame, period, grain, measure, product: product.id,
-    valueUnit, scaleMax: measure === "total" ? sharedScale : undefined, label,
-  }), [current, demo, grain, label, measure, period, previousFrame, product.id, referenceFrame, sharedScale, valueUnit]);
+    valueUnit, scaleMax, label,
+  }), [current, demo, grain, label, measure, period, previousFrame, product.id, referenceFrame, scaleMax, valueUnit]);
 
   const view = measure === "change" ? "total" : measure;
   const hasComparison = Boolean(referenceFrame && chinaProvinces.some(({ code }) => powerProductAmount(referenceFrame[code], product.id) != null)
@@ -138,13 +143,13 @@ export function usePowerAnalysis(enabled: boolean, context: WorkspaceContext) {
   const split = useMemo<{ a: ProvincePowerFrame; b: ProvincePowerFrame } | undefined>(() => {
     if (context.powerPresentation !== "split" || !reference || !referenceFrame || !hasComparison || demo) return;
     const common = { grain, measure: view, product: product.id, valueUnit, label: view === "total" ? capacity ? capacityBook.label : product.name : powerMeasureLabels[view] };
-    const b = powerAnalysisMapFrame({ ...common, current, previous: previousFrame, period, scaleMax: view === "total" ? sharedScale : undefined });
+    const b = powerAnalysisMapFrame({ ...common, current, previous: previousFrame, period, scaleMax: view === "total" ? sharedScale : view === "growth" ? growthScale : undefined });
     const a = powerAnalysisMapFrame({
       ...common, current: referenceFrame, previous: analysisHistory[previousPowerYear(reference)], period: reference, scaleMax: b.scaleMax,
     });
     const max = Math.max(a.scaleMax, b.scaleMax);
     return { a: { ...a, scaleMax: max }, b: { ...b, scaleMax: max } };
-  }, [analysisHistory, capacity, context.powerPresentation, current, demo, grain, hasComparison, period, previousFrame, product, reference, referenceFrame, sharedScale, valueUnit, view]);
+  }, [analysisHistory, capacity, context.powerPresentation, current, demo, grain, growthScale, hasComparison, period, previousFrame, product, reference, referenceFrame, sharedScale, valueUnit, view]);
 
   const note = demo ? "人工合成，禁止用于分析。"
     : source === "ember" ? "第三方结合多源统计与模型估算；光伏及月度拆分的估算成分较高。"

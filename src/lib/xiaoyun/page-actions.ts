@@ -54,7 +54,7 @@ const extraFilters: Partial<Record<SiteViewId, readonly string[]>> = {
 };
 
 const mapKeys: Record<(typeof mapViews)[number], readonly (keyof ReturnType<typeof readWorkspaceContext>)[]> = {
-  "globe-power": ["region", "year", "month", "product", "camera", "version", "projection", "powerView", "powerPeriod", "powerDemo", "powerPresentation", "powerSource", "powerReference", "powerMeasure", "powerPeers", "basemap", "layers", "tech", "labels", "minMw"],
+  "globe-power": ["region", "year", "month", "product", "camera", "version", "projection", "powerView", "powerPeriod", "powerDemo", "powerPresentation", "powerPalette", "powerSource", "powerReference", "powerMeasure", "powerPeers", "basemap", "layers", "tech", "labels", "minMw"],
   "globe-weather": ["camera", "year", "region", "scene", "technology", "weather", "replay", "replayFrame", "replayPoint", "replayRegion"],
   "globe-carbon": ["region", "date", "compareDate", "grid", "camera", "sector", "projection", "basemap"],
   "globe-economy": ["country", "year", "targetYear", "scene", "metric", "camera", "basemap"],

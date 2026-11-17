@@ -658,6 +658,16 @@ function XiaoyunRuntime({ workspace, children }: { workspace: Workspace | null; 
           throw error;
         }
       };
+      const launcherStyles = document.createElement("style");
+      launcherStyles.textContent = `
+        .xy-widget[data-mic-enabled="false"] { --xy-size: var(--og-voice-idle-size, 100px); }
+        @media (max-width: 480px) {
+          .xy-widget[data-mic-enabled="false"] { --xy-size: var(--og-voice-idle-size, 88px); }
+        }
+        .xy-widget[data-state="mic_off"][data-mic-enabled="false"] .xy-status {
+          display: var(--og-voice-idle-status, block);
+        }`;
+      voiceMount.querySelector("xiaoyun-voice")?.shadowRoot?.append(launcherStyles);
       voice.current = assistant;
       setReady(true);
     }).catch(() => {
