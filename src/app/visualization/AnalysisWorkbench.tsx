@@ -91,10 +91,10 @@ function TopicSwitcher({ topic, query }: { topic: AnalysisTopic; query: URLSearc
       <nav aria-label="切换分析专题" className={styles.topicMenu}>
         {analysisGroups.map(group => (
           <div key={group.id}>
-            <strong>{group.label}</strong>
+            <strong className={group.id === "economics" ? undefined : styles.emphasizedTopicLabel}>{group.label}</strong>
             {group.topics.map(item => (
               <Link key={item} href={relatedAnalysisHref(topic, item, query)} aria-current={item === topic ? "page" : undefined} prefetch={false}>
-                <span>{analysisTopics[item].label}</span>
+                <span className={item === "economy" ? styles.emphasizedTopicLabel : undefined}>{analysisTopics[item].label}</span>
                 {item === topic ? <Check size={15} strokeWidth={2} aria-hidden="true" />
                   : <ChevronRight size={14} strokeWidth={1.8} aria-hidden="true" />}
               </Link>

@@ -363,6 +363,11 @@
 }
 
 .topicMenu strong { display: block; padding: 3px 7px; color: var(--muted); font-size: 11px; }
+.topicMenu .emphasizedTopicLabel {
+  color: #000;
+  font-family: "Heiti SC", SimHei, "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-weight: 800;
+}
 .topicMenu a {
   display: flex;
   min-height: 30px;
