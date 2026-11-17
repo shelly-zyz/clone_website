@@ -44,12 +44,13 @@
   min-height: 28px;
   padding: 3px 6px;
   place-items: center;
-  color: #deeff7;
-  background: #173347;
   border-radius: 4px;
 }
-.timeline button:hover, .status button:hover { background: #24475a; }
-.timeline input { flex: 1; min-width: 30px; accent-color: #79c6d7; }
+.timeline button { color: #101925; background: #fff; }
+.timeline button:hover { background: #e4e8ed; }
+.status button { color: #deeff7; background: #173347; }
+.status button:hover { background: #24475a; }
+.timeline input { flex: 1; min-width: 30px; accent-color: #fff; }
 .comparison :is(button, input, a):focus-visible { outline: 2px solid #99ecff; outline-offset: -2px; }
 
 .columns, .pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
