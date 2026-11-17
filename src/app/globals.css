@@ -376,16 +376,11 @@
 .og-globe-navigation [data-topic="economy"] { --topic-color: #ff7547; }
 
 .og-globe-navigation-icon {
-  display: grid;
-  place-items: center;
-  width: calc(var(--og-globe-icon-slot) * 0.75);
-  aspect-ratio: 1;
-  border-radius: 50%;
-  color: var(--topic-color);
-  background: color-mix(in srgb, currentColor 12%, transparent);
+  display: block;
+  width: calc(var(--og-globe-icon-slot) * 0.875);
+  height: auto;
+  clip-path: circle(48.75%);
 }
-
-.og-globe-navigation-icon svg { width: 60%; height: 60%; }
 
 .og-globe-navigation button:is(:hover, [aria-pressed="true"]) {
   color: #f7fbfc;
