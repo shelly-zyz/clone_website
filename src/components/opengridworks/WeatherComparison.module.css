@@ -81,6 +81,6 @@
   .timeline button { min-width: 44px; min-height: 44px; }
 }
 
-.comparison { border: 0; background: linear-gradient(150deg, #131d26, #0b1219 65%); border-radius: 12px; }
+.comparison { border: 0; background: var(--og-panel-fill, rgb(10 17 26 / 64%)); border-radius: 12px; }
 .header, .row { border-color: #24343e; }
 .columns { background: #16222c; border-radius: 5px; padding-inline: 5px; }

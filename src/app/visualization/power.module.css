@@ -81,7 +81,7 @@
 .ringLegend [data-tone="rose"], .sourceButtons [data-tone="rose"] { --tone: #dcadbd; }
 .ringRow { cursor: default; }
 .topicRingLegend { max-height: 204px; overflow-y: auto; overscroll-behavior: contain; }
-.topicGrid { display: grid; min-width: 0; gap: 16px; align-items: start; }
+.topicGrid { display: grid; min-width: 0; gap: 16px; }
 .topicFigure .figureBody { margin-top: 8px; }
 .topicFigure .plot > div { height: 248px; }
 .topicFigure .plot > div[data-chart-kind="map"] { height: 232px; }
@@ -97,7 +97,9 @@
 
 @media (min-width: 650px) {
   .topicGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .topicGrid[data-mosaic="true"] > :last-child:nth-child(even) { grid-column: 1 / -1; }
+  .topicGrid > :first-child,
+  .topicGrid > :last-child:nth-child(even) { grid-column: 1 / -1; }
+  .topicGrid .figureFooter { margin-top: auto; }
   .topicFigure[data-lead="true"] .topicComposition, .topicFigure[data-active-view="true"] .topicComposition {
     grid-template-columns: minmax(0, 1.35fr) minmax(132px, 1fr);
   }
@@ -109,8 +111,6 @@
 }
 
 @media (min-width: 1060px) {
-  .topicGrid[data-mosaic="true"] { grid-template-columns: minmax(0, 1.53fr) minmax(0, 1fr); }
-  .topicGrid[data-mosaic="true"] > :first-child { grid-row: span 2; }
   .topicGrid > :first-child .plot > div { height: clamp(285px, 30vw, 387px); }
   .topicGrid > :first-child .topicComposition .plot > div { height: clamp(245px, 24vw, 320px); }
   .topicGrid > :first-child .ribbonStage { height: clamp(330px, 28vw, 440px); }

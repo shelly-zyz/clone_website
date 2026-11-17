@@ -30,9 +30,7 @@ import {
   Info,
   Layers,
   Map as MapIcon,
-  Pause,
   Plane,
-  Play,
   RadioTower,
   RotateCcw,
   Search,
@@ -78,16 +76,6 @@ import {
   sampleCarbonFrame,
   type CarbonFrame,
 } from "@/lib/carbon-earth";
-import {
-  capacityFactorPercent,
-  generationLabel,
-  loadClimateVreManifest,
-  loadClimateVreSummary,
-  type ClimateVreManifest,
-  type ClimateVreSummary,
-  type ClimateVreSummaryRow,
-  type VreTechnology,
-} from "@/lib/climate-vre";
 import {
   capacityToRadius,
   getMockMapDataset,
@@ -224,7 +212,6 @@ type HoverTooltip = {
 } | null;
 
 type LegendSectionKey =
-  | "generation"
   | "technology"
   | "dataCenters"
   | "fiber"
@@ -233,34 +220,6 @@ type LegendSectionKey =
   | "substations"
   | "plannedUpgrades"
   | "gasPipelines";
-
-type GenerationTechnology = "total" | VreTechnology;
-type GenerationTimeMode = "annual" | "monthly";
-
-type GenerationFrame = {
-  technology: GenerationTechnology;
-  mode: GenerationTimeMode;
-  year: number;
-  month: number;
-};
-
-type GenerationHeatmapEntry = {
-  isoCode: string;
-  regionId: string;
-  label: string;
-  valueGwh: number;
-  capacityMw: number;
-  capacityFactor: number;
-  normalized: number;
-};
-
-type GenerationHeatmapData = {
-  entries: GenerationHeatmapEntry[];
-  maxGwh: number;
-  nationalGwh: number;
-  topRegion: GenerationHeatmapEntry | null;
-  lowestNonZeroRegion: GenerationHeatmapEntry | null;
-};
 
 type PowerMapData = Pick<MapDataset, "energyAssets" | "dataCenters" | "gridLines" | "substations">;
 type PublishedPowerAssets = Pick<PowerMapData, "energyAssets" | "dataCenters">;
@@ -314,24 +273,6 @@ const carbonTargets = [
 const globeSpinStepDurationMs = 1000;
 const globeSpinSecondsPerCycle = 240;
 const globeSpinMaxZoom = 2.5;
-const defaultGenerationFrame: GenerationFrame = {
-  technology: "total",
-  mode: "annual",
-  year: 2026,
-  month: 1,
-};
-
-const generationTechnologyLabels: Record<GenerationTechnology, string> = {
-  total: "合计",
-  wind: "风电",
-  solar: "光伏",
-};
-
-const generationModeLabels: Record<GenerationTimeMode, string> = {
-  annual: "年度",
-  monthly: "月度",
-};
-
 const labelPresetKeys = ["zoom-v2", "zoom-v1", "lines-only", "no-labels", "bleed"] as const satisfies readonly LabelPreset[];
 const initialLabelSettings: LabelSettings = {
   preset: "zoom-v2",
@@ -418,21 +359,6 @@ function hiddenLayerState() {
 
 function legendSectionState() {
   return {
-    generation: false,
-    technology: false,
-    dataCenters: false,
-    fiber: false,
-    transmission: false,
-    openInfraPower: false,
-    substations: false,
-    plannedUpgrades: false,
-    gasPipelines: false,
-  } satisfies BooleanRecord<LegendSectionKey>;
-}
-
-function generationFocusLegendState() {
-  return {
-    generation: true,
     technology: false,
     dataCenters: false,
     fiber: false,
@@ -492,191 +418,6 @@ function formatWeatherTime(value: string | null | undefined) {
     timeZone: "UTC",
     timeZoneName: "short",
   }).format(date);
-}
-
-function generationTechnologyName(technology: GenerationTechnology) {
-  return generationTechnologyLabels[technology];
-}
-
-function generationModeName(mode: GenerationTimeMode) {
-  return generationModeLabels[mode];
-}
-
-function generationIsoCode(regionId: string) {
-  return regionId.startsWith("cn-") ? `CN-${regionId.slice(3).toUpperCase()}` : null;
-}
-
-function daysInMonth(year: number, month: number) {
-  return new Date(Date.UTC(year, month, 0)).getUTCDate();
-}
-
-function generationFrameHours(frame: GenerationFrame) {
-  if (frame.mode === "monthly") {
-    return daysInMonth(frame.year, frame.month) * 24;
-  }
-
-  return (frame.year % 4 === 0 ? 366 : 365) * 24;
-}
-
-function rowGenerationGwh(row: ClimateVreSummaryRow, frame: GenerationFrame) {
-  if (frame.mode === "monthly") {
-    return numericOrNull(row.monthlyMeans.find((item) => item.month === frame.month)?.generationGwh) ?? 0;
-  }
-
-  return numericOrNull(row.annualGenerationGwh) ?? 0;
-}
-
-function buildGenerationHeatmapData(summary: ClimateVreSummary | null, frame: GenerationFrame): GenerationHeatmapData | null {
-  if (!summary) {
-    return null;
-  }
-
-  const rowsByRegion = new globalThis.Map<string, Partial<Record<VreTechnology, ClimateVreSummaryRow>>>();
-  summary.annual
-    .filter((row) => row.year === frame.year && row.regionId !== "china")
-    .forEach((row) => {
-      const rows = rowsByRegion.get(row.regionId) ?? {};
-      rows[row.technology] = row;
-      rowsByRegion.set(row.regionId, rows);
-    });
-
-  const hours = generationFrameHours(frame);
-  const entries = Array.from(rowsByRegion.entries())
-    .map(([regionId, rows]) => {
-      const selectedRows: ClimateVreSummaryRow[] = frame.technology === "total"
-        ? [rows.wind, rows.solar].filter((row): row is ClimateVreSummaryRow => Boolean(row))
-        : rows[frame.technology] ? [rows[frame.technology] as ClimateVreSummaryRow] : [];
-      const isoCode = generationIsoCode(regionId);
-      const firstRow = selectedRows[0];
-
-      if (!isoCode || !firstRow) {
-        return null;
-      }
-
-      const valueGwh = selectedRows.reduce((sum, row) => sum + rowGenerationGwh(row, frame), 0);
-      const capacityMw = selectedRows.reduce((sum, row) => sum + (numericOrNull(row.capacityMw) ?? 0), 0);
-      const capacityFactor = capacityMw > 0 && hours > 0 ? valueGwh * 1000 / (capacityMw * hours) : 0;
-
-      return {
-        isoCode,
-        regionId,
-        label: firstRow.regionLabel,
-        valueGwh,
-        capacityMw,
-        capacityFactor,
-        normalized: 0,
-      } satisfies GenerationHeatmapEntry;
-    })
-    .filter((entry): entry is GenerationHeatmapEntry => Boolean(entry));
-
-  const maxGwh = Math.max(...entries.map((entry) => entry.valueGwh), 0);
-  const normalizedEntries = entries.map((entry) => ({
-    ...entry,
-    normalized: maxGwh > 0 ? Math.sqrt(entry.valueGwh / maxGwh) : 0,
-  }));
-  const sortedNonZero = normalizedEntries.filter((entry) => entry.valueGwh > 0).sort((a, b) => a.valueGwh - b.valueGwh);
-
-  return {
-    entries: normalizedEntries,
-    maxGwh,
-    nationalGwh: normalizedEntries.reduce((sum, entry) => sum + entry.valueGwh, 0),
-    topRegion: sortedNonZero.at(-1) ?? null,
-    lowestNonZeroRegion: sortedNonZero[0] ?? null,
-  };
-}
-
-function mixChannel(start: number, end: number, amount: number) {
-  return Math.round(start + (end - start) * amount);
-}
-
-function mixRgb(start: [number, number, number], end: [number, number, number], amount: number) {
-  return [
-    mixChannel(start[0], end[0], amount),
-    mixChannel(start[1], end[1], amount),
-    mixChannel(start[2], end[2], amount),
-  ] as const;
-}
-
-function generationHeatColor(normalized: number) {
-  if (normalized <= 0) {
-    return "rgba(8, 145, 178, 0.08)";
-  }
-
-  const stops: { value: number; rgb: [number, number, number] }[] = [
-    { value: 0, rgb: [8, 145, 178] },
-    { value: 0.42, rgb: [34, 211, 238] },
-    { value: 0.72, rgb: [45, 212, 191] },
-    { value: 1, rgb: [251, 191, 36] },
-  ];
-  const nextIndex = stops.findIndex((stop) => normalized <= stop.value);
-  const upper = stops[nextIndex === -1 ? stops.length - 1 : nextIndex];
-  const lower = stops[Math.max(0, (nextIndex === -1 ? stops.length - 1 : nextIndex) - 1)];
-  const span = Math.max(upper.value - lower.value, 0.001);
-  const [r, g, b] = mixRgb(lower.rgb, upper.rgb, (normalized - lower.value) / span);
-  const alpha = Math.min(0.9, 0.18 + normalized * 0.72);
-
-  return `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(3)})`;
-}
-
-function generationHeatColorExpression(data: GenerationHeatmapData | null) {
-  if (!data || data.entries.length === 0) {
-    return "rgba(0, 0, 0, 0)";
-  }
-
-  const matchPairs = data.entries.flatMap((entry) => [entry.isoCode, generationHeatColor(entry.normalized)]);
-  return [
-    "case",
-    ["==", ["get", "adm0_a3"], "CHN"],
-    ["match", ["get", "iso_3166_2"], ...matchPairs, "rgba(8, 145, 178, 0.05)"],
-    "rgba(0, 0, 0, 0)",
-  ] as unknown as ExpressionSpecification;
-}
-
-function generationFrameText(frame: GenerationFrame) {
-  return frame.mode === "monthly" ? `${frame.year} 年 ${frame.month} 月` : `${frame.year} 年`;
-}
-
-function generationFrameSubtitle(entry: GenerationHeatmapEntry, frame: GenerationFrame) {
-  return `${generationFrameText(frame)} · ${generationTechnologyName(frame.technology)} · ${generationLabel(entry.valueGwh)} · 容量因子 ${capacityFactorPercent(entry.capacityFactor)}`;
-}
-
-function generationFeatureFromEntry(entry: GenerationHeatmapEntry, frame: GenerationFrame, coordinates: Coordinates): SelectedFeature {
-  return {
-    id: `generation-${entry.regionId}-${frame.technology}-${frame.mode}-${frame.year}-${frame.month}`,
-    kind: "energy",
-    title: `${entry.label}发电量`,
-    subtitle: generationFrameSubtitle(entry, frame),
-    coordinates,
-    color: generationHeatColor(entry.normalized),
-    rows: [
-      { label: "时间", value: generationFrameText(frame) },
-      { label: "类型", value: generationTechnologyName(frame.technology) },
-      { label: "估算发电量", value: generationLabel(entry.valueGwh) },
-      { label: "映射装机", value: formatMw(entry.capacityMw) },
-      { label: "容量因子", value: capacityFactorPercent(entry.capacityFactor) },
-    ],
-    source: "GFDL-ESM4 SSP126 VRE projection",
-  };
-}
-
-function generationPlaybackPeriods(
-  summary: ClimateVreSummary | null,
-  technology: GenerationTechnology,
-  monthlyYear: number | undefined,
-) {
-  const periods = new Set<number>();
-  for (const row of summary?.annual ?? []) {
-    if (!generationIsoCode(row.regionId) || (technology !== "total" && row.technology !== technology)) continue;
-
-    if (monthlyYear === undefined) {
-      if (row.annualGenerationGwh > 0) periods.add(row.year);
-    } else if (row.year === monthlyYear) {
-      for (const { month, generationGwh } of row.monthlyMeans) {
-        if (generationGwh > 0) periods.add(month);
-      }
-    }
-  }
-  return [...periods].sort((a, b) => a - b);
 }
 
 function localizeStatus(value: string) {
@@ -2096,55 +1837,6 @@ function addInteractiveLayers(map: Map) {
         0, ["+", .55, ["*", 1.55, ["get", "weight"]]], 6, ["+", .8, ["*", 5, ["get", "weight"]]]],
     },
   });
-  map.addLayer({
-    id: "generation-heat-fill",
-    type: "fill",
-    source: "ne-admin1-polygons",
-    filter: ["==", ["get", "adm0_a3"], "CHN"],
-    paint: {
-      "fill-color": "rgba(0, 0, 0, 0)",
-      "fill-opacity": 1,
-      "fill-outline-color": "rgba(103, 232, 249, 0.22)",
-    },
-    layout: {
-      visibility: "none",
-    },
-  });
-
-  map.addLayer({
-    id: "generation-heat-border",
-    type: "line",
-    source: "ne-admin1-polygons",
-    filter: ["==", ["get", "adm0_a3"], "CHN"],
-    paint: {
-      "line-color": "rgba(226, 232, 240, 0.5)",
-      "line-width": ["interpolate", ["linear"], ["zoom"], 2.4, 0.42, 5, 0.72, 7, 1.05],
-      "line-opacity": 0.58,
-    },
-    layout: {
-      "line-join": "round",
-      "line-cap": "round",
-      visibility: "none",
-    },
-  });
-
-  map.addLayer({
-    id: "generation-heat-hover",
-    type: "line",
-    source: "ne-admin1-polygons",
-    filter: ["==", ["get", "iso_3166_2"], ""],
-    paint: {
-      "line-color": "#f8fafc",
-      "line-width": ["interpolate", ["linear"], ["zoom"], 2.4, 1.2, 5, 1.9, 7, 2.5],
-      "line-opacity": 0.94,
-    },
-    layout: {
-      "line-join": "round",
-      "line-cap": "round",
-      visibility: "none",
-    },
-  });
-
   for (const layer of globeBoundaryLayers) map.addLayer(layer);
   map.addLayer(globeCountryLabels);
 
@@ -2884,9 +2576,6 @@ function MapViewport({
   bubbleScale: currentBubbleScale,
   hoveredLegend,
   labelSettings,
-  generationHeatmapActive,
-  generationHeatmapData,
-  generationFrame,
   weatherMetric,
   weatherField,
   weatherWindField,
@@ -2920,9 +2609,6 @@ function MapViewport({
   bubbleScale: number;
   hoveredLegend: LegendHover | null;
   labelSettings: LabelSettings;
-  generationHeatmapActive: boolean;
-  generationHeatmapData: GenerationHeatmapData | null;
-  generationFrame: GenerationFrame;
   weatherMetric: WeatherMetricKey;
   weatherField: WeatherField | null;
   weatherWindField: WeatherField | null;
@@ -2953,9 +2639,6 @@ function MapViewport({
   const screenshotRef = useRef(onScreenshotComplete);
   const lastScreenshot = useRef(screenshotRequest);
   const basemapFallbackRef = useRef(false);
-  const generationActiveRef = useRef(generationHeatmapActive);
-  const generationDataRef = useRef(generationHeatmapData);
-  const generationFrameRef = useRef(generationFrame);
   const activeRef = useRef(active);
   const activeProjectRef = useRef(activeProject);
   const weatherMetricRef = useRef(weatherMetric);
@@ -2980,9 +2663,6 @@ function MapViewport({
     regionHoverRef.current = onRegionHover;
     cameraRef.current = onCameraChange;
     screenshotRef.current = onScreenshotComplete;
-    generationActiveRef.current = generationHeatmapActive;
-    generationDataRef.current = generationHeatmapData;
-    generationFrameRef.current = generationFrame;
     activeRef.current = active;
     activeProjectRef.current = activeProject;
     weatherMetricRef.current = weatherMetric;
@@ -2990,7 +2670,7 @@ function MapViewport({
     carbonFrameRef.current = carbonFrame;
     carbonScaleRef.current = carbonScale;
     carbonPlanarRef.current = carbonPlanar;
-  }, [active, carbonScale, carbonPlanar, activeProject, carbonFrame, generationFrame, generationHeatmapActive, generationHeatmapData, onCameraChange, onHoverTooltip, onRegionHover, onScreenshotComplete, onSelectFeature, weatherField, weatherMetric]);
+  }, [active, carbonScale, carbonPlanar, activeProject, carbonFrame, onCameraChange, onHoverTooltip, onRegionHover, onScreenshotComplete, onSelectFeature, weatherField, weatherMetric]);
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) {
@@ -3102,32 +2782,6 @@ function MapViewport({
         }
         return;
       }
-      if (generationActiveRef.current) {
-        const heatFeatures = getQueryableLayers(map, ["generation-heat-fill"]).length > 0
-          ? map.queryRenderedFeatures(event.point, { layers: ["generation-heat-fill"] })
-          : [];
-        const heatFeature = heatFeatures[0];
-        const isoCode = heatFeature?.properties ? readString(heatFeature.properties as Record<string, unknown>, "iso_3166_2") : "";
-        const heatEntry = generationDataRef.current?.entries.find((entry) => entry.isoCode === isoCode);
-
-        if (heatEntry) {
-          map.getCanvas().style.cursor = "pointer";
-          map.setFilter("generation-heat-hover", ["==", ["get", "iso_3166_2"], isoCode]);
-          hoverRef.current({
-            x: event.originalEvent.clientX,
-            y: event.originalEvent.clientY,
-            title: `${heatEntry.label}发电量`,
-            subtitle: generationFrameSubtitle(heatEntry, generationFrameRef.current),
-            color: generationHeatColor(heatEntry.normalized),
-          });
-          return;
-        }
-
-        if (map.getLayer("generation-heat-hover")) {
-          map.setFilter("generation-heat-hover", ["==", ["get", "iso_3166_2"], ""]);
-        }
-      }
-
       const queryableLayers = getQueryableLayers(map, interactiveLayerIds);
 
       if (queryableLayers.length === 0) {
@@ -3190,20 +2844,6 @@ function MapViewport({
         }
         return;
       }
-      if (generationActiveRef.current) {
-        const heatFeatures = getQueryableLayers(map, ["generation-heat-fill"]).length > 0
-          ? map.queryRenderedFeatures(event.point, { layers: ["generation-heat-fill"] })
-          : [];
-        const heatFeature = heatFeatures[0];
-        const isoCode = heatFeature?.properties ? readString(heatFeature.properties as Record<string, unknown>, "iso_3166_2") : "";
-        const heatEntry = generationDataRef.current?.entries.find((entry) => entry.isoCode === isoCode);
-
-        if (heatEntry) {
-          selectRef.current(generationFeatureFromEntry(heatEntry, generationFrameRef.current, [event.lngLat.lng, event.lngLat.lat]));
-          return;
-        }
-      }
-
       const queryableLayers = getQueryableLayers(map, interactiveLayerIds);
 
       if (queryableLayers.length === 0) {
@@ -3248,9 +2888,6 @@ function MapViewport({
     map.on("moveend", handleMoveEnd);
     map.on("error", handleMapError);
     map.on("mouseleave", () => {
-      if (map.getLayer("generation-heat-hover")) {
-        map.setFilter("generation-heat-hover", ["==", ["get", "iso_3166_2"], ""]);
-      }
       hoverRef.current(null);
       regionHoverRef.current("global");
     });
@@ -3343,19 +2980,6 @@ function MapViewport({
       }
     }
   }, [carbonPlanar, ready]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !ready) {
-      return;
-    }
-
-    const heatmapVisible = activeProject === "power" && generationHeatmapActive && (generationHeatmapData?.maxGwh ?? 0) > 0;
-    setLayerVisibility(map, "generation-heat-fill", heatmapVisible);
-    setLayerVisibility(map, "generation-heat-border", heatmapVisible);
-    setLayerVisibility(map, "generation-heat-hover", heatmapVisible);
-    map.setPaintProperty("generation-heat-fill", "fill-color", generationHeatColorExpression(generationHeatmapData));
-  }, [activeProject, generationHeatmapActive, generationHeatmapData, ready]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -3860,7 +3484,6 @@ function MapViewport({
 
   return (
     <div className="og-map-viewport" aria-label={activeProject === "carbon" ? "交互式碳排放地球" : "交互式电源项目地图"} data-map-ready={ready}>
-      <div className="og-starfield" aria-hidden="true" />
       <div ref={mapContainerRef} className="og-maplibre-container" />
       {!ready && !mapUnavailable && <GlobeLoading label={activeProject === "carbon" ? "正在加载碳排放地球" : "正在加载电力地球"} />}
       {mapUnavailable ? <p className="og-map-unavailable" role="status">当前浏览器无法绘制地图，仍可使用专题分析。</p> : null}
@@ -4063,157 +3686,6 @@ function SizeLegend({
   );
 }
 
-function GenerationLegendPanel({
-  heatmapEnabled,
-  showInlineHeatmapToggle = false,
-  frame,
-  manifest,
-  data,
-  loading,
-  error,
-  playing,
-  canPlay,
-  onHeatmapToggle,
-  onPlayingChange,
-  onFrameChange,
-}: {
-  heatmapEnabled: boolean;
-  showInlineHeatmapToggle?: boolean;
-  frame: GenerationFrame;
-  manifest: ClimateVreManifest | null;
-  data: GenerationHeatmapData | null;
-  loading: boolean;
-  error: string | null;
-  playing: boolean;
-  canPlay: boolean;
-  onHeatmapToggle: () => void;
-  onPlayingChange: (playing: boolean) => void;
-  onFrameChange: (frame: GenerationFrame) => void;
-}) {
-  const years = manifest?.years ?? Array.from({ length: 40 }, (_, index) => 2021 + index);
-  const minYear = years[0] ?? 2021;
-  const maxYear = years.at(-1) ?? 2060;
-  const frameLabel = generationFrameText(frame);
-
-  return (
-    <div className="og-generation-panel">
-      <div className="og-generation-hero">
-        <span><Activity size={14} /> VRE 情景估算</span>
-        <strong>{frameLabel}{generationTechnologyName(frame.technology)}发电量</strong>
-        <p>按现有风电/光伏映射装机估算，不代表 2026 全年官方实绩。</p>
-      </div>
-      {showInlineHeatmapToggle ? (
-        <div className="og-generation-toggle-row">
-          <span>热力图图层</span>
-          <button
-            className="og-section-enabled-toggle og-generation-inline-toggle"
-            type="button"
-            aria-label={`发电量热力图${heatmapEnabled ? "已开启" : "已关闭"}`}
-            aria-pressed={heatmapEnabled}
-            onClick={onHeatmapToggle}
-          >
-            {heatmapEnabled ? "ON" : "OFF"}
-          </button>
-        </div>
-      ) : null}
-      <div className="og-generation-tabs" aria-label="发电量类型">
-        {(["total", "wind", "solar"] as const).map((item) => (
-          <button
-            type="button"
-            key={item}
-            className={frame.technology === item ? "is-active" : ""}
-            onClick={() => {
-              onPlayingChange(false);
-              onFrameChange({ ...frame, technology: item });
-            }}
-          >
-            {generationTechnologyName(item)}
-          </button>
-        ))}
-      </div>
-      <div className="og-generation-mode-row">
-        {(["annual", "monthly"] as const).map((mode) => (
-          <button
-            type="button"
-            key={mode}
-            className={frame.mode === mode ? "is-active" : ""}
-            onClick={() => {
-              onPlayingChange(false);
-              onFrameChange({ ...frame, mode });
-            }}
-          >
-            {generationModeName(mode)}
-          </button>
-        ))}
-        <span>{frameLabel}</span>
-      </div>
-      {canPlay && (
-        <button
-          className="og-generation-play"
-          type="button"
-          aria-pressed={playing}
-          onClick={() => onPlayingChange(!playing)}
-        >
-          {playing ? <Pause size={14} /> : <Play size={14} />}
-          {playing ? "暂停播放" : frame.mode === "monthly" ? "播放月份" : "播放年份"}
-        </button>
-      )}
-      <label className="og-generation-slider">
-        <span>年份</span>
-        <input
-          type="range"
-          min={minYear}
-          max={maxYear}
-          step={1}
-          value={frame.year}
-          onChange={(event) => {
-            onPlayingChange(false);
-            onFrameChange({ ...frame, year: Number(event.currentTarget.value) });
-          }}
-        />
-      </label>
-      {frame.mode === "monthly" ? (
-        <label className="og-generation-slider">
-          <span>月份</span>
-          <input
-            type="range"
-            min={1}
-            max={12}
-            step={1}
-            value={frame.month}
-            onChange={(event) => {
-              onPlayingChange(false);
-              onFrameChange({ ...frame, month: Number(event.currentTarget.value) });
-            }}
-          />
-        </label>
-      ) : null}
-      <div className="og-generation-summary">
-        {loading ? (
-          <span>正在读取发电量数据...</span>
-        ) : error ? (
-          <span>{error}</span>
-        ) : data && data.maxGwh > 0 ? (
-          <>
-            <strong>{generationLabel(data.nationalGwh)}</strong>
-            <span>最高 {data.topRegion?.label ?? "暂无"} · {data.topRegion ? generationLabel(data.topRegion.valueGwh) : "0 GWh"}</span>
-            <span>最低非零 {data.lowestNonZeroRegion?.label ?? "暂无"}</span>
-          </>
-        ) : (
-          <span>暂无当前帧数据</span>
-        )}
-      </div>
-      <div className="og-generation-scale" aria-label="发电量热力色阶预览">
-        <span />
-        <div>
-          <small>低</small>
-          <small>{data ? generationLabel(data.maxGwh) : "高"}</small>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function PowerLegendPanel({
   regionStats,
   camera,
@@ -4224,19 +3696,7 @@ function PowerLegendPanel({
   visibleSubstationClasses,
   activeSizeMin,
   openSections,
-  generationFrame,
-  generationManifest,
-  generationData,
-  generationLoading,
-  generationError,
-  generationPlaying,
-  canPlayGeneration,
-  generationHeatmapEnabled,
   onToggleSection,
-  onOpenGeneration,
-  onToggleGenerationHeatmap,
-  onGenerationPlayingChange,
-  onGenerationFrameChange,
   onToggleTechnology,
   onToggleTechnologyGroup,
   onToggleLayer,
@@ -4254,19 +3714,7 @@ function PowerLegendPanel({
   visibleSubstationClasses: BooleanRecord<VoltageClass>;
   activeSizeMin: number | null;
   openSections: BooleanRecord<LegendSectionKey>;
-  generationFrame: GenerationFrame;
-  generationManifest: ClimateVreManifest | null;
-  generationData: GenerationHeatmapData | null;
-  generationLoading: boolean;
-  generationError: string | null;
-  generationPlaying: boolean;
-  canPlayGeneration: boolean;
-  generationHeatmapEnabled: boolean;
   onToggleSection: (key: LegendSectionKey) => void;
-  onOpenGeneration: () => void;
-  onToggleGenerationHeatmap: () => void;
-  onGenerationPlayingChange: (playing: boolean) => void;
-  onGenerationFrameChange: (frame: GenerationFrame) => void;
   onToggleTechnology: (key: TechnologyKey) => void;
   onToggleTechnologyGroup: () => void;
   onToggleLayer: (key: LayerKey) => void;
@@ -4279,28 +3727,6 @@ function PowerLegendPanel({
 
   return (
     <section aria-label="电力数据筛选">
-      <LegendSection
-        title="发电量"
-        enabled={generationHeatmapEnabled}
-        onToggle={onToggleGenerationHeatmap}
-        open={openSections.generation}
-        onOpenToggle={openSections.generation ? () => onToggleSection("generation") : onOpenGeneration}
-      >
-        <GenerationLegendPanel
-          heatmapEnabled={generationHeatmapEnabled}
-          frame={generationFrame}
-          manifest={generationManifest}
-          data={generationData}
-          loading={generationLoading}
-          error={generationError}
-          playing={generationPlaying}
-          canPlay={canPlayGeneration}
-          onHeatmapToggle={onToggleGenerationHeatmap}
-          onPlayingChange={onGenerationPlayingChange}
-          onFrameChange={onGenerationFrameChange}
-        />
-      </LegendSection>
-
       <LegendSection
         title="电源类型"
         enabled={technologyGroupEnabled}
@@ -4873,10 +4299,6 @@ function SearchPanel({
   );
 }
 
-function numericOrNull(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
 function FeaturePopup({
   feature,
   onClose,
@@ -5303,7 +4725,6 @@ function MobilePowerShortcuts({
   activeCleanEnergy,
   activeGas,
   activePlanned,
-  onGeneration,
   onCleanEnergy,
   onGas,
   onPlanned,
@@ -5311,14 +4732,12 @@ function MobilePowerShortcuts({
   activeCleanEnergy: boolean;
   activeGas: boolean;
   activePlanned: boolean;
-  onGeneration: () => void;
   onCleanEnergy: () => void;
   onGas: () => void;
   onPlanned: () => void;
 }) {
   return (
     <div className="og-mobile-controls og-mobile-chips" aria-label="电力图层快捷控制">
-      <button type="button" onClick={onGeneration}><span />发电量</button>
       <button type="button" aria-pressed={activeCleanEnergy} onClick={onCleanEnergy}><span />可再生能源</button>
       <button type="button" aria-pressed={activeGas} onClick={onGas}><span />燃气</button>
       <button type="button" aria-pressed={activePlanned} onClick={onPlanned}><span />开发中</button>
@@ -5400,57 +4819,6 @@ function Toast({ message }: { message: string | null }) {
   return <div className="og-toast" role="status">{message}</div>;
 }
 
-function MobileGenerationSheet({
-  open,
-  heatmapEnabled,
-  frame,
-  manifest,
-  data,
-  loading,
-  error,
-  playing,
-  canPlay,
-  onHeatmapToggle,
-  onPlayingChange,
-  onFrameChange,
-}: {
-  open: boolean;
-  heatmapEnabled: boolean;
-  frame: GenerationFrame;
-  manifest: ClimateVreManifest | null;
-  data: GenerationHeatmapData | null;
-  loading: boolean;
-  error: string | null;
-  playing: boolean;
-  canPlay: boolean;
-  onHeatmapToggle: () => void;
-  onPlayingChange: (playing: boolean) => void;
-  onFrameChange: (frame: GenerationFrame) => void;
-}) {
-  if (!open) {
-    return null;
-  }
-
-  return (
-    <aside className="og-mobile-generation-sheet" aria-label="发电量移动控制">
-      <GenerationLegendPanel
-        heatmapEnabled={heatmapEnabled}
-        showInlineHeatmapToggle
-        frame={frame}
-        manifest={manifest}
-        data={data}
-        loading={loading}
-        error={error}
-        playing={playing}
-        canPlay={canPlay}
-        onHeatmapToggle={onHeatmapToggle}
-        onPlayingChange={onPlayingChange}
-        onFrameChange={onFrameChange}
-      />
-    </aside>
-  );
-}
-
 export function MapAppShell({ initialProject = "power", initialContext = {} }: {
   initialProject?: WorkspaceTopic;
   initialContext?: WorkspaceContext;
@@ -5472,13 +4840,6 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
   const [economyMapTheme, setEconomyMapTheme] = useState<MapThemeKey>(() => themeForContext(initialContext, "economy"));
   const [activeMapTheme, setActiveMapTheme] = useState<MapThemeKey>(() => themeForContext(initialContext, initialProject));
   const [activeSizeMin, setActiveSizeMin] = useState<number | null>(initialContext.minMw ?? null);
-  const [generationFrame, setGenerationFrame] = useState<GenerationFrame>(defaultGenerationFrame);
-  const [generationManifest, setGenerationManifest] = useState<ClimateVreManifest | null>(null);
-  const [generationSummary, setGenerationSummary] = useState<ClimateVreSummary | null>(null);
-  const [generationLoading, setGenerationLoading] = useState(false);
-  const [generationError, setGenerationError] = useState<string | null>(null);
-  const [generationPlaying, setGenerationPlaying] = useState(false);
-  const [generationHeatmapEnabled, setGenerationHeatmapEnabled] = useState(false);
 
   const [weatherDocument, setWeatherDocument] = useState<Document | null>(null);
   const [carbonPlaying, setCarbonPlaying] = useState(false);
@@ -5500,7 +4861,6 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
   const [powerBin, setPowerBin] = useState<{ key: string; value: number | null } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [toast, setToast] = useState<string | null>(null);
-  const generationLoadStartedRef = useRef(false);
   const [powerAssetsRequested, setPowerAssetsRequested] = useState(false);
   const [powerAssetsStatus, setPowerAssetsStatus] = useState<"loading" | "ready" | "error">("loading");
   const [powerAssetsAttempt, setPowerAssetsAttempt] = useState(0);
@@ -5520,7 +4880,6 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
     setFocusedRegion(regionTargets.find(item => item.id === context.region)?.id ?? defaultRegion.id);
     setActiveRegion(regions.find(item => item.id === context.region) ?? defaultRegion);
     if (topic === "power" || topic === "carbon") setActiveMapTheme(themeForContext(context, topic));
-    setGenerationPlaying(false);
     setCarbonPlaying(false);
     if (topic === "economy") setEconomyMapTheme(themeForContext(context, "economy"));
     if (topic === "power") {
@@ -5702,67 +5061,6 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
   }, [powerAssetsAttempt, powerAssetsRequested]);
 
   useEffect(() => {
-    if (!generationHeatmapEnabled || generationLoadStartedRef.current) {
-      return;
-    }
-
-    generationLoadStartedRef.current = true;
-    let active = true;
-
-    void loadClimateVreManifest().then((manifest) => {
-      if (!active) {
-        return;
-      }
-      if (!manifest) {
-        setGenerationError("未找到发电量情景数据 manifest。");
-        setGenerationLoading(false);
-        return;
-      }
-
-      setGenerationManifest(manifest);
-      void loadClimateVreSummary(manifest.summaryPath).then((summary) => {
-        if (!active) {
-          return;
-        }
-        if (!summary) {
-          setGenerationError("发电量摘要数据不可用。");
-        } else {
-          setGenerationSummary(summary);
-          setGenerationError(null);
-        }
-        setGenerationLoading(false);
-      });
-    });
-
-    return () => {
-      active = false;
-      generationLoadStartedRef.current = false;
-    };
-  }, [generationHeatmapEnabled]);
-
-  const monthlyPlaybackYear = generationFrame.mode === "monthly" ? generationFrame.year : undefined;
-  const generationPeriods = useMemo(
-    () => generationPlaybackPeriods(generationSummary, generationFrame.technology, monthlyPlaybackYear),
-    [generationSummary, generationFrame.technology, monthlyPlaybackYear],
-  );
-  const canPlayGeneration = activeProject === "power" && powerView === "facilities" &&
-    generationHeatmapEnabled && !generationLoading && !generationError && generationPeriods.length > 1;
-
-  useEffect(() => {
-    if (!generationPlaying || !canPlayGeneration) return;
-
-    const timer = window.setInterval(() => {
-      setGenerationFrame((frame) => {
-        const key = frame.mode === "monthly" ? "month" : "year";
-        const nextPeriod = generationPeriods.find(period => period > frame[key]) ?? generationPeriods[0];
-        return { ...frame, [key]: nextPeriod };
-      });
-    }, monthlyPlaybackYear === undefined ? 950 : 850);
-
-    return () => window.clearInterval(timer);
-  }, [canPlayGeneration, generationPeriods, generationPlaying, monthlyPlaybackYear]);
-
-  useEffect(() => {
     if (!carbonPlaying || activeProject !== "carbon" || carbonLoading) return;
     const yearFrames = carbonFrames.filter(item => item.date.slice(0, 4) === carbonDate.slice(0, 4));
     if (yearFrames.length < 2) return;
@@ -5793,42 +5091,6 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
     replaceWorkspaceContext({ region: target.id });
     requestFocus(target.center, target.zoom, target.pitch, target.bearing, target.id === "global" ? "globe" : undefined);
   }, [requestFocus]);
-
-  const openGenerationView = useCallback(() => {
-    const chinaRegion = regions.find((region) => region.id === "china");
-    const chinaTarget = regionTargets.find((target) => target.id === "china") ?? chinaRegion;
-
-    setOpenLegendSections(generationFocusLegendState());
-    setVisibleTechnologies(hiddenTechnologyState());
-    setVisibleLayers(hiddenLayerState());
-    setVisibleVoltageClasses(hiddenVoltageState());
-    setActiveRegion(chinaRegion ?? defaultRegion);
-    setFocusedRegion(chinaTarget?.id ?? defaultRegion.id);
-    setActiveMapTheme("cartoDark");
-    setActiveSizeMin(null);
-    if (!generationLoadStartedRef.current) {
-      setGenerationLoading(true);
-    }
-    setGenerationHeatmapEnabled(true);
-    if (powerView !== "facilities") navigate("power", { powerView: "facilities" });
-    setLabelSettings({
-      ...initialLabelSettings,
-      preset: "zoom-v2",
-      showLabels: true,
-      lineLabelSize: 96,
-      provinceLabels: true,
-      countryBorders: true,
-      stateBorders: true,
-    });
-    setGenerationPlaying(false);
-    setSelectedFeature(null);
-    setCardsOpen(false);
-    setActivePanel(null);
-    if (chinaTarget) {
-      requestFocus(chinaTarget.center, 3.75, 0, 0);
-    }
-    showToast("已切换到中国发电量热力图视图；其它图层已暂时隐藏，可手动重新打开。");
-  }, [navigate, powerView, requestFocus, showToast]);
 
   const switchProject = useCallback((project: WorkspaceTopic) => {
     if (project === activeProject) return;
@@ -5905,8 +5167,6 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
     setSelectedFeature(null);
     setHoverTooltip(null);
     setActivePanel(null);
-    setGenerationPlaying(false);
-    setGenerationHeatmapEnabled(false);
     const region = view === "facilities" ? context.region : selectedProvince ?? "china";
     const camera = view !== "facilities" && powerView === "facilities"
       ? selectedProvince ? contextCamera("power", { region }) ?? powerOverviewCamera() : powerOverviewCamera()
@@ -5942,10 +5202,6 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
   const regionStats = useMemo(() => getRegionStats(powerData, activeRegion.id, visibleTechnologies, activeSizeMin),
     [activeRegion.id, activeSizeMin, powerData, visibleTechnologies]);
 
-  const generationHeatmapData = useMemo(
-    () => buildGenerationHeatmapData(generationSummary, generationFrame),
-    [generationFrame, generationSummary],
-  );
   const handleRegionHover = useCallback((regionId: RegionTargetId) => {
     setActiveRegion((current) => {
       if (current.id === regionId) {
@@ -5968,27 +5224,6 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
   const toggleTechnologyGroup = () => {
     const anyTechnologyVisible = technologies.some((item) => visibleTechnologies[item.key]);
     setVisibleTechnologies(anyTechnologyVisible ? hiddenTechnologyState() : technologyState());
-  };
-
-  const toggleGenerationHeatmap = () => {
-    const nextEnabled = !generationHeatmapEnabled;
-    setGenerationHeatmapEnabled(nextEnabled);
-    if (nextEnabled) {
-      if (!generationLoadStartedRef.current) {
-        setGenerationLoading(true);
-      }
-      setOpenLegendSections((state) => ({ ...state, generation: true }));
-    } else {
-      setGenerationPlaying(false);
-    }
-  };
-
-  const changeGenerationPlayback = (playing: boolean) => {
-    if (playing && (mapCamera.zoom < 3 || getRegionForCoordinates(...mapCamera.center).id !== "china")) {
-      setFocusedRegion("china");
-      requestFocus(powerOverviewCenter, 3.75);
-    }
-    setGenerationPlaying(playing);
   };
 
   const toggleLayer = (key: LayerKey) => {
@@ -6038,9 +5273,6 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
     setActiveRegion(defaultRegion);
     setActiveMapTheme("nasa");
     setActiveSizeMin(null);
-    setGenerationFrame(defaultGenerationFrame);
-    setGenerationPlaying(false);
-    setGenerationHeatmapEnabled(false);
     setLabelSettings(initialLabelSettings);
     setSelectedFeature(null);
     setActivePanel(null);
@@ -6118,7 +5350,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
     .some((item) => visibleTechnologies[item.key]);
   const activeGas = visibleTechnologies.gas || visibleLayers.gasPipelines;
   const activePlanned = visibleLayers.plannedUpgrades;
-  const hasFacilityLayers = generationHeatmapEnabled || Object.values(visibleTechnologies).some(Boolean)
+  const hasFacilityLayers = Object.values(visibleTechnologies).some(Boolean)
     || Object.values(visibleLayers).some(Boolean) || Object.values(visibleCustomLayers).some(Boolean);
   const sidebarSummary = {
     power: statsActive ? "发电、装机与区域变化" : `${activeRegion.label} · ${regionStats.totalPlants.toLocaleString()} 个可见项目`,
@@ -6132,6 +5364,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
     <main className={className} onClickCapture={beforeAnalysis} data-workspace={activeProject}
       data-power-assets={activeProject === "power" && !statsActive ? powerAssetsStatus : undefined}
       data-carbon-data-ready={activeProject === "carbon" ? Boolean(carbonFrame) : undefined}>
+      {!resourceScene && <div className="og-starfield" aria-hidden="true" />}
       <GlobeNavigation activeTopic={activeProject} onTopicChange={switchProject} onTopicIntent={preloadTopic} />
       {resourceScene && (
         <WeatherResourceScene context={context}
@@ -6235,9 +5468,6 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
               bubbleScale={bubbleScale}
               hoveredLegend={hoveredLegend}
               labelSettings={labelSettings}
-              generationHeatmapActive={activeProject === "power" && powerView === "facilities" && generationHeatmapEnabled}
-              generationHeatmapData={generationHeatmapData}
-              generationFrame={generationFrame}
               weatherMetric={defaultWeatherMetric}
               weatherField={null}
               weatherWindField={null}
@@ -6281,7 +5511,6 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
               activeCleanEnergy={activeCleanEnergy}
               activeGas={activeGas}
               activePlanned={activePlanned}
-              onGeneration={() => selectPowerView("generation")}
               onCleanEnergy={applyCleanEnergyPreset}
               onGas={() => {
                 setVisibleTechnologies((state) => ({ ...state, gas: !state.gas }));
@@ -6337,19 +5566,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
                 visibleSubstationClasses={visibleSubstationClasses}
                 activeSizeMin={activeSizeMin}
                 openSections={openLegendSections}
-                generationFrame={generationFrame}
-                generationManifest={generationManifest}
-                generationData={generationHeatmapData}
-                generationLoading={generationLoading}
-                generationError={generationError}
-                generationPlaying={generationPlaying}
-                canPlayGeneration={canPlayGeneration}
-                generationHeatmapEnabled={generationHeatmapEnabled}
                 onToggleSection={toggleLegendSection}
-                onOpenGeneration={openGenerationView}
-                onToggleGenerationHeatmap={toggleGenerationHeatmap}
-                onGenerationPlayingChange={changeGenerationPlayback}
-                onGenerationFrameChange={setGenerationFrame}
                 onToggleTechnology={toggleTechnology}
                 onToggleTechnologyGroup={toggleTechnologyGroup}
                 onToggleLayer={toggleLayer}
@@ -6503,22 +5720,6 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
           >
             <Info size={18} />
           </button>
-          {activeProject === "power" ? (
-            <MobileGenerationSheet
-              open={openLegendSections.generation}
-              heatmapEnabled={generationHeatmapEnabled}
-              frame={generationFrame}
-              manifest={generationManifest}
-              data={generationHeatmapData}
-              loading={generationLoading}
-              error={generationError}
-              playing={generationPlaying}
-              canPlay={canPlayGeneration}
-              onHeatmapToggle={toggleGenerationHeatmap}
-              onPlayingChange={changeGenerationPlayback}
-              onFrameChange={setGenerationFrame}
-            />
-          ) : null}
         </>
       )}
     </main>

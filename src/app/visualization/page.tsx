@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowUpRight, ChartArea, ChevronDown } from "lucide-react";
+import { ArrowUpRight, ChartArea } from "lucide-react";
 import { resolveWorkspaceTopic } from "@/lib/globe-topics";
 import { analysisGroups, analysisHref, analysisTopics, type AnalysisTopic } from "@/lib/topic-analysis/catalog";
 import { buildCarbonAnalysis, buildRenewableAnalysis, buildWeatherAnalysis, carbonDates } from "@/lib/topic-analysis/climate";
@@ -59,15 +59,12 @@ export default async function VisualizationPage({ searchParams }: {
           <div className={styles.heroCopy}>
             <h1 id="visualization-title">专题分析</h1>
             <p>从发电与气候到排放与贸易，用多年数据看清结构、地域与季节变化。</p>
-            <a className={styles.browseLink} href="#energy">
-              浏览专题 <ChevronDown size={17} strokeWidth={1.8} aria-hidden="true" />
-            </a>
+            <AnalysisGroupNav />
           </div>
           <div className={styles.heroSpacer} aria-hidden="true" />
         </section>
       </div>
-      <AnalysisGroupNav />
-      <div className={styles.gallery}>
+      <div id="topics" className={styles.gallery}>
         {analysisGroups.map(group => (
           <section key={group.id} id={group.id} className={styles.group} aria-labelledby={group.id + "-title"}>
             <h2 id={group.id + "-title"}>{group.label}</h2>

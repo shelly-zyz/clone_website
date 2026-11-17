@@ -633,7 +633,7 @@ export function AnalysisWorkbench({ topic, initialQuery, initialScenario }: {
                 </nav>
               ) : topic !== "power" && (
                 <>
-                  <div className={powerStyles.topicGrid} data-mosaic={overview.length >= 3 || undefined}>
+                  <div className={powerStyles.topicGrid}>
                     {overview.map((spec, index) => renderFigure(spec, false, index === 0))}
                   </div>
                   {comparisonId && <div className={styles.comparisonBelow}><ComparisonLink id={comparisonId} /></div>}

@@ -17,12 +17,6 @@
   position: absolute;
   inset: 0;
   overflow: hidden;
-  background: radial-gradient(ellipse at 49% 42%, #18232e 0%, #0b131a 57%, #060a10 100%);
-  transition: background-color 220ms ease;
-}
-
-.viewport[data-outlook="true"] {
-  background: radial-gradient(ellipse at 47% 45%, #173d393d, #0d1211 45%, #0a0e0e 73%);
 }
 
 .map { position: absolute; inset: 0; }
@@ -168,7 +162,7 @@
   padding: clamp(12px, 1.25vw, 19px);
   border: 0;
   color: #f4f7f5;
-  background: linear-gradient(90deg, #090e0d3b, #090e0dbf 30%);
+  background: var(--og-panel-fill, rgb(10 17 26 / 64%));
   color-scheme: dark;
   box-shadow: none;
   border-radius: 0;
@@ -309,7 +303,6 @@
   }
 
   :global(.og-economy-profile-region:not([data-dock="open"])) .profile { display: none; }
-  .profile { background: #0b1111ed; }
   .profileIndicators button, .searchResults button { min-height: 44px; }
 }
 

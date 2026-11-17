@@ -272,6 +272,7 @@
   overflow: auto;
   scrollbar-width: thin;
 }
+.embedded .readingsBody { background: var(--og-panel-fill, rgb(10 17 26 / 64%)); }
 .embedded .legend { bottom: calc(var(--og-globe-nav-space, 70px) + 128px); left: auto; right: clamp(245px, 23vw, 306px); width: 122px; }
 
 .legend { padding: 9px; width: 118px; }

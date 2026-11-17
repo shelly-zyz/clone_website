@@ -95,9 +95,11 @@
   background: var(--control-selected);
   font-size: 14px;
   font-weight: 700;
+  cursor: pointer;
 }
 
 .browseLink:hover { background: #a2efe4; }
+.browseLink[aria-expanded="true"] svg { transform: rotate(180deg); }
 
 .heroSpacer {
   justify-self: end;
@@ -105,44 +107,43 @@
   aspect-ratio: 1;
 }
 
-.groupBar {
-  position: sticky;
-  top: 0;
+.browsePositioner {
   z-index: 5;
-  background: #e7eff1;
-}
-.groupBar > div {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 4px;
-  max-width: 1110px;
-  margin-inline: auto;
-  padding: 6px clamp(8px, 2.5vw, 20px);
 }
 
-.groupBar a {
+.browseMenu {
+  min-width: max(178px, var(--anchor-width));
+  max-height: var(--available-height);
+  overflow: auto;
+  padding: 5px;
+  border-radius: var(--control-radius);
+  color: var(--ink);
+  background: #f5fafb;
+  box-shadow: 0 6px 24px #101e3180;
+}
+
+.browseMenu a {
   display: flex;
-  min-height: 46px;
+  min-height: 42px;
   align-items: center;
-  justify-content: center;
   gap: 10px;
-  padding: 8px;
+  padding: 8px 12px;
   border-radius: var(--control-radius);
   font-size: 14px;
   font-weight: 670;
-  transition: background-color 160ms ease, color 160ms ease;
 }
-.groupBar a:hover { background: #d8ebee; }
-.groupBar a[aria-current="location"] {
+.browseMenu a[data-highlighted] { background: #d8ebee; }
+.browseMenu a[aria-current="location"] {
   background: var(--control-selected);
   color: var(--control-selected-ink);
   font-weight: 730;
 }
-.groupBar a:nth-child(1) svg { color: #ac6122; }
-.groupBar a:nth-child(2) svg { color: #087c78; }
-.groupBar a:nth-child(3) svg { color: #b05045; }
-.groupBar a:nth-child(4) svg { color: #6050a3; }
-.groupBar a:is([aria-current="location"], :focus-visible) svg { color: currentColor; }
+.browseMenu a:nth-child(1) svg { color: #ac6122; }
+.browseMenu a:nth-child(2) svg { color: #087c78; }
+.browseMenu a:nth-child(3) svg { color: #b05045; }
+.browseMenu a:nth-child(4) svg { color: #6050a3; }
+.browseMenu a:is([aria-current="location"], :focus-visible) svg { color: currentColor; }
+.browseMenu .browseReset { margin-top: 4px; padding-left: 40px; }
 
 .gallery {
   max-width: 1430px;
@@ -150,8 +151,9 @@
   padding: 36px clamp(20px, 5vw, 72px) 72px;
 }
 
-.group { scroll-margin-top: 73px; }
-.group + .group { margin-top: 40px; }
+.gallery:has(> .group:target) > .group:not(:target) { display: none; }
+.group { scroll-margin-top: 16px; }
+.group + .group:not(:target) { margin-top: 40px; }
 .group h2 {
   margin-bottom: 15px;
   font-size: clamp(22px, 2.2vw, 29px);
@@ -444,13 +446,13 @@
 .pending { min-height: 110px; padding: 24px; color: var(--muted); }
 .pending button { display: inline-flex; align-items: center; gap: 4px; margin-left: 10px; color: var(--accent); cursor: pointer; }
 
-.page :is(.browseLink, .groupBar a, .chartNav a, .topicMenu a, .disclosure, .filter select, .moreViews a):focus-visible {
+.page :is(.browseLink, .browseMenu a, .chartNav a, .topicMenu a, .disclosure, .filter select, .moreViews a):focus-visible {
   outline: none;
   background: var(--control-focus, #176864);
   color: var(--control-focus-ink, #f3f8fa);
 }
 .page :is(
-  .browseLink, .groupBar a[aria-current], .chartNav a[aria-current], .topicMenu a[aria-current],
+  .browseLink, .browseMenu a[aria-current], .chartNav a[aria-current], .topicMenu a[aria-current],
   details[open] > .disclosure, .filter select:open
 ):focus-visible {
   --control-focus: var(--control-selected);
@@ -487,10 +489,8 @@
   .heroCopy h1 { font-size: clamp(32px, 8.3vw, 47px); letter-spacing: 0.01em; }
   .heroCopy p { margin-top: 10px; font-size: 13px; }
   .browseLink { min-height: 35px; margin-top: 13px; padding: 5px 9px; gap: 8px; font-size: 12px; }
-  .groupBar a { flex-direction: column; min-height: 47px; gap: 3px; padding: 5px 2px; font-size: 11px; }
-  .groupBar svg { width: 17px; height: 17px; }
   .gallery { padding: 22px 12px 38px; }
-  .group + .group { margin-top: 28px; }
+  .group + .group:not(:target) { margin-top: 28px; }
   .group h2 { margin-bottom: 11px; }
   .grid, .grid[data-count] { grid-template-columns: minmax(0, 1fr); }
   .previewPlot { height: 156px; }
@@ -520,7 +520,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .page { scroll-behavior: auto; }
-  .page :is(.topicCard, .groupBar a, .chartNav a, .cardArrow, .cardArrow svg, .disclosure, .chevron) { transition: none; }
+  .page :is(.topicCard, .chartNav a, .cardArrow, .cardArrow svg, .disclosure, .chevron) { transition: none; }
 }
 
 .comparison {

@@ -66,6 +66,10 @@ body {
     background: #000005;
 }
 
+.ogw-workspace body {
+    background: transparent;
+}
+
 #warn {
     font-size: 2.0em;
     position: absolute;

@@ -15,7 +15,7 @@
   display: flex;
   flex-direction: column;
   color: #edf0f2;
-  background: linear-gradient(150deg, #111b24, #090f17 65%);
+  background: var(--og-panel-fill, rgb(10 17 26 / 64%));
   border-radius: 8px;
 }
 
