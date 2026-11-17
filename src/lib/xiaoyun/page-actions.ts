@@ -25,7 +25,7 @@ export const mapPatchSchema = z.strictObject({
   place: z.string().trim().min(1).max(32).optional(),
   projection: z.enum(["map", "globe"]).optional(),
   powerView: z.enum(["facilities", "generation", "capacity"]).optional(),
-  replay: z.enum(["globe", "weather", "time", "rain", "accumulation", "radar", "wind"]).optional(),
+  replay: z.enum(["globe", "weather", "time", "rain", "accumulation"]).optional(),
   layers: z.array(layerChange).min(1).max(32).optional(),
 });
 

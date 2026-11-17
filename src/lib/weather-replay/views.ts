@@ -6,15 +6,5 @@ export const replayViews = {
 } as const;
 
 export type ReplayView = keyof typeof replayViews;
-export const weatherVolumeViews = {
-  radar: { title: "三维雷达", description: "体扫回波、垂直剖面和真实高度切片" },
-  wind: { title: "三维风场", description: "模式风矢量与区域 10 米风速预报" },
-} as const;
-
-export type VolumeView = keyof typeof weatherVolumeViews;
-export type WeatherScene = "globe" | ReplayView | VolumeView;
-export const weatherSceneViews = { ...replayViews, ...weatherVolumeViews };
-export function isReplayView(view: WeatherScene): view is ReplayView {
-  return Object.hasOwn(replayViews, view);
-}
+export type WeatherScene = "globe" | ReplayView;
 export const replayViewOrder = ["weather", "time", "rain", "accumulation"] as const satisfies readonly ReplayView[];

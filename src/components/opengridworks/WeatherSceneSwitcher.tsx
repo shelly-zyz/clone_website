@@ -1,10 +1,10 @@
 "use client";
 
-import { replayViewOrder, weatherSceneViews, type WeatherScene } from "@/lib/weather-replay/views";
+import { replayViewOrder, replayViews, type WeatherScene } from "@/lib/weather-replay/views";
 import styles from "./SceneSwitcher.module.css";
 
-const scenes = ["globe", ...replayViewOrder, "radar", "wind"] as const;
-const title = (scene: WeatherScene) => scene === "globe" ? "气象地球" : weatherSceneViews[scene].title;
+const scenes = ["globe", ...replayViewOrder] as const;
+const title = (scene: WeatherScene) => scene === "globe" ? "气象地球" : replayViews[scene].title;
 
 export function WeatherSceneSwitcher({ scene, onChange }: { scene: WeatherScene; onChange: (scene: WeatherScene) => void }) {
   const index = scenes.indexOf(scene);

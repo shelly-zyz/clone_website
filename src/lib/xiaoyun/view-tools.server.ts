@@ -85,7 +85,7 @@ export function setMapView(page: ActivePage | undefined, patch: z.infer<typeof m
     query.delete("replayFrame");
     if (patch.replay === "globe") query.delete("replay");
     else query.set("replay", patch.replay);
-    changed.push({ globe: "气象地球", weather: "云雨叠加", time: "降水时空层", rain: "三维雨幕", accumulation: "累计降雨", radar: "三维雷达", wind: "三维风场" }[patch.replay]);
+    changed.push({ globe: "气象地球", weather: "云雨叠加", time: "降水时空层", rain: "三维雨幕", accumulation: "累计降雨"}[patch.replay]);
   }
   if (patch.place) {
     const place = patch.place;

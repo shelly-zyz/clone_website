@@ -51,33 +51,4 @@ for (const hour of [6, 9, 12, 15, 18]) {
   assert(water > 25000 && masked > 10000, "GFS-Wave includes an ocean field and a real land mask");
 }
 
-const radar = data("radar-khgx-20220322.json");
-assert.match(radar.sha256, /^[a-f0-9]{64}$/);
-assert.deepEqual([radar.x.length, radar.y.length, radar.z.length], [91, 91, 19]);
-const reflectivity = unpack(radar.values);
-assert.equal(reflectivity.length, 91 * 91 * 19);
-assert(reflectivity.includes(128), "radar has a real missing mask");
-assert(reflectivity.some(value => value > 50 && value < 90), "radar has strong observed echoes");
-assert.deepEqual(radar.meshes.map(mesh => mesh.dbz), [20, 35, 50]);
-for (const mesh of radar.meshes) {
-  const vertices = unpack(mesh.vertices), faces = unpack(mesh.faces);
-  assert.equal(vertices.length % 6, 0);
-  assert.equal(faces.length % 12, 0);
-  assert(vertices.length > 0 && faces.length > 0);
-  for (let i = 0; i < faces.length; i += 4) assert(faces.readUInt32LE(i) < vertices.length / 6);
-}
-
-const wind = data("wind-wrf-20050828.json");
-assert.match(wind.sha256, /^[a-f0-9]{64}$/);
-assert.equal(wind.x.length, wind.y.length);
-assert(wind.x.at(-1) - wind.x[0] >= 400, "horizontal coordinates are in km");
-assert.equal(wind.frames.length, 4);
-for (const frame of wind.frames) {
-  const vectors = unpack(frame.vectors);
-  assert.equal(vectors.length, wind.x.length * wind.levels.length * 8);
-  const vertical = Array.from({ length: vectors.length / 8 }, (_, i) => vectors.readInt16LE(i * 8 + 4))
-    .filter(value => value !== -32768);
-  assert(vertical.some(value => value > 20) && vertical.some(value => value < -20), "archive resolves both vertical directions");
-  assert(frame.surfaceMean >= 10 && frame.surfaceMean <= 20);
-}
-console.log("PASS: paired ERA5/GFS valid times, GFS-Wave archive and masks, NEXRAD masks and mesh topology, WRF U/V/W and km coordinates");
+console.log("PASS: paired ERA5/GFS valid times, GFS-Wave archive and masks");

@@ -61,6 +61,9 @@ assert.equal(prepareReplayArea(tiny(0.5,0.5,1,1),'usa',custom).ocean,false,'inla
 assert(archive.mapBounds.west < replay.bounds.west, 'the basemap extends landward');
 assert.deepEqual(archive.bounds, replay.bounds, 'the data retain their geographic extent');
 
+const gradient = () => ({ addColorStop() {} });
+// Cached scene layers draw through offscreen canvases; forward them to the active recording.
+let activeContext;
 function recorder() {
   const surfaces = [];
   const fills = new Set();
@@ -73,13 +76,15 @@ function recorder() {
     closePath(){}, arc(){},
     fill(){
       fills.add(this.fillStyle);
-      if (this.fillStyle?.startsWith('rgb(')) surfaces.push(this.fillStyle);
+      if (typeof this.fillStyle === 'string' && this.fillStyle.startsWith('rgb(')) surfaces.push(this.fillStyle);
     },
-    stroke(){ if (this.strokeStyle === "rgba(127, 56, 40, .82)") drops.push(...path); },
+    stroke(){ if (this.strokeStyle === "rgba(64, 92, 128, .62)") drops.push(...path); },
+    createLinearGradient: gradient, createRadialGradient: gradient,
     fillText(label){ labels.push(label); },
     drawImage(image){ rasters.push(image); },
   }, {get(target,key){return key in target ? target[key] : () => {}; }});
   ctx.fillStyle = '';
+  activeContext = ctx;
   return { surfaces, fills, rasters, drops, labels, canvas:{clientWidth:1060,clientHeight:500,width:1060,height:500,getContext:()=>ctx} };
 }
 
@@ -87,9 +92,17 @@ globalThis.window = {devicePixelRatio:1};
 globalThis.document = {
   createElement() {
     const canvas = { width: 0, height: 0 };
-    canvas.getContext = () => ({
+    canvas.getContext = () => new Proxy({
       createImageData: (width, height) => ({ data: new Uint8ClampedArray(width * height * 4) }),
       putImageData: image => { canvas.pixels = image.data; },
+      createLinearGradient: gradient, createRadialGradient: gradient,
+    }, {
+      get(target, key) {
+        if (key in target) return target[key];
+        const value = activeContext?.[key];
+        return typeof value === 'function' ? value.bind(activeContext) : value;
+      },
+      set(target, key, value) { if (activeContext) activeContext[key] = value; return true; },
     });
     return canvas;
   },
@@ -114,7 +127,7 @@ const index = Math.min(8, replay.rain.length - 1);
 const common = { index, area: archive, clouds:true, precipitation:true, previous:index, progress:1, rotation:.42 };
 const overlay = recorder();
 paintReplay(overlay.canvas, replay, { ...common, view: 'weather' });
-assert.equal(overlay.rasters.length, 2);
+assert(overlay.rasters.length >= 3, 'ground rain, cloud shadow and the cached cloud layer are drawn');
 assert(overlay.drops.length > 0);
 const stack = recorder();
 paintReplay(stack.canvas, replay, { ...common, view: 'time' });

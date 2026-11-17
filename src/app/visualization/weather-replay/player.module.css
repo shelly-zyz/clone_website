@@ -349,3 +349,6 @@
   .embedded .readingsToggle { background: var(--glass); padding: 5px 9px; gap: 9px; }
   .embedded .readingsBody { border-radius: 0 0 9px 9px; }
 }
+
+.embedded:has(.scene[data-immersive="true"]) .readings { display: none; }
+.embedded:has(.scene[data-immersive="true"]) .legend { right: 16px; }
