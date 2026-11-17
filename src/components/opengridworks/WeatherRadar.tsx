@@ -8,8 +8,8 @@ import {
 } from "three";
 import { geoAzimuthalEquidistant, geoStream } from "d3-geo";
 import type { FeatureCollection, Polygon, MultiPolygon } from "geojson";
-import { finishGlobeHandoff } from "@/lib/globe-handoff";
 import { scaleColor } from "@/app/visualization/weather-replay/replay-palette";
+import { GlobeLoading } from "./GlobeLoading";
 import { WeatherVolumeCanvas, unpack, useWeatherArchive } from "./WeatherVolumeCanvas";
 import styles from "./WeatherVolume.module.css";
 
@@ -244,10 +244,9 @@ export function WeatherRadar() {
   const build = useCallback(() => radar ? radarGroup(radar, mode, threshold, opacity, focus, coastline) : new Group(),
     [coastline, focus, mode, opacity, radar, threshold]);
 
-  useEffect(() => { if (radar || error) finishGlobeHandoff("weather"); }, [radar, error]);
-
-  if (!radar) return <div className={styles.notice} role="status">{error || data ? "无法读取此雷达体扫档案。" : "正在读取雷达体扫…"}
-    {(error || data) && <button type="button" onClick={retry}>重试</button>}</div>;
+  if (!radar) return error || data
+    ? <div className={styles.notice} role="status">无法读取此雷达体扫档案。<button type="button" onClick={retry}>重试</button></div>
+    : <GlobeLoading label="正在加载三维雷达" />;
 
   return (
     <section className={styles.layout} aria-label="三维雷达">

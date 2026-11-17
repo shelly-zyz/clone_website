@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BufferGeometry, Color, Float32BufferAttribute, GridHelper, Group, LineBasicMaterial, LineSegments, Vector3 } from "three";
-import { finishGlobeHandoff } from "@/lib/globe-handoff";
 import { forecastOverviewSchema, type ForecastOverview } from "@/lib/globe-forecast";
 import { ForecastSeries } from "./ForecastSidebar";
+import { GlobeLoading } from "./GlobeLoading";
 import { WeatherVolumeCanvas, unpack, useWeatherArchive } from "./WeatherVolumeCanvas";
 import styles from "./WeatherVolume.module.css";
 
@@ -89,7 +89,6 @@ export function WeatherWind() {
   }) ?? [], [data, points]);
   const build = useCallback(() => buildWind(points, layer), [layer, points]);
 
-  useEffect(() => { if (data || error) finishGlobeHandoff("weather"); }, [data, error]);
   useEffect(() => {
     if (model !== "climax" || !issue || referenceLoaded) return;
     const controller = new AbortController();
@@ -105,8 +104,9 @@ export function WeatherWind() {
     return () => controller.abort();
   }, [issue, model, referenceLoaded]);
 
-  if (!data || !frame) return <div className={styles.notice} role="status">{error ? "无法读取 WRF 档案。" : "正在读取三维风场…"}
-    {error && <button type="button" onClick={retry}>重试</button>}</div>;
+  if (!data || !frame) return error || data
+    ? <div className={styles.notice} role="status">无法读取 WRF 档案。<button type="button" onClick={retry}>重试</button></div>
+    : <GlobeLoading label="正在加载三维风场" />;
 
   const surfacePoints = data.frames.map(item => ({ date: item.time, value: item.surfaceMean }));
   const compatible = reference?.issueTime && Date.parse(reference.issueTime) === Date.parse(data.issue) ? reference : undefined;
