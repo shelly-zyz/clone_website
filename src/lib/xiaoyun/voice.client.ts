@@ -9,32 +9,31 @@ type RecognitionOptions = {
 };
 
 export function streamRecognition({ request, onText, signal }: RecognitionOptions) {
+  const recording: ArrayBuffer[] = [];
   let pending: ArrayBuffer[] = [];
   let uploaded: Promise<void> = Promise.resolve();
   let failed = false;
+  let finished = false;
   const upstream = new AbortController();
   const channel = AbortSignal.any([signal, upstream.signal]);
   const opened = request("recognize-start", "", channel).then(response => response.session).catch(() => undefined);
   const collect = () => {
-    const joined = new Uint8Array(pending.reduce((sum, chunk) => sum + chunk.byteLength, 0));
-    let offset = 0;
-    for (const chunk of pending) {
-      joined.set(new Uint8Array(chunk), offset);
-      offset += chunk.byteLength;
-    }
+    const batch = joinPcm(pending);
     pending = [];
-    return joined.buffer;
+    return batch;
   };
   const cancel = () => {
     upstream.abort();
     void opened.then(id => {
-      if (id) void request("recognize-cancel", "", AbortSignal.timeout(2_000), id).catch(() => {});
+      if (id && !finished) void request("recognize-cancel", "", AbortSignal.timeout(2_000), id).catch(() => {});
     });
   };
   signal.addEventListener("abort", cancel, { once: true });
   return {
     append(pcm: ArrayBuffer) {
-      if (failed || signal.aborted) return;
+      if (signal.aborted) return;
+      recording.push(pcm);
+      if (failed) return;
       pending.push(pcm);
       if (pending.length < 6) return;
       const batch = collect();
@@ -46,21 +45,51 @@ export function streamRecognition({ request, onText, signal }: RecognitionOption
       }).catch(() => { failed = true; });
     },
     async finish() {
-      const deadline = setTimeout(cancel, 1_000);
-      try {
+      const backup = new AbortController();
+      const backupSignal = AbortSignal.any([signal, backup.signal]);
+      const backupStart = Promise.withResolvers<void>();
+      const hedge = setTimeout(() => backupStart.resolve(), 600);
+      const deadline = setTimeout(cancel, 2_500);
+      const realtime = (async () => {
         const id = await opened;
         await uploaded;
         if (failed || !id) throw new Error("实时语音连接未完成。");
-        return (await request("recognize-finish", collect(), channel, id)).text ?? "";
-      } catch (error) {
-        if (!channel.aborted) cancel();
+        const { text } = await request("recognize-finish", collect(), channel, id);
+        finished = true;
+        if (!text) throw new Error("实时语音未识别出文字。");
+        return text;
+      })().catch(error => {
+        backupStart.resolve();
         throw error;
+      });
+      const batch = backupStart.promise.then(async () => {
+        backupSignal.throwIfAborted();
+        const { text } = await request("transcribe", joinPcm(recording), backupSignal);
+        if (!text) throw new Error("未识别出文字。");
+        return text;
+      });
+      try {
+        return await Promise.any([realtime, batch]);
       } finally {
+        clearTimeout(hedge);
         clearTimeout(deadline);
+        backup.abort();
+        backupStart.resolve();
+        if (!channel.aborted) cancel();
         signal.removeEventListener("abort", cancel);
       }
     },
   };
+}
+
+function joinPcm(chunks: ArrayBuffer[]) {
+  const joined = new Uint8Array(chunks.reduce((size, chunk) => size + chunk.byteLength, 0));
+  let offset = 0;
+  for (const chunk of chunks) {
+    joined.set(new Uint8Array(chunk), offset);
+    offset += chunk.byteLength;
+  }
+  return joined.buffer;
 }
 
 export function pcmBase64(bytes: Uint8Array) {
