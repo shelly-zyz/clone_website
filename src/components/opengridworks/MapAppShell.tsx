@@ -41,7 +41,7 @@ import {
   Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { CarbonAtlasControls, CarbonTimeline } from "./CarbonAtlasControls";
+import { CarbonAtlasControls, CarbonMapLegend, CarbonTimeline } from "./CarbonAtlasControls";
 import { CarbonSceneSwitcher } from "./CarbonSceneSwitcher";
 import {
   PowerAnalysisFilters, PowerAnalysisRail, PowerMapCaption, PowerMapLegend, PowerTimeline, PowerViews,
@@ -61,7 +61,7 @@ import { readReplayRegion, replayRegionAt, replayRegionOptions } from "@/lib/wea
 import { replayViews, type WeatherScene } from "@/lib/weather-replay/views";
 import { WeatherSceneSwitcher } from "./WeatherSceneSwitcher";
 import { loadWeatherReplayData } from "@/app/visualization/weather-replay/replay-loader";
-import { WeatherSidebarFilters } from "@/components/opengridworks/WeatherSidebarFilters";
+import { WeatherGlobeLegend, WeatherSidebarFilters } from "@/components/opengridworks/WeatherSidebarFilters";
 import { WorkspaceFilterSelect, WorkspaceSidebar } from "@/components/opengridworks/WorkspaceSidebar";
 import { XiaoyunAssistant } from "@/components/opengridworks/XiaoyunAssistant";
 import type { WorkspaceTopic } from "@/lib/globe-topics";
@@ -5397,6 +5397,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
         {retainedStages.weather && (
           <div className="og-weather-original og-weather-globe-stage" hidden={!weatherGlobeActive}>
             <EarthProjectViewport active={weatherGlobeActive} hash={activeProject === "weather" ? context.weather : undefined} onLoad={weatherReady} onLocation={setWeatherPoint} />
+            {weatherGlobeActive && <WeatherGlobeLegend frameDocument={weatherDocument} />}
             {weatherGlobeActive && weatherPoint && replayCandidate && (
               <button type="button" className="og-weather-replay-entry" onClick={() => navigate("weather", {
                 replay: "weather", replayRegion: replayCandidate.value,
@@ -5489,6 +5490,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
             />
           </div>
         )}
+        {activeProject === "carbon" && !cinematic && <CarbonMapLegend frame={carbonFrame} planar={carbonPlanar} scaleMax={carbonScale} />}
       </div>
       {!economyActive && !resourceScene && (
         <>
@@ -5579,7 +5581,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
             ) : activeProject === "carbon" ? (
               <CarbonAtlasControls {...carbonTime} manifest={carbonManifest} frame={carbonFrame} sector={carbonSector}
                 regionOptions={carbonTargets} region={context.region ?? "global"} pending={carbonLoading} error={carbonError}
-                planar={carbonPlanar} scaleMax={carbonScale} compareHref={carbonCompareHref}
+                compareHref={carbonCompareHref}
                 onRegion={selectCarbonRegion} onSector={onCarbonSector} onShare={shareMap} onRetry={retryCarbon} />
             ) : activeProject === "weather" ? (
               <>

@@ -107,13 +107,13 @@ function heatmap(data: ChartData, fields: ChartFields, palette: Palette, compact
     note: "同一格内的记录取平均值，空格表示缺少数据。" +
       (columns.length < allX.length || rows.length < allY.length ? " 图中最多展示前 48 列、26 行。" : ""),
     option: {
-      grid: { left: compact ? 48 : 74, right: 14, top: 14, bottom: 72 },
+      grid: { left: compact ? 103 : 160, right: 14, top: 14, bottom: 36 },
       xAxis: { ...categoryAxis(palette, columns), axisLabel: { ...axis(palette).axisLabel, formatter: (label: string) => shortName(label, 8) } },
       yAxis: { ...categoryAxis(palette, rows), inverse: true, axisLabel: { ...axis(palette).axisLabel, formatter: (label: string) => shortName(label, compact ? 4 : 8) } },
       visualMap: {
         type: "continuous", dimension: 2, min, max: max === min ? max + Math.max(1, Math.abs(max) * 0.01) : max,
-        inRange: { color: [...palette.scale] }, bottom: 12, left: "center", orient: "horizontal",
-        itemWidth: 10, itemHeight: compact ? 88 : 150, text: [number.format(max), number.format(min)], textStyle: { color: palette.muted },
+        inRange: { color: [...palette.scale] }, top: 9, left: 5, orient: "vertical",
+        itemWidth: 10, itemHeight: compact ? 54 : 90, text: [number.format(max), number.format(min)], textStyle: { color: palette.muted },
       },
       tooltip: {
         formatter: params => {

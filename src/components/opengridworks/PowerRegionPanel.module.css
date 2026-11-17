@@ -71,12 +71,14 @@
 .mapCaption {
   position: absolute;
   top: 12px;
-  left: 12px;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 4px 7px;
-  max-width: calc(100% - 67px);
+  width: max-content;
+  max-width: calc(100% - 220px);
   padding: 6px 9px;
   border-radius: 6px;
   background: #0d1b27dd;
@@ -89,9 +91,10 @@
 .legend {
   position: absolute;
   z-index: 2;
-  bottom: 10px;
+  top: 12px;
   left: 12px;
-  width: min(208px, calc(100% - 25px));
+  width: max-content;
+  max-width: min(155px, 36%);
   display: grid;
   gap: 4px;
   padding: 8px 10px;
@@ -100,16 +103,18 @@
   color: #bdcedc;
   font-size: 9px;
 }
-.legendHead, .legendTicks { display: flex; justify-content: space-between; gap: 4px; }
+.legendBody { display: flex; gap: 6px; height: 76px; }
+.legendHead { display: grid; gap: 2px; }
+.legendTicks { display: flex; flex-direction: column; justify-content: space-between; font-variant-numeric: tabular-nums; }
 .legendHead strong { font-weight: 650; color: #e3eff5; }
-.ramp { display: block; width: 100%; height: 6px; border-radius: 2px; }
+.ramp { display: block; width: 10px; height: 100%; border-radius: 2px; }
 .legendNote { color: #a9bbcc; }
-.bins { display: flex; gap: 3px; }
-.bins button { flex: 1 1 0; min-width: 0; min-height: 12px; }
+.bins { display: flex; flex-direction: column; width: 12px; gap: 2px; }
+.bins button { flex: 1 1 0; min-width: 0; min-height: 0; }
 .bins:has(button[aria-pressed="true"]) button[aria-pressed="false"],
 .legend:has(.missing[aria-pressed="true"]) .bins button { opacity: .4; }
 .missing[aria-pressed="true"] { background: #263f51; color: #fff; }
-.bins svg { width: 100%; height: 8px; }
+.bins svg { display: block; width: 100%; height: 100%; }
 .missing { justify-self: start; }
 .missing::before { display: inline-block; content: ""; width: 8px; height: 8px; margin-right: 5px; background: #46586a; }
 .thematicMap { position: absolute; inset: 33px 6px 55px; display: grid; grid-template-rows: minmax(0, 1fr) auto; }
@@ -266,10 +271,19 @@
   .timelineMain { gap: 6px; min-height: 35px; }
   .timelineRange > div { font-size: 8px; }
   .timeline select { max-width: 42%; }
-  .mapCaption { top: 5px; left: 5px; padding: 5px; font-size: 10px; }
+  .mapCaption {
+    top: 5px;
+    left: calc(27% + 12px);
+    right: 52px;
+    max-width: none;
+    width: auto;
+    transform: none;
+    padding: 5px;
+    font-size: 10px;
+  }
   .mapCaption strong { font-size: 11px; }
-  .legend { width: min(155px, 45%); bottom: 4px; left: 5px; padding: 5px 6px; font-size: 8px; }
-  .legendHead { flex-wrap: wrap; }
+  .legend { top: 5px; left: 5px; max-width: min(104px, 27%); padding: 5px 6px; font-size: 8px; }
+  .legendBody { height: 61px; }
   .thematicMap { inset: 28px 1px 45px; }
   .wipe { width: min(245px, 80%); }
   .railRegion { inset: auto var(--og-gutter) var(--og-globe-nav-space); width: auto; pointer-events: none; }

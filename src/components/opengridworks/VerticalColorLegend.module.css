@@ -1,0 +1,28 @@
+.legend {
+  position: absolute;
+  z-index: 4;
+  top: 10px;
+  left: 10px;
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #0d1b27e8;
+  color: #c9d9e4;
+  font-size: 10px;
+  line-height: 1.25;
+  pointer-events: none;
+}
+.legend strong { color: #eff7fc; font-weight: 650; }
+.body { display: flex; gap: 6px; }
+.ramp { display: block; width: 10px; height: var(--color-legend-height, 76px); }
+.ticks { display: flex; flex-direction: column; justify-content: space-between; font-variant-numeric: tabular-nums; }
+
+.weatherGlobe[data-ready="false"] { visibility: hidden; }
+@media (min-width: 901px) {
+  .weatherGlobe {
+    top: calc(var(--og-stage-top) + 10px);
+    left: calc(var(--og-stage-left) + 10px);
+  }
+}

@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { geoEquirectangular, geoPath, type GeoPermissibleObjects } from "d3-geo";
 import { ChevronDown, Pause, Play } from "lucide-react";
 import { scaleColor } from "@/app/visualization/weather-replay/replay-palette";
+import { VerticalColorLegend } from "./VerticalColorLegend";
 import styles from "./WeatherComparison.module.css";
 
 const fields = {
@@ -175,20 +176,11 @@ export function WeatherComparisonPanel() {
                 <figure className={styles.row} key={key}>
                   <figcaption className={styles.rowTitle}>
                     <span className={styles.metric}><b>{meta.short}</b> {meta.name} <small>{meta.unit}</small></span>
-                    <span className={styles.legend} aria-label={`共同色标 ${meta.range[0]} 至 ${meta.range[1]} ${meta.unit}`}>
-                      <span>{meta.range[0]}</span>
-                      <svg className={styles.legendRamp} viewBox="0 0 46 4" aria-hidden="true">
-                        <defs><linearGradient id={`${panelId}-${key}`}>
-                          {colorScale(key).map(([offset, rgb]) => (
-                            <stop key={offset} offset={offset} stopColor={`rgb(${rgb.join(",")})`} />
-                          ))}
-                        </linearGradient></defs>
-                        <rect width="46" height="4" rx="1" fill={`url(#${panelId}-${key})`} />
-                      </svg>
-                      <span>{meta.range[1]}</span>
-                    </span>
                   </figcaption>
                   <div className={styles.pair}>
+                    <VerticalColorLegend className={styles.legend} label="共同色标"
+                      ticks={[String(meta.range[1]), String(meta.range[0])]}
+                      stops={colorScale(key).map(([offset, rgb]) => [offset, `rgb(${rgb.join(",")})`])} />
                     <MiniMap raster={rendered.maps[key].analysis} land={land} label={meta.name + " · ERA5 再分析"} />
                     <MiniMap raster={rendered.maps[key].forecast} land={land} label={meta.name + " · GFS 预报"} />
                   </div>

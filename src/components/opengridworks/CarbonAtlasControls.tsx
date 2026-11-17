@@ -10,6 +10,7 @@ import {
 import { chineseLabelMatches } from "@/lib/china-provinces";
 import { CarbonYearFilter } from "./CarbonYearFilter";
 import { WorkspaceFilterSelect } from "./WorkspaceSidebar";
+import { VerticalColorLegend } from "./VerticalColorLegend";
 import styles from "./CarbonAtlasControls.module.css";
 
 const amount = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 });
@@ -59,9 +60,23 @@ export function CarbonTimeline({ frames, date, playing, onDate, onPlay }: Carbon
   );
 }
 
+export function CarbonMapLegend({ frame, planar, scaleMax }: {
+  frame: CarbonManifestFrame | null;
+  planar: boolean;
+  scaleMax: number;
+}) {
+  const colors = planar ? ["#3f9f82", "#a7c869", "#f4dc52", "#f27c47", "#fff0cf"]
+    : ["#19786d", "#23e6d5", "#e9ff72", "#ff892e", "#fff5cc"];
+  const maximum = frame ? planar ? scaleMax : carbonFrameColorMax(frame) : null;
+  return <VerticalColorLegend label="碳排放速率" unit="kgC/h" className={styles.mapLegend}
+    stops={colors.map((color, index) => [index / (colors.length - 1), color])}
+    ticks={[maximum == null ? "—" : amount.format(maximum), "0"]}
+    note={planar ? "部门共用对数色阶" : "当日网格对数色阶"} />;
+}
+
 export function CarbonAtlasControls({
-  manifest, frames, frame, date, sector, regionOptions, region, pending, error, playing, planar,
-  scaleMax, compareHref, onRegion, onDate, onSector, onPlay, onShare, onRetry,
+  manifest, frames, frame, date, sector, regionOptions, region, pending, error, playing,
+  compareHref, onRegion, onDate, onSector, onPlay, onShare, onRetry,
 }: CarbonTime & {
   manifest: CarbonCatalog | null;
   frame: CarbonManifestFrame | null;
@@ -70,8 +85,6 @@ export function CarbonAtlasControls({
   region: string;
   pending: boolean;
   error: string | null;
-  planar: boolean;
-  scaleMax: number;
   compareHref?: string;
   onRegion: (id: string) => void;
   onSector: (value: string) => void;
@@ -143,7 +156,7 @@ export function CarbonAtlasControls({
         </div>
       </details>
       <details className={styles.group} open>
-        <summary>排放摘要与图例</summary>
+        <summary>排放摘要</summary>
         <WorkspaceFilterSelect label="全球排放显示单位" value={unit} onChange={setUnit}
           options={[{ value: "co2", label: "百万吨 CO₂ / 日" }, { value: "carbon", label: "千克碳 / 小时" }]} />
         <div className={styles.indicator} aria-label="全球排放摘要" aria-busy={pending}>
@@ -154,9 +167,7 @@ export function CarbonAtlasControls({
           {pending ? <p role="status">正在读取 {date || "排放目录"}…</p> :
             error ? <p role="status">{error} <button type="button" onClick={onRetry}>重试</button></p> : null}
         </div>
-        <div className={styles.ramp} data-planar={planar} aria-hidden="true" />
-        <p className={styles.endpoints}><span>低 · 0</span><span>高 · {frame ? amount.format(planar ? scaleMax : carbonFrameColorMax(frame)) : "—"} kgC/h</span></p>
-        <p className={styles.note}>0.1° 网格 · {planar ? "部门共用对数色阶" : "当日网格对数色阶"}</p>
+
       </details>
       <details className={styles.group}>
         <summary>排放图层与来源</summary>

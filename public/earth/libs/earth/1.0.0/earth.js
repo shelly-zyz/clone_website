@@ -709,6 +709,22 @@
         });
     }
 
+    function updateScaleLabels(grid) {
+        var elementId = grid.type === "wind" ? "#location-wind-units" : "#location-value-units";
+        var units = createUnitToggle(elementId, grid).value();
+        var bounds = grid.scale.bounds;
+        document.getElementById("scale-label").textContent = units.label;
+        document.getElementById("scale-max").textContent = µ.formatScalar(bounds[1], units);
+        document.getElementById("scale-min").textContent = µ.formatScalar(bounds[0], units);
+        return units;
+    }
+
+    function notifyScaleChange() {
+        if (document.documentElement.classList.contains("ogw-workspace")) {
+            document.getElementById("scale").dispatchEvent(new Event("weather-scale-change"));
+        }
+    }
+
     function drawOverlay(field, overlayType) {
         if (!field) return;
 
@@ -724,29 +740,27 @@
             drawGridPoints(ctx, grid, globeAgent.value());
         }
 
+        var legend = document.getElementById("weather-color-legend");
+        legend.hidden = !grid;
         if (grid) {
-            // Draw color bar for reference.
             var scale = grid.scale, bounds = scale.bounds;
-            var g = c.getContext("2d"), n = c.width - 1;
+            var g = c.getContext("2d"), n = c.height - 1;
             for (var i = 0; i <= n; i++) {
-                var rgb = scale.gradient(µ.spread(i / n, bounds[0], bounds[1]), 1);
+                var rgb = scale.gradient(µ.spread(1 - i / n, bounds[0], bounds[1]), 1);
                 g.fillStyle = "rgb(" + rgb[0] + "," + rgb[1] + "," + rgb[2] + ")";
-                g.fillRect(i, 0, 1, c.height);
+                g.fillRect(0, i, c.width, 1);
             }
 
-            // Show tooltip on hover.
+            updateScaleLabels(grid);
             colorBar.on("mousemove", function() {
-                var x = d3.mouse(this)[0];
-                var pct = µ.clamp((Math.round(x) - 2) / (n - 2), 0, 1);
+                var pct = 1 - µ.clamp(d3.mouse(this)[1] / n, 0, 1);
                 var value = µ.spread(pct, bounds[0], bounds[1]);
                 var elementId = grid.type === "wind" ? "#location-wind-units" : "#location-value-units";
                 var units = createUnitToggle(elementId, grid).value();
                 colorBar.attr("title", µ.formatScalar(value, units) + " " + units.label);
             });
         }
-        if (document.documentElement.classList.contains("ogw-workspace")) {
-            c.dispatchEvent(new Event("weather-scale-change"));
-        }
+        notifyScaleChange();
     }
 
     /**
@@ -836,6 +850,11 @@
         d3.select("#location-wind-units").text(units.label).on("click", function() {
             unitToggle.next();
             showWindAtLocation(wind, product);
+            var grid = (gridAgent.value() || {}).overlayGrid;
+            if (grid) {
+                updateScaleLabels(grid);
+                notifyScaleChange();
+            }
         });
     }
 
@@ -848,6 +867,11 @@
         d3.select("#location-value-units").text(units.label).on("click", function() {
             unitToggle.next();
             showOverlayValueAtLocation(value, product);
+            var grid = (gridAgent.value() || {}).overlayGrid;
+            if (grid) {
+                updateScaleLabels(grid);
+                notifyScaleChange();
+            }
         });
     }
 
@@ -955,12 +979,6 @@
         });
 
         d3.selectAll(".fill-screen").attr("width", view.width).attr("height", view.height);
-        // Adjust size of the scale canvas to fill the width of the menu to the right of the label.
-        var label = d3.select("#scale-label").node();
-        d3.select("#scale")
-            .attr("width", (d3.select("#menu").node().offsetWidth - label.offsetWidth) * 0.97)
-            .attr("height", label.offsetHeight / 2);
-
         d3.select("#show-menu").on("click", function() {
             d3.select("#menu").classed("invisible", !d3.select("#menu").classed("invisible"));
         });

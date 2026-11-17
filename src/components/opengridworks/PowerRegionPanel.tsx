@@ -168,26 +168,28 @@ export function PowerMapLegend({ data, presentation, bin, palette, onBin }: {
       <strong>{frame.label}</strong>
       <span>{presentation ? "分级设色" : "连续色阶"} · {frame.unit}</span>
     </div>
-    {end > 0 ? <>
+    {end > 0 ? <div className={styles.legendBody}>
       {presentation ? <div className={styles.bins} role="group" aria-label="图例分级筛选">
-        {colors.map((color, i) => {
+        {colors.map((_, position) => {
+          const i = colors.length - 1 - position;
+          const color = colors[i];
           const low = begin + (end - begin) * i / colors.length;
           const high = begin + (end - begin) * (i + 1) / colors.length;
           const description = "筛选 " + number(low, frame.unit, diverging) + " 至 " + number(high, frame.unit, diverging);
           return <button type="button" key={color} aria-label={description} title={description} aria-pressed={bin === i}
-            onClick={() => onBin(bin === i ? null : i)}><svg viewBox="0 0 20 8" preserveAspectRatio="none" aria-hidden="true">
-              <rect width="20" height="8" fill={color} />
+            onClick={() => onBin(bin === i ? null : i)}><svg viewBox="0 0 10 12" preserveAspectRatio="none" aria-hidden="true">
+              <rect width="10" height="12" fill={color} />
             </svg></button>;
         })}
-      </div> : <svg className={styles.ramp} viewBox="0 0 200 6" preserveAspectRatio="none" aria-hidden="true">
-        <defs><linearGradient id={gradientId}>
+      </div> : <svg className={styles.ramp} viewBox="0 0 10 76" preserveAspectRatio="none" aria-hidden="true">
+        <defs><linearGradient id={gradientId} x1="0" x2="0" y1="1" y2="0">
           {Array.from({ length: 33 }, (_, index) => <stop key={index} offset={index / 32}
             stopColor={powerRampColor(index / 32, diverging, palette)} />)}
         </linearGradient></defs>
-        <rect width="200" height="6" fill={"url(#" + gradientId + ")"} />
+        <rect width="10" height="76" fill={"url(#" + gradientId + ")"} />
       </svg>}
-      <div className={styles.legendTicks}><span>{number(begin, "", diverging)}</span><span>{number(middle)}</span><span>{number(end, "", diverging)}</span></div>
-    </> : null}
+      <div className={styles.legendTicks}><span>{number(end, "", diverging)}</span><span>{number(middle)}</span><span>{number(begin, "", diverging)}</span></div>
+    </div> : null}
     {!presentation && end > 0 && <span className={styles.legendNote}>
       {diverging ? "高度按指标绝对值平方根缩放" : "高度按指标平方根缩放"}{data.measure === "growth" ? " · 超量程值封顶" : ""}
     </span>}

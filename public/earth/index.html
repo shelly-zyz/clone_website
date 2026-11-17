@@ -16,7 +16,7 @@
     <link rel="shortcut icon" href="/earth/favicon.ico"/>
     <link rel="apple-touch-icon" sizes="120x120" href="/earth/iphone-icon.png"/>
     <link rel="apple-touch-icon" sizes="152x152" href="/earth/ipad-icon.png"/>
-    <link rel="stylesheet" type="text/css" href="/earth/styles/styles.css"/>
+    <link rel="stylesheet" type="text/css" href="/earth/styles/styles.css?v=vertical-color-scale"/>
     <script>
         if (new URLSearchParams(location.search).has("workspace")) {
             document.documentElement.classList.add("ogw-workspace");
@@ -40,6 +40,14 @@
     <div id="sponsor" class="invisible">
         <p><span id="sponsor-hide" class="text-button invisible"> ✕ </span>community</p>
         <a id="sponsor-link" href="https://www.facebook.com/EarthWindMap">EarthWindMap</a>
+    </div>
+
+    <div id="weather-color-legend" aria-label="覆盖指标色阶" hidden>
+        <span id="scale-label"></span>
+        <div class="weather-color-body">
+            <canvas id="scale" width="10" height="76"></canvas>
+            <div class="weather-color-ticks"><span id="scale-max"></span><span id="scale-min"></span></div>
+        </div>
     </div>
 
     <div id="details">
@@ -70,7 +78,6 @@
                 id="toggle-zone" class="text-button"></span>
             </p>
             <p>数据层 | <span id="data-layer"></span></p>
-            <p><span id="scale-label">色标 | </span><canvas id="scale"></canvas></p>
             <p>来源 | <span id="data-center"></span></p>
             <p>时间控制 | <span
                 class="text-button" id="nav-now" title="当前条件">当前</span><span
@@ -151,7 +158,7 @@
     <script defer src="/earth/libs/earth/1.0.0/micro.js" charset="utf-8"></script>
     <script defer src="/earth/libs/earth/1.0.0/globes.js" charset="utf-8"></script>
     <script defer src="/earth/libs/earth/1.0.0/products.js" charset="utf-8"></script>
-    <script defer src="/earth/libs/earth/1.0.0/earth.js?v=regional-replay" charset="utf-8"></script>
+    <script defer src="/earth/libs/earth/1.0.0/earth.js?v=vertical-color-scale" charset="utf-8"></script>
 
 </body>
 </html>

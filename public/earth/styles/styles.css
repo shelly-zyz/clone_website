@@ -113,6 +113,32 @@ body {
     text-decoration: none;
 }
 
+#weather-color-legend:not([hidden]) {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 2;
+    display: grid;
+    gap: 4px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: #0d1b27e8;
+    color: #c9d9e4;
+    font-size: 10px;
+}
+.weather-color-body {
+    display: flex;
+    gap: 6px;
+}
+.weather-color-ticks {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+.ogw-workspace #weather-color-legend:not([hidden]) {
+    display: none;
+}
+
 #details {
     position: absolute;
     top: 16px;

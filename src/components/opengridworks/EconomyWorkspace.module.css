@@ -64,7 +64,7 @@
   border-top: 1px solid #2a3538;
 }
 
-.legend, .search {
+.search {
   display: grid;
   gap: 6px;
   color: #aebbc1;
@@ -72,35 +72,11 @@
   line-height: 1.45;
 }
 
-.legend {
-  padding-block: 12px 2px;
-  border-top: 1px solid #2a3538;
-}
-
-.scale {
-  height: 6px;
-  background: linear-gradient(90deg, #653019, #d46a25, #ffad32);
-  border-radius: 3px;
-}
-
-.range {
-  display: flex;
-  justify-content: space-between;
-  gap: 6px;
-  font-size: 10px;
-}
-
-.missing {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.missing span {
-  width: 8px;
-  height: 8px;
-  background: #252b2d;
-  border: 1px solid #657276;
+@media (min-width: 901px) {
+  .historyLegend[class] {
+    top: calc(var(--og-stage-top) + 10px);
+    left: calc(var(--og-stage-left) + 10px);
+  }
 }
 
 .searchField {
@@ -261,19 +237,6 @@
 .close { display: flex; position: absolute; top: 9px; right: 12px; width: 36px; }
 :global(.og-economy-profile-region[data-dock="closed"]) .profileTrigger { display: inline-flex; }
 :global(.og-economy-profile-region[data-dock="closed"]) .profile { display: none; }
-
-.outlookLegend {
-  display: grid;
-  gap: 3px;
-  margin-block: 7px;
-  color: #b8cbbe;
-}
-
-.outlookScale {
-  height: 4px;
-  border-radius: 2px;
-  background: linear-gradient(90deg, #c97663 0%, #80a4a0 37.5%, #62ac80 62.5%, #d4ee74 100%);
-}
 
 .outlookLinks {
   display: flex;

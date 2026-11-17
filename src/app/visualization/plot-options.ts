@@ -93,7 +93,7 @@ function heatmap(spec: AnalysisChartSpec, compact: boolean, tooltip: TooltipComp
           : "";
       },
     },
-    grid: { left: compact ? 36 : 52, right: zoom ? 41 : 13, top: 8, bottom: compact ? 25 : 67 },
+    grid: { left: compact ? 36 : 144, right: zoom ? 41 : 13, top: 8, bottom: 25 },
     xAxis: {
       type: "category", data: [...spec.labels], axisLabel: { ...axisLabel, fontSize: compact ? 9 : 11 },
       splitArea: { show: true, areaStyle: { color: ["#eef3f5"] } }, axisTick: { show: false },
@@ -110,7 +110,7 @@ function heatmap(spec: AnalysisChartSpec, compact: boolean, tooltip: TooltipComp
     },
     visualMap: {
       show: !compact, type: "continuous", min, max: Math.max(min + 0.0001, max), dimension: 2,
-      orient: "horizontal", itemWidth: 11, itemHeight: 134, left: "center", bottom: 5,
+      orient: "vertical", itemWidth: 10, itemHeight: 84, left: 6, top: 6,
       text: [readValue(max, spec.unit), readValue(min, spec.unit)],
       formatter: value => compactFormat.format(Number(value)), calculable: false, precision: 2,
       inRange: { color: palette }, textStyle: { color: ink },
@@ -138,7 +138,7 @@ function mapOptions(spec: Extract<AnalysisChartSpec, { kind: "map" }>, compact: 
       },
     },
     visualMap: {
-      type: "piecewise", show: !compact, orient: "horizontal", left: "center", bottom: 6,
+      type: "piecewise", show: !compact, orient: "vertical", left: 6, top: 6,
       itemWidth: 13, itemHeight: 9, itemGap: 8, textStyle: { color: ink, fontSize: 10 },
       pieces: pieces.map(piece => ({
         ...piece,
@@ -151,7 +151,7 @@ function mapOptions(spec: Extract<AnalysisChartSpec, { kind: "map" }>, compact: 
     },
     series: [{
       type: "map", map: worldMap, nameProperty: "ADM0_A3", silent: compact, roam: false,
-      top: 4, bottom: compact ? 4 : 46, left: 7, right: 7,
+      top: 4, bottom: 4, left: compact ? 7 : 100, right: 7,
       itemStyle: { areaColor: "#e9eef5", borderColor: "#fff", borderWidth: 0.72, shadowBlur: 6, shadowColor: "#58759d39" },
       emphasis: { label: { show: false }, itemStyle: { areaColor: champagne.base } },
       data: spec.mapIds.map((id, index) => ({
@@ -322,14 +322,14 @@ function calendar(spec: AnalysisChartSpec, compact: boolean, tooltip: TooltipCom
   return {
     calendar: {
       range: [spec.labels[0], spec.labels[spec.labels.length - 1]], orient: "vertical", cellSize: ["auto", "auto"],
-      left: compact ? 5 : 10, right: compact ? 5 : 10, top: compact ? 8 : 12, bottom: compact ? 8 : 53,
+      left: compact ? 5 : 113, right: compact ? 5 : 10, top: compact ? 8 : 12, bottom: 8,
       splitLine: { show: false }, yearLabel: { show: false }, monthLabel: { show: false },
       dayLabel: { show: !compact, position: "end", firstDay: 1, nameMap: ["日", "一", "二", "三", "四", "五", "六"], color: ink, margin: 8 },
       itemStyle: { color: "#f2f6f7", borderColor: "#fff", borderWidth: 3 },
     },
     visualMap: {
-      type: "continuous", show: !compact, dimension: 1, min, max, orient: "horizontal", left: "center", bottom: 5,
-      inRange: { color: emissionColors }, itemWidth: 10, itemHeight: 112,
+      type: "continuous", show: !compact, dimension: 1, min, max, orient: "vertical", left: 6, top: 6,
+      inRange: { color: emissionColors }, itemWidth: 10, itemHeight: 76,
       text: [readValue(max, spec.unit), readValue(min, spec.unit)], textStyle: { color: ink, fontSize: 10 },
     },
     tooltip: { ...tooltip, trigger: "item", formatter: params => {

@@ -490,12 +490,6 @@
 
 .og-weather-sidebar-animation { margin-top: 4px; }
 
-.og-weather-sidebar-scale {
-  display: block;
-  width: 100%;
-  height: 6px;
-}
-
 .og-beta-badge {
   display: inline-flex;
   align-items: center;

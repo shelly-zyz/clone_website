@@ -87,15 +87,14 @@
   background: #fffdfa;
   font-size: 12px;
 }
-.stageLabels { position: absolute; inset: 12px 14px auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; pointer-events: none; }
+.stageLabels { position: absolute; inset: 12px 14px auto 136px; display: flex; align-items: center; justify-content: flex-end; gap: 8px; pointer-events: none; }
 .sceneTime { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 650; letter-spacing: .04em; }
 .stageLabels > span { font-size: 11px; }
 
 .legend {
   position: absolute;
-  bottom: 11px;
+  top: 11px;
   left: 14px;
-  width: 184px;
   max-width: calc(100% - 28px);
   display: grid;
   gap: 4px;
@@ -129,11 +128,10 @@
   .header, .controls { padding-inline: 9px; }
   .header { padding-block: 7px; }
   .header button { font-size: 11px; min-height: 31px; }
-  .stage:has(.legend) .canvas { height: calc(100% - 82px); }
-  .legend { left: 7px; bottom: 7px; gap: 2px; padding: 5px 7px; }
+  .legend { left: 7px; top: 7px; gap: 2px; padding: 5px 7px; }
   .emptyNotice { inset-block: 33px auto; }
   .cameraControls { gap: 1px; }
-  .stageLabels { inset: 7px 8px auto; }
+  .stageLabels { inset: 7px 8px auto 102px; }
   .stageLabels > span { font-size: 9px; }
   .layers { gap: 0 9px; font-size: 10px; }
   .layers label { min-height: 20px; }
@@ -273,7 +271,11 @@
   scrollbar-width: thin;
 }
 .embedded .readingsBody { background: var(--og-panel-fill, rgb(10 17 26 / 64%)); }
-.embedded .legend { bottom: calc(var(--og-globe-nav-space, 70px) + 128px); left: auto; right: clamp(245px, 23vw, 306px); width: 122px; }
+.embedded .legend {
+  top: calc(var(--og-stage-top, 100px) + 10px);
+  left: calc(var(--og-stage-left, 240px) + 10px);
+  width: 112px;
+}
 
 .legend { padding: 9px; width: 118px; }
 .legendRamp { height: 91px; width: 62px; display: flex; gap: 6px; }
@@ -304,7 +306,7 @@
     height: max(165px, calc(100% - var(--og-globe-nav-space, 68px) - 335px));
     mask-image: linear-gradient(transparent, #000 12%, #000 86%, transparent);
   }
-  .embedded .legend { right: auto; left: 7px; top: 171px; bottom: auto; width: 88px; }
+  .embedded .legend { left: 7px; top: 205px; width: 88px; }
   .embedded .legendRamp { height: 47px; }
   .embedded .stage[data-view="time"] .peak { display: none; }
   .embedded .readings {
@@ -322,7 +324,7 @@
 
 .embedded:has(.scene[data-immersive="true"]) .readings { display: none; }
 @media (min-width: 901px) {
-  .embedded:has(.scene[data-immersive="true"]) .legend { right: 16px; }
+  .embedded:has(.scene[data-immersive="true"]) .legend { top: 12px; left: 12px; }
 }
 
 .heading p { line-height: 1.45; }

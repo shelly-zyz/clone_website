@@ -119,7 +119,10 @@ def draw_panel(fig, ax, panel, design):
         cmap.set_bad(design["grid"])
         image = ax.imshow(values, aspect="auto", interpolation="nearest", cmap=cmap,
                           vmin=-1 if diverging else None, vmax=1 if diverging else None)
-        fig.colorbar(image, ax=ax, shrink=.76, label=unit)
+        fig.colorbar(
+            image, ax=ax, location="left", shrink=.58, pad=.12,
+            anchor=(1, 1), panchor=(0, 1), label=unit,
+        )
         for axis, values in ((ax.set_xticks, panel["x"]), (ax.set_yticks, panel["row_labels"])):
             step = max(1, (len(values) + 5) // 6)
             axis(range(0, len(values), step), values[::step])

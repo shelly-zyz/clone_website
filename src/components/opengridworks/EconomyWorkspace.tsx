@@ -13,6 +13,7 @@ import {
   economyMetrics, formatEconomyAmount, formatGrowth, rankEconomies,
   type EconomicOutlook, type EconomyCountry, type EconomyMetric, type EconomyRank, type EconomySnapshot, type EconomyValue,
 } from "./economy-data";
+import { VerticalColorLegend } from "./VerticalColorLegend";
 import styles from "./EconomyWorkspace.module.css";
 import switcherStyles from "./SceneSwitcher.module.css";
 
@@ -359,7 +360,16 @@ export function EconomyWorkspace({ active, basemap, onBasemapError, initialConte
         ))}
       </nav>
       <div id={viewId} className="og-globe-stage" data-economy-data-ready={Boolean(snapshot && outlook)}
-        data-view={outlookActive ? "outlook" : "history"}>{globe}</div>
+        data-view={outlookActive ? "outlook" : "history"}>
+        {globe}
+        {outlookActive ? <VerticalColorLegend label="实际 GDP 增速"
+          stops={[[0, "#f56d52"], [.375, "#598f89"], [.625, "#37ce77"], [1, "#d4f54b"]]}
+          ticks={["≥10%", "≤−6%"]} note="缺测 · 深灰" />
+          : <VerticalColorLegend className={styles.historyLegend} label={economyMetrics[metric].label}
+            unit="现价美元" stops={[[0, "#653019"], [.5, "#d46a25"], [1, "#ffad32"]]}
+            ticks={["≥ " + formatEconomyAmount(max, metric), "≤ " + formatEconomyAmount(min, metric)]}
+            note="对数色阶 · 深灰为缺测" />}
+      </div>
       <WorkspaceSidebar topic="economy" summary={outlookActive ? "世界银行 GEP · 实际 GDP 增速预测" : "世界银行 WDI · 全球经济指标"}>
         <section className={styles.filters} aria-label={outlookActive ? "增长展望筛选" : "经济数据筛选"}>
           {snapshot && <CountrySearch countries={snapshot.countries} onSelect={chooseCountry} />}
@@ -377,12 +387,7 @@ export function EconomyWorkspace({ active, basemap, onBasemapError, initialConte
               <WorkspaceFilterSelect label="经济指标" value={metric} options={metricOptions}
                 onChange={value => { if (value === "gdp" || value === "perCapita" || value === "exports") chooseMetric(value); }} />
               <WorkspaceFilterSelect label="统计年份" options={yearOptions} value={String(year)} onChange={value => chooseYear(Number(value))} />
-              <div className={styles.legend} aria-label="经济指标图例">
-                <p>现价美元 · 对数色阶</p>
-                <div className={styles.scale} aria-hidden="true" />
-                <div className={styles.range}><span>≤ {formatEconomyAmount(min, metric)}</span><span>≥ {formatEconomyAmount(max, metric)}</span></div>
-                <p className={styles.missing}><span aria-hidden="true" /> 缺测</p>
-              </div>
+
             </>
           )}
           <SnapshotStatus data={snapshot} label="经济指标" retry={retrySnapshot} />
@@ -401,11 +406,6 @@ export function EconomyWorkspace({ active, basemap, onBasemapError, initialConte
               <div className={styles.outlookLinks}>
                 <Link href={statisticsHref} prefetch={false}>增长路径与同版对比 <ArrowUpRight size={14} aria-hidden="true" /></Link>
                 {outlook && <a href={outlook.sourceUrl} target="_blank" rel="noreferrer">数据来源 <ArrowUpRight size={12} aria-hidden="true" /></a>}
-              </div>
-              <div className={styles.outlookLegend} aria-label="实际 GDP 增速色阶">
-                <div className={styles.outlookScale} aria-hidden="true" />
-                <div className={styles.range}><span>−6% 以下</span><span>0%</span><span>10% 以上</span></div>
-                <p className={styles.missing}><span aria-hidden="true" /> 缺测</p>
               </div>
               <SnapshotStatus data={outlook} label="增长展望" retry={retryOutlook} />
               {forecastRanking.length > 0 && <p className={styles.note}>显示 {forecastRanking.length} 个有值经济体中的前 {top.length} 位 · 正负值按原值展示</p>}

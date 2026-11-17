@@ -4,6 +4,7 @@ import { quantile } from "./planner";
 
 const typeface = (design: FigureDesign) => design.font + ', "PingFang SC", "Microsoft YaHei", sans-serif';
 const labels = (design: FigureDesign) => ({ color: design.muted, fontSize: design.font_size, hideOverlap: true });
+const scaleNumber = new Intl.NumberFormat("zh-CN", { maximumSignificantDigits: 4 });
 const stroke = (design: FigureDesign) => ({ color: design.grid });
 const escape = (value: string) => value.replace(/[{}]/g, "");
 
@@ -91,7 +92,7 @@ export function buildECharts(model: FigureModel, design: FigureDesign, narrow = 
     if (panel.kind === "calendar") {
       const calendarIndex = calendars.length;
       calendars.push({
-        range: x[0].slice(0, 4), top: top + rowPct * 0.24 + "%", left: left + 7 + "%", right: right + 7 + "%",
+        range: x[0].slice(0, 4), top: top + rowPct * 0.24 + "%", left: left + width * .22 + "%", right: right + 7 + "%",
         cellSize: ["auto", 15], itemStyle: { color: design.background, borderColor: design.grid, borderWidth: 1 },
         yearLabel: { show: false }, dayLabel: { color: design.muted, margin: 4, nameMap: "ZH" }, monthLabel: { color: design.muted },
       });
@@ -99,7 +100,8 @@ export function buildECharts(model: FigureModel, design: FigureDesign, narrow = 
       const values = cells.map(entry => Number(entry[1]));
       const min = Math.min(...values);
       visualMaps.push({ show: true, type: "continuous", min, max: Math.max(min + 1e-9, ...values), seriesIndex: series.length,
-        right: right + 6 + "%", top: top + rowPct * 0.69 + "%", orient: "horizontal", itemWidth: 10, itemHeight: 98,
+        left: left + 2 + "%", top: top + rowPct * .24 + "%", orient: "vertical", itemWidth: 9, itemHeight: 64,
+        text: [scaleNumber.format(Math.max(...values)), scaleNumber.format(min)],
         textStyle: labels(design), inRange: { color: design.continuous } });
       series.push({ type: "heatmap", coordinateSystem: "calendar", calendarIndex, data: cells, name: unit });
       continue;
@@ -120,7 +122,7 @@ export function buildECharts(model: FigureModel, design: FigureDesign, narrow = 
       axisLine: { lineStyle: stroke(design) }, axisTick: { show: false } };
     const numberAxis = { type: "value" as const, axisLabel: labels(design), nameTextStyle: labels(design),
       splitLine: { lineStyle: stroke(design) }, axisLine: { lineStyle: stroke(design) } };
-    grids.push({ left: left + (horizontal ? 14 : 7) + "%", right: right + (rightLegend ? 20 : cells ? 11 : 5) + "%",
+    grids.push({ left: left + (cells ? width * .22 + 6 : horizontal ? 14 : 7) + "%", right: right + (rightLegend ? 20 : 5) + "%",
       top: top + rowPct * (cells || legend && design.legend === "top" ? 0.24 : 0.17) + "%",
       height: rowPct * (legend && design.legend === "bottom" ? 0.56 : 0.65) + "%" });
     xAxes.push(horizontal ? { ...numberAxis, gridIndex: axisIndex, name: unit, nameLocation: "center", nameGap: 29 }
@@ -138,7 +140,8 @@ export function buildECharts(model: FigureModel, design: FigureDesign, narrow = 
       const low = panel.kind === "correlation" ? -1 : Math.min(...values);
       const high = panel.kind === "correlation" ? 1 : Math.max(low + 1e-9, ...values);
       visualMaps.push({ type: "continuous", min: low, max: high, seriesIndex: series.length, dimension: 2,
-        orient: "vertical", calculable: false, itemWidth: 8, itemHeight: 72, right: right + 1 + "%", top: top + rowPct * 0.34 + "%",
+        orient: "vertical", calculable: false, itemWidth: 9, itemHeight: 64, left: left + 2 + "%", top: top + rowPct * .24 + "%",
+        text: [scaleNumber.format(high), scaleNumber.format(low)],
         textStyle: { color: design.muted, fontSize: 9 }, inRange: { color: panel.kind === "correlation" ? design.diverging : design.continuous } });
       series.push({ ...binding, type: "heatmap", data: panel.cells, name: unit,
         ...(panel.kind === "correlation" ? { label: { show: true, formatter: "{@[2]}" } } : {}),

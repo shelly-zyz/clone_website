@@ -3,6 +3,7 @@
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { WorkspaceFilterSelect, type WorkspaceFilterOption } from "./WorkspaceSidebar";
+import styles from "./VerticalColorLegend.module.css";
 
 function readChoices(document: Document, selector: string) {
   const elements = Array.from(document.querySelectorAll<HTMLElement>(`#menu ${selector}`));
@@ -52,8 +53,6 @@ function readWeatherMenu(document: Document) {
 
 export function WeatherSidebarFilters({ frameDocument }: { frameDocument: Document | null }) {
   const [menu, setMenu] = useState<ReturnType<typeof readWeatherMenu> | null>(null);
-  const colorScale = useRef<HTMLCanvasElement>(null);
-  const menuReady = !!menu?.animation.value;
 
   useEffect(() => {
     const sourceMenu = frameDocument?.getElementById("menu");
@@ -73,22 +72,6 @@ export function WeatherSidebarFilters({ frameDocument }: { frameDocument: Docume
       observer.disconnect();
     };
   }, [frameDocument]);
-
-  useEffect(() => {
-    const source = frameDocument?.querySelector<HTMLCanvasElement>("#scale");
-    const target = colorScale.current;
-    if (!menuReady || !source || !target) return;
-
-    const copyScale = () => {
-      if (!source.width || !source.height) return;
-      target.width = source.width;
-      target.height = source.height;
-      target.getContext("2d")?.drawImage(source, 0, 0);
-    };
-    copyScale();
-    source.addEventListener("weather-scale-change", copyScale);
-    return () => source.removeEventListener("weather-scale-change", copyScale);
-  }, [frameDocument, menuReady]);
 
   if (!frameDocument || !menu?.animation.value) return <p className="og-weather-sidebar-status" role="status">正在加载气象筛选…</p>;
 
@@ -144,7 +127,6 @@ export function WeatherSidebarFilters({ frameDocument }: { frameDocument: Docume
       </div>
       {menu.status ? <p className="og-weather-sidebar-status" role="status">{menu.status === "No Data" ? "当前筛选暂无气象数据" : menu.status}</p> : null}
       {menu.layer ? <p className="og-weather-sidebar-status">{menu.layer}</p> : null}
-      <canvas ref={colorScale} className="og-weather-sidebar-scale" aria-label="覆盖指标色阶" role="img" />
       {menu.source ? <p className="og-weather-sidebar-status">{menu.source}</p> : null}
       {menu.location ? <section className="og-weather-sample" aria-label="气象选点详情">
         <strong>{menu.location}</strong>
@@ -153,4 +135,35 @@ export function WeatherSidebarFilters({ frameDocument }: { frameDocument: Docume
       </section> : null}
     </div>
   );
+}
+
+export function WeatherGlobeLegend({ frameDocument }: { frameDocument: Document | null }) {
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const [range, setRange] = useState<{ unit: string; high: string; low: string } | null>(null);
+  useEffect(() => {
+    const source = frameDocument?.querySelector<HTMLCanvasElement>("#scale");
+    const target = canvas.current;
+    if (!frameDocument || !source || !target) return;
+    const read = (id: string) => frameDocument.getElementById(id)?.textContent?.trim() ?? "";
+    const copy = () => {
+      const high = read("scale-max");
+      const low = read("scale-min");
+      setRange(frameDocument.getElementById("weather-color-legend")?.hidden || !high || !low
+        ? null : { unit: read("scale-label"), high, low });
+      target.getContext("2d")?.drawImage(source, 0, 0);
+    };
+    const request = requestAnimationFrame(copy);
+    source.addEventListener("weather-scale-change", copy);
+    return () => {
+      cancelAnimationFrame(request);
+      source.removeEventListener("weather-scale-change", copy);
+    };
+  }, [frameDocument]);
+  return <div className={styles.legend + " " + styles.weatherGlobe} aria-label="覆盖指标色阶" data-ready={Boolean(range)}>
+    <strong>{range?.unit}</strong>
+    <div className={styles.body}>
+      <canvas ref={canvas} width={10} height={76} className={styles.ramp} aria-hidden="true" />
+      <div className={styles.ticks}><span>{range?.high}</span><span>{range?.low}</span></div>
+    </div>
+  </div>;
 }
