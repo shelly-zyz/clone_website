@@ -117,6 +117,22 @@ function readCurrentPage() {
   return active && location ? { ...active, search: location.url.search, section: location.url.hash.slice(1) || undefined } : undefined;
 }
 
+function microphoneHelp(message: string) {
+  if (/permission|notallowed|denied|not-allowed|权限|拒绝|不允许/i.test(message)) {
+    return "请在浏览器地址栏的站点设置中允许麦克风；macOS 还需在系统设置 → 隐私与安全性 → 麦克风中允许当前浏览器。更改后重新打开页面再试。";
+  }
+  if (/not[\s-]*found|audio-capture|未找到|没有.*麦克风/i.test(message)) {
+    return "未检测到可用麦克风。请连接录音设备，并在系统声音设置中选择有效的输入设备后重试。";
+  }
+  if (/notreadable|could not start audio|trackstarterror|device.*use|占用/i.test(message)) {
+    return "录音设备无法启动，可能被其他软件占用或被系统限制。请关闭其他录音应用，检查系统麦克风权限和声音输入设备后重试。";
+  }
+  if (/https|localhost|getusermedia|secure context/i.test(message)) {
+    return "当前页面不支持录音。请在独立浏览器中打开本机网站，使用 HTTPS 或 localhost 地址，不要在受限的内嵌预览里录音。";
+  }
+  return "请检查浏览器麦克风权限和系统声音输入设备；内嵌预览受限时，在独立浏览器打开网站后重试。文字输入仍可使用。";
+}
+
 function XiaoyunRuntime({ workspace, children }: { workspace: Workspace | null; children: ReactNode }) {
   const container = useRef<HTMLDivElement>(null);
   const mount = useRef<HTMLDivElement | null>(null);
@@ -134,6 +150,10 @@ function XiaoyunRuntime({ workspace, children }: { workspace: Workspace | null; 
   const [requiresToken, setRequiresToken] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [connectionError, setConnectionError] = useState("");
+  const [microphoneError, setMicrophoneError] = useState("");
+  const [microphonePending, setMicrophonePending] = useState(false);
+  const microphoneRequest = useRef(false);
+  const microphoneLink = useRef<HTMLAnchorElement>(null);
   const connectionCheck = useRef<AbortController | undefined>(undefined);
   const [ready, setReady] = useState(false);
   const [business, setBusiness] = useState<XiaoyunBusinessResult[]>([]);
@@ -147,6 +167,29 @@ function XiaoyunRuntime({ workspace, children }: { workspace: Workspace | null; 
   const [forecastNotice, setForecastNotice] = useState<{ topic: Topic; message: string }>();
   const [selectedChartId, setSelectedChartId] = useState<string>();
   const workspaceTopic = workspace?.topic;
+
+  useLayoutEffect(() => {
+    if (microphoneLink.current) microphoneLink.current.href = window.location.href;
+  });
+
+  const retryMicrophone = async () => {
+    const assistant = voice.current;
+    if (!assistant || microphoneRequest.current) return;
+    microphoneRequest.current = true;
+    setMicrophonePending(true);
+    try {
+      if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+        throw new Error("麦克风需要 HTTPS 或 localhost 页面");
+      }
+      await assistant.wake();
+      setMicrophoneError("");
+    } catch (error) {
+      setMicrophoneError(error instanceof Error ? `${error.name}: ${error.message}` : String(error));
+    } finally {
+      microphoneRequest.current = false;
+      setMicrophonePending(false);
+    }
+  };
 
   const checkConnection = useCallback(async () => {
     connectionCheck.current?.abort();
@@ -334,7 +377,7 @@ function XiaoyunRuntime({ workspace, children }: { workspace: Workspace | null; 
     void import("@xiaoyun/voice").then(({ createVoiceAssistant }) => {
       if (disposed) return;
       const active = detectSiteView(window.location.pathname, window.location.search);
-      voice.current = createVoiceAssistant({
+      const assistant = createVoiceAssistant({
         container: voiceMount,
         projectId: "opengridworks",
         mode: "live",
@@ -516,6 +559,23 @@ function XiaoyunRuntime({ workspace, children }: { workspace: Workspace | null; 
           },
         },
       });
+      const setMicEnabled = assistant.setMicEnabled.bind(assistant);
+      // Capture only microphone initialization failures, before the SDK drops the error name.
+      // Its UI and wake() both call this public method; cloud speech errors stay in the SDK UI.
+      assistant.setMicEnabled = async enabled => {
+        try {
+          await setMicEnabled(enabled);
+          if (enabled && !disposed) setMicrophoneError("");
+        } catch (error) {
+          if (enabled) {
+            // Release any stream acquired before capture-worklet initialization failed.
+            await setMicEnabled(false).catch(() => {});
+            if (!disposed) setMicrophoneError(error instanceof Error ? `${error.name}: ${error.message}` : String(error));
+          }
+          throw error;
+        }
+      };
+      voice.current = assistant;
       setReady(true);
     }).catch(() => {
       if (!disposed) setLoadError(true);
@@ -571,6 +631,24 @@ function XiaoyunRuntime({ workspace, children }: { workspace: Workspace | null; 
           <span>{connectionError}</span>
           <button type="button" className="underline" onClick={() => { void checkConnection(); }}>重新连接</button>
         </div>
+      )}
+      {microphoneError && (
+        <section role="alert" aria-label="小云麦克风故障提示"
+          className="fixed bottom-4 right-4 z-[3100] max-h-[70svh] w-[min(380px,calc(100vw-32px))] overflow-auto rounded-lg border border-slate-600 bg-slate-950 p-4 text-sm text-slate-100 shadow-xl">
+          <h2 className="font-semibold">麦克风暂时无法开启</h2>
+          <p className="mt-2 leading-relaxed">{microphoneHelp(microphoneError)}</p>
+          <details className="mt-2 text-xs text-slate-300">
+            <summary className="cursor-pointer">查看原始错误</summary>
+            <p className="mt-1 break-words">{microphoneError}</p>
+          </details>
+          <div className="mt-3 flex flex-wrap gap-3">
+            <button type="button" disabled={!ready || microphonePending} className="underline disabled:opacity-50"
+              onClick={() => { void retryMicrophone(); }}>{microphonePending ? "等待麦克风授权…" : "重新开启麦克风"}</button>
+            <a ref={microphoneLink} href={pathname} target="_blank" rel="noopener noreferrer" className="underline"
+              onClick={event => { event.currentTarget.href = window.location.href; }}>在新窗口打开网站</a>
+            <button type="button" className="underline" onClick={() => setMicrophoneError("")}>关闭提示</button>
+          </div>
+        </section>
       )}
       {loadError && (
         <p role="alert" className="fixed bottom-4 right-4 z-[3000] rounded-lg bg-slate-950 px-3 py-2 text-sm text-slate-100">
