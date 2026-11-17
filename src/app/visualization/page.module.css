@@ -385,20 +385,6 @@
 .dataStatus > .scenarioDate { padding-inline: 0; background: transparent; font-weight: 500; }
 .dataStatus > button { display: grid; min-width: 32px; min-height: 32px; place-items: center; color: #326777; cursor: pointer; }
 .dataStatus > button:hover { background: #edf4f5; }
-.release { position: relative; z-index: 2; }
-.release summary { min-height: 30px; }
-.release dl {
-  position: absolute;
-  top: calc(100% + 5px);
-  right: 0;
-  width: min(265px, 80vw);
-  padding: 10px 12px;
-  border-radius: 12px;
-  overflow-wrap: anywhere;
-  background: #fff;
-  box-shadow: 0 6px 24px #152c3d26;
-}
-.release dt { margin-top: 5px; color: var(--ink); font-weight: 650; }
 
 .metrics {
   display: grid;
@@ -620,7 +606,6 @@
 }
 
 .chartControls { display: flex; flex-wrap: wrap; gap: 7px 12px; margin: 12px 0 17px; }
-.dataStatus > .pinRelease { min-width: 0; padding: 5px 8px; }
 .comparisonBelow > a {
   display: inline-flex;
   align-items: center;

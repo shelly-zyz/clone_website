@@ -60,6 +60,11 @@ const modules = {
     export function runDataAgentWrite() { throw new Error("Unexpected database call in fixture"); }
     export function readDataAgent() { throw new Error("Unexpected database call in fixture"); }`,
   "@/lib/data-agent/pi.server": `export function getPiModel() { return globalThis.xiaoyunFixture.pi; }`,
+  "@/lib/topic-analysis/published.server": `
+    export async function readPublishedHistory(topic, version) {
+      return globalThis.xiaoyunFixture.publishedHistory?.(topic, version) ?? null;
+    }
+    export async function readRegionalGeneration() { throw new Error("Unexpected regional lookup in fixture"); }`,
   "@/lib/data-agent/map-assistant.server": `
     export async function readMapAssistantThread() {}
     export async function saveMapAssistantThread() { return "fixture-thread"; }`,
@@ -356,6 +361,29 @@ if (live) {
     assert.equal((await turn([["set_view_filters", { compareCountry: "DEU" }]], input)).pageChange, undefined);
     assert.equal((await turn([["set_view_filters", { compareCountry: "XXX" }]], input)).pageChange, undefined);
     assert.equal((await turn([["set_view_filters", { startYear: 2023, year: 2020 }]], input)).pageChange, undefined);
+  });
+
+  await test("专题筛选跟随最新发布，显式版本链接仍可复现", async () => {
+    const oldVersion = "a".repeat(64);
+    const newVersion = "b".repeat(64);
+    const requestedVersions = [];
+    fixtures.publishedHistory = (_topic, version) => {
+      requestedVersions.push(version);
+      return { version: version ?? newVersion, facts: [] };
+    };
+    const action = ["set_view_filters", { fuel: "crude-oil" }];
+    const activePage = { view: "fuels", search: "", dataVersion: oldVersion };
+    try {
+      const current = await turn([action], { activePage });
+      assert.equal(pageLocation(current.pageChange.page).href, "/visualization/fuels?fuel=crude-oil");
+      assert.equal(current.pageChange.page.dataVersion, newVersion);
+
+      const pinned = await turn([action], { activePage: { ...activePage, search: "?version=" + oldVersion } });
+      assert.equal(pageLocation(pinned.pageChange.page).url.searchParams.get("version"), oldVersion);
+      assert.deepEqual(requestedVersions, [undefined, oldVersion]);
+    } finally {
+      delete fixtures.publishedHistory;
+    }
   });
 
   await test("小云按同一 DataRef 串联查数、出图、预测和来源", async () => {

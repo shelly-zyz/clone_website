@@ -140,6 +140,7 @@ export async function setViewFilters(page: ActivePage | undefined, patch: z.infe
   const target = patchViewFilters(page, patch);
   if (!target) throw new XiaoyunContextError("当前页面不支持这些筛选，或选项之间不匹配。");
   const query = new URLSearchParams(target.page.search);
+  let dataVersion: string | undefined;
   const countryKeys = ["country", "compareCountry", "compareThird"];
   for (const key of countryKeys) {
     const value = query.get(key);
@@ -181,7 +182,7 @@ export async function setViewFilters(page: ActivePage | undefined, patch: z.infe
       item.value !== null && item.series === (query.get("fuel") ?? "raw-coal"))) {
       throw new XiaoyunContextError("该发布版本没有所选品种的月度观测。");
     }
-    if (history) query.set("version", history.version);
+    dataVersion = history?.version;
   }
   if (page.view === "renewables") {
     const scenario = await readRenewableScenario();
@@ -196,5 +197,5 @@ export async function setViewFilters(page: ActivePage | undefined, patch: z.infe
   if (page.view === "weather-replay" && query.get("region") === "china") {
     throw new XiaoyunContextError("档案暂无中国区域回放。");
   }
-  return { page: { ...target.page, search: query.size ? "?" + query : "" }, status: "当前专题筛选", expected: page };
+  return { page: { ...target.page, search: query.size ? "?" + query : "", dataVersion }, status: "当前专题筛选", expected: page };
 }

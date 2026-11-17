@@ -131,7 +131,7 @@ function relatedAnalysisHref(current: AnalysisTopic, next: AnalysisTopic, query:
   const keys = next === "economy" || next === "trade" || next === "outlook"
     ? ["country", "year", "startYear", "targetYear", "metric"]
     : next === "generation" || next === "power" || next === "fuels"
-      ? ["month", "year", "region", "product", "version"]
+      ? ["month", "year", "region", "product"]
       : ["region", "year", "technology"];
   const nextQuery = new URLSearchParams();
   for (const key of keys) {
@@ -470,10 +470,12 @@ export function AnalysisWorkbench({ topic, initialQuery, initialScenario }: {
   const provinceComparison = comparisonActive && topic === "generation"
     ? provincePair(regional.data, primaryRegion, alternateRegion, product.name) : undefined;
   if (hasPublishedQuery) {
-    dataStatus = published.pending ? "读取数据库中" : history ? "数据库已发布"
+    dataStatus = published.pending ? "读取数据库中" : history ? undefined
       : releaseVersion ? "请求版本暂不可用 · 当前显示公开归档"
-      : topic === "carbon" ? "归档日度数据" : topic === "generation" ? "公开月报选录" : "公开年度公报";
+        : topic === "carbon" ? "归档日度数据" : topic === "generation" ? "公开月报选录" : "公开年度公报";
   }
+  const retryHistory = hasPublishedQuery && !published.pending && !history;
+  const retryRegions = topic === "generation" && history && !regional.pending && !regional.data && displayedMonth;
 
   function emptyMessage(spec: AnalysisChartSpec) {
     if (spec.id === "province-ranking") {
@@ -589,43 +591,21 @@ export function AnalysisWorkbench({ topic, initialQuery, initialScenario }: {
         </div>
         <div className={styles.filters} id="topic-filters">
           <div className={styles.filterControls} role="group" aria-label="分析筛选">{filters}</div>
-          <div className={styles.dataStatus} role="status">
+          {(topic === "power" || dataStatus || retryHistory || retryRegions || scenarioData) && <div className={styles.dataStatus} role="status">
             {topic === "power" && <InterimPowerRelease />}
-            {dataStatus && <span data-ready={Boolean(history || scenarioData?.origin === "database")}>{dataStatus}</span>}
-            {hasPublishedQuery && !published.pending && !history && (
+            {dataStatus && <span data-ready={scenarioData?.origin === "database"}>{dataStatus}</span>}
+            {retryHistory && (
               <button onClick={published.retry} type="button" aria-label="重新读取数据库">
                 <RotateCw size={15} aria-hidden="true" />
               </button>
             )}
-            {topic === "generation" && history && !regional.pending && !regional.data && displayedMonth && (
+            {retryRegions && (
               <button type="button" onClick={regional.retry} aria-label="重新读取分省数据">
                 <RotateCw size={15} aria-hidden="true" />
               </button>
             )}
-            {history && !releaseVersion && (
-              <button className={styles.pinRelease} type="button" onClick={() => select(history.version, "version")}>
-                固定版本
-              </button>
-            )}
-            {history && releaseVersion && (
-              <button className={styles.pinRelease} type="button" onClick={() => select(undefined, "version")}>
-                跟随最新版本
-              </button>
-            )}
             {scenarioData && <span className={styles.scenarioDate}>情景数据生成于 {scenarioData.generatedAt.slice(0, 10)}</span>}
-            {history && (
-              <details className={styles.release}>
-                <summary className={styles.disclosure}>
-                  数据版本 <ChevronDown className={styles.chevron} size={14} strokeWidth={1.8} aria-hidden="true" />
-                </summary>
-                <dl>
-                  <div><dt>数据集</dt><dd>{history.dataset}</dd></div>
-                  <div><dt>发布于</dt><dd>{history.publishedAt.slice(0, 10)} UTC</dd></div>
-                  <div><dt>版本</dt><dd>{history.version}</dd></div>
-                </dl>
-              </details>
-            )}
-          </div>
+          </div>}
         </div>
         {analysis ? (
           <>

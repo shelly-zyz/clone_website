@@ -14,6 +14,7 @@ export const activePageSchema = z.strictObject({
   view: siteViewIdSchema,
   search: z.string().max(1200).regex(/^(?:\?[^#]*)?$/),
   section: section.optional(),
+  dataVersion: version.optional(),
 });
 export type ActivePage = z.infer<typeof activePageSchema>;
 
@@ -140,7 +141,7 @@ export function patchViewFilters(page: ActivePage, patch: z.infer<typeof filterP
   if (!forValidation || !resolveSiteNavigation(forValidation)) return;
   const compare = url.searchParams.get("compareRegion");
   if (compare && (!page.section?.startsWith("province-") && patch.compareRegion || !findChinaProvince(compare))) return;
-  const updated = { ...page, search: url.search };
+  const updated = { view: page.view, section: page.section, search: url.search };
   return { page: updated, href: current.url.pathname + url.search + url.hash };
 }
 

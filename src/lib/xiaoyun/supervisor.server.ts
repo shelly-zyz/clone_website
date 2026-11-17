@@ -371,6 +371,9 @@ async function runXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal, gua
           return note("save_project_view", "没有可保存的图表，请先在项目里生成或选中图表。", "needs_input");
         }
         const dataVersion = chart && await resolveDataResult(state.scope.project_id, chart.result_id, state.scope.project_key);
+        if (pageToSave.dataVersion && !locationToSave.url.searchParams.has("version")) {
+          locationToSave.url.searchParams.set("version", pageToSave.dataVersion);
+        }
         await saveProjectView(state.scope, args.name, {
           page: { view: pageToSave.view, search: locationToSave.url.search, section: locationToSave.url.hash.slice(1) || undefined },
           chart: chart?.chart_id ? { ...chart, chart_id: chart.chart_id } : undefined,

@@ -109,12 +109,11 @@ function viewTopic(view: SiteViewId | undefined): Topic | undefined {
 
 function readCurrentPage() {
   const { pathname, search, hash } = window.location;
-  const loadedVersion = document.querySelector<HTMLElement>("#topic-analysis-page [data-published-version]")?.dataset.publishedVersion;
-  const query = new URLSearchParams(search);
-  if (loadedVersion && !query.has("version")) query.set("version", loadedVersion);
-  const active = readActivePage(pathname, query.size ? "?" + query : "", hash);
+  const dataVersion = document.querySelector<HTMLElement>("#topic-analysis-page [data-published-version]")?.dataset.publishedVersion;
+  const active = readActivePage(pathname, search, hash);
   const location = active && pageLocation(active);
-  return active && location ? { ...active, search: location.url.search, section: location.url.hash.slice(1) || undefined } : undefined;
+  return active && location
+    ? { ...active, search: location.url.search, section: location.url.hash.slice(1) || undefined, dataVersion } : undefined;
 }
 
 function microphoneHelp(message: string) {
