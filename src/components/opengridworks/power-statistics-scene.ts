@@ -1,12 +1,15 @@
 import {
-  AmbientLight, Box2, CanvasTexture, Color, CylinderGeometry, DirectionalLight, Float32BufferAttribute, LineBasicMaterial,
+  AmbientLight, Box2, Box3, CanvasTexture, Color, CylinderGeometry, DirectionalLight, Float32BufferAttribute, LineBasicMaterial,
   Mesh, MeshStandardMaterial, MOUSE, OrthographicCamera, Raycaster, Scene, Sprite, SpriteMaterial, SRGBColorSpace, TOUCH,
   Vector2, Vector3, WebGLRenderer, LineSegments, type BufferGeometry, type Material,
 } from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { powerAmount, powerMapColors, powerMapNoData, provincePowerRatio, type ProvincePowerFrame } from "@/lib/china-power-statistics";
 import type { MapCameraState } from "@/types/opengridworks";
-import { buildPowerGeography, powerDetailLines, powerProjection, projectPowerPoint, type ChinaPowerGeography } from "./power-statistics-geometry";
+import {
+  buildPowerGeography, fitPowerMapBounds, powerDetailLines, powerProjection, projectPowerPoint,
+  type ChinaPowerGeography, type PowerFitPadding,
+} from "./power-statistics-geometry";
 
 const cameraOffset = new Vector3(0, -11, 24);
 const maximumHeight = 3.15;
@@ -67,6 +70,35 @@ function mapCenter(bounds: Box2) {
   return new Vector3(center.x, center.y + .28, 0);
 }
 
+function measureFitPadding(canvas: HTMLCanvasElement): PowerFitPadding {
+  const rect = canvas.getBoundingClientRect();
+  const margin = Math.max(16, Math.min(32, Math.min(rect.width, rect.height) * .04));
+  const padding = { left: margin, right: margin, top: margin, bottom: margin };
+  const shell = canvas.closest(".og-app-shell");
+  const stage = shell?.querySelector(".og-globe-stage")?.getBoundingClientRect();
+  // 舞台 DOM 已解析 CSS 的侧栏、顶部和底部安全区；只计入与 canvas 重叠的部分。
+  if (stage?.width && stage.height) {
+    padding.left += Math.max(0, stage.left - rect.left);
+    padding.right += Math.max(0, rect.right - stage.right);
+    padding.top += Math.max(0, stage.top - rect.top);
+    padding.bottom += Math.max(0, rect.bottom - stage.bottom);
+  }
+  for (const panel of shell?.querySelectorAll(".og-workspace-sidebar, .og-forecast-region > aside") ?? []) {
+    const style = window.getComputedStyle(panel);
+    if (style.display === "none" || style.visibility === "hidden") continue;
+    const box = panel.getBoundingClientRect();
+    if (!box.width || !box.height || box.right <= rect.left || box.left >= rect.right || box.bottom <= rect.top || box.top >= rect.bottom) continue;
+    if (box.width > box.height) {
+      if ((box.top + box.bottom) / 2 > (rect.top + rect.bottom) / 2) padding.bottom = Math.max(padding.bottom, rect.bottom - box.top + margin);
+      else padding.top = Math.max(padding.top, box.bottom - rect.top + margin);
+    } else {
+      if ((box.left + box.right) / 2 < (rect.left + rect.right) / 2) padding.left = Math.max(padding.left, box.right - rect.left + margin);
+      else padding.right = Math.max(padding.right, rect.right - box.left + margin);
+    }
+  }
+  return padding;
+}
+
 export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: ChinaPowerGeography, callbacks: Callbacks) {
   const renderer = new WebGLRenderer({ canvas, alpha: true, antialias: true, preserveDrawingBuffer: true });
   renderer.autoClear = false;
@@ -123,6 +155,26 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
   let animation = 0;
   let drawRequest = 0;
   let frame: ProvincePowerFrame | undefined;
+  let automaticFocus: string | null = "national";
+  let interacting = false;
+
+  function fittedView(provinceCode = "national") {
+    const selected = byCode.get(provinceCode);
+    const fitBounds = new Box3();
+    for (const part of selected ? [selected] : parts) {
+      fitBounds.union(part.fitBounds);
+      if (part.column.visible) {
+        part.column.updateMatrixWorld();
+        fitBounds.union(new Box3().setFromObject(part.column));
+      }
+    }
+    return fitPowerMapBounds(fitBounds, { width, height, padding: measureFitPadding(canvas) }, camera.quaternion);
+  }
+
+  function setZoomLimits(nextZoom = camera.zoom) {
+    controls.minZoom = Math.min(fit * .68, camera.zoom, nextZoom);
+    controls.maxZoom = Math.max(fit * 5.5, camera.zoom, nextZoom);
+  }
 
   function queueRender() {
     if (!drawRequest) drawRequest = requestAnimationFrame(draw);
@@ -202,7 +254,8 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
 
   function moveTo(next: View, animate = true) {
     cancelAnimationFrame(animation);
-    const view = { ...next, zoom: Math.min(controls.maxZoom, Math.max(controls.minZoom, next.zoom)) };
+    const view = next;
+    setZoomLimits(view.zoom);
     if (!animate || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       applyView(view);
       reportCamera();
@@ -228,12 +281,13 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
     camera.right = width / 2;
     camera.top = height / 2;
     camera.bottom = -height / 2;
-    const size = bounds.getSize(new Vector2());
-    const previous = fit;
-    fit = Math.min(width * .93 / size.x, height * .95 / (size.y * .91 + maximumHeight * .42));
-    controls.minZoom = fit * .68;
-    controls.maxZoom = fit * 5.5;
-    applyView({ center: controls.target.clone(), zoom: camera.zoom / previous * fit });
+    fit = fittedView().zoom;
+    const next = automaticFocus == null
+      ? { center: controls.target.clone(), zoom: camera.zoom }
+      : fittedView(automaticFocus);
+    cancelAnimationFrame(animation);
+    setZoomLimits(next.zoom);
+    applyView(next);
     renderer.setSize(width, height, false);
     reportCamera();
   }
@@ -269,16 +323,23 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
     if (event.pointerType === "touch" && part?.value == null) pointerMove(event);
   }
   const hideHover = () => callbacks.onHover(null);
-  const stopMove = () => { cancelAnimationFrame(animation); hideHover(); };
-  controls.addEventListener("change", queueRender);
+  const cameraChanged = () => {
+    if (interacting) automaticFocus = null;
+    queueRender();
+  };
+  const stopMove = () => { interacting = true; cancelAnimationFrame(animation); hideHover(); };
+  const endMove = () => { interacting = false; reportCamera(); };
+  controls.addEventListener("change", cameraChanged);
   controls.addEventListener("start", stopMove);
-  controls.addEventListener("end", reportCamera);
+  controls.addEventListener("end", endMove);
   canvas.addEventListener("pointerdown", pointerDown);
   canvas.addEventListener("pointermove", pointerMove);
   canvas.addEventListener("pointerup", pointerUp);
   canvas.addEventListener("pointerleave", hideHover);
   const observer = new ResizeObserver(resize);
   observer.observe(canvas);
+  const stage = canvas.closest(".og-app-shell")?.querySelector(".og-globe-stage");
+  if (stage) observer.observe(stage);
   resize();
 
   function clearLabels() {
@@ -291,14 +352,23 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
   }
 
   return {
-    focus(view: MapCameraState | undefined, animate = true) {
-      const target = view && projectPowerPoint(view.center);
-      moveTo({
-        center: target ? new Vector3(target.x, target.y, 0) : center,
-        zoom: view ? pixelsPerUnit * 2 ** view.zoom : fit,
-      }, animate);
+    focus(view: MapCameraState | undefined, animate = true, provinceCode?: string) {
+      if (provinceCode || !view) {
+        automaticFocus = provinceCode ? byCode.get(provinceCode.padEnd(12, "0"))?.code ?? "national" : "national";
+        moveTo(fittedView(automaticFocus), animate);
+      } else {
+        automaticFocus = null;
+        const target = projectPowerPoint(view.center);
+        moveTo({ center: new Vector3(target.x, target.y, 0), zoom: pixelsPerUnit * 2 ** view.zoom }, animate);
+      }
     },
-    zoom(factor: number) { moveTo({ center: controls.target.clone(), zoom: camera.zoom * factor }); },
+    zoom(factor: number) {
+      automaticFocus = null;
+      moveTo({
+        center: controls.target.clone(),
+        zoom: Math.min(controls.maxZoom, Math.max(controls.minZoom, camera.zoom * factor)),
+      });
+    },
     update(next: ProvincePowerFrame, selected?: string) {
       frame = next;
       hideHover();
@@ -328,6 +398,9 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
         labels.push(label);
         scene.add(label.sprite);
       }
+      fit = fittedView().zoom;
+      if (automaticFocus != null) moveTo(fittedView(automaticFocus), false);
+      else setZoomLimits();
       queueRender();
     },
     screenshot() {

@@ -14,7 +14,7 @@ type Props = Parameters<typeof createPowerStatisticsScene>[2] & {
   frame: ProvincePowerFrame;
   selected?: string;
   initialCamera?: MapCameraState;
-  focus?: { nonce: number; camera?: MapCameraState };
+  focus?: { nonce: number; camera?: MapCameraState; provinceCode?: string };
   screenshotRequest: number;
   onScreenshotComplete: (message: string) => void;
 };
@@ -48,7 +48,11 @@ export function PowerStatisticsMap(props: Props) {
         });
         scene.current = map;
         map.update(current.frame, current.selected);
-        map.focus(current.focus && current.focus.nonce !== initialFocus.current ? current.focus.camera : current.initialCamera, false);
+        if (current.focus && current.focus.nonce !== initialFocus.current) {
+          map.focus(current.focus.camera, false, current.focus.provinceCode);
+        } else {
+          map.focus(current.initialCamera, false, current.initialCamera ? undefined : current.selected);
+        }
         setStatus("ready");
       })
       .catch(() => {
@@ -66,7 +70,10 @@ export function PowerStatisticsMap(props: Props) {
 
   const focusNonce = props.focus?.nonce;
   useEffect(() => {
-    if (focusNonce != null && focusNonce !== initialFocus.current) scene.current?.focus(latest.current.focus?.camera);
+    if (focusNonce != null && focusNonce !== initialFocus.current) {
+      const focus = latest.current.focus;
+      scene.current?.focus(focus?.camera, true, focus?.provinceCode);
+    }
   }, [focusNonce]);
 
   useEffect(() => {

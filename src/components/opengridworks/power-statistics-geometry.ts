@@ -1,7 +1,7 @@
 import { geoMercator } from "d3-geo";
 import {
-  Box2, BufferGeometry, ExtrudeGeometry, Float32BufferAttribute, Group, LineBasicMaterial, LineSegments,
-  Mesh, MeshBasicMaterial, Path, Shape, Vector2, Vector3,
+  Box2, Box3, BufferGeometry, ExtrudeGeometry, Float32BufferAttribute, Group, LineBasicMaterial, LineSegments,
+  Mesh, MeshBasicMaterial, Path, Shape, Vector2, Vector3, type Quaternion,
 } from "three";
 
 type Coordinate = [number, number];
@@ -19,6 +19,37 @@ export const powerProjection = geoMercator().center([104, 35]).scale(14).transla
 export function projectPowerPoint([lng, lat]: Coordinate) {
   const [x, y] = powerProjection([lng, lat])!;
   return new Vector2(x, -y);
+}
+
+export type PowerFitPadding = { left: number; right: number; top: number; bottom: number };
+export type PowerFitViewport = { width: number; height: number; padding: PowerFitPadding };
+
+export function fitPowerMapBounds(bounds: Box3, viewport: PowerFitViewport, orientation: Quaternion) {
+  const right = new Vector3(1, 0, 0).applyQuaternion(orientation);
+  const up = new Vector3(0, 1, 0).applyQuaternion(orientation);
+  const back = new Vector3(0, 0, 1).applyQuaternion(orientation);
+  const projected = new Box2();
+  for (const x of [bounds.min.x, bounds.max.x]) {
+    for (const y of [bounds.min.y, bounds.max.y]) {
+      for (const z of [bounds.min.z, bounds.max.z]) {
+        const point = new Vector3(x, y, z);
+        projected.expandByPoint(new Vector2(point.dot(right), point.dot(up)));
+      }
+    }
+  }
+  const { width, height, padding } = viewport;
+  const size = projected.getSize(new Vector2());
+  const zoom = Math.min(
+    Math.max(1, width - padding.left - padding.right) / Math.max(size.x, Number.EPSILON),
+    Math.max(1, height - padding.top - padding.bottom) / Math.max(size.y, Number.EPSILON),
+  );
+  const middle = projected.getCenter(new Vector2());
+  const center = right.multiplyScalar(middle.x - (padding.left - padding.right) / (2 * zoom))
+    .addScaledVector(up, middle.y - (padding.bottom - padding.top) / (2 * zoom));
+  // 沿视线落回地图平面，保存经纬度相机后仍能精确还原同一投影中心。
+  center.addScaledVector(back, -center.z / back.z);
+  center.z = 0;
+  return { center, zoom };
 }
 
 function ringsToShapes(polygons: Polygon[]) {
@@ -74,10 +105,19 @@ export function buildPowerGeography(geo: ChinaPowerGeography) {
     );
     mesh.userData.code = code;
     const lines = outline(national, powerMapDepth + .008, boundary);
+    mesh.geometry.computeBoundingBox();
+    lines.geometry.computeBoundingBox();
+    const fitBounds = mesh.geometry.boundingBox!.clone().union(lines.geometry.boundingBox!);
+    // 同时保留双精度原始轮廓和实际 Float32 挤出几何的边界。
+    for (const polygon of national) for (const ring of polygon) for (const point of ring) {
+      const { x, y } = projectPowerPoint(point);
+      fitBounds.expandByPoint(new Vector3(x, y, 0));
+      fitBounds.expandByPoint(new Vector3(x, y, powerMapDepth + .008));
+    }
     main.add(mesh, lines);
     const coord = properties.centroid ?? properties.center!;
     const { x, y } = projectPowerPoint(coord);
-    return [{ code, mesh, lines, fill, side, name: properties.name, anchor: new Vector3(x, y, powerMapDepth) }];
+    return [{ code, mesh, lines, fill, side, fitBounds, name: properties.name, anchor: new Vector3(x, y, powerMapDepth) }];
   });
   return { main, inset, bounds, insetBounds, provinces };
 }
