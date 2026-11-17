@@ -3,11 +3,12 @@
 import dynamic from "next/dynamic";
 import { ChevronDown, Layers3 } from "lucide-react";
 import { useState } from "react";
-import { reading, type DataStory } from "@/lib/topic-analysis/data-story";
-import type { AnalysisChartSpec } from "@/lib/topic-analysis/model";
+import { reading } from "@/lib/topic-analysis/data-story";
+import { hasChartValues, type AnalysisChartSpec } from "@/lib/topic-analysis/model";
 import { powerStory } from "@/lib/topic-analysis/power-insights";
 import { explorerMeasures, powerChartIds, powerExplorer, powerSources, powerYearRecord, type PowerChartId } from "@/lib/topic-analysis/power";
-import { AnalysisTable, hasChartValues } from "./AnalysisFigure";
+import { AnalysisTable } from "./AnalysisFigure";
+import { AnalysisInsights, AnalysisNarrative } from "./AnalysisNarrative";
 import { AnalysisPlot } from "./AnalysisPlot";
 import styles from "./power.module.css";
 
@@ -22,32 +23,6 @@ const descriptions = {
   "renewable-capacity-share": ["风光占比", "全国装机结构的变化"],
   "generation-by-source": ["发电对比", "已发布的分电源发电量"],
 } as const;
-
-function Insight({ story, id }: { story: DataStory; id: string }) {
-  return <aside className={styles.insight} aria-labelledby={`${id}-findings`} aria-live="polite">
-    <h3 id={`${id}-findings`}>关键洞察</h3>
-    <ul>{story.highlights.map(({ label, text }) => <li key={label}><strong>{label}</strong><p>{text}</p></li>)}</ul>
-  </aside>;
-}
-
-function Report({ story, spec, defaultOpen }: { story: DataStory; spec: AnalysisChartSpec; defaultOpen?: boolean }) {
-  const [tab, setTab] = useState(1);
-  return <details className={styles.report} open={defaultOpen || undefined}>
-    <summary>深度分析报告 <ChevronDown size={15} aria-hidden /></summary>
-    <div className={styles.reportBody}>
-      <div className={styles.reportTabs} role="group" aria-label="解读维度">
-        {story.sections.map(({ label }, index) => <button type="button" key={label}
-          aria-pressed={index === tab} onClick={() => setTab(index)}>{label}</button>)}
-      </div>
-      <p aria-live="polite">{story.sections[tab].text}</p>
-      <details className={styles.evidence}>
-        <summary>分析依据 <ChevronDown size={13} aria-hidden /></summary>
-        <p>{spec.caption}</p>
-        <ul>{spec.sources.map(source => <li key={source.href}><a href={source.href} target="_blank" rel="noreferrer">{source.label}</a></li>)}</ul>
-      </details>
-    </div>
-  </details>;
-}
 
 function PowerFigure({ spec, id, year, source, expanded, update }: {
   spec: AnalysisChartSpec; id: PowerChartId; year: string; source?: string; expanded: boolean;
@@ -98,11 +73,11 @@ function PowerFigure({ spec, id, year, source, expanded, update }: {
         </div> : <p className={styles.empty}>{spec.caption}</p>}
         {id === "generation-by-source" && <p className={styles.rankKey}><i aria-hidden />发电量：低到高（TWh）</p>}
       </div>
-      <Insight story={story} id={id} />
+      <AnalysisInsights story={story} id={id} />
     </div>
     <figcaption className={styles.caption}>{spec.caption}</figcaption>
     <div className={styles.figureFooter}>
-      <Report story={story} spec={spec} defaultOpen={id === "capacity-comparison" && !expanded} />
+      <AnalysisNarrative story={story} caption={spec.caption} sources={spec.sources} defaultOpen={id === "capacity-comparison" && !expanded} />
       {displayed && <AnalysisTable spec={spec} />}
     </div>
   </figure>;

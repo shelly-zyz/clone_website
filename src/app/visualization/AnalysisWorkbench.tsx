@@ -23,12 +23,16 @@ import {
 import {
   fuelSeries, generationSeries, publishedAnalysisTopics, type PublishedHistory, type RegionalGeneration, type RenewableScenario,
 } from "@/lib/topic-analysis/history";
-import type { Analysis, AnalysisChartSpec } from "@/lib/topic-analysis/model";
+import { hasChartValues, type Analysis, type AnalysisChartSpec, type Source } from "@/lib/topic-analysis/model";
+import { chartStory } from "@/lib/topic-analysis/chart-story";
+import { powerStory } from "@/lib/topic-analysis/power-insights";
+import { powerChartIds, powerSources, residualSource } from "@/lib/topic-analysis/power";
+import { AnalysisReportDownload } from "./AnalysisReportDownload";
+import type { ReportFigure, TopicReport } from "./analysis-report";
 import { PeriodComparison } from "./PeriodComparison";
 import { updateAnalysisQuery, useAnalysisQuery } from "./useAnalysisLocation";
-import { AnalysisFigure, hasChartValues } from "./AnalysisFigure";
+import { AnalysisFigure } from "./AnalysisFigure";
 import { useAnalysisAnchor } from "./useAnalysisAnchor";
-import { powerSources, residualSource } from "@/lib/topic-analysis/power";
 import { InterimPowerRelease, PowerDashboard } from "./PowerDashboard";
 import styles from "./page.module.css";
 import powerStyles from "./power.module.css";
@@ -157,27 +161,47 @@ function PeriodOptions({ options, value }: { options: readonly string[]; value: 
   </>;
 }
 
-function CarbonComparison({ history, query, period, grain }: {
-  history: PublishedHistory | null;
-  query: URLSearchParams;
+const generationCompareId = "province-comparison";
+const carbonCompareId = "carbon-comparison";
+
+function pairSpec(id: string, title: string, caption: string, source: Source, unit: string,
+  first: { label: string; value: number | null }, second: { label: string; value: number | null }): AnalysisChartSpec {
+  return {
+    id, title, label: "A/B 对比", caption, kind: "column", unit, color: "#416d8d", sources: [source],
+    labels: ["A · " + first.label, "B · " + second.label], categoryColors: ["#91b7d5", "#9698c9"],
+    series: [{ name: "同口径数值", values: [first.value, second.value] }],
+  };
+}
+
+function carbonPair(history: PublishedHistory | null, query: URLSearchParams, period: string, grain: CarbonGrain) {
+  const byPeriod = carbonPeriods(grain, history).toReversed();
+  const month = query.get("compareMonth");
+  const requested = grain === "day" ? readWorkspaceContext(query).compareDate
+    : month && /^[0-9]{4}-(0[1-9]|1[0-2])$/.test(month) ? month : undefined;
+  const alternate = requested || byPeriod.find(item => item.period !== period)?.period || period;
+  const first = byPeriod.find(item => item.period === period);
+  const second = byPeriod.find(item => item.period === alternate);
+  const caption = history ? (grain === "day" ? "同一发布版本的两个全球日帧。日期为 UTC。"
+    : "同一发布版本的两个月均速率。每月按有值日帧平均，并显示覆盖天数。")
+    : "使用 2025 年 8 月 GRACED Power 归档。按相同空间范围和单位比较。";
+  const spec = pairSpec(carbonCompareId, "全球电力排放速率对比", caption, gracedSource, carbonRateUnit,
+    { label: period, value: first?.rate ?? null }, { label: alternate, value: second?.rate ?? null });
+  const chart = grain === "day" && !history ? carbonArchiveLatitudeComparison(period, alternate)
+    : carbonComparisonTrend(byPeriod, period, alternate, grain);
+  return { alternate, first, second, options: byPeriod.map(item => item.period), spec, chart,
+    version: history?.version ?? "2025-08 GRACED Power 归档" };
+}
+
+function CarbonComparison({ pair, period, grain }: {
+  pair: ReturnType<typeof carbonPair>;
   period: string;
   grain: CarbonGrain;
 }) {
-  const context = readWorkspaceContext(query);
-  const periodOptions = carbonPeriods(grain, history).toReversed();
+  const { alternate, first, second, options, spec, chart, version } = pair;
   const key = grain === "day" ? "date" : "month";
   const compareKey = grain === "day" ? "compareDate" : "compareMonth";
-  const month = query.get("compareMonth");
-  const requested = grain === "day" ? context.compareDate : month && /^[0-9]{4}-(0[1-9]|1[0-2])$/.test(month) ? month : undefined;
-  const alternate = requested || periodOptions.find(item => item.period !== period)?.period || period;
-  const first = periodOptions.find(item => item.period === period);
-  const second = periodOptions.find(item => item.period === alternate);
-  const options = periodOptions.map(item => item.period);
-  const version = history?.version ?? "2025-08 GRACED Power 归档";
   const describe = (item: CarbonPeriod | undefined) => item?.rate == null ? "暂无所选时期的排放速率"
     : `${item.coverage} 个有值日帧 · ${item.grids?.toLocaleString("zh-CN", { maximumFractionDigits: 2 }) ?? "暂无"} ${grain === "month" ? "月均非零格点" : "个非零格点"}`;
-  const chart = grain === "day" && !history ? carbonArchiveLatitudeComparison(period, alternate)
-    : carbonComparisonTrend(periodOptions, period, alternate, grain);
   const exportHref = first?.rate != null || second?.rate != null ? csvDownload([
     ["比较", "时期（UTC）", "空间", "数据集", "版本", "有效日帧", "速率（kgC/h）", "非零格点"],
     ["A", period, "全球", "GRACED Power", version, first?.coverage ?? null, first?.rate ?? null, first?.grids ?? null],
@@ -185,10 +209,7 @@ function CarbonComparison({ history, query, period, grain }: {
   ]) : undefined;
   return (
     <div>
-      <PeriodComparison id="carbon-comparison" title="全球电力排放速率对比"
-        caption={history ? (grain === "day" ? "同一发布版本的两个全球日帧。日期为 UTC。"
-          : "同一发布版本的两个月均速率。每月按有值日帧平均，并显示覆盖天数。")
-          : "使用 2025 年 8 月 GRACED Power 归档。按相同空间范围和单位比较。"}
+      <PeriodComparison spec={spec}
         first={{
           heading: "基准时期", value: first?.rate ?? null, detail: describe(first),
           controls: <AnalysisFilter label={grain === "day" ? "A 日度日期" : "A 月份"} value={period} onChange={value => select(value, key)}>
@@ -201,7 +222,6 @@ function CarbonComparison({ history, query, period, grain }: {
             <PeriodOptions options={options} value={alternate} />
           </AnalysisFilter>,
         }}
-        unit={carbonRateUnit} source={gracedSource}
         onSwap={period && alternate && alternate !== period ? () => updateAnalysisQuery({ [key]: alternate, [compareKey]: period }) : undefined}
         exportHref={exportHref}
       />
@@ -210,9 +230,6 @@ function CarbonComparison({ history, query, period, grain }: {
   );
 }
 
-const generationCompareId = "province-comparison";
-const carbonCompareId = "carbon-comparison";
-
 function ComparisonLink({ id, active = false }: { id: string; active?: boolean }) {
   return <a href={"#" + id} aria-current={active ? "location" : undefined} onClick={event => selectView(event, id)}>
     <GitCompareArrows size={22} strokeWidth={1.65} aria-hidden="true" /><span>A/B 对比</span>
@@ -220,37 +237,44 @@ function ComparisonLink({ id, active = false }: { id: string; active?: boolean }
 }
 const historicalCompareId = "economic-comparison";
 
-function ProvinceComparison({ data, pending, available, primary, alternate, scope, unit }: {
+function provincePair(data: RegionalGeneration | null, primary: string, alternate: string, scope: string) {
+  const first = data?.regions.find(item => item.code === primary);
+  const second = data?.regions.find(item => item.code === alternate);
+  const label = (code: string) => findChinaProvince(code)?.name ?? code;
+  return pairSpec(generationCompareId, scope + " · 省际对照",
+    "两个省级地区共享月份、发电指标和发布版本。原始缺测保持为空。", officialProvincial, "亿千瓦时",
+    { label: label(primary), value: first?.value ?? null }, { label: label(alternate), value: second?.value ?? null });
+}
+
+function ProvinceComparison({ data, pending, available, primary, alternate, scope, spec }: {
   data: RegionalGeneration | null;
   pending: boolean;
   available: boolean;
   primary: string;
   alternate: string;
   scope: string;
-  unit: string;
+  spec: AnalysisChartSpec;
 }) {
-  const first = data?.regions.find(item => item.code === primary);
-  const second = data?.regions.find(item => item.code === alternate);
+  const [first, second] = spec.series[0].values;
   const describe = (value: number | null | undefined) => pending ? "读取该期分省数据中"
     : !available ? "已发布数据库暂不可用"
       : value == null ? "该省暂无此报告期的数值" : "已发布的省级本期值";
   const options = chinaProvinces.map(item => <option key={item.code} value={item.code}>{item.name}</option>);
-  const exportHref = data && (first?.value != null || second?.value != null) ? csvDownload([
-    ["比较", "地区", "月份", "版本", "指标", unit],
-    ["A", findChinaProvince(primary)?.name ?? primary, data.month, data.version, scope, first?.value ?? null],
-    ["B", findChinaProvince(alternate)?.name ?? alternate, data.month, data.version, scope, second?.value ?? null],
+  const exportHref = data && (first != null || second != null) ? csvDownload([
+    ["比较", "地区", "月份", "版本", "指标", spec.unit],
+    ["A", findChinaProvince(primary)?.name ?? primary, data.month, data.version, scope, first ?? null],
+    ["B", findChinaProvince(alternate)?.name ?? alternate, data.month, data.version, scope, second ?? null],
   ]) : undefined;
-  return <PeriodComparison id={generationCompareId} title={scope + " · 省际对照"}
-    caption="两个省级地区共享月份、发电指标和发布版本。原始缺测保持为空。"
+  return <PeriodComparison spec={spec} empty={first == null && second == null ? describe(null) : undefined}
     first={{
-      heading: "基准地区", value: first?.value ?? null, detail: describe(first?.value),
+      heading: "基准地区", value: first ?? null, detail: describe(first),
       controls: <AnalysisFilter label="A 省级地区" value={primary} onChange={value => select(value, "region")}>{options}</AnalysisFilter>,
     }}
     second={{
-      heading: "对照地区", value: second?.value ?? null, detail: describe(second?.value),
+      heading: "对照地区", value: second ?? null, detail: describe(second),
       controls: <AnalysisFilter label="B 省级地区" value={alternate} onChange={value => select(value, "compareRegion")}>{options}</AnalysisFilter>,
     }}
-    unit={unit} source={officialProvincial} exportHref={exportHref}
+    exportHref={exportHref}
     onSwap={primary !== alternate ? () => updateAnalysisQuery({ region: alternate, compareRegion: primary }) : undefined}
   />;
 }
@@ -364,7 +388,7 @@ export function AnalysisWorkbench({ topic, initialQuery }: { topic: AnalysisTopi
       break;
     case "renewables":
       dataStatus = scenario.pending ? "读取情景中" : scenario.data?.origin === "database" ? "数据库情景"
-        : scenario.data ? "情景归档" : undefined;
+        : scenario.data ? "情景归档" : "情景数据暂不可用";
       if (scenario.data && selectedScenarioRegion && displayedScenarioYear) {
         analysis = buildRenewableAnalysis(scenario.data, selectedScenarioRegion.id, displayedScenarioYear, technology);
         filters = <>
@@ -432,6 +456,10 @@ export function AnalysisWorkbench({ topic, initialQuery }: { topic: AnalysisTopi
   const selected = analysis?.charts.find(spec => spec.id === view);
   const first = selected ?? analysis?.charts.find(hasChartValues);
   const otherCharts = analysis?.charts.filter(spec => spec.id !== first?.id) ?? [];
+  const carbonPeriod = carbonGrain === "day" ? carbonDate : carbonMonth;
+  const carbonComparison = comparisonActive && topic === "carbon" ? carbonPair(history, query, carbonPeriod, carbonGrain) : undefined;
+  const provinceComparison = comparisonActive && topic === "generation"
+    ? provincePair(regional.data, primaryRegion, alternateRegion, product.name) : undefined;
   if (hasPublishedQuery) {
     dataStatus = published.pending ? "读取数据库中" : history ? "数据库已发布"
       : releaseVersion ? "请求版本暂不可用 · 当前显示公开归档"
@@ -497,13 +525,28 @@ export function AnalysisWorkbench({ topic, initialQuery }: { topic: AnalysisTopi
   }
 
   function renderComparison() {
-    return topic === "carbon" ? <CarbonComparison history={history} query={query}
-      period={carbonGrain === "day" ? carbonDate : carbonMonth} grain={carbonGrain} />
-      : <ProvinceComparison data={regional.data} available={Boolean(history)}
+    return carbonComparison ? <CarbonComparison pair={carbonComparison} period={carbonPeriod} grain={carbonGrain} />
+      : provinceComparison && <ProvinceComparison data={regional.data} available={Boolean(history)}
         pending={regional.pending || published.pending} primary={primaryRegion} alternate={alternateRegion}
-        scope={product.name} unit="亿千瓦时" />;
+        scope={product.name} spec={provinceComparison} />;
   }
 
+  const reportCharts = carbonComparison ? [carbonComparison.spec, ...(carbonComparison.chart ? [carbonComparison.chart] : [])]
+    : provinceComparison ? [provinceComparison] : selected ? [selected] : analysis?.charts ?? [];
+  const reportFigures: ReportFigure[] = reportCharts.map(spec => {
+    const id = powerChartIds.find(id => id === spec.id);
+    return { spec, story: id && topic === "power" ? powerStory(id, powerYear, powerSource) : chartStory(spec, emptyMessage(spec)) };
+  });
+  const report: TopicReport = {
+    title: config.title, scope: analysis?.scope ?? config.description, metrics: analysis?.metrics ?? [],
+    figures: reportFigures, context: [
+      { label: "导出范围", value: comparisonActive ? "A/B 对比" : selected?.label ?? "专题概览" },
+      ...(dataStatus ? [{ label: "数据状态", value: dataStatus }] : []),
+      ...(history ? [{ label: "数据集版本", value: history.version }, { label: "发布于（UTC）", value: history.publishedAt.slice(0, 10) }] : []),
+      ...(scenario.data ? [{ label: "情景数据生成日期", value: scenario.data.generatedAt.slice(0, 10) }] : []),
+      ...(carbonComparison && !history ? [{ label: "数据集版本", value: carbonComparison.version }] : []),
+    ],
+  };
   return (
     <div className={topic === "power" ? `${styles.workbench} ${powerStyles.workbench}` : styles.workbench} data-topic={topic} data-published-version={history?.version}>
       <aside className={styles.workbenchNav}>
@@ -524,7 +567,11 @@ export function AnalysisWorkbench({ topic, initialQuery }: { topic: AnalysisTopi
             <h1 id="analysis-topic-title">{config.title}</h1>
             <p>{analysis?.scope ?? config.description}</p>
           </div>
-          <TopicSwitcher topic={topic} query={query} />
+          <div className={styles.headingActions}>
+            <TopicSwitcher topic={topic} query={query} />
+            <AnalysisReportDownload topic={topic} view={reportCharts[0] && (comparisonActive || selected) ? reportCharts[0].id : "overview"}
+              report={report} pending={published.pending || regional.pending || scenario.pending} />
+          </div>
         </div>
         <div className={styles.filters} id="topic-filters">
           <div className={styles.filterControls} role="group" aria-label="分析筛选">{filters}</div>

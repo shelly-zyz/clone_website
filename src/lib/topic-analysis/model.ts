@@ -31,6 +31,13 @@ export type AnalysisChartSpec = {
 export type Metric = { label: string; value: string; unit?: string };
 export type Analysis = { scope: string; metrics: Metric[]; charts: AnalysisChartSpec[] };
 
+export function hasChartValues(spec: AnalysisChartSpec) {
+  if (spec.kind === "sankey") return spec.links.some(link => link.value > 0);
+  if (spec.kind === "boxplot") return spec.series[2].values.some(value => value !== null);
+  if (spec.kind === "range-band") return spec.series.slice(0, 4).some(series => series.values.some(value => value !== null));
+  return spec.series.some(series => series.values.some(value => value !== null));
+}
+
 const number = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 });
 
 export function formatAnalysisValue(value: Value) {

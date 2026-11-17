@@ -3,14 +3,14 @@
 import { BarChart, BoxplotChart, CustomChart, HeatmapChart, LineChart, MapChart, PieChart, SankeyChart, ScatterChart, TreemapChart } from "echarts/charts";
 import { CalendarComponent, DataZoomComponent, GeoComponent, GridComponent, LegendComponent, MarkLineComponent, PolarComponent, TitleComponent, TooltipComponent, VisualMapComponent } from "echarts/components";
 import { getMap, init, registerMap, use as registerCharts, type ECElementEvent, type EChartsType } from "echarts/core";
-import { CanvasRenderer } from "echarts/renderers";
+import { CanvasRenderer, SVGRenderer } from "echarts/renderers";
 import { useEffect, useRef, useState } from "react";
 import type { AnalysisChartSpec } from "@/lib/topic-analysis/model";
 import { chartOptions, worldMap } from "./plot-options";
 import styles from "./page.module.css";
 
 registerCharts([
-  BarChart, BoxplotChart, CustomChart, HeatmapChart, LineChart, MapChart, PieChart, SankeyChart, ScatterChart, TreemapChart, CanvasRenderer,
+  BarChart, BoxplotChart, CustomChart, HeatmapChart, LineChart, MapChart, PieChart, SankeyChart, ScatterChart, TreemapChart, CanvasRenderer, SVGRenderer,
   CalendarComponent, DataZoomComponent, GeoComponent, GridComponent, LegendComponent, MarkLineComponent, PolarComponent,
   TitleComponent, TooltipComponent, VisualMapComponent,
 ]);
@@ -33,6 +33,24 @@ function loadWorld() {
     throw error;
   });
   return worldRequest;
+}
+
+export async function renderReportChart(spec: AnalysisChartSpec) {
+  if (spec.kind === "map") await loadWorld();
+  const height = spec.kind === "heatmap" ? Math.max(340, 18 * spec.series.length + 80)
+    : spec.kind === "map" || spec.kind === "bubble" ? 435 : 355;
+  const instance = init(null, undefined, { renderer: "svg", ssr: true, width: 960, height });
+  try {
+    // zrender writes font-family directly into an XML attribute when serializing SVG.
+    const textStyle = { fontFamily: "Inter, PingFang SC, Microsoft YaHei, sans-serif" };
+    instance.setOption({ ...chartOptions(spec, false), textStyle, animation: false, dataZoom: [], tooltip: { show: false } });
+    const svg = instance.renderToSVGString();
+    const root = new DOMParser().parseFromString(svg, "image/svg+xml").documentElement;
+    if (root.localName !== "svg" || root.querySelector("parsererror")) throw new Error("Unable to render the report figure");
+    return svg;
+  } finally {
+    instance.dispose();
+  }
 }
 
 export function AnalysisPlot({ spec, compact = false, onCategory, highlight }: {
