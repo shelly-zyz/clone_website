@@ -126,10 +126,13 @@ export function buildECharts(model: FigureModel, design: FigureDesign, narrow = 
         emphasis: { itemStyle: { borderColor: design.foreground, borderWidth: 1 } } });
     } else if (panel.kind === "scatter") {
       series.push({ ...binding, type: "scatter", name: panel.series[0].name, data: panel.points, symbolSize: 8,
-        itemStyle: { color: design.colors[0], opacity: 0.72 } });
+        itemStyle: { color: design.colors[index % design.colors.length], borderColor: design.background, borderWidth: 1, opacity: 0.8 } });
     } else if (panel.kind === "box") {
       const summaries = panel.series.map(item => summary(item.data));
-      series.push({ ...binding, type: "boxplot", name: unit, data: summaries.map(item => item.box), itemStyle: { color: design.background, borderColor: design.colors[0] } },
+      series.push({ ...binding, type: "boxplot", name: unit, boxWidth: [10, 50], data: summaries.map((item, i) => {
+        const ink = design.colors[(i + index) % design.colors.length];
+        return { value: item.box, itemStyle: { color: ink + "22", borderColor: ink, borderWidth: 1.6 } };
+      }) },
         { ...binding, type: "scatter", name: "超出四分位围栏", data: summaries.flatMap((item, i) => item.outliers.map(value => [i, value])),
           symbolSize: 5, itemStyle: { color: design.colors[1] } });
     } else if (panel.kind === "dumbbell") {
@@ -155,7 +158,7 @@ export function buildECharts(model: FigureModel, design: FigureDesign, narrow = 
       });
     } else {
       for (const [i, item] of panel.series.entries()) {
-        const color = design.colors[i % design.colors.length];
+        const color = design.colors[(i + index) % design.colors.length];
         const data = temporal(panel.axis, x, item.data);
         const pattern = item.forecast ? "dashed" : design.theme === "academic-monochrome" && i % 3 ? (i % 3 === 1 ? "dashed" : "dotted") : "solid";
         const symbol = ["circle", "diamond", "triangle"][i % 3];
@@ -168,13 +171,23 @@ export function buildECharts(model: FigureModel, design: FigureDesign, narrow = 
               data: item.interval.map((interval, j) => [x[j], interval ? offset ? interval[1] - interval[0] : interval[0] : null]) });
           }
         }
-        if (panel.kind === "columns" || panel.kind === "rank") {
-          series.push({ ...binding, type: "bar", name: item.name, data, barMaxWidth: 30, itemStyle: { color, opacity: 0.84 } });
+        if (panel.kind === "rank") {
+          series.push({ ...binding, type: "bar", name: item.name, data, barWidth: 2, silent: true, itemStyle: { color: color + "42" } },
+            { ...binding, type: "scatter", name: item.name, symbolSize: x.length > 20 ? 7 : 12,
+              data: item.data.flatMap((value, n) => value === null ? [] : [[value, x[n]]]),
+              itemStyle: { color, borderColor: design.background, borderWidth: 1.25 } });
+        } else if (panel.kind === "columns") {
+          series.push({ ...binding, type: "bar", name: item.name, data, barMaxWidth: 28, itemStyle: {
+            color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color }, { offset: 1, color: color + "85" }] },
+            borderRadius: [3, 3, 0, 0],
+          } });
         } else {
           const stack = panel.kind === "stack";
-          series.push({ ...binding, type: "line", name: item.name, data, symbol, showSymbol: item.data.length <= 18,
+          series.push({ ...binding, type: "line", name: item.name, data, symbol, showSymbol: !stack && item.data.length <= 18,
             symbolSize: 6, connectNulls: false, lineStyle: { color, type: pattern, width: 2.1 },
-            itemStyle: { color }, stack: stack ? "composition" : undefined, areaStyle: stack ? { color, opacity: 0.48 } : undefined });
+            itemStyle: { color }, stack: stack ? "composition" : undefined, areaStyle: stack ? { color: {
+              type: "linear", x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: color + "93" }, { offset: 1, color: color + "37" }],
+            }, opacity: 1 } : undefined });
         }
       }
     }

@@ -80,6 +80,65 @@
 .workspace button:focus-visible, .workspace select:focus-visible, .workspace input:focus-visible, .workspace textarea:focus-visible,
 .workspace summary:focus-visible, .workspace a:focus-visible { outline: 2px solid #248c82; outline-offset: 2px; }
 
+.choices {
+  --topic-ink: #17605c;
+  --topic-surface: #eaf6f2;
+  --topic-line: #a8cfc4;
+  display: grid;
+  gap: 10px;
+  padding: 14px clamp(12px, 2.3vw, 28px);
+  border-bottom: 1px solid var(--line);
+  background: #fcfefd;
+}
+.choices[data-domain="meteorology"] { --topic-ink: #256080; --topic-surface: #edf5fa; --topic-line: #accee0; }
+.choices[data-domain="carbon"] { --topic-ink: #914c43; --topic-surface: #faefec; --topic-line: #e1bcb2; }
+.choices[data-domain="economy"] { --topic-ink: #5a5087; --topic-surface: #f2eff8; --topic-line: #c8bddf; }
+.choiceHeading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 14px; }
+.choiceHeading h3 { color: var(--ink); font-size: 14px; font-weight: 740; }
+.choiceActions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+.choices .exampleSelect { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.exampleSelect span { white-space: nowrap; }
+.choices .exampleSelect select { min-height: 28px; width: auto; max-width: min(56vw, 228px); }
+.topicChoices, .chartChoices, .extraChoices { display: grid; gap: 7px; }
+.topicChoices { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 5px; }
+.chartChoices, .extraChoices { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.topicChoices button { min-height: 39px; font-size: 13px; }
+.topicChoices button[aria-pressed="true"], .chartChoices button[aria-pressed="true"] {
+  color: var(--topic-ink);
+  background: var(--topic-surface);
+  border-color: var(--topic-line);
+}
+.chartChoices button, .extraChoices button { position: relative; min-width: 0; gap: 8px; justify-content: start; text-align: left; }
+.chartChoices button { align-items: start; min-height: 75px; padding: 9px 8px; }
+.chartChoices button:disabled, .extraChoices button:disabled { background: #f5f8f7; opacity: .75; }
+.chartChoiceText, .extraChoices button > span { display: grid; gap: 3px; line-height: 1.4; }
+.chartChoiceText strong { padding-right: 9px; }
+.chartChoices small, .extraChoices small { color: var(--muted); font-size: 10px; font-weight: 500; }
+.chartIcon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 30px;
+  height: 30px;
+  color: var(--topic-ink);
+  background: var(--topic-surface);
+  border-radius: 6px;
+}
+.choiceCheck { position: absolute; right: 5px; top: 5px; }
+.moreChoices { color: var(--muted); font-size: 11px; }
+.moreChoices summary { width: fit-content; cursor: pointer; }
+.extraChoices { margin-top: 7px; }
+.extraChoices button { padding: 8px; }
+.extraChoices button > svg { flex: none; color: var(--topic-ink); }
+@media (min-width: 711px) {
+  .topicChoices { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .chartChoices { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .extraChoices { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (min-width: 1024px) {
+  .chartChoices button { min-height: 66px; align-items: center; }
+  .chartIcon { flex-basis: 36px; height: 36px; }
+}
+
 .workspaceGrid { display: grid; gap: 12px; padding: 12px; align-items: start; }
 
 .config, .inspector, .center { min-width: 0; }

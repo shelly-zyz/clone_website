@@ -41,6 +41,7 @@ export const styleSchema = z.strictObject({
 export type FigureStyle = z.infer<typeof styleSchema>;
 
 export const figurePatchSchema = z.strictObject({
+  domain: z.enum(domains).optional(),
   title: z.string().trim().min(1).max(100).optional(),
   kind: z.enum(["auto", ...chartKinds]).optional(),
   mode: z.enum(["interactive", "paper"]).optional(),

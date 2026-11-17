@@ -1,19 +1,20 @@
 "use client";
 
-import { Bookmark, ChartSpline, ChevronDown, FlaskConical, Maximize, Plus, Sparkles } from "lucide-react";
+import { Bookmark, ChevronDown, FlaskConical, Maximize, PanelsTopLeft, Plus, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { EChartsType } from "echarts";
 import { z } from "zod";
 import { type WorkspaceTopic } from "@/lib/globe-topics";
 import { xiaoyunContextSchema } from "@/lib/xiaoyun/contracts";
 import {
-  chartKinds, domains, figurePatchSchema, layouts, projectKeySchema, themes, type DatasetRequest, type Domain, type FigureEdit,
+  figurePatchSchema, layouts, projectKeySchema, themes, type ChartKind, type DatasetRequest, type Domain, type FigureEdit,
   type ExportFormat, type FigureStyle, type VisualizationJob, type VisualizationResult, type WorkspaceRequest,
 } from "@/lib/visualization-agent/research/contracts";
 import { ResearchExport, ResearchInspector, type ListedFigure, type SavedFigure } from "./ResearchInspector";
 import { ResearchPreview } from "./ResearchPreview";
+import { ResearchChartChoices } from "./ResearchChartChoices";
 import { ResearchSourceFields, type ResearchCatalog } from "./ResearchSourceFields";
-import { chartNames, domainNames, exampleRecipe, layoutNames, newSource, presets, themeNames, topicDomain } from "./research-controls";
+import { chartNames, chartRequirement, exampleRecipe, layoutNames, newSource, presets, themeNames, topicDomain } from "./research-controls";
 import styles from "./research.module.css";
 
 type Draft = VisualizationJob["configuration"];
@@ -123,13 +124,32 @@ export function ResearchChartStudio({ topic }: { topic: WorkspaceTopic }) {
   }
 
   function update(result: VisualizationResult) {
+    const nextDomain = result.recipe.domain ?? result.plan.datasets[0]?.domain;
+    if (nextDomain) setDomain(nextDomain);
     setDraft(result.recipe);
     setFigure(result);
   }
 
-  function selectPreset(next: Domain) {
+  function selectTopic(next: Domain) {
+    if (domain === next) return;
     setDomain(next);
     setDraft(exampleRecipe(next));
+    setFigure(undefined);
+    setSaved(undefined);
+    setPrompt("");
+    setAttention("");
+    setStatus("");
+  }
+
+  function chooseChart(kind: ChartKind) {
+    setDraft(value => {
+      const mode = kind === "violin" || kind === "density" ? "paper"
+        : kind === "calendar" || kind === "flow" ? "interactive" : value.mode ?? "interactive";
+      const changeMode = mode !== (value.mode ?? "interactive");
+      const resetEngine = changeMode || value.engine === "flint" && kind !== "trend" && kind !== "columns";
+      return { ...value, domain, kind, mode, engine: resetEngine ? "auto" : value.engine,
+        style: changeMode ? { ...value.style, theme: undefined } : value.style };
+    });
   }
 
   function changeDataset(index: number, source: DatasetRequest) {
@@ -141,6 +161,7 @@ export function ResearchChartStudio({ topic }: { topic: WorkspaceTopic }) {
   }
 
   function submitDraft() {
+    if (!canGenerate) return;
     void run("正在校验数据并生成图件…", async signal => {
       const patch = figurePatchSchema.safeParse(draft).data;
       if (!patch?.datasets) throw new RequestError(400, "请检查数据引用、日期与图件参数。");
@@ -240,6 +261,11 @@ export function ResearchChartStudio({ topic }: { topic: WorkspaceTopic }) {
   const paper = draft.mode === "paper";
   const engineEnabled = (id: string) => catalog?.engines.find(engine => engine.id === id)?.available;
   const isDirty = raw(draft) !== raw(figure?.recipe);
+  const profiles = figure && raw(draft.datasets) === raw(figure.recipe.datasets) ? figure.plan.datasets : undefined;
+  const selectedChart = draft.kind && draft.kind !== "auto" ? draft.kind : undefined;
+  const incompatible = selectedChart && chartRequirement(selectedChart, draft.datasets, profiles);
+  const canGenerate = Boolean(selectedChart && !incompatible);
+  const draftNeedsApplying = figure ? isDirty : Boolean(selectedChart);
 
   return <section className={styles.workspace} aria-labelledby="research-title">
     <header className={styles.header}>
@@ -279,16 +305,18 @@ export function ResearchChartStudio({ topic }: { topic: WorkspaceTopic }) {
     {(attention || status) && <div className={styles.notice} data-error={Boolean(attention)} role={attention ? "alert" : "status"}>
       {attention || status}
     </div>}
+    <ResearchChartChoices domain={domain} draft={draft} profiles={profiles} busy={busy} paperAvailable={engineEnabled("matplotlib")}
+      onDomain={selectTopic} onChart={chooseChart} onExample={index => {
+        setDraft(exampleRecipe(domain, index));
+        setAttention("");
+      }} generate={<button className={styles.primary} type="submit" form="research-figure-configuration" disabled={busy || !canGenerate}>
+        {figure ? "应用所选图样" : "生成图件"}
+      </button>} />
     <div className={styles.workspaceGrid}>
       <details className={styles.config} open>
-        <summary>数据与图型<ChevronDown size={15} aria-hidden /></summary>
-        <form onSubmit={event => { event.preventDefault(); submitDraft(); }}>
+        <summary>数据与绘图设置<ChevronDown size={15} aria-hidden /></summary>
+        <form id="research-figure-configuration" onSubmit={event => { event.preventDefault(); submitDraft(); }}>
           <fieldset disabled={busy}>
-            <label>领域示例
-              <select value={domain} onChange={event => selectPreset(event.target.value as Domain)}>
-                {domains.map(item => <option key={item} value={item}>{domainNames[item]} · {presets[item].label}</option>)}
-              </select>
-            </label>
             <button type="button" className={styles.textButton} onClick={useXiaoyunProject}>使用小云已有问数项目</button>
             {draft.datasets.map((data, index) => <ResearchSourceFields key={index} data={data} index={index} catalog={catalog}
               onChange={source => changeDataset(index, source)} onRemove={draft.datasets.length > 1 ? () =>
@@ -297,27 +325,19 @@ export function ResearchChartStudio({ topic }: { topic: WorkspaceTopic }) {
               onClick={() => setDraft(value => ({ ...value, datasets: [...value.datasets, newSource(domain)] }))}>
               <Plus size={15} aria-hidden />添加数据来源
             </button>
-            <label>图型<select value={draft.kind ?? "auto"}
-              onChange={event => {
-                const kind = event.target.value as Draft["kind"];
-                const scientific = kind === "violin" || kind === "density";
-                setDraft(value => ({ ...value, kind, ...(scientific && value.mode !== "paper" ?
-                  { mode: "paper", engine: "auto", style: { ...value.style, theme: undefined } } : {}) }));
-              }}>
-              <option value="auto">智能推荐</option>
-              {chartKinds.filter(kind => kind !== "surface").map(kind => <option key={kind} value={kind}>{chartNames[kind]}</option>)}
-            </select></label>
             <label>绘图模式<select value={paper ? "paper" : "interactive"} onChange={event => {
               const mode = event.target.value as Draft["mode"];
               setDraft(value => ({ ...value, mode, engine: undefined, style: { ...value.style, theme: undefined } }));
             }}>
-              <option value="interactive">网页交互</option><option value="paper" disabled={engineEnabled("matplotlib") === false}>论文图件</option>
+              <option value="interactive" disabled={selectedChart === "violin" || selectedChart === "density"}>网页交互</option>
+              <option value="paper" disabled={engineEnabled("matplotlib") === false || selectedChart === "calendar" || selectedChart === "flow"}>论文图件</option>
             </select></label>
             <label>引擎<select value={draft.engine ?? "auto"}
               onChange={event => setDraft(value => ({ ...value, engine: event.target.value as Draft["engine"] }))}>
               <option value="auto">自动</option>
               <option value="echarts" disabled={paper}>ECharts</option>
-              <option value="flint" disabled={paper || engineEnabled("flint") === false}>Flint → ECharts</option>
+              <option value="flint" disabled={paper || engineEnabled("flint") === false ||
+                Boolean(selectedChart && selectedChart !== "trend" && selectedChart !== "columns")}>Flint → ECharts</option>
               <option value="matplotlib" disabled={!paper || engineEnabled("matplotlib") === false}>Matplotlib</option>
             </select></label>
             <details className={styles.details}>
@@ -354,7 +374,8 @@ export function ResearchChartStudio({ topic }: { topic: WorkspaceTopic }) {
                 </div>
               </div>
             </details>
-            <button className={styles.primary} type="submit" disabled={busy}>{figure ? "应用到图件" : "生成图件"}</button>
+            {incompatible && <p className={styles.hint}>{incompatible}，或重新选择图样。</p>}
+            <button className={styles.primary} type="submit" disabled={busy || !canGenerate}>{figure ? "应用到图件" : "生成图件"}</button>
           </fieldset>
         </form>
       </details>
@@ -375,10 +396,10 @@ export function ResearchChartStudio({ topic }: { topic: WorkspaceTopic }) {
           </header>
           {figure ? <ResearchPreview onError={onPreviewError} chart={chart} figure={figure} />
             : <div className={styles.empty}>
-              <span><ChartSpline size={30} strokeWidth={1.5} aria-hidden /></span>
-              <strong>查看{presets[domain].label}</strong>
-              <p>使用当前选择直接生成，或让小云按你的研究问题规划。</p>
-              <button className={styles.primary} type="button" onClick={submitDraft} disabled={busy}>生成当前图件</button>
+              <span><PanelsTopLeft size={30} strokeWidth={1.5} aria-hidden /></span>
+              <strong>{selectedChart ? chartNames[selectedChart] : "选择一种图样"}</strong>
+              <p>{incompatible || (selectedChart ? "将按左侧所选指标和时间生成。" : "也可以在小云制图中描述你的研究问题。")}</p>
+              <button className={styles.primary} type="button" onClick={submitDraft} disabled={busy || !canGenerate}>生成当前图件</button>
             </div>}
           {figure && <footer className={styles.canvasBar}>
             <ResearchExport figure={figure} busy={busy} onExport={exportFigure} />
@@ -395,15 +416,16 @@ export function ResearchChartStudio({ topic }: { topic: WorkspaceTopic }) {
       </div>
 
       <aside className={styles.inspector} aria-label="智能编辑与数据解读">
-        <form className={styles.ask} onSubmit={event => { event.preventDefault(); ask(); }}>
+        <form className={styles.ask} onSubmit={event => { event.preventDefault(); if (!draftNeedsApplying) ask(); }}>
           <h3><Sparkles size={16} aria-hidden />小云制图</h3>
           <label htmlFor="research-instruction">{figure ? "修改当前图件" : "描述研究问题"}</label>
           <textarea id="research-instruction" value={prompt} onChange={event => setPrompt(event.target.value)} maxLength={500}
             rows={3} placeholder={figure ? "比如：换成学术黑白" : presets[domain].prompt} disabled={busy} />
           <div className={styles.askActions}>
             <button type="button" className={styles.textButton} disabled={busy} onClick={() => setPrompt(figure ? "换成学术黑白" : presets[domain].prompt)}>填入示例</button>
-            <button type="submit" className={styles.primary} disabled={busy || !prompt.trim()}>{figure ? "提交修改" : "让小云制图"}</button>
+            <button type="submit" className={styles.primary} disabled={busy || !prompt.trim() || draftNeedsApplying}>{figure ? "提交修改" : "让小云制图"}</button>
           </div>
+          {draftNeedsApplying && <p className={styles.hint}>{figure ? "先应用所选图样与数据，再用小云修改。" : "先按选定图样生成，再用小云修改。"}</p>}
         </form>
         <ResearchInspector figure={figure} saved={saved} />
       </aside>

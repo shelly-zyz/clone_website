@@ -90,7 +90,15 @@ try {
   const navigate = () => cdp("Page.navigate", { url: new URL(location, base).href });
   await navigate();
   await until("document.readyState==='complete' && document.getElementById('research-title')", "research entry");
-  await activate("生成当前图件");
+  const choose = async kind => {
+    const selector = JSON.stringify('[aria-label="推荐图样"] button[data-chart="' + kind + '"]');
+    await until("document.querySelector(" + selector + ")?.disabled === false", "chart choice " + kind);
+    await js("document.querySelector(" + selector + ").click()");
+    await until("document.querySelector(" + selector + ").getAttribute('aria-pressed') === 'true'", "selected chart " + kind);
+  };
+  assert.equal(await js("[...document.querySelectorAll('button')].find(el=>el.textContent.trim()==='生成当前图件').disabled"), true);
+  await choose("forecast");
+  await activate("生成图件");
   await until("document.querySelector('[aria-labelledby=research-title] canvas')", "ECharts canvas");
   await until("document.querySelector('[aria-labelledby=research-title] aside').innerText.includes('预测值')", "written insights");
   await screenshot("workspace-desktop.png");
@@ -99,6 +107,7 @@ try {
   await activate("填入示例");
   await activate("提交修改");
   await until("document.querySelector('[aria-labelledby=research-title] [role=status]')?.textContent.includes('修改已应用')", "natural-language style edit");
+  assert.ok(await js("[...document.querySelectorAll('header p')].some(el=>el.textContent.includes('实值与预测 · echarts'))"));
   await activate("保存图件");
   await until("document.querySelector('[aria-labelledby=research-title] [role=status]')?.textContent.includes('修订 2')", "second saved figure");
 
@@ -131,8 +140,39 @@ try {
   assert.ok(await js("document.documentElement.scrollWidth <= innerWidth + 1"), "mobile layout must not overflow");
   await js("document.getElementById('research-title').scrollIntoView({block:'center'})");
   await screenshot("workspace-mobile.png");
+  await dimensions(1500, 1030);
+  for (const { topic, domain, kind, label, example } of [
+    { topic: "电力与能源", domain: "electricity", kind: "stack", label: "构成堆叠图" },
+    { topic: "电力与能源", domain: "electricity", kind: "rank", label: "分类排行", example: "1" },
+    { topic: "气象与气候", domain: "meteorology", kind: "grid", label: "空间热图", example: "1" },
+    { topic: "碳排放", domain: "carbon", kind: "calendar", label: "日历热图" },
+    { topic: "经济与贸易", domain: "economy", kind: "scatter", label: "关系散点图", example: "1" },
+  ]) {
+    await activate(topic);
+    await until("Boolean(document.querySelector('[aria-label=专题与图样][data-domain=" + domain + "]'))", domain + " recommendations");
+    if (example) await js(`(() => {
+      const select = document.querySelector('[aria-label=专题与图样] select');
+      select.value = ${JSON.stringify(example)};
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    })()`);
+    await choose(kind);
+    const hasFigure = await js("Boolean(document.querySelector('[aria-labelledby=research-title] canvas'))");
+    await activate(hasFigure ? "应用所选图样" : "生成图件");
+    await until("Boolean(document.querySelector('[aria-labelledby=research-title] canvas')) && " +
+      "[...document.querySelectorAll('header p')].some(el=>el.textContent.includes(" + JSON.stringify(label + " · echarts") + "))", label + " chart", 38_000);
+    await js("document.getElementById('research-title').scrollIntoView({block:'start'})");
+    await screenshot(domain + "-" + kind + ".png");
+    if (kind === "stack") {
+      await choose("columns");
+      await activate("应用所选图样");
+      await until("[...document.querySelectorAll('header p')].some(el=>el.textContent.includes('对比柱图 · echarts'))", "change chart type in place");
+      const selectedProducts = await js(`[...document.querySelectorAll('[aria-labelledby=research-title] select')]
+        .filter(el=>el.labels[0]?.textContent.startsWith('产品')).map(el=>el.value)`);
+      assert.deepEqual(selectedProducts, ["wind-power", "solar-power"]);
+    }
+  }
   assert.equal(exceptions.length, 0, exceptions[0]);
-  console.log("PASS Chrome desktop and mobile, authorized render, written insight, edit, save/reload/version switch and PNG/SVG download");
+  console.log("PASS Chrome desktop and mobile, four topic styles, written insight, edit, save/reload/version switch and PNG/SVG download");
 } finally {
   socket?.close();
   if (chrome.exitCode === null && !startupError) {
