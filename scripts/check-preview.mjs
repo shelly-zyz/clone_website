@@ -16,7 +16,7 @@ async function request(path, options = {}) {
   const response = await fetch(new URL(path, base), {
     redirect: "error",
     cache: "no-store",
-    signal: AbortSignal.timeout(20_000),
+    signal: AbortSignal.timeout(35_000),
     ...options,
   });
   if (!response.ok) throw new Error(`${path} HTTP ${response.status}`);
@@ -40,11 +40,13 @@ async function check(label, run, attempts = 1) {
   }
 }
 
+const token = process.env.DATA_AGENT_TOKEN?.trim();
+const authorization = token ? { Authorization: "Bearer " + token } : {};
+
 async function checkVoice(action, body, contentType, valid) {
-  const token = process.env.DATA_AGENT_TOKEN?.trim();
   const response = await request(`/api/xiaoyun/voice?action=${action}`, {
     method: "POST",
-    headers: { "Content-Type": contentType, ...(token && { Authorization: "Bearer " + token }) },
+    headers: { "Content-Type": contentType, ...authorization },
     body,
   });
   assert(valid(await response.json()), "语音服务返回了无效响应");
@@ -56,6 +58,22 @@ await Promise.all([
     assert(health.ok && health.database === "zyz", "未连到 zyz");
     return health.database;
   }),
+  check("数据库 Agent 与会话", async () => {
+    const response = await request("/api/xiaoyun/status", { method: "POST", headers: authorization });
+    const status = await response.json();
+    assert(status.database && status.dataAgent && status.sessions, "数据库、已发布目录或会话存储不可用");
+    assert(status.modelConfigured && status.voiceConfigured, "小云的问答模型或语音未配置");
+  }, 2),
+  check("Pi 问答与数据库查询", async () => {
+    const response = await request("/api/data-agent", {
+      method: "POST", headers: { "Content-Type": "application/json", ...authorization },
+      body: JSON.stringify({ action: "ask", topic: "carbon",
+        question: "2026年7月31日全球电力部门（GRACED Power）的碳排放速率是多少？只查询当天。" }),
+      signal: AbortSignal.timeout(35_000),
+    });
+    const answer = await response.json();
+    assert(answer.mode === "pi" && answer.rows?.some(row => row.value != null), "问答未返回已发布的查询数据");
+  }, 2),
   check("气象回放", async () => {
     const response = await request("/api/weather-replay");
     const bytes = Buffer.from(await response.arrayBuffer());
@@ -68,12 +86,12 @@ await Promise.all([
     "云图或降水格点不完整");
     if (requirePostgresReplay) assert(source === "postgres", `回放来自 ${source}，尚未验证数据库直读`);
     return `${replay.satellite.length} 帧云图、${replay.rain.length} 帧降水（${source}）`;
-  }),
+  }, 2),
   check("电力设施", async () => {
     const data = await (await request("/api/data/map-assets")).json();
     assert(data.energyAssets.length && Array.isArray(data.dataCenters), "电力设施首批数据为空");
     return `首批 ${data.energyAssets.length} 条`;
-  }),
+  }, 2),
   check("碳排放网格", async () => {
     const catalog = await (await request("/api/carbon-earth?request=catalog")).json();
     const sector = catalog.sectors.includes("Power") ? "Power" : catalog.sectors[0];
@@ -85,7 +103,7 @@ await Promise.all([
     const data = gunzipSync(Buffer.from(await response.arrayBuffer()));
     assert(data.length === meta.grid.width * meta.grid.height * 4, "碳排放网格字节数不匹配");
     return latest.date;
-  }),
+  }, 2),
   check("经济资料", async () => {
     const [wdi, gep] = await Promise.all(["wdi", "gep"].map(async id =>
       (await request(`/data/economy/${id}.json`)).json()));

@@ -28,6 +28,7 @@
   },
   "scripts": {
     "dev": "node scripts/dev-with-local-config.mjs",
+    "preview:open": "node scripts/open-local-preview.mjs",
     "preview:ssh": "bash scripts/open-ssh-preview.sh",
     "check:preview": "node scripts/check-preview.mjs",
     "build": "next build",

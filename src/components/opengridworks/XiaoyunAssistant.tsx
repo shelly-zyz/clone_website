@@ -133,6 +133,8 @@ function XiaoyunRuntime({ workspace, children }: { workspace: Workspace | null; 
   const token = useRef("");
   const [requiresToken, setRequiresToken] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  const [connectionError, setConnectionError] = useState("");
+  const connectionCheck = useRef<AbortController | undefined>(undefined);
   const [ready, setReady] = useState(false);
   const [business, setBusiness] = useState<XiaoyunBusinessResult[]>([]);
   const [openDashboard, setOpenDashboard] = useState<Extract<XiaoyunBusinessResult, { kind: "chart" }>>();
@@ -145,6 +147,64 @@ function XiaoyunRuntime({ workspace, children }: { workspace: Workspace | null; 
   const [forecastNotice, setForecastNotice] = useState<{ topic: Topic; message: string }>();
   const [selectedChartId, setSelectedChartId] = useState<string>();
   const workspaceTopic = workspace?.topic;
+
+  const checkConnection = useCallback(async () => {
+    connectionCheck.current?.abort();
+    const check = new AbortController();
+    connectionCheck.current = check;
+    try {
+      const response = await fetch("/api/xiaoyun/status", {
+        method: "POST",
+        headers: token.current ? { Authorization: `Bearer ${token.current}` } : {},
+        cache: "no-store",
+        signal: AbortSignal.any([check.signal, AbortSignal.timeout(18_000)]),
+      });
+      if (check.signal.aborted) return;
+      if (response.status === 401) {
+        setRequiresToken(true);
+        return;
+      }
+      if (!response.ok) throw new Error("小云的连接检查失败。");
+      const status: {
+        database: boolean; dataAgent: boolean; sessions: boolean; modelConfigured: boolean; voiceConfigured: boolean;
+      } = await response.json();
+      if (check.signal.aborted) return;
+      const unavailable = [
+        !status.database && "数据库",
+        !status.dataAgent && "数据库 Agent",
+        !(status.sessions && status.modelConfigured) && "小云问答",
+        !status.voiceConfigured && "小云语音",
+      ].filter(Boolean);
+      setRequiresToken(false);
+      setConnectionError(unavailable.length ? `${unavailable.join("、")}暂不可用` : "");
+    } catch {
+      if (!check.signal.aborted) setConnectionError("小云的连接检查失败");
+    }
+  }, []);
+
+  useEffect(() => {
+    const check = () => { void checkConnection(); };
+    const onVisible = () => { if (document.visibilityState === "visible") check(); };
+    const onRestore = (event: PageTransitionEvent) => { if (event.persisted) onVisible(); };
+    check();
+    window.addEventListener("online", check);
+    window.addEventListener("pageshow", onRestore);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      connectionCheck.current?.abort();
+      window.removeEventListener("online", check);
+      window.removeEventListener("pageshow", onRestore);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [checkConnection]);
+
+  useEffect(() => {
+    if (!connectionError || requiresToken) return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void checkConnection();
+    }, 25_000);
+    return () => window.clearInterval(timer);
+  }, [checkConnection, connectionError, requiresToken]);
 
   const loadAnalysis = useCallback(async (task: Extract<XiaoyunBusinessResult, { kind: "analysis" }>, signal: AbortSignal) => {
     const scope = context.current.sessions?.[task.topic];
@@ -271,11 +331,7 @@ function XiaoyunRuntime({ workspace, children }: { workspace: Workspace | null; 
       if (!response.ok) throw new Error(payload.error ?? "千问语音暂时不可用。");
       return payload;
     }
-    const capability = fetch("/api/xiaoyun/voice", { cache: "no-store" })
-      .then(response => response.ok ? response.json() as Promise<{ enabled?: boolean }> : null)
-      .catch(() => null);
-
-    void Promise.all([import("@xiaoyun/voice"), capability]).then(([{ createVoiceAssistant }, config]) => {
+    void import("@xiaoyun/voice").then(({ createVoiceAssistant }) => {
       if (disposed) return;
       const active = detectSiteView(window.location.pathname, window.location.search);
       voice.current = createVoiceAssistant({
@@ -286,14 +342,14 @@ function XiaoyunRuntime({ workspace, children }: { workspace: Workspace | null; 
         context: { topic: viewTopic(active) ?? context.current.lastTopic ?? "power" },
         ui: { theme: "power-earth", position: { right: 18, bottom: 112 } },
         browserAdapter: {
-          audio: config?.enabled ? {
+          audio: {
             async transcribe(pcm, signal) { return (await voiceRequest("transcribe", pcm, signal)).text ?? ""; },
             async synthesize(text, signal) {
               const audio = (await voiceRequest("synthesize", JSON.stringify({ text: text.slice(0, 500) }), signal)).audio;
               if (!audio) throw new Error("千问未返回播报音频。");
               return audio;
             },
-          } : undefined,
+          },
           async submit(message, _snapshot, signal) {
             signal.throwIfAborted();
             const { location } = window;
@@ -505,8 +561,16 @@ function XiaoyunRuntime({ workspace, children }: { workspace: Workspace | null; 
         <label className="fixed bottom-4 right-4 z-[3000] flex items-center gap-2 rounded-lg bg-slate-950 px-3 py-2 text-sm text-slate-100">
           小云访问令牌
           <input type="password" autoComplete="off" onChange={(event) => { token.current = event.target.value.trim(); }}
+            onBlur={() => { void checkConnection(); }}
+            onKeyDown={(event) => { if (event.key === "Enter") void checkConnection(); }}
             className="w-32 rounded border border-slate-500 bg-slate-900 px-2 py-1" />
         </label>
+      )}
+      {connectionError && !requiresToken && !loadError && (
+        <div role="status" className="fixed bottom-4 right-4 z-[3000] flex items-center gap-2 rounded-lg bg-slate-950 px-3 py-2 text-sm text-slate-100">
+          <span>{connectionError}</span>
+          <button type="button" className="underline" onClick={() => { void checkConnection(); }}>重新连接</button>
+        </div>
       )}
       {loadError && (
         <p role="alert" className="fixed bottom-4 right-4 z-[3000] rounded-lg bg-slate-950 px-3 py-2 text-sm text-slate-100">

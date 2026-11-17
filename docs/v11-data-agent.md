@@ -45,6 +45,8 @@ GRACED 速率和统计局发电量的指标规则与查询数据版本一起返�
 
 - `create_project` 返回项目编号与访问密钥。后续 `create_session`、`get_session`、`resolve_result` 和带 `session` 的 `ask` 用 `X-Data-Project-Key` 提供该密钥。状态连接使用 `green_agent_context`。会话按修订号写入，复用上次查询条件的追问默认固定到上次版本。保存结果可由 HTTP 或 MCP 读取，项目密钥由调用方保管。
 - `/api/data/vector-tiles/postgis/{z}/{x}/{y}.pbf` 读取 PostGIS 动态瓦片。当前图层 `osm_power_points` 使用现有 OpenStreetMap 电力点，范围为 7 至 15 级，每瓦片最多 5,000 个点。更新源表后执行 `REFRESH MATERIALIZED VIEW CONCURRENTLY derived.osm_power_point`。调用地图时显示 OpenStreetMap 署名。
+- 本机使用 `npm run preview:open -- 3207` 打开当前预览。命令会先恢复已配置的数据库隧道，并验证发布目录、会话存储、Pi 真实查数和语音识别／合成，再打开首页。`--no-open` 只运行预检。页面加载、恢复可见或网络重新上线时也会检查小云与数据库连接。浏览器麦克风由用户主动开启。
+- 使用 SSH 转发的开发机可在 `~/.config/opengridworks/database-tunnel.env`（权限 `0600`）配置 `SSH_HOST`、`PG_HOST`、`PG_PORT` 和 `LOCAL_PORT`。SSH 使用现有主机别名和密钥，`LOCAL_PORT` 与本机地图数据库 URL 匹配。可用 `AGENT_LOCAL_PORT` 为数据库 Agent 和会话配置独立的转发端口，并在对应 URL 中使用该端口。开发预览运行期间会自动补建断开的本地转发。
 - 碳帧、电力资产和旧版地图图层通过服务端 `DATABASE_URL` 读取。本地开发可把该变量放在 `$HOME/.config/opengridworks/map-database.env`（权限 `0600`），经本机 SSH 转发连接 PostgreSQL。管理员在 `zyz` 执行 [预览地图只读授权](../scripts/v11-map-preview.sql) 后，可用现有 `green_v11_web_query` 登录，并在连接 URL 的 `options` 参数中设置 `-c role=green_v11_web_map -c default_transaction_read_only=on -c statement_timeout=20000`。地图角色只读现有地图 API 使用的表，数据 Agent 查询仍以 `green_agent_ro` 执行。重启后用 `/api/database/health`、`/api/data/map-assets` 和 `/api/carbon-earth?request=manifest` 检查。
 - 在配好 `wsl-yingzi` SSH 别名的开发机上运行 `npm run preview:ssh`，命令会建立或复用隧道，检查数据库状态并打开 `http://127.0.0.1:31861/workspace`。用这个地址测试小云问答。问答所需凭据由服务器预览进程读取，浏览器经私有隧道访问。
 - 查询结果保留 V11 的 `dataset_id`、`version`、`query_hash`、字段、单位、时间范围与质量信息。本期项目结果为限行内联数据，`artifact_uri` 为 `null`。语义 embedding 索引、Wren MDL、SQLGlot、SeaweedFS Parquet 与其他专题的定时源更新属于后续接入。

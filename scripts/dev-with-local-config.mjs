@@ -3,6 +3,7 @@ import { lstatSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseEnv } from "node:util";
+import { localDatabaseTunnel } from "./local-database-tunnel.mjs";
 
 const configDirectory = join(homedir(), ".config", "opengridworks");
 const allowedVariables = new Set([
@@ -42,6 +43,17 @@ for (const fileName of ["map-database.env", "data-agent-database.env", "xiaoyun-
   }
 }
 
+const ensureDatabaseTunnel = localDatabaseTunnel();
+let tunnelCheck;
+if (ensureDatabaseTunnel) {
+  const reconnect = async () => {
+    try { await ensureDatabaseTunnel(); }
+    catch (error) { console.warn(error.message); }
+    finally { tunnelCheck = setTimeout(reconnect, 15_000).unref(); }
+  };
+  await reconnect();
+}
+
 const next = spawn(process.execPath, [resolve("node_modules/next/dist/bin/next"), "dev", "--webpack", ...process.argv.slice(2)], {
   env: process.env,
   stdio: "inherit",
@@ -57,5 +69,6 @@ next.once("error", (error) => {
 });
 
 next.once("exit", (code, signal) => {
+  clearTimeout(tunnelCheck);
   process.exitCode = code ?? (signal === "SIGINT" ? 130 : signal === "SIGTERM" ? 143 : 1);
 });
