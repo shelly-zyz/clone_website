@@ -342,28 +342,25 @@
 }
 
 .og-globe-navigation {
+  --og-globe-icon-slot: 64px;
+  position: absolute;
+  z-index: 48;
+  bottom: max(10px, env(safe-area-inset-bottom));
+  left: calc(50% + (var(--og-sidebar-width) + 16px) / 2);
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 3px;
-  width: min(100%, 420px);
-}
-
-.og-globe-navigation.is-docked {
-  position: absolute;
-  z-index: 48;
-  right: auto;
-  bottom: max(10px, env(safe-area-inset-bottom));
-  left: calc(50% + (var(--og-sidebar-width) + 16px) / 2);
   width: min(420px, calc(100% - var(--og-sidebar-width) - 42px));
   transform: translateX(-50%);
 }
 
-.og-globe-navigation :is(button, a) {
+.og-globe-navigation button {
   --topic-color: #f6cd2c;
   display: grid;
-  min-width: 0;
+  grid-template-rows: var(--og-globe-icon-slot) auto;
   justify-items: center;
-  align-content: center;
+  align-items: center;
+  min-width: 0;
   gap: 4px;
   padding: 4px 2px 3px;
   border-bottom: 5px solid var(--topic-color);
@@ -378,25 +375,21 @@
 .og-globe-navigation [data-topic="carbon"] { --topic-color: #78d449; }
 .og-globe-navigation [data-topic="economy"] { --topic-color: #ff7547; }
 
-.og-globe-navigation img {
+.og-globe-navigation-icon {
   display: block;
-  width: 64px;
-  height: 64px;
-  object-fit: contain;
-  mask-image: radial-gradient(circle closest-side, #000 94%, transparent 100%);
+  width: calc(var(--og-globe-icon-slot) * 0.875);
+  height: auto;
+  clip-path: circle(48.75%);
 }
 
-.og-globe-navigation :is(button, a):hover,
-.og-globe-navigation button[aria-pressed="true"] {
+.og-globe-navigation button:is(:hover, [aria-pressed="true"]) {
   color: #f7fbfc;
   background: color-mix(in srgb, var(--topic-color) 18%, #0b1015);
 }
 
-.og-globe-navigation button[aria-pressed="true"] {
-  font-weight: 650;
-}
+.og-globe-navigation button[aria-pressed="true"] { font-weight: 650; }
 
-.og-globe-navigation :is(button, a):focus-visible {
+.og-globe-navigation button:focus-visible {
   outline: 2px solid var(--topic-color);
   outline-offset: -2px;
 }
@@ -1288,14 +1281,10 @@
     min-height: 100svh;
   }
 
-  .og-globe-navigation.is-docked {
+  .og-globe-navigation {
+    --og-globe-icon-slot: 49px;
     left: 50%;
     width: min(420px, calc(100% - 20px));
-  }
-
-  .og-globe-navigation img {
-    width: 49px;
-    height: 49px;
   }
 
   .og-top-toolbar {
@@ -3665,7 +3654,7 @@
   border-radius: 8px;
 }
 
-.og-globe-workspace .og-globe-navigation.is-docked {
+.og-globe-workspace .og-globe-navigation {
   left: var(--og-stage-left);
   right: var(--og-gutter);
   width: min(420px, calc(100% - var(--og-stage-left) - var(--og-gutter)));
@@ -3787,11 +3776,12 @@
 
 @media (max-height: 520px) {
   .og-globe-workspace {
-    --og-globe-nav-space: calc(62px + env(safe-area-inset-bottom, 0px));
+    --og-globe-nav-space: calc(68px + env(safe-area-inset-bottom, 0px));
     --og-dock-size: min(24svh, 190px);
     --og-assistant-bottom: 68px;
   }
-  .og-globe-workspace .og-globe-navigation img { width: 30px; height: 30px; }
+  .og-globe-workspace.is-cinematic { --og-globe-nav-space: 0px; }
+  .og-globe-navigation { --og-globe-icon-slot: 30px; }
   .og-globe-stage .maplibregl-ctrl-group { display: flex; }
   .og-globe-stage .maplibregl-ctrl-group button + button { border-top: 0; border-left: 1px solid #ffffff20; }
 }

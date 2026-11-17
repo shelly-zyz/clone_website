@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { GlobeHandoff } from "@/components/opengridworks/GlobeHandoff";
 import { XiaoyunSiteAssistant } from "@/components/opengridworks/XiaoyunAssistant";
 import "./globals.css";
 
@@ -20,7 +19,6 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <XiaoyunSiteAssistant>{children}</XiaoyunSiteAssistant>
-        <GlobeHandoff />
       </body>
     </html>
   );

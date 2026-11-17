@@ -32,25 +32,17 @@
   display: none;
 }
 
-.mapPlaceholder {
+.mapError {
   position: absolute;
   inset: 0;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 11px;
   padding: 15px;
   color: #cfd9d8;
   font-size: 13px;
   text-align: center;
   pointer-events: none;
-}
-
-.mapPlaceholder img {
-  width: min(100%, 230px);
-  height: auto;
-  mask-image: radial-gradient(closest-side, #000 90%, transparent 100%);
 }
 
 .marker {

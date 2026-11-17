@@ -17,6 +17,8 @@ import {
 import { buildChart, palettes, type PaletteName } from "./chart-options";
 import type { WorkspaceTopic } from "@/lib/globe-topics";
 import { AgentChartStudio } from "./AgentChartStudio";
+import { ResearchChartStudio } from "./ResearchChartStudio";
+import researchStyles from "./research.module.css";
 import styles from "./studio.module.css";
 
 registerCharts([
@@ -195,7 +197,7 @@ export function CustomChartStudio({ topic, topicName, backHref }: { topic: Works
         <div>
           <Link href={backHref} className={styles.back}><ArrowLeft size={15} aria-hidden />{topicName}</Link>
           <h1 id="studio-title">自定义制图</h1>
-          <p>用小云生成带依据的图文结果，也可在本地用 CSV 手动制图。</p>
+          <p>从发布数据生成可复现的图件，也可在本地用 CSV 手动制图。</p>
         </div>
         {data !== sampleData && <button className={styles.secondaryButton} type="button" onClick={() => {
           request.current++;
@@ -205,7 +207,11 @@ export function CustomChartStudio({ topic, topicName, backHref }: { topic: Works
         }}>查看示例数据 <ArrowUpRight size={15} aria-hidden /></button>}
       </div>
 
-      <AgentChartStudio topic={topic} />
+      <ResearchChartStudio topic={topic} />
+      <details className={researchStyles.legacy}>
+        <summary>小云快速制图</summary>
+        <AgentChartStudio topic={topic} />
+      </details>
       <h2 className={styles.localTitle}>本地 CSV 制图</h2>
 
       <div className={styles.upload} data-dragging={dragging} onDragOver={event => {

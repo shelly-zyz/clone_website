@@ -42,7 +42,10 @@ const chartRequest = { project_id, result_id, chart: "line" };
 const charts = {};
 await withMcp("/api/mcp/visualization", key, async client => {
   const { tools } = await client.listTools();
-  assert.deepEqual(tools.map(tool => tool.name).sort(), ["build_power_globe_scene", "render_antv", "render_custom_chart", "render_echarts", "render_vchart"]);
+  const names = tools.map(tool => tool.name);
+  for (const name of ["build_power_globe_scene", "render_antv", "render_custom_chart", "render_echarts", "render_vchart", "viz.create_plan"]) {
+    assert.ok(names.includes(name), name);
+  }
   for (const renderer of ["echarts", "vchart", "antv"]) {
     const reply = await client.callTool({ name: `render_${renderer}`, arguments: chartRequest });
     assert.ok(!reply.isError, JSON.stringify(reply));

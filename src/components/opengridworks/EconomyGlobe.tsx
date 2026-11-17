@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import { GlobeLoading } from "./GlobeLoading";
 import maplibregl, { type ExpressionSpecification, type Map as MapLibreMap, type Marker } from "maplibre-gl";
 import type { FeatureCollection, Point } from "geojson";
 import { useEffect, useRef, useState } from "react";
@@ -47,7 +47,7 @@ function mapLayers(values: EconomyValue[], metric: EconomyMetric, outlook: boole
   return { fill, points };
 }
 
-export function EconomyGlobe({ active, basemap, onBasemapError, values, metric, outlook, selected, country, camera, cameraRevision = 0, onSelect, onReady }: {
+export function EconomyGlobe({ active, basemap, onBasemapError, values, metric, outlook, selected, country, camera, cameraRevision = 0, onSelect }: {
   active: boolean;
   basemap: MapTheme;
   onBasemapError: () => void;
@@ -59,7 +59,6 @@ export function EconomyGlobe({ active, basemap, onBasemapError, values, metric, 
   camera?: string;
   cameraRevision?: number;
   onSelect: (code: string) => void;
-  onReady?: () => void;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<MapLibreMap>(null);
@@ -160,10 +159,6 @@ export function EconomyGlobe({ active, basemap, onBasemapError, values, metric, 
   }, []);
 
   useEffect(() => {
-    if (status !== "loading") onReady?.();
-  }, [onReady, status]);
-
-  useEffect(() => {
     if (!active) map.current?.stop();
   }, [active]);
 
@@ -257,12 +252,8 @@ export function EconomyGlobe({ active, basemap, onBasemapError, values, metric, 
   return (
     <section className={styles.viewport} data-outlook={outlook} aria-label="交互式经济地球">
       <div className={styles.map} ref={container} data-ready={status === "ready"} />
-      {status !== "ready" && (
-        <div className={styles.mapPlaceholder}>
-          <Image src="/images/opengridworks/globes/economy.webp" alt="" width={240} height={240} unoptimized loading="eager" />
-          <p role="status">{status === "unavailable" ? "当前浏览器无法绘制地球。仍可从列表选择经济体。" : "正在绘制全球经济指标…"}</p>
-        </div>
-      )}
+      {status === "loading" && <GlobeLoading label="正在加载经济地球" />}
+      {status === "unavailable" && <p className={styles.mapError} role="status">当前浏览器无法绘制地球。仍可从列表选择经济体。</p>}
     </section>
   );
 }

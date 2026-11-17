@@ -50,7 +50,11 @@
                     case 404: msg = "No Data"; break;
                 }
                 log.error(err);
-                return s.classed("bad", true).text(msg);
+                s.classed("bad", true).text(msg);
+                if (window.parent !== window && document.documentElement.classList.contains("ogw-workspace")) {
+                    window.parent.postMessage("ogw-weather-error", window.location.origin);
+                }
+                return s;
             },
             reset: function() {
                 return s.classed("bad", false).text("");
