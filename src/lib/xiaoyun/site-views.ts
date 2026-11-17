@@ -181,7 +181,8 @@ export function generationNavigation(message: string, active?: { view: SiteViewI
   const full = /^(?:请)?(?:我想|想|帮我|给我)?(?:打开|查看|看看?|显示)((?:19|20|21)\d{2})年(?:(1[0-2]|0?[1-9])月)?(?:的)?(?:全国)?(?:总)?发电量(?:走势|趋势)?(?:吧|一下)?$/.exec(normalized);
   const onGeneration = active?.view === "generation";
   const changeYear = onGeneration && /^(?:那就|那|换成|切到|改成|改为|看)?((?:19|20|21)\d{2})年(?:的呢|呢|吧)?$/.exec(normalized);
-  const changeMonth = onGeneration && /^(?:那就|那|换成|切到|改成|改为|看)?(1[0-2]|0?[1-9])月(?:的呢|呢|吧)?$/.exec(normalized);
+  const monthCommand = normalized.replace(/^大(?=\d{1,2}月(?:的)?呢$)/, "那");
+  const changeMonth = onGeneration && /^(?:那就|那|换成|切到|改成|改为|看)?(1[0-2]|0?[1-9])月(?:的呢|呢|吧)?$/.exec(monthCommand);
   if (!full && !changeYear && !changeMonth) return;
   const search = new URLSearchParams(active?.search);
   const year = Number(full?.[1] || (changeYear && changeYear[1]) || search.get("year") || search.get("month")?.slice(0, 4));

@@ -415,6 +415,7 @@ function XiaoyunRuntime({ workspace, children }: { workspace: Workspace | null; 
         context: { topic: viewTopic(active) ?? context.current.lastTopic ?? "power" },
         ui: { theme: "power-earth", position: { right: 18, bottom: 112 } },
         browserAdapter: {
+          localGreeting: { response: greetingReply, matches: message => !stripGreeting(message) },
           audio: {
             async transcribe(pcm, signal) { return (await voiceRequest("transcribe", pcm, signal)).text ?? ""; },
             async synthesize(text, signal) {

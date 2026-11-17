@@ -57,7 +57,7 @@
     "@stylexjs/stylex": "0.19.1",
     "@types/d3-geo": "^3.1.0",
     "@visactor/vchart": "2.2.1",
-    "@xiaoyun/voice": "file:vendor/xiaoyun-voice-1.0.0-beta.1-power-earth.5.tgz",
+    "@xiaoyun/voice": "file:vendor/xiaoyun-voice-1.0.0-beta.1-power-earth.6.tgz",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "d3-dsv": "3.0.2",

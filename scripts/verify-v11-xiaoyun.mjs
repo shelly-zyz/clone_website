@@ -299,8 +299,10 @@ if (live) {
     const activePage = { view: "generation", section: "generation-history", search: "?year=2024&month=2024-03" };
     const changed = await turn([], { message: "改成2023年", activePage, context: {} });
     assert.deepEqual(changed.navigation.filters, { year: 2023 });
-    const month = await turn([], { message: "那八月呢", activePage: { ...activePage, search: "?year=2023" }, context: {} });
-    assert.deepEqual(month.navigation.filters, { year: 2023, month: "2023-08" });
+    for (const message of ["那八月呢", "大八月呢"]) {
+      const month = await turn([], { message, activePage: { ...activePage, search: "?year=2023" }, context: {} });
+      assert.deepEqual(month.navigation.filters, { year: 2023, month: "2023-08" });
+    }
     const history = { facts: [
       { month: "2023-08", series: "electricity", value: 350 },
       { month: "2024-03", series: "electricity", value: 500 },

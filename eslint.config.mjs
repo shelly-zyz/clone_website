@@ -13,6 +13,7 @@ const eslintConfig = defineConfig([
     "build/**",
     "deepagent/**",
     "public/earth/**",
+    "public/xiaoyun-audio/kws/*.js",
     "next-env.d.ts",
   ]),
 ]);
