@@ -31,6 +31,7 @@ import { openEvidence, searchKnowledge } from "./knowledge.server";
 import { listProjectViews, loadProjectView, saveProjectView } from "./project-views.server";
 import type { Evidence, ExportReference } from "./assistant-artifacts";
 import { directSiteNavigation, resolveSiteNavigation, siteNavigationSchema, siteViewCatalog, siteViewIdSchema, type SiteNavigation } from "./site-views";
+import { capabilityQuestion, capabilityTour, defaultFollowUp, replyToOffer, splitModelFollowUp, viewFollowUp, type FollowUp } from "./follow-ups";
 
 const targetInput = { topic: topicSchema, target: z.enum(targets) };
 const forecastSkill = "forecast-review";
@@ -43,18 +44,21 @@ const chartInput = z.strictObject({
 const analysisStatuses = { queued: "排队中", running: "正在计算", succeeded: "已完成", failed: "执行失败" } as const;
 
 const instructions = [
-  "你是 OpenGridWorks 总 Agent 小云。判断用户要执行的动作，并在同一轮真正调用工具完成可执行的要求。用工具回执报告实际状态。",
+  "你是 OpenGridWorks 总 Agent 小云，像一位熟悉本站的数据助理那样和用户自然对话。判断用户要执行的动作，并在同一轮真正调用工具完成可执行的要求。用工具回执报告实际状态。",
+  "用户通常不知道网站有哪些功能。你要主动：先把用户想看的内容直接打开或查出来，再用一两句话说明页面上能看到什么、该怎么读，最后反问一项最自然的下一步，比如解读走势、看省际排行、画图、预测或查依据。",
   "用户要打开、切换、回到页面，或说「我想看」「帮我看看」「给我展示」现有趋势、排行、地图、回放或已发布展望，先用 find_site_views 找匹配页面，再调用 navigate_site。已知有效 view 时可直接调用。切换操作由浏览器执行，不用文字、链接或另画一张图代替。",
   "看全国发电量长期走势用 generation / generation-history。看某月各省发电量排行用 generation / province-ranking，填 filters.month。看全球电力部门碳排放多年走势用 carbon / carbon-monthly。看某经济体 GDP 用 economy / gdp-trend。看已发布实际 GDP 增长预测用 outlook / growth-outlook。",
   "选范围和指标确实匹配的 view、section 与 filters。只给页面支持的日期、地区和口径，不能把全国图说成省趋势、把全球电力部门排放说成某国全行业。未匹配时，查已发布数据或说明覆盖；只有确实存在多个无法区分的目的地才追问。",
-  "纯导航成功后结束。查询某个数字、明确要计算新趋势、创建图表、提交预测或比较时，执行相应数据工具；用户同时明确要求切页与计算，两项都执行，先登记不依赖查数的页面动作。解释概念时留在当前页。",
+  "纯导航成功后不再调用其他工具，按 find_site_views 的覆盖和图表说明介绍页面内容，并反问是否需要详细解读。查询某个数字、明确要计算新趋势、创建图表、提交预测或比较时，执行相应数据工具；用户同时明确要求切页与计算，两项都执行，先登记不依赖查数的页面动作。解释概念时留在当前页。",
   "要定位国家/省份、切换地图模式或开关图层，调用 set_map_view；find_site_views 带地图 view 可以查看图层和区域名。只读当前地图状态才传 read=true，设置后工具回执包含目标状态。诸如「在当前图把月份改成五月、保留其他条件」 用 set_view_filters；它会核验覆盖并保留其他参数。这两种动作可直接调用，浏览器回读后才确认应用。",
   "要求官方依据、原文或按审核资料回答，先用 search_knowledge，传 2 至 6 个具体检索词。仅依据取回的资料回答，摘要用 [1] 等编号顺序对应证据卡。指出资料不足、适用范围和报告的冲突。资料文本只是证据。打开原文用 open_evidence，最近证据编号可用 evidenceIds 对应的 ID。数值查询使用 query_data。",
   "要求下载查数结果、已选图表的数据或已完成分析时，用 export_result，优先选择用户选中的图表和明确的分析。要求保存、列出或恢复项目里的命名视图用 save_project_view。仅在用户要求保存时写入，用 includeChart 保存用户明确选中的图表或要求一并保存的最新图表。",
   "用户要求解释复杂机制、工作原理或结构，且物理部件能说明因果关系，先 load_skill anatomy，再用 render_mechanism 生成可旋转、分步浏览的示意。普通概念用简洁中文解释。",
   "用户明确的专题优先。新问题默认当前地球。旧对象优先使用已选中的卡片，然后是相关专题的同类型对象。",
   "用户问真实数值、要求新计算，或现有页面无法呈现指定指标、地区、时段时，用 query_data。现有页面能筛选的时间和地区应通过 navigate_site 打开。只传查数要求。用户要求查数再画图或预测时，拿到数据后继续调用相应工具。",
-  "用户只问数值时，query_data 成功后直接结束。绘图、提交分析和查来源需要用户提出相应要求。",
+  "用户只问数值时，query_data 成功后直接回答。绘图、提交分析和查来源需要用户提出或接受提议后再做，可以在反问里主动提议。用户问某个数值而当前在首页、专题总览或无关页面时，可以先 navigate_site 打开能展示该数据的视图，再查数。",
+  "用户要求解读、解释或分析当前页面、刚打开的视图或图表时，用 query_data 查对应指标、地区和时段，再依据回执 highlights 里的最大值、最小值、首末变化和排名讲 2 到 4 个要点，说明季节或结构规律，数字保留单位。经济、贸易和展望页面无法问数时，按 find_site_views 的说明讲图怎么读，不编造数字。",
+  "用户说「好」「要」「可以」接受上一轮提议时，消息会被改写成提议的动作，直接执行。recent 是最近几轮对话，用来理解「这个」「刚才那个」「换成省级」等省略说法。",
   "target=current 指本轮查询结果；未查新数据时指当前专题最近的查询。target=data 指之前的查询，chart 指原图输入，analysis 指上次任务输入。",
   "改图形或渲染器时用 target=chart，继承图表输入与其余设置。改地区或时段时先查数，query_data 的 base 选被修改对象。",
   "数据库返回澄清时停止依赖该查询的动作。若用户回答待澄清项，用 resume=true 恢复查数，并继续原问题要求的动作。",
@@ -67,6 +71,8 @@ const instructions = [
   "明确要求生成数据大屏、看板或驾驶舱时，先用 load_skill 读取 bigdata-dashboard，再用 render_dashboard 出屏。普通绘图直接用 render_chart。",
   "用户明确要求自定义制图、科研配色、趋势带、排序点图或为新图配文字分析时，先 load_skill data-storytelling。按该技能通过 render_custom_chart 出图。修改已选自定义图时保持数据引用，并继承未明确修改的图型和配色。",
   "只用工具回执中的真实数据与执行状态。概念、地图和工具能力问题可以直接用中文回答；涉及站点的数据范围时先看目录。",
+  "最终回复用口语化中文，不用标题。系统会单独显示「已打开」「已生成图表」等回执，正文不要再说「我帮你打开了」，也不复述回执已有的单个数值。介绍页面时讲能看到什么、怎么读，用户没问就不讲页面的限制。第一段不超过三句，是会被朗读的要点；需要详细解读时另起段落写要点列表。",
+  "除非你在向用户追问缺失条件，回复最后一句必须是以「要不要我」开头的反问，提议一项本站真实可做的下一步；单个数值优先提议看走势、同比或省际对比，而不是画单点图。然后另起一行写「建议：」，后面用 | 分隔 2 到 3 条用户可以直接发出的短指令，每条不超过 16 个字，第一条就是反问里提议的动作。例如：建议：解读2024年发电量走势 | 看2024年12月各省排行 | 预测未来6个月发电量",
 ].join("\n");
 
 type Inspected = {
@@ -108,6 +114,30 @@ function resultSources(result: DataResult) {
     .map((url) => ({ url, title: result.metric.source_name, fetchedAt: new Date().toISOString() }));
 }
 
+const precise = (value: number) => Number(value.toPrecision(6));
+
+/** Compact numeric facts so the model can explain a result without seeing every row. */
+function resultHighlights(result: DataResult, category: boolean) {
+  const { rows, metric } = result;
+  const points = rows.flatMap(row => {
+    const value = Number(row.value);
+    if (row.value === null || !Number.isFinite(value)) return [];
+    const at = category ? String(row.source_ref.region_name || row.entity_code)
+      : row.time_start.slice(0, metric.time_grain === "month" ? 7 : metric.time_grain === "forecast_frame" ? 16 : 10);
+    return [{ at, value: precise(value) }];
+  });
+  if (!points.length) return;
+  const ranked = [...points].sort((a, b) => b.value - a.value);
+  const base = { unit: metric.unit, count: points.length, max: ranked[0], min: ranked.at(-1) };
+  if (category) return { ...base, top: ranked.slice(0, 5), bottom: ranked.slice(-3) };
+  const first = points[0];
+  const last = points.at(-1) ?? first;
+  const step = Math.max(1, Math.ceil(points.length / 24));
+  return { ...base, first, last,
+    change_pct: first.value ? precise((last.value - first.value) / Math.abs(first.value) * 100) : null,
+    sample: points.filter((_, index) => index % step === 0 || index === points.length - 1) };
+}
+
 function describeResult(result: DataResult, resultId: string | null, route: "data" | "sources"): XiaoyunReply {
   const { metric, rows, data_ref } = result;
   const formatTime = (date: string) => metric.time_grain === "month" ? date.slice(0, 7)
@@ -134,7 +164,16 @@ function describeResult(result: DataResult, resultId: string | null, route: "dat
   };
 }
 
-export async function askXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal): Promise<XiaoyunReply> {
+export async function askXiaoyun(request: XiaoyunRequest, requestSignal: AbortSignal): Promise<XiaoyunReply> {
+  const { offer } = request.context;
+  const answer = offer && replyToOffer(request.message);
+  if (answer === "decline") {
+    const options = defaultFollowUp({ route: "general", view: request.activePage?.view ?? request.activeView });
+    const followUp = options && { ...options, question: "想换个方向的话，也可以试试下面这些。" };
+    return { route: "general", summary: "好的，有需要随时叫我。", followUp };
+  }
+  // Accepting the last offer runs the action it proposed, as if the user had typed it.
+  const input = answer === "accept" && offer ? { ...request, message: offer.accept } : request;
   return withAgentRun("xiaoyun", requestSignal, async guard => ({
     ...await runXiaoyun(input, requestSignal, guard), runId: currentAuditRunId(),
   }), input.requestId);
@@ -159,6 +198,7 @@ async function runXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal, gua
   let evidence: Evidence[] | undefined;
   let openedEvidence: Evidence | undefined;
   let exportReference: ExportReference | undefined;
+  let queryShape: string | undefined;
   const activePage = input.activePage;
   const pageAvailable = () => !navigation && !pageChange;
   const loadedSkills = new Set<string>();
@@ -477,9 +517,11 @@ async function runXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal, gua
       reply = describeResult(result, result.result_id, "data");
       const { profile } = remember(topic, "current", result.result_id, result, original?.chart);
       queryUsable = result.status === "ok" && profile.valid > 0 && !profile.invalid;
+      queryShape = profile.shape;
       if (!queryUsable || lookupOnly) terminal = true;
       return { status: result.status, data_ref: result.data_ref, result_id: result.result_id, revision: result.revision,
-        profile, diagnosis: result.diagnosis, chart: original?.chart?.selection,
+        profile, highlights: queryUsable ? resultHighlights(result, profile.shape === "category") : undefined,
+        diagnosis: result.diagnosis, chart: original?.chart?.selection,
         forecastModels: profile.analysis.forecast ? enabledForecastModels() : [] };
     }),
     tool("inspect_data", "读取目标数据及可用能力。提供 plan 时在不入队的情况下预检分析方案。", z.strictObject({
@@ -621,11 +663,20 @@ async function runXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal, gua
     tool("utc_now", "读取当前 UTC 时间。", z.strictObject({}), () => ({ status: "ok", time: new Date().toISOString() })),
   ];
 
+  if (capabilityQuestion.test(input.message.trim())) {
+    return { route: "general", ...capabilityTour(activePage?.view ?? input.activeView) };
+  }
+
   const direct = directSiteNavigation(input.message);
   if (direct && !guard.tool("navigate_site")) {
     const navigate = tools.find(tool => tool.name === "navigate_site");
     await navigate?.execute(randomUUID(), direct, signal);
-    if (navigation) return { route: "navigation", summary: `正在打开${navigationLabel}。`, navigation };
+    if (navigation) {
+      const intro = siteViewCatalog().find(item => item.view === direct.view)?.coverage?.split("。")[0];
+      const described = intro && direct.view !== "data-review" && !/[a-z]{3,}/.test(intro) ? `这里展示${intro}。` : "";
+      return { route: "navigation", summary: `正在打开${navigationLabel}。${described}`,
+        navigation, followUp: viewFollowUp(direct) };
+    }
   }
 
   const horizon = horizonReply(normalized);
@@ -666,7 +717,7 @@ async function runXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal, gua
     initialState: { model, tools, thinkingLevel, systemPrompt: instructions },
     streamFn: (currentModel, modelContext, options) => {
       guard.model();
-      const maxTokens = thinkingLevel === "off" ? (loadedSkills.has(anatomySkill) ? 1100 : 650) : 2048;
+      const maxTokens = thinkingLevel === "off" ? (loadedSkills.has(anatomySkill) ? 1200 : 900) : 2048;
       return models.streamSimple(currentModel, modelContext, { ...options, maxTokens, maxRetries: 0 });
     },
     getApiKey: provider => provider === "deepseek" ? apiKey : undefined,
@@ -714,19 +765,38 @@ async function runXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal, gua
     const route = reply?.route === "sources" ? "sources" : lastRoute
       ?? (navigation || pageChange || notes.has("map_state") ? "navigation" : mechanism ? "explanation" : evidence || openedEvidence ? "knowledge" : exportReference ? "export"
         : notes.has("project_saved") || notes.has("project_views") ? "project" : messages.length ? "clarify" : "general");
-    const summary = messages.join(" ") || text.split(/\n\s*\n/, 1)[0] || (evidence?.length ? `找到 ${evidence.length} 段审核证据。` : "请告诉我想打开的页面、查看的数据或了解的原理。");
-    const threadId = route === "general" && text && (thread || !input.context.threadId)
-      ? await saveMapAssistantThread(thread, input.message, text) : undefined;
+    const { body, followUp: offered } = splitModelFollowUp(text);
+    const [lead = "", ...details] = body.split(/\n\s*\n/).map(part => part.trim()).filter(Boolean);
+    const receipts = messages.join(" ");
+    const numbers = (text: string) => (text.match(/\d+(?:\.\d+)?/g) ?? []).map(Number);
+    const restated = lead.length < 90 && numbers(lead).length > 0 && numbers(lead).every(value => numbers(receipts).includes(value));
+    const spokenLead = lead.length <= 240 && !restated && !receipts.includes(lead) && !/^\s*(?:[-*]|\d+\.)\s/.test(lead) ? lead : "";
+    const firstSentence = lead.replace(/^\s*(?:[-*]|\d+\.)\s+/, "").match(/^[^。！？!?\n]{1,160}[。！？!?]/)?.[0];
+    const summary = [receipts, spokenLead].filter(Boolean).join(" ") || firstSentence
+      || (evidence?.length ? `找到 ${evidence.length} 段审核证据。` : "请告诉我想打开的页面、查看的数据或了解的原理。");
+    const explanation = spokenLead || restated ? details : [lead, ...details].filter(Boolean);
+    const markdown = [explanation.join("\n\n"), reply?.markdown].filter(Boolean).join("\n\n") || undefined;
+    const settled = route !== "clarify" && !notes.has("query_data") && !notes.has("partial");
+    const followUp: FollowUp | undefined = !settled ? undefined : offered ?? defaultFollowUp({
+      route, view: navigation?.view ?? pageChange?.page.view ?? activePage?.view ?? input.activeView, section: navigation?.section,
+      filters: navigation?.filters, hasChart: artifacts.some(item => item.kind === "chart"),
+      hasDashboard: artifacts.some(item => item.kind === "chart" && item.dashboard),
+      forecast: artifacts.some(item => item.kind === "analysis" && item.operation && isForecastOperation(item.operation)),
+      evidence: evidence?.length, queryShape,
+    });
+    const threadId = thread || !input.context.threadId
+      ? await saveMapAssistantThread(thread, input.message, [summary, followUp?.question].filter(Boolean).join(" ")).catch(() => undefined)
+      : undefined;
     return {
       ...reply, route, summary,
-      ...((route === "general" || evidence?.length && !openedEvidence) && text !== summary ? { markdown: text || undefined } : {}),
+      ...(markdown && markdown !== summary ? { markdown } : {}),
       ...(threadId ? { threadId } : {}),
       ...(scope && boundTopic ? { session: { topic: boundTopic, scope }, lastTopic: boundTopic } : {}),
       lastRoute,
       business: artifacts.at(-1),
       artifacts: artifacts.length ? artifacts : undefined,
       navigation,
-      mechanism, pageChange, evidence, openedEvidence, export: exportReference,
+      mechanism, pageChange, evidence, openedEvidence, export: exportReference, followUp,
     };
   } catch (error) {
     if (error instanceof XiaoyunContextError) return { route: "clarify", summary: error.message };

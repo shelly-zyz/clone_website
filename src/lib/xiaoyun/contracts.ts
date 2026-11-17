@@ -8,6 +8,7 @@ import type { Mechanism } from "./anatomy";
 import { activePageSchema, type PageChange } from "./page-actions";
 import type { Evidence, ExportReference } from "./assistant-artifacts";
 import type { DataStory } from "@/lib/topic-analysis/data-story";
+import { followUpSchema, type FollowUp } from "./follow-ups";
 
 const businessSessionSchema = z.strictObject({ session_id: z.uuid() });
 
@@ -25,6 +26,7 @@ export const xiaoyunContextSchema = z.strictObject({
   lastTopic: topicSchema.optional(),
   evidenceIds: z.array(z.uuid()).max(8).optional(),
   lastRoute: z.enum(["data", "visualization", "analysis"]).optional(),
+  offer: followUpSchema.pick({ question: true, accept: true }).optional(),
 });
 
 export const xiaoyunRequestSchema = z.strictObject({
@@ -101,4 +103,5 @@ export type XiaoyunReply = {
   evidence?: Evidence[];
   openedEvidence?: Evidence;
   export?: ExportReference;
+  followUp?: FollowUp;
 };

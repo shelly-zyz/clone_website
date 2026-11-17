@@ -18,6 +18,7 @@ import { WorkspaceForecast, type LoadForecastOverview } from "./WorkspaceForecas
 import { XiaoyunBusinessCard, XiaoyunDashboardDialog } from "./XiaoyunBusinessCard";
 import { evidenceSchema, exportReferenceSchema, type Evidence, type ExportReference } from "@/lib/xiaoyun/assistant-artifacts";
 import { pageChangeSchema, pageLocation, readActivePage } from "@/lib/xiaoyun/page-actions";
+import { followUpHref, followUpSchema, speakable, withFollowUp } from "@/lib/xiaoyun/follow-ups";
 import { XiaoyunEvidence } from "./XiaoyunEvidence";
 
 const XiaoyunMechanismDialog = dynamic(() => import("./XiaoyunMechanismDialog").then(module => module.XiaoyunMechanismDialog), { ssr: false });
@@ -339,6 +340,20 @@ function XiaoyunRuntime({ workspace, children }: { workspace: Workspace | null; 
     }
   }, []);
 
+  useEffect(() => {
+    // Suggested next steps render as links inside the assistant's shadow DOM; send them as the next message.
+    const onClick = (event: MouseEvent) => {
+      const link = event.composedPath().find((node): node is HTMLAnchorElement => node instanceof HTMLAnchorElement);
+      if (link?.getAttribute("href") !== followUpHref) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const message = link.textContent?.trim();
+      if (message) void voice.current?.submitText(message).catch(() => {});
+    };
+    window.addEventListener("click", onClick, true);
+    return () => window.removeEventListener("click", onClick, true);
+  }, []);
+
   useLayoutEffect(() => {
     page.current = { workspace, router };
     const slot = workspace?.slot ?? container.current;
@@ -387,7 +402,7 @@ function XiaoyunRuntime({ workspace, children }: { workspace: Workspace | null; 
           audio: {
             async transcribe(pcm, signal) { return (await voiceRequest("transcribe", pcm, signal)).text ?? ""; },
             async synthesize(text, signal) {
-              const audio = (await voiceRequest("synthesize", JSON.stringify({ text: text.slice(0, 500) }), signal)).audio;
+              const audio = (await voiceRequest("synthesize", JSON.stringify({ text: speakable(text).slice(0, 500) }), signal)).audio;
               if (!audio) throw new Error("千问未返回播报音频。");
               return audio;
             },
@@ -444,6 +459,8 @@ function XiaoyunRuntime({ workspace, children }: { workspace: Workspace | null; 
             if (reply.session) updated.sessions = { ...updated.sessions, [reply.session.topic]: reply.session.scope };
             if (reply.lastTopic) updated.lastTopic = reply.lastTopic;
             if (reply.lastRoute) updated.lastRoute = reply.lastRoute;
+            let followUp = followUpSchema.safeParse(reply.followUp).data;
+            updated.offer = followUp && { question: followUp.question, accept: followUp.accept };
             context.current = updated;
             try { sessionStorage.setItem(storageKey, JSON.stringify(updated)); } catch {
               // Keep the live session available if browser storage is disabled.
@@ -551,10 +568,11 @@ function XiaoyunRuntime({ workspace, children }: { workspace: Workspace | null; 
                 }
               } else {
                 summary = target ? `当前页面已变化，未自动打开${target.label}。` : "无法识别要打开的页面。";
+                followUp = undefined;
               }
             }
             if (studio) studio.response = { summary, chart: studioChart };
-            return { summary, markdown: reply.markdown, data: reply.data, sources: reply.sources };
+            return { summary: withFollowUp(summary, followUp), markdown: reply.markdown, data: reply.data, sources: reply.sources };
           },
         },
       });
