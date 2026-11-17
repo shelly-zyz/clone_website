@@ -3,7 +3,7 @@ class XiaoyunCapture extends AudioWorkletProcessor {
     super();
     this.ratio = sampleRate / 16000;
     this.weight = 0; this.sum = 0;
-    this.packet = new Int16Array(1600); this.pos = 0;
+    this.packet = new Int16Array(640); this.pos = 0;
     this.energy = 0;
   }
   process(inputs) {
@@ -21,7 +21,7 @@ class XiaoyunCapture extends AudioWorkletProcessor {
           this.weight = 0; this.sum = 0;
           if (this.pos === this.packet.length) {
             this.port.postMessage({pcm:this.packet.buffer, rms:Math.sqrt(this.energy / this.pos)}, [this.packet.buffer]);
-            this.packet = new Int16Array(1600); this.pos = 0; this.energy = 0;
+            this.packet = new Int16Array(640); this.pos = 0; this.energy = 0;
           }
         }
       }

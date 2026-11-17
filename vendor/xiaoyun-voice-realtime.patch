@@ -1,0 +1,223 @@
+--- a/package.json
++++ b/package.json
+@@ -3 +3 @@
+-  "version": "1.0.0-beta.1-power-earth.4",
++  "version": "1.0.0-beta.1-power-earth.5",
+--- a/packages/voice/dist/index.d.ts
++++ b/packages/voice/dist/index.d.ts
+@@ -92 +92 @@
+-    submit(text:string,context:JsonObject,signal:AbortSignal):Promise<Pick<TaskResult,'summary'|'markdown'|'data'|'sources'>>;
++    submit(text:string,context:JsonObject,signal:AbortSignal,update:(event:{caption?:string;speak?:string})=>void):Promise<Pick<TaskResult,'summary'|'markdown'|'data'|'sources'>>;
+@@ -97,0 +98,5 @@
++      streamSynthesis?(text:string,signal:AbortSignal,chunk:(pcm:string)=>void):Promise<void>;
++      streamRecognition?(signal:AbortSignal,onText:(text:string)=>void):{
++        append(pcm:ArrayBuffer):void;
++        finish():Promise<string>;
++      };
+--- a/packages/voice/dist/voice.js
++++ b/packages/voice/dist/voice.js
+@@ -40589 +40589 @@
+-  thinking: "让我想一想",
++  thinking: "小云",
+@@ -40988,0 +40989,4 @@
++  browserRecognition;
++  browserRecognitionController;
++  browserWarmRecognition;
++  browserWarmTimer;
+@@ -41134,0 +41139,3 @@
++                clearTimeout(this.browserWarmTimer);
++                this.browserWarmRecognition?.controller.abort();
++                this.browserWarmRecognition = void 0;
+@@ -41137,0 +41145 @@
++              this.warmBrowserRecognition();
+@@ -41221 +41229,22 @@
+-      const l = await this.options.browserAdapter.submit(t, a.contextAtStart, r.signal);
++      let output;
++      const captionId = crypto.randomUUID();
++      const update = ({caption, speak}) => {
++        if (r.signal.aborted || this.destroyed) return;
++        if (speak && this.snapshot.micEnabled) {
++          output ??= this.startBrowserOutput(a.taskId, captionId, caption || speak);
++          output.enqueue(speak);
++        }
++        if (caption !== void 0) {
++          this.snapshot.caption = { deliveryId: captionId, taskId: a.taskId, kind: "result",
++            text: caption, status: this.playingDelivery === captionId ? "playing" : "generating" };
++          this.render();
++        }
++      };
++      let l;
++      try {
++        l = await this.options.browserAdapter.submit(t, a.contextAtStart, r.signal, update);
++      } catch (error) {
++        output?.finish();
++        if (!output && this.snapshot.caption?.deliveryId === captionId) this.clearCaption();
++        throw error;
++      }
+@@ -41224 +41253,8 @@
+-      this.onTask({ ...a, status: "succeeded", updatedAt: Date.now() }), this.onResult(o), this.snapshot.micEnabled && this.speakBrowserResult(o);
++      this.onTask({ ...a, status: "succeeded", updatedAt: Date.now() }), this.onResult(o);
++      if (output) output.finish();
++      else if (this.snapshot.micEnabled) this.speakBrowserResult(o);
++      else if (this.snapshot.caption?.deliveryId === captionId) {
++        this.snapshot.caption = { ...this.snapshot.caption, text: o.summary, status: "delivered" };
++        this.retainCaption();
++        this.render();
++      }
+@@ -41233 +41269 @@
+-  speakBrowserResult(t) {
++  speakBrowserResult(result) {
+@@ -41234,0 +41271,5 @@
++    const output = this.startBrowserOutput(result.taskId, crypto.randomUUID(), result.summary);
++    output.enqueue(result.summary);
++    output.finish();
++  }
++  startBrowserOutput(taskId, deliveryId, caption) {
+@@ -41237,2 +41277,0 @@
+-    this.onSpeechStart({ speechId, deliveryId: crypto.randomUUID(), sessionId: this.sessionId, taskId: t.taskId, kind: "result", text: t.summary, provider: adapter ? "live" : "demo", sentenceIndex: 0, sentenceCount: 1 });
+-    if (!adapter) return;
+@@ -41241,12 +41280,36 @@
+-    void adapter.synthesize(t.summary, controller.signal).then((pcm) => {
+-      if (controller.signal.aborted || !this.acceptSpeech(speechId)) return;
+-      this.updateCaption(t.summary);
+-      this.audio.enqueue(speechId, pcm);
+-      this.audio.finish(speechId);
+-    }).catch((error) => {
+-      if (!controller.signal.aborted && this.acceptSpeech(speechId)) {
+-        this.interrupt();
+-        this.report(error);
+-      }
+-    }).finally(() => {
+-      if (this.browserSynthesis === controller) this.browserSynthesis = void 0;
++    this.onSpeechStart({ speechId, deliveryId, sessionId: this.sessionId, taskId, kind: "result",
++      text: caption, provider: adapter ? "live" : "demo", sentenceIndex: 0, sentenceCount: 1 });
++    if (adapter) this.updateCaption(caption);
++    let queue = Promise.resolve();
++    return {
++      enqueue: text => {
++        if (!adapter || controller.signal.aborted) return;
++        queue = queue.then(async () => {
++          if (controller.signal.aborted) return;
++          const play = pcm => {
++            if (!controller.signal.aborted && this.acceptSpeech(speechId)) this.audio.enqueue(speechId, pcm);
++          };
++          if (adapter.streamSynthesis) await adapter.streamSynthesis(text, controller.signal, play);
++          else play(await adapter.synthesize(text, controller.signal));
++        }).catch(error => {
++          if (!controller.signal.aborted && this.acceptSpeech(speechId)) {
++            this.interrupt();
++            this.report(error);
++          }
++        });
++      },
++      finish: () => {
++        if (!adapter) return;
++        void queue.then(() => {
++          if (!controller.signal.aborted && this.acceptSpeech(speechId)) this.audio.finish(speechId);
++          if (this.browserSynthesis === controller) this.browserSynthesis = void 0;
++        });
++      },
++    };
++  }
++  warmBrowserRecognition() {
++    const adapter = this.options.browserAdapter?.audio;
++    if (!adapter?.streamRecognition || !this.snapshot.micEnabled || this.browserWarmRecognition) return;
++    const controller = new AbortController();
++    const recognition = adapter.streamRecognition(controller.signal, text => {
++      if (this.browserRecognitionController === controller) this.emit({ type: "input.transcript", text });
+@@ -41253,0 +41317,6 @@
++    this.browserWarmRecognition = { controller, recognition };
++    this.browserWarmTimer = setTimeout(() => {
++      if (this.browserWarmRecognition?.controller !== controller) return;
++      this.browserWarmRecognition = void 0;
++      controller.abort();
++    }, 8_000);
+@@ -41259,0 +41329,3 @@
++    this.browserRecognitionController?.abort();
++    this.browserRecognitionController = void 0;
++    this.browserRecognition = void 0;
+@@ -41263 +41335 @@
+-    if (!adapter || !this.snapshot.micEnabled || this.speech || this.browserTranscription) return;
++    if (!adapter || !this.snapshot.micEnabled || this.browserTranscription) return;
+@@ -41265 +41337 @@
+-    const voiced = rms > 0.025;
++    const voiced = rms > (this.playingDelivery ? 0.038 : 0.018);
+@@ -41268 +41340 @@
+-      if (this.browserPreroll.length > 3) this.browserPreroll.shift();
++      if (this.browserPreroll.length > 4) this.browserPreroll.shift();
+@@ -41275 +41347,17 @@
+-    if (this.browserQuietFrames < 7 && this.browserFrames.length < 120) return;
++    if (this.browserVoiceFrames === 3 && voiced) {
++      const interrupted = this.speech || this.browserRequest;
++      this.cancelBrowserRequest();
++      this.interrupt();
++      if (interrupted) this.emit({ type: "playback.interrupted" });
++      this.setState("listening");
++      this.warmBrowserRecognition();
++      if (this.browserWarmRecognition) {
++        clearTimeout(this.browserWarmTimer);
++        const { controller, recognition } = this.browserWarmRecognition;
++        this.browserWarmRecognition = void 0;
++        this.browserRecognition = recognition;
++        this.browserRecognitionController = controller;
++        for (const frame of this.browserFrames) recognition.append(frame);
++      }
++    } else this.browserRecognition?.append(pcm);
++    if (this.browserQuietFrames < 8 && this.browserFrames.length < 300) return;
+@@ -41277,0 +41366,3 @@
++    const recognition = this.browserRecognition;
++    const controller = this.browserRecognitionController ?? new AbortController();
++    this.browserRecognitionController = void 0;
+@@ -41279,8 +41370 @@
+-    if (speechFrames < 3) return;
+-    const joined = new Uint8Array(frames.reduce((bytes, frame) => bytes + frame.byteLength, 0));
+-    let offset = 0;
+-    for (const frame of frames) {
+-      joined.set(new Uint8Array(frame), offset);
+-      offset += frame.byteLength;
+-    }
+-    const controller = new AbortController();
++    if (speechFrames < 3) { controller.abort(); return; }
+@@ -41288,3 +41372,21 @@
+-    this.cancelBrowserRequest();
+-    this.setState("thinking");
+-    void adapter.transcribe(joined.buffer, controller.signal).then((text) => {
++    this.lastInputEnded = performance.now() - Math.min(8, frames.length - speechFrames) * 40;
++    this.inputEndSource = "local_pcm";
++    this.emit({ type: "input.audio_ended", at: Date.now() - (performance.now() - this.lastInputEnded) });
++    const transcribe = async () => {
++      if (recognition) {
++        try {
++          const text = await recognition.finish();
++          if (text) return text;
++        } catch {
++          controller.signal.throwIfAborted();
++        }
++      }
++      const joined = new Uint8Array(frames.reduce((bytes, frame) => bytes + frame.byteLength, 0));
++      let offset = 0;
++      for (const frame of frames) {
++        joined.set(new Uint8Array(frame), offset);
++        offset += frame.byteLength;
++      }
++      return adapter.transcribe(joined.buffer, controller.signal);
++    };
++    void transcribe().then(text => {
+@@ -41292,3 +41394,5 @@
+-      if (text) void this.submitText(text).catch((error) => this.report(error));
+-      else this.setState("listening");
+-    }).catch((error) => {
++      if (text) {
++        this.warmBrowserRecognition();
++        void this.submitText(text).catch(error => this.report(error));
++      } else this.setState("listening");
++    }).catch(error => {
+@@ -41455 +41559 @@
+-    this.captionPrefix = a ? this.snapshot.caption.text : "", this.sentenceText = "", a || (this.playingDelivery = void 0, [...this.snapshot.cards, ...this.pendingCards].forEach((l) => l.speaking = !1)), this.snapshot.caption = { deliveryId: t.deliveryId, taskId: t.taskId, kind: t.kind, text: this.captionPrefix, status: a ? "playing" : "generating" }, this.setState(a ? "speaking" : "thinking"), t.provider === "demo" ? this.audio.playDemo(t.speechId, t.text, (l) => {
++    this.captionPrefix = a ? this.snapshot.caption.text : "", this.sentenceText = "", a || (this.playingDelivery = void 0, [...this.snapshot.cards, ...this.pendingCards].forEach((l) => l.speaking = !1)), this.snapshot.caption = { deliveryId: t.deliveryId, taskId: t.taskId, kind: t.kind, text: this.captionPrefix, status: a ? "playing" : "generating" }, this.setState(a ? "speaking" : this.options.browserAdapter ? "listening" : "thinking"), t.provider === "demo" ? this.audio.playDemo(t.speechId, t.text, (l) => {
+@@ -41491 +41595 @@
+-      this.setState("thinking");
++      this.setState(this.options.browserAdapter ? "listening" : "thinking");
+@@ -41499 +41603 @@
+-      this.setState("thinking");
++      this.setState(this.options.browserAdapter ? "listening" : "thinking");

@@ -184,6 +184,7 @@ registerHooks({
 const { askXiaoyun } = await import("../src/lib/xiaoyun/supervisor.server.ts");
 const { detectSiteView, resolveSiteNavigation, siteNavigationSchema, siteViewCatalog } = await import("../src/lib/xiaoyun/site-views.ts");
 
+const { buildGenerationAnalysis } = await import("../src/lib/topic-analysis/energy.ts");
 const { pageLocation } = await import("../src/lib/xiaoyun/page-actions.ts");
 
 const context = { sessions: {} };
@@ -287,6 +288,30 @@ if (live) {
     assert.deepEqual(result.navigation, { view: "home" });
     assert.deepEqual(resolveSiteNavigation(result.navigation), { href: "/", label: "首页" });
     assert.deepEqual(fixtures.calls, []);
+  });
+
+  await test("纯问候直接答复，连续语音保留图表年份与月份", async () => {
+    const greeting = await turn([], { message: "你好，小云。", context: {} });
+    assert.deepEqual(greeting, { route: "general", summary: "我在。" });
+    const { navigation, followUp } = await turn([], { message: "你好小云，帮我看二零二四年发电量", context: {} });
+    assert.equal(resolveSiteNavigation(navigation).href, "/visualization/generation?year=2024#generation-history");
+    assert.match(followUp.accept, /2024年/);
+    const activePage = { view: "generation", section: "generation-history", search: "?year=2024&month=2024-03" };
+    const changed = await turn([], { message: "改成2023年", activePage, context: {} });
+    assert.deepEqual(changed.navigation.filters, { year: 2023 });
+    const month = await turn([], { message: "那八月呢", activePage: { ...activePage, search: "?year=2023" }, context: {} });
+    assert.deepEqual(month.navigation.filters, { year: 2023, month: "2023-08" });
+    const history = { facts: [
+      { month: "2023-08", series: "electricity", value: 350 },
+      { month: "2024-03", series: "electricity", value: 500 },
+    ] };
+    const trend = buildGenerationAnalysis("electricity", "2024-03", history, null, undefined, 2024)
+      .charts.find(chart => chart.id === "generation-history");
+    assert.equal(trend.labels.length, 12);
+    assert.equal(trend.labels[0], "2024-01");
+    assert.equal(trend.labels[11], "2024-12");
+    assert.deepEqual(trend.series[0].values.slice(0, 3), [null, null, 500]);
+    assert.ok(!trend.series[0].values.includes(350));
   });
 
   await test("全站页面与图表筛选由白名单解析，业务查询可与导航合并", async () => {

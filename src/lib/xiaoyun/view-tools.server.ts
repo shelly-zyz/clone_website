@@ -167,7 +167,8 @@ export async function setViewFilters(page: ActivePage | undefined, patch: z.infe
     if (version && !history) throw new XiaoyunContextError("无法核验所选发布版本，筛选尚未应用。");
     if (page.view === "generation") {
       const product = filterPatchSchema.shape.product.safeParse(query.get("product") ?? "electricity").data ?? "electricity";
-      const months = generationMonths(history, product);
+      const year = Number(query.get("year")) || undefined;
+      const months = generationMonths(history, product, year);
       const month = query.get("month") ?? months.at(-1);
       if (!month || !months.includes(month)) throw new XiaoyunContextError("当前发布版本或公开月报没有该月份和指标。");
       if (page.section?.startsWith("province-")) {

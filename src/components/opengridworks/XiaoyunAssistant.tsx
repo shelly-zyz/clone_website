@@ -19,6 +19,8 @@ import { XiaoyunBusinessCard, XiaoyunDashboardDialog } from "./XiaoyunBusinessCa
 import { evidenceSchema, exportReferenceSchema, type Evidence, type ExportReference } from "@/lib/xiaoyun/assistant-artifacts";
 import { pageChangeSchema, pageLocation, readActivePage } from "@/lib/xiaoyun/page-actions";
 import { followUpHref, followUpSchema, speakable, withFollowUp } from "@/lib/xiaoyun/follow-ups";
+import { greetingReply, stripGreeting, xiaoyunStreamType } from "@/lib/xiaoyun/stream";
+import { pcmBase64, streamRecognition, streamTurn } from "@/lib/xiaoyun/voice.client";
 import { XiaoyunEvidence } from "./XiaoyunEvidence";
 
 const XiaoyunMechanismDialog = dynamic(() => import("./XiaoyunMechanismDialog").then(module => module.XiaoyunMechanismDialog), { ssr: false });
@@ -374,19 +376,33 @@ function XiaoyunRuntime({ workspace, children }: { workspace: Workspace | null; 
       if (!disposed) setForecasts(forecastRefs.current);
     });
 
-    async function voiceRequest(action: "transcribe" | "synthesize", body: ArrayBuffer | string, signal: AbortSignal) {
-      const response = await fetch(`/api/xiaoyun/voice?action=${action}`, {
+    async function voiceFetch(action: string, body: ArrayBuffer | string, signal: AbortSignal, session?: string, pcm = false) {
+      const params = new URLSearchParams({ action, ...(session && { session }) });
+      const response = await fetch(`/api/xiaoyun/voice?${params}`, {
         method: "POST",
         headers: {
-          "Content-Type": action === "transcribe" ? "application/octet-stream" : "application/json",
+          "Content-Type": typeof body === "string" ? "application/json" : "application/octet-stream",
+          ...(pcm && { Accept: "application/octet-stream" }),
           ...(token.current ? { Authorization: `Bearer ${token.current}` } : {}),
         },
         body, signal,
       });
       if (response.status === 401) setRequiresToken(true);
-      const payload: { audio?: string; text?: string; error?: string } = await response.json();
-      if (!response.ok) throw new Error(payload.error ?? "千问语音暂时不可用。");
-      return payload;
+      if (!response.ok) {
+        const payload: { error?: string } = await response.json().catch(() => ({}));
+        throw new Error(payload.error ?? "千问语音暂时不可用。");
+      }
+      return response;
+    }
+    async function voiceRequest(action: string, body: ArrayBuffer | string, signal: AbortSignal, session?: string) {
+      const response = await voiceFetch(action, body, signal, session);
+      return await response.json() as { audio?: string; text?: string; session?: string };
+    }
+    let greeting: Promise<Uint8Array | undefined> | undefined;
+    function loadGreeting() {
+      return greeting ??= fetch("/xiaoyun-audio/greeting.pcm")
+        .then(async response => response.ok ? new Uint8Array(await response.arrayBuffer()) : undefined)
+        .catch(() => undefined);
     }
     void import("@xiaoyun/voice").then(({ createVoiceAssistant }) => {
       if (disposed) return;
@@ -406,9 +422,43 @@ function XiaoyunRuntime({ workspace, children }: { workspace: Workspace | null; 
               if (!audio) throw new Error("千问未返回播报音频。");
               return audio;
             },
+            streamRecognition(signal, onText) {
+              return streamRecognition({ request: voiceRequest, onText, signal });
+            },
+            async streamSynthesis(value, signal, chunk) {
+              const text = speakable(value).slice(0, 500).trim();
+              if (!text) return;
+              if (text === greetingReply) {
+                const cached = await loadGreeting();
+                signal.throwIfAborted();
+                if (cached?.length) { chunk(pcmBase64(cached)); return; }
+              }
+              const response = await voiceFetch("synthesize", JSON.stringify({ text }), signal, undefined, true);
+              if (!response.body) throw new Error("千问未返回播报音频。");
+              const reader = response.body.getReader();
+              let carry: number | undefined;
+              try {
+                while (true) {
+                  const { done, value: bytes } = await reader.read();
+                  signal.throwIfAborted();
+                  if (done) break;
+                  const pcm = carry === undefined ? bytes : new Uint8Array([carry, ...bytes]);
+                  carry = pcm.length % 2 ? pcm.at(-1) : undefined;
+                  const even = pcm.subarray(0, pcm.length - pcm.length % 2);
+                  if (even.length) chunk(pcmBase64(even));
+                }
+              } finally {
+                await reader.cancel().catch(() => {});
+                reader.releaseLock();
+              }
+            },
           },
-          async submit(message, _snapshot, signal) {
+          async submit(message, _snapshot, signal, update) {
             signal.throwIfAborted();
+            if (!stripGreeting(message)) {
+              update({ caption: greetingReply, speak: greetingReply });
+              return { summary: greetingReply };
+            }
             const { location } = window;
             if (location.pathname === "/workspace" && page.current.workspace?.slot.isConnected) {
               page.current.workspace.captureView();
@@ -428,21 +478,34 @@ function XiaoyunRuntime({ workspace, children }: { workspace: Workspace | null; 
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
+                Accept: xiaoyunStreamType,
                 ...(token.current ? { Authorization: `Bearer ${token.current}` } : {}),
               },
               body: JSON.stringify({ requestId: id, message, topic: activeTopic, activeView, activePage, context: context.current, selectedChart: chart }),
               signal,
             });
-            const reply: XiaoyunReply & { error?: string } = await response.json();
-            signal.throwIfAborted();
-            if (!response.ok) {
-              if (response.status === 401) setRequiresToken(true);
-              if (studio) studio.response = { summary: reply.error ?? "暂时无法提交制图。" };
-              if (fromSidebar) {
-                pending.answered = true;
-                setForecastNotice({ topic: activeTopic, message: reply.error ?? "暂时无法提交预测。" });
+            const output = streamTurn(update, signal);
+            let reply: XiaoyunReply;
+            try {
+              if (!response.ok) {
+                if (response.status === 401) setRequiresToken(true);
+                const problem: { error?: string } = await response.json().catch(() => ({}));
+                throw new Error(problem.error ?? "小云暂时无法处理此请求。");
               }
-              throw new Error(reply.error ?? "小云暂时无法处理此请求。");
+              if (response.headers.get("content-type")?.includes(xiaoyunStreamType) && response.body) {
+                reply = await output.read(response.body);
+              } else {
+                reply = await response.json();
+              }
+              signal.throwIfAborted();
+            } catch (error) {
+              const reason = error instanceof Error ? error.message : "小云暂时无法处理此请求。";
+              if (!signal.aborted && studio) studio.response = { summary: reason };
+              if (!signal.aborted && fromSidebar) {
+                pending.answered = true;
+                setForecastNotice({ topic: activeTopic, message: reason });
+              }
+              throw error;
             }
             retry.current = undefined;
 
@@ -572,6 +635,7 @@ function XiaoyunRuntime({ workspace, children }: { workspace: Workspace | null; 
               }
             }
             if (studio) studio.response = { summary, chart: studioChart };
+            output.finish(summary, followUp?.question);
             return { summary: withFollowUp(summary, followUp), markdown: reply.markdown, data: reply.data, sources: reply.sources };
           },
         },
@@ -581,6 +645,7 @@ function XiaoyunRuntime({ workspace, children }: { workspace: Workspace | null; 
       // Its UI and wake() both call this public method; cloud speech errors stay in the SDK UI.
       assistant.setMicEnabled = async enabled => {
         try {
+          if (enabled) void loadGreeting();
           await setMicEnabled(enabled);
           if (enabled && !disposed) setMicrophoneError("");
         } catch (error) {

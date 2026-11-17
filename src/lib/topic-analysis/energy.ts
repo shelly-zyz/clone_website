@@ -49,8 +49,9 @@ const monthlyFacts: PublishedFact[] = monthly.flatMap(row => Object.entries(row.
   month: row.date, series, value, coverage: 1,
 })));
 
-export function generationMonths(history: PublishedHistory | null, product: GenerationProduct) {
-  return observationMonths(history?.facts ?? monthlyFacts, product);
+export function generationMonths(history: PublishedHistory | null, product: GenerationProduct, year?: number) {
+  const months = observationMonths(history?.facts ?? monthlyFacts, product);
+  return year ? months.filter(month => month.startsWith(`${year}-`)) : months;
 }
 
 export function buildGenerationAnalysis(
@@ -59,12 +60,13 @@ export function buildGenerationAnalysis(
   history: PublishedHistory | null,
   regional: RegionalGeneration | null,
   selectedRegion?: string,
+  year?: number,
 ): Analysis {
   const selected = generationSeries.find(item => item.id === product) ?? generationSeries[0];
   const facts = history?.facts ?? monthlyFacts;
-  const dates = generationMonths(history, product);
+  const dates = generationMonths(history, product, year);
   const date = selectedMonth || dates.at(-1) || "";
-  const axis = monthAxis(dates);
+  const axis = year ? monthLabels.map((_, i) => monthKey(String(year), i)) : monthAxis(dates);
   const monthData = new Map(facts.filter(row => row.month === date).map(row => [row.series, row.value]));
   const current = monthData.get(product) ?? null;
   const publicReport = monthly.find(row => row.date === date);
@@ -92,7 +94,7 @@ export function buildGenerationAnalysis(
   const reported = "已公布分项";
   const renewableName = "可再生电源";
   return {
-    scope: `中国全国 · ${history ? "数据库已发布月度统计" : "国家统计局公开月报选录"} · ${monthRange(dates)}`,
+    scope: `中国全国 · ${history ? "数据库已发布月度统计" : "国家统计局公开月报选录"} · ${year ? `${year} 年` : monthRange(dates)}`,
     metrics: [
       metric(`${date || "所选月"} ${selected.name}`, current, unit),
       metric("官方发布同比增速", yoy, "%"),
@@ -125,8 +127,8 @@ export function buildGenerationAnalysis(
         series: seasonalSeries(facts, product, dates), sources,
       },
       {
-        id: "generation-history", label: "长期走势", title: `${selected.name}月度走势`,
-        caption: "横轴保留实际日历月份。可用图下时间滑块查看不同区间。",
+        id: "generation-history", label: "长期走势", title: `${year ? `${year} 年 ` : ""}${selected.name}月度走势`,
+        caption: year ? "空白月份表示没有可用的单月记录，1–2 月合报不拆分。" : "横轴保留实际日历月份。可用图下时间滑块查看不同区间。",
         kind: "area", labels: axis, unit, color: selected.color, focus: date, zoom: true,
         series: [{ name: selected.name, values: axis.map(month => byMonth.get(month) ?? null) }], sources,
       },

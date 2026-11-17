@@ -1,3 +1,5 @@
+import { recognitionSession, startRecognition } from "@/lib/xiaoyun/recognition.server";
+import { streamLines } from "@/lib/xiaoyun/stream";
 import { authorizeXiaoyun } from "@/lib/data-agent/http.server";
 
 export const runtime = "nodejs";
@@ -49,7 +51,7 @@ function waveFromPcm(pcm: Buffer) {
   return Buffer.concat([header, pcm]);
 }
 
-function pcmFromWave(wave: Buffer) {
+function pcmFromWave(wave: Buffer, partial = false) {
   if (wave.length < 44 || wave.toString("ascii", 0, 4) !== "RIFF" || wave.toString("ascii", 8, 12) !== "WAVE") {
     throw new Error("Invalid Qwen audio format");
   }
@@ -60,7 +62,7 @@ function pcmFromWave(wave: Buffer) {
     const kind = wave.toString("ascii", offset, offset + 4);
     const size = wave.readUInt32LE(offset + 4);
     const start = offset + 8;
-    const end = streaming && kind === "data" && size === 0x7fffff9b ? wave.length : start + size;
+    const end = kind === "data" && (partial || streaming && size === 0x7fffff9b) ? wave.length : start + size;
     if (end > wave.length) break;
     if (kind === "fmt " && size >= 16) {
       validFormat = wave.readUInt16LE(start) === 1 && wave.readUInt16LE(start + 2) === 1
@@ -72,6 +74,23 @@ function pcmFromWave(wave: Buffer) {
   throw new Error("Unsupported Qwen audio format");
 }
 
+async function* readSynthesis(body: ReadableStream<Uint8Array>) {
+  let total = 0;
+  for await (const line of streamLines(body)) {
+    if (!line.startsWith("data:")) continue;
+    const payload: { code?: string; output?: { audio?: { data?: string } } } = JSON.parse(line.slice(5));
+    if (payload.code) throw new Error("千问播报失败。");
+    const audio = payload.output?.audio?.data;
+    if (!audio) continue;
+    const bytes = Buffer.from(audio, "base64");
+    const pcm = total ? bytes : pcmFromWave(bytes, true);
+    total += pcm.length;
+    if (total > maxAudioBytes || pcm.length % 2) throw new Error("千问返回了无效音频。");
+    yield pcm;
+  }
+  if (!total) throw new Error("千问未返回播报音频。");
+}
+
 export function GET() {
   return Response.json({ enabled: Boolean(process.env.DASHSCOPE_API_KEY?.trim()) }, { headers: noStore });
 }
@@ -81,7 +100,32 @@ export async function POST(request: Request) {
   if (unauthorized) return unauthorized;
   const key = process.env.DASHSCOPE_API_KEY?.trim();
   if (!key) return Response.json({ error: "千问语音尚未配置。" }, { status: 503 });
-  const action = new URL(request.url).searchParams.get("action");
+  const params = new URL(request.url).searchParams;
+  const action = params.get("action");
+  if (action === "recognize-start") {
+    const session = startRecognition(key);
+    return session ? Response.json({ session }, { headers: noStore })
+      : Response.json({ error: "实时语音连接繁忙。" }, { status: 429, headers: noStore });
+  }
+  if (action === "recognize-append" || action === "recognize-finish" || action === "recognize-cancel") {
+    const session = recognitionSession(params.get("session"));
+    if (!session) return Response.json({ error: "实时语音连接已结束。" }, { status: 404, headers: noStore });
+    if (action === "recognize-cancel") {
+      session.cancel();
+      return Response.json({}, { headers: noStore });
+    }
+    try {
+      if (request.headers.get("content-type") !== "application/octet-stream") {
+        return Response.json({ error: "不支持的语音请求格式。" }, { status: 415, headers: noStore });
+      }
+      const bytes = await readBounded(request, maxRecordingBytes);
+      const text = await session.append(bytes, action === "recognize-finish");
+      return Response.json({ text }, { headers: noStore });
+    } catch {
+      session.cancel();
+      return Response.json({ error: "实时语音识别暂时不可用。" }, { status: 502, headers: noStore });
+    }
+  }
   const expectedType = action === "transcribe" ? "application/octet-stream" : action === "synthesize" ? "application/json" : undefined;
   if (!expectedType) return Response.json({ error: "无效的语音操作。" }, { status: 400 });
   if (request.headers.get("content-type")?.split(";", 1)[0] !== expectedType) {
@@ -89,6 +133,7 @@ export async function POST(request: Request) {
   }
   if (active >= 4) return Response.json({ error: "语音服务正在处理其他请求，请稍后再试。" }, { status: 429 });
   active++;
+  let streamingBody = false;
   try {
     const signal = AbortSignal.any([request.signal, AbortSignal.timeout(20_000)]);
     const headers = { Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
@@ -116,11 +161,40 @@ export async function POST(request: Request) {
     }
     const text = typeof input?.text === "string" ? input.text.trim() : "";
     if (!text || text.length > 500) return Response.json({ error: "无效的播报文本。" }, { status: 400 });
+    const streaming = request.headers.get("accept") === "application/octet-stream";
     const response = await fetch(`${host}/api/v1/services/aigc/multimodal-generation/generation`, {
-      method: "POST", headers, signal,
+      method: "POST", headers: streaming ? { ...headers, "X-DashScope-SSE": "enable" } : headers, signal,
       body: JSON.stringify({ model: "qwen3-tts-flash", input: { text, voice: "Cherry", language_type: "Chinese" } }),
     });
     if (!response.ok) throw new Error("Qwen synthesis failed");
+    if (streaming && response.body && response.headers.get("content-type")?.includes("text/event-stream")) {
+      const body = response.body;
+      const chunks = readSynthesis(body);
+      streamingBody = true;
+      let released = false;
+      const release = () => {
+        if (released) return;
+        released = true;
+        active--;
+      };
+      signal.addEventListener("abort", release, { once: true });
+      const stream = new ReadableStream<Uint8Array>({
+        async pull(controller) {
+          try {
+            const next = await chunks.next();
+            if (next.done) { release(); controller.close(); }
+            else controller.enqueue(new Uint8Array(next.value));
+          } catch (error) {
+            release();
+            controller.error(error);
+          }
+        },
+        async cancel() { release(); await chunks.return(undefined); },
+      });
+      return new Response(stream, { headers: {
+        "Content-Type": "application/octet-stream", "Cache-Control": "no-store, no-transform", "X-Accel-Buffering": "no",
+      } });
+    }
     const answer: { output?: { audio?: { url?: unknown } } } = await response.json();
     const audioUrl = answer.output?.audio?.url;
     if (typeof audioUrl !== "string") throw new Error("Missing Qwen audio");
@@ -134,13 +208,15 @@ export async function POST(request: Request) {
     const audio = await fetch(url, { signal, redirect: "error" });
     if (!audio.ok) throw new Error("Qwen audio download failed");
     const pcm = pcmFromWave(await readBounded(audio, maxAudioBytes));
-    return Response.json({ audio: pcm.toString("base64") }, { headers: noStore });
+    return streaming
+      ? new Response(new Uint8Array(pcm), { headers: { ...noStore, "Content-Type": "application/octet-stream" } })
+      : Response.json({ audio: pcm.toString("base64") }, { headers: noStore });
   } catch (error) {
     if (error instanceof BodyTooLarge && action === "transcribe") {
       return Response.json({ error: "录音请控制在 15 秒以内。" }, { status: 413 });
     }
     return Response.json({ error: "千问语音暂时不可用，请重试。" }, { status: 502 });
   } finally {
-    active--;
+    if (!streamingBody) active--;
   }
 }

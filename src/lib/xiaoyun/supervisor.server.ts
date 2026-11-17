@@ -30,8 +30,10 @@ import { mapToolCatalog, readMapView, setMapView, setViewFilters } from "./view-
 import { openEvidence, searchKnowledge } from "./knowledge.server";
 import { listProjectViews, loadProjectView, saveProjectView } from "./project-views.server";
 import type { Evidence, ExportReference } from "./assistant-artifacts";
-import { directSiteNavigation, resolveSiteNavigation, siteNavigationSchema, siteViewCatalog, siteViewIdSchema, type SiteNavigation } from "./site-views";
+import { directSiteNavigation, generationNavigation, resolveSiteNavigation, siteNavigationSchema, siteViewCatalog, siteViewIdSchema, type SiteNavigation } from "./site-views";
 import { capabilityQuestion, capabilityTour, defaultFollowUp, replyToOffer, splitModelFollowUp, viewFollowUp, type FollowUp } from "./follow-ups";
+
+import { greetingReply, stripGreeting, type XiaoyunUpdate } from "./stream";
 
 const targetInput = { topic: topicSchema, target: z.enum(targets) };
 const forecastSkill = "forecast-review";
@@ -41,13 +43,20 @@ const storytellingSkill = "data-storytelling";
 const chartInput = z.strictObject({
   ...targetInput, chart: z.enum(chartTypes).optional(), renderer: z.enum(chartBackends).optional(),
 });
+const toolProgress: Readonly<Record<string, string>> = {
+  query_data: "正在查询已发布的数据。",
+  search_knowledge: "正在查找审核资料。",
+  render_chart: "正在绘制图表。",
+  render_custom_chart: "正在绘制图表。",
+  render_dashboard: "正在生成看板。",
+};
 const analysisStatuses = { queued: "排队中", running: "正在计算", succeeded: "已完成", failed: "执行失败" } as const;
 
 const instructions = [
   "你是 OpenGridWorks 总 Agent 小云，像一位熟悉本站的数据助理那样和用户自然对话。判断用户要执行的动作，并在同一轮真正调用工具完成可执行的要求。用工具回执报告实际状态。",
   "用户通常不知道网站有哪些功能。你要主动：先把用户想看的内容直接打开或查出来，再用一两句话说明页面上能看到什么、该怎么读，最后反问一项最自然的下一步，比如解读走势、看省际排行、画图、预测或查依据。",
   "用户要打开、切换、回到页面，或说「我想看」「帮我看看」「给我展示」现有趋势、排行、地图、回放或已发布展望，先用 find_site_views 找匹配页面，再调用 navigate_site。已知有效 view 时可直接调用。切换操作由浏览器执行，不用文字、链接或另画一张图代替。",
-  "看全国发电量长期走势用 generation / generation-history。看某月各省发电量排行用 generation / province-ranking，填 filters.month。看全球电力部门碳排放多年走势用 carbon / carbon-monthly。看某经济体 GDP 用 economy / gdp-trend。看已发布实际 GDP 增长预测用 outlook / growth-outlook。",
+  "看全国发电量长期走势用 generation / generation-history，用户指定年份必须填 filters.year。看某月各省发电量排行用 generation / province-ranking，填 filters.month。看全球电力部门碳排放多年走势用 carbon / carbon-monthly。看某经济体 GDP 用 economy / gdp-trend。看已发布实际 GDP 增长预测用 outlook / growth-outlook。",
   "选范围和指标确实匹配的 view、section 与 filters。只给页面支持的日期、地区和口径，不能把全国图说成省趋势、把全球电力部门排放说成某国全行业。未匹配时，查已发布数据或说明覆盖；只有确实存在多个无法区分的目的地才追问。",
   "纯导航成功后不再调用其他工具，按 find_site_views 的覆盖和图表说明介绍页面内容，并反问是否需要详细解读。查询某个数字、明确要计算新趋势、创建图表、提交预测或比较时，执行相应数据工具；用户同时明确要求切页与计算，两项都执行，先登记不依赖查数的页面动作。解释概念时留在当前页。",
   "要定位国家/省份、切换地图模式或开关图层，调用 set_map_view；find_site_views 带地图 view 可以查看图层和区域名。只读当前地图状态才传 read=true，设置后工具回执包含目标状态。诸如「在当前图把月份改成五月、保留其他条件」 用 set_view_filters；它会核验覆盖并保留其他参数。这两种动作可直接调用，浏览器回读后才确认应用。",
@@ -70,6 +79,7 @@ const instructions = [
   "涉及查看已发布预报、新预测、回测、基线比较或修改预测时，先用 load_skill 读取 forecast-review，再决定路径。仅查看任务进度时直接用 get_analysis。",
   "明确要求生成数据大屏、看板或驾驶舱时，先用 load_skill 读取 bigdata-dashboard，再用 render_dashboard 出屏。普通绘图直接用 render_chart。",
   "用户明确要求自定义制图、科研配色、趋势带、排序点图或为新图配文字分析时，先 load_skill data-storytelling。按该技能通过 render_custom_chart 出图。修改已选自定义图时保持数据引用，并继承未明确修改的图型和配色。",
+  "需要工具时先完成工具调用，拿到结果后才输出正文。正文的第一句直接回答问题或解读结果，不播报意图或等待提示。",
   "只用工具回执中的真实数据与执行状态。概念、地图和工具能力问题可以直接用中文回答；涉及站点的数据范围时先看目录。",
   "最终回复用口语化中文，不用标题。系统会单独显示「已打开」「已生成图表」等回执，正文不要再说「我帮你打开了」，也不复述回执已有的单个数值。介绍页面时讲能看到什么、怎么读，用户没问就不讲页面的限制。第一段不超过三句，是会被朗读的要点；需要详细解读时另起段落写要点列表。",
   "除非你在向用户追问缺失条件，回复最后一句必须是以「要不要我」开头的反问，提议一项本站真实可做的下一步；单个数值优先提议看走势、同比或省际对比，而不是画单点图。然后另起一行写「建议：」，后面用 | 分隔 2 到 3 条用户可以直接发出的短指令，每条不超过 16 个字，第一条就是反问里提议的动作。例如：建议：解读2024年发电量走势 | 看2024年12月各省排行 | 预测未来6个月发电量",
@@ -164,7 +174,13 @@ function describeResult(result: DataResult, resultId: string | null, route: "dat
   };
 }
 
-export async function askXiaoyun(request: XiaoyunRequest, requestSignal: AbortSignal): Promise<XiaoyunReply> {
+export async function askXiaoyun(
+  request: XiaoyunRequest, requestSignal: AbortSignal, emit?: (event: XiaoyunUpdate) => void,
+): Promise<XiaoyunReply> {
+  requestSignal.throwIfAborted();
+  const unprefixed = stripGreeting(request.message);
+  if (!unprefixed) return { route: "general", summary: greetingReply };
+  if (unprefixed !== request.message) request = { ...request, message: unprefixed };
   const { offer } = request.context;
   const answer = offer && replyToOffer(request.message);
   if (answer === "decline") {
@@ -175,11 +191,13 @@ export async function askXiaoyun(request: XiaoyunRequest, requestSignal: AbortSi
   // Accepting the last offer runs the action it proposed, as if the user had typed it.
   const input = answer === "accept" && offer ? { ...request, message: offer.accept } : request;
   return withAgentRun("xiaoyun", requestSignal, async guard => ({
-    ...await runXiaoyun(input, requestSignal, guard), runId: currentAuditRunId(),
+    ...await runXiaoyun(input, requestSignal, guard, emit), runId: currentAuditRunId(),
   }), input.requestId);
 }
 
-async function runXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal, guard: AgentGuard): Promise<XiaoyunReply> {
+async function runXiaoyun(
+  input: XiaoyunRequest, requestSignal: AbortSignal, guard: AgentGuard, emit?: (event: XiaoyunUpdate) => void,
+): Promise<XiaoyunReply> {
   const { signal } = guard;
   const context = createTurnContext(input);
   const inspected = new Map<string, Inspected>();
@@ -667,11 +685,18 @@ async function runXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal, gua
     return { route: "general", ...capabilityTour(activePage?.view ?? input.activeView) };
   }
 
-  const direct = directSiteNavigation(input.message);
+  const generation = generationNavigation(input.message, activePage);
+  const direct = generation ?? directSiteNavigation(input.message);
   if (direct && !guard.tool("navigate_site")) {
     const navigate = tools.find(tool => tool.name === "navigate_site");
     await navigate?.execute(randomUUID(), direct, signal);
     if (navigation) {
+      if (generation) {
+        const filters = generation.filters;
+        const period = filters?.month ? `${filters.year} 年 ${Number(filters.month.slice(5))} 月` : `${filters?.year} 年`;
+        return { route: "navigation", summary: `我帮你打开 ${period}全国发电量走势。`,
+          navigation, followUp: viewFollowUp(generation) };
+      }
       const intro = siteViewCatalog().find(item => item.view === direct.view)?.coverage?.split("。")[0];
       const described = intro && direct.view !== "data-review" && !/[a-z]{3,}/.test(intro) ? `这里展示${intro}。` : "";
       return { route: "navigation", summary: `正在打开${navigationLabel}。${described}`,
@@ -730,6 +755,13 @@ async function runXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal, gua
   signal.throwIfAborted();
   signal.addEventListener("abort", abort, { once: true });
   const unsubscribe = agent.subscribe(event => {
+    if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
+      emit?.({ type: "text", text: event.assistantMessageEvent.delta });
+    }
+    if (event.type === "tool_execution_start") {
+      const progress = toolProgress[event.toolName];
+      if (progress) emit?.({ type: "progress", text: progress });
+    }
     if (event.type === "message_end" && event.message.role === "assistant") guard.usage(event.message);
   });
   try {

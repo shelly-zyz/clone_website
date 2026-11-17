@@ -33,7 +33,7 @@ const topics: Record<typeof analysisTopicOrder[number], Pick<View, "coverage" | 
     coverage: "月度长期走势和季节图为全国口径。省级筛选用于同月省际排行及比较，不能展示省级多年走势。",
     sections: { "generation-history": "全国月度发电走势", "generation-seasonal": "月度热力图", "generation-flow": "电源流向",
       "monthly-mix": "当月电源构成", "province-ranking": "同月省际排行", "province-comparison": "同月省际比较" },
-    filters: { month: "YYYY-MM，所选月份", product: generationSeries.map(item => item.id).join(" / "),
+    filters: { year: "YYYY，图表限定年份", month: "YYYY-MM，所选月份", product: generationSeries.map(item => item.id).join(" / "),
       region: "省级 ISO 代码，仅同月省际排行或比较" },
   },
   fuels: {
@@ -134,6 +134,7 @@ export function resolveSiteNavigation(action: SiteNavigation) {
   if (entries.some(([key]) => !Object.hasOwn(target.filters ?? {}, key))) return;
   const { year, startYear, targetYear, region, month, date, powerView, projection } = filters;
   if (month && date || startYear && year && startYear > year) return;
+  if (view === "generation" && year && month && !month.startsWith(`${year}-`)) return;
   if (year && (view === "power" && (year < 2020 || year > 2025)
     || view === "renewables" && (year < 2021 || year > 2060)
     || (view === "economy" || view === "trade") && (year < 2015 || year > 2024))) return;
@@ -169,4 +170,25 @@ export function directSiteNavigation(message: string): SiteNavigation | undefine
     .replace(/(?:吧|一下)$/g, "");
   const view = siteViewIdSchema.options.find(id => views.get(id)?.aliases?.some(alias => alias.replace(/\s/g, "").toLowerCase() === name.toLowerCase()));
   return view ? { view } : undefined;
+}
+
+
+export function generationNavigation(message: string, active?: { view: SiteViewId; search: string }): SiteNavigation | undefined {
+  const digits = "零一二三四五六七八九";
+  const normalized = message.normalize("NFKC").replace(/[\s，,。！!？?]/g, "")
+    .replace(/[零〇一二三四五六七八九]{4}(?=年)/g, text => [...text].map(char => digits.indexOf(char === "〇" ? "零" : char)).join(""))
+    .replace(/(十[一二]?|[一二三四五六七八九])(?=月)/g, text => String(text.startsWith("十") ? 10 + (text[1] ? digits.indexOf(text[1]) : 0) : digits.indexOf(text)));
+  const full = /^(?:请)?(?:我想|想|帮我|给我)?(?:打开|查看|看看?|显示)((?:19|20|21)\d{2})年(?:(1[0-2]|0?[1-9])月)?(?:的)?(?:全国)?(?:总)?发电量(?:走势|趋势)?(?:吧|一下)?$/.exec(normalized);
+  const onGeneration = active?.view === "generation";
+  const changeYear = onGeneration && /^(?:那就|那|换成|切到|改成|改为|看)?((?:19|20|21)\d{2})年(?:的呢|呢|吧)?$/.exec(normalized);
+  const changeMonth = onGeneration && /^(?:那就|那|换成|切到|改成|改为|看)?(1[0-2]|0?[1-9])月(?:的呢|呢|吧)?$/.exec(normalized);
+  if (!full && !changeYear && !changeMonth) return;
+  const search = new URLSearchParams(active?.search);
+  const year = Number(full?.[1] || (changeYear && changeYear[1]) || search.get("year") || search.get("month")?.slice(0, 4));
+  if (!year) return;
+  const month = full?.[2] || (changeMonth && changeMonth[1]);
+  const product = !full && siteNavigationSchema.shape.filters.unwrap().shape.product.safeParse(search.get("product")).data;
+  return { view: "generation", section: "generation-history", filters: {
+    year, ...(month && { month: `${year}-${month.padStart(2, "0")}` }), ...(product && { product }),
+  } };
 }

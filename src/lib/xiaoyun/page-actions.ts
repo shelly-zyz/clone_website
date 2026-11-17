@@ -121,6 +121,9 @@ export function patchViewFilters(page: ActivePage, patch: z.infer<typeof filterP
     if (value === null) url.searchParams.delete(key);
     else url.searchParams.set(key, String(value));
   }
+  if (page.view === "generation" && patch.year && !patch.month && !url.searchParams.get("month")?.startsWith(`${patch.year}-`)) {
+    url.searchParams.delete("month");
+  }
   if (page.view === "carbon") {
     if (patch.month && patch.date || patch.month && patch.grain === "day" || patch.date && patch.grain === "month") return;
     if (patch.month || patch.grain === "month") url.searchParams.delete("date");

@@ -306,8 +306,10 @@ export function AnalysisWorkbench({ topic, initialQuery, initialScenario }: {
   const scenario = useResource<RenewableScenario>(topic === "renewables" ? api + topic : null);
   const scenarioData = scenario.data ?? initialScenario;
   const history = published.data?.facts.some(row => row.value !== null) ? published.data : null;
-  const months = topic === "generation" ? generationMonths(history, product.id) : [];
-  const displayedMonth = context.month || months.at(-1) || "";
+  const generationYear = topic === "generation" ? context.year : undefined;
+  const months = topic === "generation" ? generationMonths(history, product.id, generationYear) : [];
+  const displayedMonth = context.month && (!generationYear || context.month.startsWith(`${generationYear}-`))
+    ? context.month : months.at(-1) || "";
   const regional = useResource<RegionalGeneration>(
     topic === "generation" && history && displayedMonth
       ? `${api}generation&month=${displayedMonth}&version=${history.version}&product=${product.id}` : null,
@@ -367,7 +369,7 @@ export function AnalysisWorkbench({ topic, initialQuery, initialScenario }: {
       </>;
       break;
     case "generation":
-      analysis = buildGenerationAnalysis(product.id, displayedMonth, history, regional.data, primaryRegion);
+      analysis = buildGenerationAnalysis(product.id, displayedMonth, history, regional.data, primaryRegion, generationYear);
       filters = <>
         <AnalysisFilter label="发电指标" value={product.id} onChange={value => select(value, "product")}>
           {generationSeries.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
@@ -469,7 +471,9 @@ export function AnalysisWorkbench({ topic, initialQuery, initialScenario }: {
   const carbonComparison = comparisonActive && topic === "carbon" ? carbonPair(history, query, carbonPeriod, carbonGrain) : undefined;
   const provinceComparison = comparisonActive && topic === "generation"
     ? provincePair(regional.data, primaryRegion, alternateRegion, product.name) : undefined;
-  if (hasPublishedQuery) {
+  if (generationYear && !months.length && !published.pending) {
+    dataStatus = `${generationYear} 年暂无该指标的月度记录`;
+  } else if (hasPublishedQuery) {
     dataStatus = published.pending ? "读取数据库中" : history ? undefined
       : releaseVersion ? "请求版本暂不可用 · 当前显示公开归档"
         : topic === "carbon" ? "归档日度数据" : topic === "generation" ? "公开月报选录" : "公开年度公报";
