@@ -13,7 +13,7 @@ const height = 600;
 const mercator = geoMercator().center([104, 35]).scale(14).translate([0, 0]);
 type Point = [number, number];
 type Polygon = Point[][];
-type MapShape = { code: string; name: string; path: string };
+type MapShape = { code: string; name: string; path: string; center?: Point };
 
 function buildPaths(geo: ChinaPowerGeography) {
   const inset: Polygon[] = [];
@@ -22,7 +22,7 @@ function buildPaths(geo: ChinaPowerGeography) {
     const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
     const mainland = polygons.filter(([ring]) => properties.name && ring.some(point => point[1] >= 18));
     inset.push(...polygons.filter(polygon => !mainland.includes(polygon)));
-    return { code: String(properties.adcode).padEnd(12, "0"), name: properties.name, polygons: mainland };
+    return { code: String(properties.adcode).padEnd(12, "0"), name: properties.name, polygons: mainland, center: properties.centroid ?? properties.center };
   }).filter(item => item.polygons.length);
   function pathProjector(polygons: Polygon[], x: number, y: number, w: number, h: number) {
     const projected = polygons.flatMap(rings => rings[0].map(point => mercator(point)!));
@@ -31,15 +31,20 @@ function buildPaths(geo: ChinaPowerGeography) {
     const scale = Math.min(w / span[0], h / span[1]);
     const left = x + (w - span[0] * scale) / 2;
     const top = y + (h - span[1] * scale) / 2;
-    return (shapes: Polygon[]) => shapes.map(rings => rings.map(ring => "M" + ring.map(point => {
-      const [lng, lat] = mercator(point)!;
-      return (left + (lng - min[0]) * scale).toFixed(1) + "," + (top + (lat - min[1]) * scale).toFixed(1);
-    }).join("L") + "Z").join("")).join("");
+    const point = (coords: Point): Point => {
+      const [lng, lat] = mercator(coords)!;
+      return [left + (lng - min[0]) * scale, top + (lat - min[1]) * scale];
+    };
+    const path = (shapes: Polygon[]) => shapes.map(rings => rings.map(ring => "M" + ring.map(coords =>
+      point(coords).map(value => value.toFixed(1)).join(",")).join("L") + "Z").join("")).join("");
+    return { point, path };
   }
   const project = pathProjector(main.flatMap(row => row.polygons), 14, 16, width - 28, height - 34);
   return {
-    shapes: main.map(({ code, name, polygons }): MapShape => ({ code, name, path: project(polygons) })),
-    inset: inset.length ? pathProjector(inset, 829, 473, 93, 95)(inset) : "",
+    shapes: main.map(({ code, name, polygons, center }): MapShape => ({
+      code, name, path: project.path(polygons), center: center && project.point(center),
+    })),
+    inset: inset.length ? pathProjector(inset, 829, 473, 93, 95).path(inset) : "",
   };
 }
 
@@ -84,7 +89,7 @@ export function PowerThematicMap({ frame, split, selection, bin, onSelect, scree
     const signed = data.encoding === "diverging";
     const shapes = drawing!.shapes;
     const ordered = [...shapes.filter(shape => !selection.includes(shape.code)), ...shapes.filter(shape => selection.includes(shape.code))];
-    return ordered.map(({ code, name, path }) => {
+    return ordered.map(({ code, name, path, center }) => {
       const row = rows.get(code);
       const value = row?.value ?? null;
       const index = selection.indexOf(code);
@@ -92,16 +97,20 @@ export function PowerThematicMap({ frame, split, selection, bin, onSelect, scree
       const isMuted = !selected && bin != null && bin !== powerBin(value, data.scaleMax, signed);
       const label = [name, data.period, data.label, value == null ? "暂无数据" : formatPowerNumber(value, data.unit, signed),
         row?.detail].filter(Boolean).join(" · ");
-      return <path key={code} d={path} fill={powerClassColor(value, data.scaleMax, signed)} fillRule="evenodd"
-        opacity={isMuted ? .23 : !selected && selection.length ? .86 : 1}
-        stroke={powerSelectionColors[index] ?? "#162d42"} strokeWidth={selected ? 2.8 : 1.04}
-        className={styles.provincePath} role="button" tabIndex={tab ? 0 : -1} aria-label={label}
-        aria-pressed={selected} data-province={code} onClick={() => onSelect(code)}
-        onKeyDown={event => {
-          if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(code); }
-        }}>
-        <title>{label}</title>
-      </path>;
+      return (
+        <g key={code}>
+          <path d={path} fill={powerClassColor(value, data.scaleMax, signed)} fillRule="evenodd"
+            opacity={isMuted ? .23 : !selected && selection.length ? .55 : 1}
+            className={styles.provincePath} role="button" tabIndex={tab ? 0 : -1} aria-label={label}
+            aria-pressed={selected} data-province={code} onClick={() => onSelect(code)}
+            onKeyDown={event => {
+              if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(code); }
+            }}>
+            <title>{label}</title>
+          </path>
+          {selected && center && <circle cx={center[0]} cy={center[1]} r="4" fill={powerSelectionColors[index]} pointerEvents="none" />}
+        </g>
+      );
     });
   }
 
@@ -110,17 +119,21 @@ export function PowerThematicMap({ frame, split, selection, bin, onSelect, scree
     <div className={styles.thematicMap} data-power-flat-ready aria-label={split ? "省级双期地图" : "省级二维专题地图"}>
       <svg ref={svg} xmlns="http://www.w3.org/2000/svg" viewBox={"0 0 " + width + " " + height} className={styles.flatSvg} aria-label={frame.label}>
         <title>{[frame.period, frame.label, frame.unit].join(" · ")}</title>
-        {split && <defs><clipPath id={clipId}><rect width={splitX} height={height} /></clipPath></defs>}
-        {regions(split?.b ?? frame, true)}
-        {split && <g clipPath={"url(#" + clipId + ")"}>{regions(split.a, false)}</g>}
+        {split ? <>
+          <defs>
+            <clipPath id={clipId}><rect width={splitX} height={height} /></clipPath>
+            <clipPath id={clipId + "-current"}><rect x={splitX} width={width - splitX} height={height} /></clipPath>
+          </defs>
+          <g clipPath={"url(#" + clipId + "-current)"}>{regions(split.b, true)}</g>
+          <g clipPath={"url(#" + clipId + ")"}>{regions(split.a, false)}</g>
+        </> : regions(frame, true)}
         {drawing.inset && <g aria-label="南海诸岛" pointerEvents="none">
-          <rect x="820" y="463" width="110" height="124" rx="4" fill="#0e1b2a" stroke="#334c63" />
-          <path d={drawing.inset} fill="#57738c" fillRule="evenodd" stroke="#7b96ab" strokeWidth="1" />
+          <rect x="820" y="463" width="110" height="124" rx="4" fill="#0e1b2a" />
+          <path d={drawing.inset} fill="#57738c" fillRule="evenodd" />
           <text x="875" y="580" textAnchor="middle" fill="#bcd1e1" fontSize="12">南海诸岛</text>
         </g>}
         {split && <g pointerEvents="none">
-          <line x1={splitX} x2={splitX} y1="10" y2={height - 8} stroke="#dcecf3" strokeDasharray="4 4" />
-          <circle cx={splitX} cy={height / 2} r="16" fill="#132b3d" stroke="#e1eff6" />
+          <circle cx={splitX} cy={height / 2} r="16" fill="#132b3d" />
           <path d={"M" + (splitX - 3) + ",293l-6,7 6,7M" + (splitX + 3) + ",293l6,7 -6,7"} fill="none" stroke="#dcecf3" strokeWidth="2" />
         </g>}
       </svg>

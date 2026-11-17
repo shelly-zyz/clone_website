@@ -1,14 +1,14 @@
 import {
-  Box2, Box3, CanvasTexture, Color, LineBasicMaterial,
+  Box2, Box3, CanvasTexture, Color,
   Mesh, MOUSE, OrthographicCamera, Raycaster, Scene, Sprite, SpriteMaterial, SRGBColorSpace, TOUCH,
-  Vector2, Vector3, WebGLRenderer, LineSegments, type BufferGeometry, type Material,
+  Vector2, Vector3, WebGLRenderer, type BufferGeometry, type Material,
 } from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { powerDemoNotice, powerMapNoData, type ProvincePowerFrame } from "@/lib/china-power-statistics";
 import { formatPowerNumber, powerLegendColors, powerMagnitude, powerSelectionColors } from "@/lib/power-analysis";
 import type { MapCameraState } from "@/types/opengridworks";
 import {
-  buildPowerGeography, fitPowerMapBounds, powerDetailLines, powerProjection, projectPowerPoint,
+  buildPowerGeography, fitPowerMapBounds, powerProjection, projectPowerPoint,
   type ChinaPowerGeography, type PowerFitPadding,
 } from "./power-statistics-geometry";
 
@@ -31,7 +31,7 @@ function scaleColor(value: number, max: number, signed: boolean) {
   return palette[left].clone().lerp(palette[left + 1], stop - left);
 }
 
-function makeLabel(text: string) {
+function makeLabel(text: string, textColor = "#e5f2ff") {
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d")!;
   const font = "600 22px Inter, system-ui, sans-serif";
@@ -44,7 +44,7 @@ function makeLabel(text: string) {
   ctx.roundRect(0, 0, canvas.width, canvas.height, 7);
   ctx.fill();
   ctx.textBaseline = "middle";
-  ctx.fillStyle = "#e5f2ff";
+  ctx.fillStyle = textColor;
   ctx.fillText(text, 12, 19);
   const map = new CanvasTexture(canvas);
   map.colorSpace = SRGBColorSpace;
@@ -115,15 +115,10 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
   controls.zoomSpeed = .85;
   controls.update();
 
-  const highlights = powerSelectionColors.map(color => new LineBasicMaterial({ color }));
-  const originalBoundary = provinces[0].lines.material;
   const parts = provinces.map(province => ({ ...province, value: null as number | null, detail: undefined as string | undefined }));
   const byCode = new Map(parts.map(part => [part.code, part]));
   const targets = parts.map(part => part.mesh);
   const labels: ReturnType<typeof makeLabel>[] = [];
-  const boundaries = new Map<string, LineSegments>();
-  const requested = new Set<string>();
-  const controller = new AbortController();
   const ray = new Raycaster();
   let width = 1;
   let height = 1;
@@ -150,33 +145,9 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
     if (!drawRequest) drawRequest = requestAnimationFrame(draw);
   }
 
-  function syncDetails() {
-    for (const [level, threshold] of [["city", .95], ["county", 2.6]] as const) {
-      const visible = camera.zoom / fit >= threshold;
-      const layer = boundaries.get(level);
-      if (layer) layer.visible = visible;
-      if (!visible || requested.has(level)) continue;
-      requested.add(level);
-      void fetch(`/data/china-power/${level}-lines.bin`, { signal: controller.signal })
-        .then(response => {
-          if (!response.ok) throw new Error("行政辅助边界暂不可用");
-          return response.arrayBuffer();
-        })
-        .then(data => {
-          if (controller.signal.aborted) return;
-          const lines = powerDetailLines(data, level === "county");
-          boundaries.set(level, lines);
-          scene.add(lines);
-          queueRender();
-        })
-        .catch(() => requested.delete(level));
-    }
-  }
-
   function draw() {
     cancelAnimationFrame(drawRequest);
     drawRequest = 0;
-    syncDetails();
     camera.updateMatrixWorld();
     const mobile = width < 540;
     const regions: { left: number; right: number; top: number; bottom: number }[] = [];
@@ -354,10 +325,8 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
         const base = value == null ? noData : scaleColor(value, next.scaleMax, signed);
         part.value = value;
         part.detail = row?.detail;
-        part.fill.color.copy(base).multiplyScalar(selection.length && index < 0 ? .74 : 1);
+        part.fill.color.copy(base).multiplyScalar(selection.length && index < 0 ? .52 : 1);
         part.side.color.copy(part.fill.color).multiplyScalar(.43);
-        part.lines.material = highlights[index] ?? originalBoundary;
-        part.lines.renderOrder = index < 0 ? 0 : 2;
       }
 
       const ranked = parts.filter(part => part.value != null).sort((a, b) => Math.abs(b.value!) - Math.abs(a.value!)).slice(0, 3);
@@ -367,7 +336,10 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
       }) : ranked;
       for (const part of annotated) {
         const name = part.name.replace(/(?:壮族|回族|维吾尔)?自治区$|特别行政区$|[省市]$/u, "");
-        const label = makeLabel(name + " " + formatPowerNumber(part.value, next.unit === "%" ? "%" : "", signed));
+        const label = makeLabel(
+          name + " " + formatPowerNumber(part.value, next.unit === "%" ? "%" : "", signed),
+          powerSelectionColors[selection.indexOf(part.code)],
+        );
         label.sprite.position.copy(part.anchor);
         label.sprite.position.z += .15;
         labels.push(label);
@@ -396,7 +368,6 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
       return output.toDataURL("image/png");
     },
     dispose() {
-      controller.abort();
       observer.disconnect();
       cancelAnimationFrame(animation);
       cancelAnimationFrame(drawRequest);
@@ -407,9 +378,9 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
       canvas.removeEventListener("pointerleave", hideHover);
       clearLabels();
       const geometries = new Set<BufferGeometry>();
-      const materials = new Set<Material>([...highlights, originalBoundary]);
+      const materials = new Set<Material>();
       for (const root of [scene, insetScene]) root.traverse(object => {
-        if (object instanceof Mesh || object instanceof LineSegments) {
+        if (object instanceof Mesh) {
           geometries.add(object.geometry);
           for (const material of Array.isArray(object.material) ? object.material : [object.material]) materials.add(material);
         }

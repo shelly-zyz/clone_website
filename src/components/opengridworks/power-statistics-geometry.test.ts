@@ -25,12 +25,10 @@ function provincePoints(code: string) {
   const national = polygons.filter(([ring]) => ring.some(point => point[1] >= 18));
   const points = national.flatMap(polygon => polygon.flatMap(ring => ring.flatMap(point => {
     const { x, y } = projectPowerPoint(point);
-    return [new Vector3(x, y, 0), new Vector3(x, y, powerMapDepth + .008)];
+    return [new Vector3(x, y, 0), new Vector3(x, y, powerMapDepth)];
   })));
-  for (const object of [province.mesh, province.lines]) {
-    const positions = object.geometry.attributes.position;
-    for (let index = 0; index < positions.count; index++) points.push(new Vector3().fromBufferAttribute(positions, index));
-  }
+  const positions = province.mesh.geometry.attributes.position;
+  for (let index = 0; index < positions.count; index++) points.push(new Vector3().fromBufferAttribute(positions, index));
   points.push(...corners(province.fitBounds));
   return { province, points, polygons: national.length };
 }

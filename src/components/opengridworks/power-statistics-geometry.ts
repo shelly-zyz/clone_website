@@ -1,6 +1,6 @@
 import { geoMercator } from "d3-geo";
 import {
-  Box2, Box3, BufferGeometry, ExtrudeGeometry, Float32BufferAttribute, Group, LineBasicMaterial, LineSegments,
+  Box2, Box3, ExtrudeGeometry, Group,
   Mesh, MeshBasicMaterial, Path, Shape, Vector2, Vector3, type Quaternion,
 } from "three";
 
@@ -60,27 +60,12 @@ function ringsToShapes(polygons: Polygon[]) {
   });
 }
 
-function outline(polygons: Polygon[], z: number, material: LineBasicMaterial) {
-  const positions: number[] = [];
-  for (const polygon of polygons) {
-    for (const ring of polygon) {
-      const points = ring.map(projectPowerPoint);
-      for (let index = 1; index < points.length; index++) {
-        positions.push(points[index - 1].x, points[index - 1].y, z, points[index].x, points[index].y, z);
-      }
-    }
-  }
-  return new LineSegments(new BufferGeometry().setAttribute("position", new Float32BufferAttribute(positions, 3)), material);
-}
-
 export function buildPowerGeography(geo: ChinaPowerGeography) {
   // Use the reference map's direct ring projection, hole handling and southern inset partition.
   const main = new Group();
   const inset = new Group();
   const bounds = new Box2();
   const insetBounds = new Box2();
-  const boundary = new LineBasicMaterial({ color: "#203e58", transparent: true, opacity: .9 });
-  const coast = new LineBasicMaterial({ color: "#8099b0" });
   const insetLand = new MeshBasicMaterial({ color: "#668299" });
 
   const provinces = geo.features.flatMap(({ properties, geometry }) => {
@@ -91,7 +76,6 @@ export function buildPowerGeography(geo: ChinaPowerGeography) {
       for (const polygon of southern) for (const point of polygon[0]) insetBounds.expandByPoint(projectPowerPoint(point));
       const shape = new ExtrudeGeometry(ringsToShapes(southern), { depth: 0, bevelEnabled: false, curveSegments: 1 });
       inset.add(new Mesh(shape, insetLand));
-      inset.add(outline(southern, .01, coast));
     }
     if (!national.length) return [];
 
@@ -104,32 +88,18 @@ export function buildPowerGeography(geo: ChinaPowerGeography) {
       [fill, side],
     );
     mesh.userData.code = code;
-    const lines = outline(national, powerMapDepth + .008, boundary);
     mesh.geometry.computeBoundingBox();
-    lines.geometry.computeBoundingBox();
-    const fitBounds = mesh.geometry.boundingBox!.clone().union(lines.geometry.boundingBox!);
+    const fitBounds = mesh.geometry.boundingBox!.clone();
     // 同时保留双精度原始轮廓和实际 Float32 挤出几何的边界。
     for (const polygon of national) for (const ring of polygon) for (const point of ring) {
       const { x, y } = projectPowerPoint(point);
       fitBounds.expandByPoint(new Vector3(x, y, 0));
-      fitBounds.expandByPoint(new Vector3(x, y, powerMapDepth + .008));
+      fitBounds.expandByPoint(new Vector3(x, y, powerMapDepth));
     }
-    main.add(mesh, lines);
+    main.add(mesh);
     const coord = properties.centroid ?? properties.center!;
     const { x, y } = projectPowerPoint(coord);
-    return [{ code, mesh, lines, fill, side, fitBounds, name: properties.name, anchor: new Vector3(x, y, powerMapDepth) }];
+    return [{ code, mesh, fill, side, fitBounds, name: properties.name, anchor: new Vector3(x, y, powerMapDepth) }];
   });
   return { main, inset, bounds, insetBounds, provinces };
-}
-
-export function powerDetailLines(buffer: ArrayBuffer, county: boolean) {
-  const data = new DataView(buffer);
-  const positions = new Float32Array(buffer.byteLength / 8 * 3);
-  for (let offset = 0, index = 0; offset < buffer.byteLength; offset += 8, index += 3) {
-    const { x, y } = projectPowerPoint([data.getFloat32(offset, true), data.getFloat32(offset + 4, true)]);
-    positions.set([x, y, powerMapDepth + .004], index);
-  }
-  const geometry = new BufferGeometry().setAttribute("position", new Float32BufferAttribute(positions, 3));
-  const material = new LineBasicMaterial({ color: "#1d4669", transparent: true, opacity: county ? .17 : .22 });
-  return new LineSegments(geometry, material);
 }

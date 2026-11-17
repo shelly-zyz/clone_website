@@ -419,7 +419,7 @@ function MatchScatter({ data, selection, onChoose }: { data: PowerAnalysis; sele
         const index = selection.indexOf(row.code);
         return <circle key={row.code} className={styles.point} cx={151 + row.x / max * 111} cy={68 - row.y / max * 56}
           r={3 + Math.sqrt(row.stock / stockMax) * 6} fill={index >= 0 ? powerSelectionColors[index] : "#6ecddf"}
-          opacity={index >= 0 ? 1 : .65} stroke="#0d2437" role="button" tabIndex={0}
+          opacity={index >= 0 ? 1 : .65} role="button" tabIndex={0}
           aria-label={row.name + "，装机" + number(row.x, "%", true) + "，发电" + number(row.y, "%", true)}
           onClick={() => onChoose(row.code)} onKeyDown={event => {
             if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onChoose(row.code); }

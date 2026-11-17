@@ -3712,6 +3712,13 @@
 .is-power-statistics .og-globe-stage { background: transparent; }
 .is-power-statistics .og-forecast-region { display: none; }
 .is-power-statistics .og-scale { display: none; }
+.is-power-statistics :is(.og-workspace-action, .og-workspace-visualization-link, .og-icon-button,
+  .og-globe-navigation button, .og-floating-panel, .og-hover-bubble) {
+  border: 0;
+}
+.is-power-statistics .og-globe-navigation button { padding-bottom: 8px; }
+.is-power-statistics .og-info-button.is-active { box-shadow: none; }
+
 .og-globe-workspace.is-power-statistics:not(.is-cinematic) {
   --og-power-rail: clamp(238px, 23vw, 330px);
   --og-stage-right: calc(var(--og-power-rail) + 2 * var(--og-gutter));

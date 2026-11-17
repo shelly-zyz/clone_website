@@ -124,21 +124,17 @@ function snapshot(scene) { scene.screenshot(); return state.renderer.camera; }
 function assertProvinceVisible(scene, code, safe = null) {
   const camera = snapshot(scene);
   const part = geography.provinces.find(province => province.code === code);
-  let count = 0;
-  for (const object of [part.mesh, part.lines]) {
-    const positions = object.geometry.attributes.position;
-    for (let index = 0; index < positions.count; index++) {
-      const point = new Vector3().fromBufferAttribute(positions, index).project(camera);
-      assert.ok(Math.abs(point.x) <= 1 + 1e-9 && Math.abs(point.y) <= 1 + 1e-9);
-      if (safe) {
-        const x = (point.x + 1) * (camera.right - camera.left) / 2;
-        const y = (1 - point.y) * (camera.top - camera.bottom) / 2;
-        assert.ok(x >= safe.left && x <= safe.right && y >= safe.top && y <= safe.bottom);
-      }
-      count++;
+  const positions = part.mesh.geometry.attributes.position;
+  for (let index = 0; index < positions.count; index++) {
+    const point = new Vector3().fromBufferAttribute(positions, index).project(camera);
+    assert.ok(Math.abs(point.x) <= 1 + 1e-9 && Math.abs(point.y) <= 1 + 1e-9);
+    if (safe) {
+      const x = (point.x + 1) * (camera.right - camera.left) / 2;
+      const y = (1 - point.y) * (camera.top - camera.bottom) / 2;
+      assert.ok(x >= safe.left && x <= safe.right && y >= safe.top && y <= safe.bottom);
     }
   }
-  return count;
+  return positions.count;
 }
 
 test("scene：provinceCode 优先于固定相机，resize 自动 fit，南海独立 viewport 保留", context => {
@@ -222,7 +218,7 @@ test("scene：全屏测量左右覆盖与舞台安全区，不重复扣除已缩
   } finally { nested.scene.dispose(); }
 });
 
-test("scene：增长分色不移动相机，选中的两省有独立轮廓，清除 focus 回全国", () => {
+test("scene：增长分色不移动相机，使用填色和标注标记所选省份，清除 focus 回全国", () => {
   const { scene } = setup();
   try {
     const beijing = "110000000000";
@@ -241,9 +237,8 @@ test("scene：增长分色不移动相机，选中的两省有独立轮廓，清
     assert.ok(group.children.every(object => object.geometry?.type !== "CylinderGeometry"));
     const fills = [beijing, xinjiang].map(code => group.children.find(node => node.userData.code === code).material[0].color.getHexString());
     assert.notEqual(fills[0], fills[1]);
-    const highlighted = group.children.filter(object => object.isLineSegments && object.renderOrder === 2);
-    assert.equal(highlighted.length, 2);
-    assert.notEqual(highlighted[0].material.color.getHexString(), highlighted[1].material.color.getHexString());
+    assert.ok(group.children.every(object => !object.isLineSegments));
+    assert.equal(state.renderer.scene.children.filter(object => object.isSprite).length, 2);
     scene.focus(undefined, false);
     for (const code of [xinjiang, "540000000000", "150000000000", "460000000000", beijing]) assertProvinceVisible(scene, code);
   } finally { scene.dispose(); }
