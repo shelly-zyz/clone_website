@@ -63,8 +63,8 @@
   min-height: 210px;
   overflow: hidden;
   min-width: 0;
-  background: radial-gradient(ellipse at 47% 42%, #fff, #f4f2ee 72%, #eae7e2);
-  color: #423c34;
+  background: #09141d;
+  color: #fff;
 }
 
 .canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; }

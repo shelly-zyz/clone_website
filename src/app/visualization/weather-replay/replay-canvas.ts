@@ -226,7 +226,7 @@ export function paintReplay(
   mapLine(edgeLon, mapSouth, edgeLon, mapNorth);
   ctx.stroke();
   ctx.font = (width < 480 ? 10 : 11) + "px system-ui, sans-serif";
-  ctx.fillStyle = "#383530";
+  ctx.fillStyle = "#fff";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   const tick = (point: Point, outward: Point, label: string) => {
@@ -323,7 +323,7 @@ export function paintReplay(
     ctx.stroke();
     ctx.textAlign = "left";
     ctx.font = "600 11px system-ui, sans-serif";
-    ctx.fillStyle = "#3b3731";
+    ctx.fillStyle = "#fff";
     ctx.fillText("UTC", Math.min(width - 36, axisTop[0] + 6), axisTop[1] - 9);
     for (const [layer, frame] of frames.entries()) {
       const [x, y] = project([axis[0], axis[1], (layer + 1) * timeStep + voxelHeight]);
@@ -333,7 +333,7 @@ export function paintReplay(
       ctx.moveTo(x - 3, y);
       ctx.lineTo(x + 4, y);
       ctx.stroke();
-      ctx.fillStyle = active ? "#86291f" : "#453e35";
+      ctx.fillStyle = active ? "#fff" : "#e2ebf0";
       ctx.font = (active ? "650 " : "") + "11px system-ui, sans-serif";
       ctx.fillText(utcClock(replay.rain[frame].time), Math.min(width - 36, x + 7), y);
     }
