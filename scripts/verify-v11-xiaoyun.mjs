@@ -291,7 +291,7 @@ if (live) {
   });
 
   await test("纯问候直接答复，连续语音保留图表年份与月份", async () => {
-    const greeting = await turn([], { message: "你好，小云。", context: {} });
+    const greeting = await turn([], { message: "你好。小云。", context: {} });
     assert.deepEqual(greeting, { route: "general", summary: "我在。" });
     const { navigation, followUp } = await turn([], { message: "你好小云，帮我看二零二四年发电量", context: {} });
     assert.equal(resolveSiteNavigation(navigation).href, "/visualization/generation?year=2024#generation-history");

@@ -90,7 +90,7 @@ const views: Partial<Record<SiteViewId, (context: ViewContext) => FollowUp>> = {
     return section === "province-ranking" || section === "province-comparison"
       ? offer(`要不要我解读${when ?? "这个月"}各省发电量的排名差异？`, `解读${when ?? "当月"}各省发电排名`, "看全国月度发电走势", "看当月电源构成")
       : offer(`要不要我详细解读${filters?.year ? `${filters.year}年` : when ? `${when.slice(0, 4)}年` : "近几年"}全国发电量的走势和季节规律？`,
-        `解读${filters?.year ? `${filters.year}年` : when ? `${when.slice(0, 4)}年` : "近几年"}全国发电量走势`, `看${when ?? "最新月份"}各省发电排行`, "预测未来6个月全国发电量");
+        `解读${filters?.year ? `${filters.year}年` : when ? `${when.slice(0, 4)}年` : "近几年"}全国发电量走势`, rankingMonth, "预测未来6个月全国发电量");
   },
   fuels: () => offer("要不要我解读一下煤、油、气产量这几年的变化？", "解读煤油气产量变化", "看年度增速", "看全国月度产量历史"),
   weather: () => offer("要不要我讲讲风向玫瑰和风速分布该怎么看？", "解读风向玫瑰和风速分布", "看纬度对照", "打开区域3D回放"),
