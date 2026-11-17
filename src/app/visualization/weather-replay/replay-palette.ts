@@ -4,8 +4,8 @@ export const rainScale = [
 ] as const;
 
 export const accumulationScale = [
-  [0, [247, 224, 175]], [.10, [246, 193, 128]], [.28, [237, 151, 78]],
-  [.48, [218, 83, 48]], [.66, [184, 44, 33]], [.83, [144, 22, 26]], [1, [97, 13, 20]],
+  [0, [48, 116, 167]], [.10, [46, 165, 204]], [.28, [69, 212, 189]],
+  [.48, [181, 224, 133]], [.66, [255, 216, 118]], [.83, [251, 153, 99]], [1, [244, 102, 135]],
 ] as const;
 
 type Scale = readonly (readonly [number, readonly [number, number, number]])[];
@@ -25,7 +25,7 @@ export function rainColor(rate: number, limit: number) {
 }
 
 type Grid = readonly (number | null)[];
-export type ReplayTextureLayer = "rain" | "infrared" | "cloudCover";
+export type ReplayTextureLayer = "rain" | "accumulation" | "infrared" | "cloudCover";
 const images = new WeakMap<Grid, { image: HTMLCanvasElement; layer: ReplayTextureLayer; limit: number }>();
 
 export function replayTexture(values: Grid, cols: number, rows: number, layer: ReplayTextureLayer, limit = 75) {
@@ -40,9 +40,9 @@ export function replayTexture(values: Grid, cols: number, rows: number, layer: R
   values.forEach((value, index) => {
     if (value == null) return;
     const offset = 4 * index;
-    if (layer === "rain") {
-      if (value < .2) return;
-      pixels.data.set(rainColor(value, limit), offset);
+    if (layer === "rain" || layer === "accumulation") {
+      if (value < (layer === "rain" ? .2 : .05)) return;
+      pixels.data.set(layer === "rain" ? rainColor(value, limit) : scaleColor(accumulationScale, value / limit), offset);
       pixels.data[offset + 3] = 255;
       return;
     }
@@ -56,24 +56,4 @@ export function replayTexture(values: Grid, cols: number, rows: number, layer: R
   painter.putImageData(pixels, 0, 0);
   images.set(values, { image, layer, limit });
   return image;
-}
-
-export function smoothAccumulation(values: Grid, cols: number, rows: number) {
-  return values.map((value, index) => {
-    if (value == null || value === 0) return value;
-    const x = index % cols;
-    const y = Math.floor(index / cols);
-    let sum = value * 4;
-    let weight = 4;
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        if ((!dx && !dy) || x + dx < 0 || x + dx >= cols || y + dy < 0 || y + dy >= rows) continue;
-        const neighbor = values[index + dy * cols + dx];
-        if (neighbor == null) continue;
-        sum += neighbor;
-        weight++;
-      }
-    }
-    return sum / weight;
-  });
 }

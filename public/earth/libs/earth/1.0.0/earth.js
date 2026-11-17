@@ -1101,6 +1101,18 @@
 
         // Add event handlers for showing, updating, and removing location details.
         inputController.on("click", showLocationDetails);
+        if (workspace) {
+            inputController.on("click", function(point, coord) {
+                var field = fieldAgent.value();
+                if (field && field.isInsideBoundary(point[0], point[1]) && coord &&
+                    _.isFinite(coord[0]) && _.isFinite(coord[1])) {
+                    window.parent.postMessage({type: "ogw-weather-location", coordinates: coord}, window.location.origin);
+                }
+            });
+            d3.select("#location-close").on("click.ogw-weather", function() {
+                window.parent.postMessage({type: "ogw-weather-location", coordinates: null}, window.location.origin);
+            });
+        }
         fieldAgent.on("update", updateLocationDetails);
         d3.select("#location-close").on("click", _.partial(clearLocationDetails, true));
 

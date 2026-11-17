@@ -22,6 +22,7 @@ export type WorkspaceContext = {
   weather?: string;
   replay?: Exclude<WeatherScene, "globe">;
   replayFrame?: number;
+  replayPoint?: string;
   replayRegion?: ReplayRegionId;
   powerView?: "generation" | "facilities" | "capacity";
   powerPeriod?: "monthly";
@@ -89,6 +90,7 @@ export function readWorkspaceContext(search: URLSearchParams): WorkspaceContext 
     weather: weather && /^[A-Za-z0-9_,./:@=+%-]{1,180}$/.test(weather) ? weather : undefined,
     replay: replay && Object.hasOwn(replayViews, replay) ? replay as keyof typeof replayViews : undefined,
     replayFrame: replayFrame && /^\d{1,4}$/.test(replayFrame) ? Number(replayFrame) : undefined,
+    replayPoint: readGridPoint(search.get("replayPoint"))?.join(","),
     replayRegion: readReplayRegion(search.get("replayRegion")),
     powerView: powerView === "generation" || powerView === "capacity" || powerView === "facilities" ? powerView : undefined,
     powerPeriod: search.get("powerPeriod") === "monthly" ? "monthly" : undefined,

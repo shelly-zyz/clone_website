@@ -3769,9 +3769,6 @@
     transform: translateY(calc(112px - var(--og-assistant-bottom) - var(--og-mobile-dock) - var(--og-stage-footer)));
     transition: transform var(--og-stage-transition);
   }
-  .og-globe-workspace:has(.og-weather-replay-stage) .og-globe-stage {
-    bottom: calc(var(--og-globe-nav-space) + var(--og-mobile-dock) + min(100px, 13svh));
-  }
 }
 
 @media (max-height: 520px) {
@@ -3850,6 +3847,7 @@
 }
 .is-earth-project .og-weather-sidebar-filters { border: 0; }
 .is-earth-project .og-weather-field-stage { inset: 0; border: 0; border-radius: 0; }
+.is-earth-project > .og-globe-stage:has(.og-weather-field-stage) { inset: 0; }
 .og-weather-globe-stage { position: absolute; inset: 0; }
 @media (min-width: 901px) {
   .is-earth-project > .og-globe-stage:has(.og-weather-field-stage, .og-weather-globe-stage:not([hidden])) {
@@ -3883,6 +3881,9 @@
     position: relative;
     flex: 0 0 clamp(290px, 49svh, 490px);
   }
+  .is-earth-project:has(.og-weather-field-stage) .og-info-button {
+    inset: var(--og-workspace-top) var(--og-gutter) auto auto;
+  }
   .is-earth-project:has(.og-weather-field-stage) .og-assistant-mount {
     position: fixed;
     inset: 0;
@@ -3901,8 +3902,6 @@
     right: var(--og-stage-right);
     bottom: calc(var(--og-globe-nav-space) + var(--og-stage-footer) + var(--og-mobile-dock));
   }
-  /* Regional replay scenes run edge to edge, under the floating cards and topic bar. */
-  .is-earth-project > .og-globe-stage:has(.og-weather-field-stage) { inset: 0; }
 }
 
 /* Immersive replay keeps only the scene, its header and the timeline. */
@@ -3926,4 +3925,26 @@
   .og-weather-globe-stage .og-earth-project,
   .og-workspace-map-layer,
   .og-retained-economy .og-globe-stage { animation: none; }
+}
+
+.og-weather-replay-entry {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  bottom: calc(var(--og-globe-nav-space, 70px) + 24px);
+  transform: translateX(-50%);
+  display: grid;
+  gap: 3px;
+  padding: 9px 14px;
+  border-radius: 9px;
+  background: #142733ed;
+  color: #e1f2f6;
+  text-align: left;
+  font-size: 12px;
+}
+.og-weather-replay-entry strong { display: flex; align-items: center; gap: 6px; color: #a9f1f4; }
+.og-weather-replay-entry:hover { background: #225060; }
+
+@media (max-width: 900px) {
+  .og-weather-replay-entry { bottom: auto; top: clamp(252px, 44svh, 440px); }
 }

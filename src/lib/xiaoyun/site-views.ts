@@ -4,6 +4,7 @@ import { globeTopicOrder, workspaceHref } from "@/lib/globe-topics";
 import { analysisHref, analysisTopicOrder, analysisTopics } from "@/lib/topic-analysis/catalog";
 import { fuelSeries, generationSeries } from "@/lib/topic-analysis/history";
 import { replayRegions } from "@/lib/weather-replay/regions";
+import { replayViewOrder, replayViews } from "@/lib/weather-replay/views";
 
 const pageIds = ["home", "analysis", "weather-replay", "data-review"] as const;
 const globeIds = globeTopicOrder.map(topic => `globe-${topic}` as const);
@@ -85,7 +86,7 @@ const pages = {
   "globe-power": { title: "电源地球", href: workspaceHref("power"), aliases: ["工作台", "电力地球", "电源地球", "地图工作台"],
     filters: { powerView: "facilities / generation / capacity", region: "省级 ISO 代码（省级发电/装机统计）", projection: "map（省级统计使用三维中国地图）" } },
   "globe-weather": { title: "气象地球", href: workspaceHref("weather"), aliases: ["气象地球", "气象地图"],
-    filters: { replay: "weather（云雨叠加） / time（降水时空层） / rain（三维雨幕） / accumulation（累计降雨）" } },
+    filters: { replay: replayViewOrder.map(view => `${view}（${replayViews[view].title}）`).join(" / ") } },
   "globe-carbon": { title: "碳排放地球", href: workspaceHref("carbon"), aliases: ["碳排放地球", "碳地球", "碳排放地图"],
     filters: { projection: "globe / map", date: "YYYY-MM-DD，观察日" } },
   "globe-economy": { title: "经济地球", href: workspaceHref("economy"), aliases: ["经济地球", "经济地图", "经济体档案"],

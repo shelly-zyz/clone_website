@@ -2,36 +2,78 @@
   {
     "value": "china",
     "label": "中国东南沿海 · 台风格美",
-    "archive": "gfs-china"
+    "archive": "gfs-china",
+    "bounds": {
+      "west": 111,
+      "east": 128,
+      "south": 18,
+      "north": 33
+    }
   },
   {
     "value": "north-america",
     "label": "北美 · 美国中东部",
-    "archive": "gfs-north-america"
+    "archive": "gfs-north-america",
+    "bounds": {
+      "west": -104,
+      "east": -78,
+      "south": 28,
+      "north": 47
+    }
   },
   {
     "value": "south-america",
     "label": "南美 · 亚马孙流域",
-    "archive": "gfs-south-america"
+    "archive": "gfs-south-america",
+    "bounds": {
+      "west": -76,
+      "east": -47,
+      "south": -17,
+      "north": 5
+    }
   },
   {
     "value": "europe",
     "label": "欧洲 · 西欧",
-    "archive": "gfs-europe"
+    "archive": "gfs-europe",
+    "bounds": {
+      "west": -13,
+      "east": 16,
+      "south": 41,
+      "north": 59
+    }
   },
   {
     "value": "asia",
     "label": "亚洲 · 孟加拉湾",
-    "archive": "gfs-asia"
+    "archive": "gfs-asia",
+    "bounds": {
+      "west": 79,
+      "east": 101,
+      "south": 8,
+      "north": 28
+    }
   },
   {
     "value": "africa",
     "label": "非洲 · 刚果盆地",
-    "archive": "gfs-africa"
+    "archive": "gfs-africa",
+    "bounds": {
+      "west": 10,
+      "east": 36,
+      "south": -14,
+      "north": 9
+    }
   },
   {
     "value": "oceania",
     "label": "大洋洲 · 澳大利亚东岸",
-    "archive": "gfs-oceania"
+    "archive": "gfs-oceania",
+    "bounds": {
+      "west": 140,
+      "east": 157,
+      "south": -38,
+      "north": -19
+    }
   }
 ]

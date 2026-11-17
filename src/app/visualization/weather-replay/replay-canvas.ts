@@ -1,7 +1,7 @@
 import type { WeatherReplay } from "@/lib/weather-replay/model";
 import type { ReplayArea } from "./replay-geography";
-import { satelliteAt, stackFrameIndices } from "./replay-data";
-import { accumulationScale, rainColor, replayTexture, scaleColor, smoothAccumulation, type ReplayTextureLayer } from "./replay-palette";
+import { cellPosition, contourSegments, satelliteAt, stackFrameIndices, utcClock, type Hotspot } from "./replay-data";
+import { replayTexture, type ReplayTextureLayer } from "./replay-palette";
 import type { ReplayView } from "@/lib/weather-replay/views";
 
 type Point = [number, number];
@@ -12,9 +12,16 @@ const cloudBase = .36;
 const cloudDepth = .2;
 const rainCeiling = .33;
 const rainTail = 0.03;
-const rainStroke = "rgba(64, 92, 128, .62)";
-const timeStep = .165;
-const voxelHeight = .055;
+const rainStroke = "rgba(139, 201, 245, .63)";
+
+function timeStack(replay: WeatherReplay, index: number) {
+  const frames = stackFrameIndices(replay, index);
+  const last = frames[frames.length - 1];
+  const start = Date.parse(replay.rain[frames[0]].time);
+  const duration = Date.parse(replay.rain[last].time) - start;
+  const heightAt = (frame: number) => .09 + .81 * (duration ? (Date.parse(replay.rain[frame].time) - start) / duration : 0);
+  return { frames, last, heightAt };
+}
 
 function coordinateTicks(start: number, end: number, target: number) {
   const spacing = (end - start) / target;
@@ -34,8 +41,6 @@ function rainRandom(seed: number, salt: number) {
   const bits = Math.imul(seed ^ salt, 0x9e3779b9);
   return (Math.imul(bits ^ (bits >>> 16), 0x85ebca6b) >>> 0) / 4294967296;
 }
-
-export const utcClock = (iso: string) => iso.slice(11, 16);
 
 type Grid = readonly (number | null)[];
 type CloudField = { density: Float32Array; key: string };
@@ -78,18 +83,14 @@ function cloudDensity(values: Grid, cols: number, rows: number, cover: boolean) 
   return field;
 }
 
-/** Blend the two satellite frames around the rain time so clouds evolve between sparse IR scans. */
+/** Use the same cloud source frame as the transect readout. */
 function cloudField(replay: WeatherReplay, time: string): CloudField | undefined {
   const frame = satelliteAt(replay, time);
   if (!frame) return;
-  const cover = replay.metadata?.cloudVariable === "cover";
-  const from = cloudDensity(frame.values, replay.cols, replay.rows, cover);
-  const next = replay.satellite[replay.satellite.indexOf(frame) + 1];
-  const span = next ? Date.parse(next.time) - Date.parse(frame.time) : 0;
-  const t = span > 0 ? clamp01((Date.parse(time) - Date.parse(frame.time)) / span) : 0;
-  if (!next || t <= 0) return { density: from, key: frame.time };
-  const to = cloudDensity(next.values, replay.cols, replay.rows, cover);
-  return { density: from.map((value, i) => value + (to[i] - value) * t), key: frame.time + ">" + t.toFixed(3) };
+  return {
+    density: cloudDensity(frame.values, replay.cols, replay.rows, replay.metadata?.cloudVariable === "cover"),
+    key: frame.time,
+  };
 }
 
 function densityRaster(density: Float32Array, cols: number, rows: number, color: readonly [number, number, number], opacity: number) {
@@ -114,7 +115,7 @@ const puffLobes = [
   [[62, 64, 42], [36, 66, 26], [90, 62, 28], [70, 44, 30], [52, 84, 24]],
   [[66, 62, 40], [44, 54, 30], [86, 78, 28], [40, 82, 22], [84, 46, 24]],
 ] as const;
-let sprites: { lit: HTMLCanvasElement[]; shade: HTMLCanvasElement[]; curtain: HTMLCanvasElement } | undefined;
+let sprites: { lit: HTMLCanvasElement[]; shade: HTMLCanvasElement[] } | undefined;
 
 function puffSprite(lobes: (typeof puffLobes)[number], light: boolean) {
   const image = document.createElement("canvas");
@@ -137,29 +138,9 @@ function puffSprite(lobes: (typeof puffLobes)[number], light: boolean) {
 
 function cloudSprites() {
   if (sprites) return sprites;
-  const curtain = document.createElement("canvas");
-  curtain.width = 32;
-  curtain.height = 128;
-  const painter = curtain.getContext("2d");
-  if (painter) {
-    const fall = painter.createLinearGradient(0, 0, 0, 128);
-    fall.addColorStop(0, "rgba(118, 136, 162, 0)");
-    fall.addColorStop(.22, "rgba(118, 136, 162, .55)");
-    fall.addColorStop(1, "rgba(96, 118, 150, .9)");
-    painter.fillStyle = fall;
-    painter.fillRect(0, 0, 32, 128);
-    const edge = painter.createLinearGradient(0, 0, 32, 0);
-    edge.addColorStop(0, "rgba(0, 0, 0, 0)");
-    edge.addColorStop(.5, "#000");
-    edge.addColorStop(1, "rgba(0, 0, 0, 0)");
-    painter.globalCompositeOperation = "destination-in";
-    painter.fillStyle = edge;
-    painter.fillRect(0, 0, 32, 128);
-  }
   sprites = {
     lit: puffLobes.map(lobes => puffSprite(lobes, true)),
     shade: puffLobes.map(lobes => puffSprite(lobes, false)),
-    curtain,
   };
   return sprites;
 }
@@ -217,10 +198,10 @@ function replayCamera(width: number, height: number, area: ReplayArea, view: Rep
   const xs = map.map(point => point[0]);
   const ys = map.map(point => point[1] * tilt);
   const left = Math.min(...xs), right = Math.max(...xs);
-  const bottom = Math.max(...ys), top = Math.min(...ys) - (area.hasData ? view === "time" ? .43 : .33 : 0);
-  const scale = Math.min(width * (width > 960 ? .6 : .87) / (right - left), height * .72 / (bottom - top)) * zoom;
+  const bottom = Math.max(...ys), top = Math.min(...ys) - (area.hasData ? view === "time" ? .48 : view === "weather" ? .28 : 0 : 0);
+  const scale = Math.min(width * (width > 960 ? .55 : .83) / (right - left), height * (width < 600 ? .77 : view === "time" ? .62 : view === "weather" ? .68 : .54) / (bottom - top)) * zoom;
   const centerX = (left + right) / 2, centerY = (top + bottom) / 2;
-  const offsetX = width * .5 + pan[0], offsetY = height * .47 + pan[1];
+  const offsetX = width * .5 + pan[0], offsetY = height * (view === "time" ? .43 : .46) + pan[1];
   const project = ([lon, lat, z = 0]: World): Point => {
     const [x, depth] = toView([lon, lat]);
     return [offsetX + (x - centerX) * scale, offsetY + (depth * tilt - z * .48 - centerY) * scale];
@@ -230,21 +211,26 @@ function replayCamera(width: number, height: number, area: ReplayArea, view: Rep
     const depth = ((y - offsetY) / scale + centerY) / tilt;
     return [(vx * cos + depth * sin) / aspect + .5, vx * sin - depth * cos + .5];
   };
-  const frontX = sin >= 0 ? [1, 2] as const : [3, 0] as const;
-  const frontY = cos >= 0 ? [0, 1] as const : [2, 3] as const;
   const depth = ([lon, lat, z = 0]: World) => toView([lon, lat])[1] + z * tilt / .48;
-  return { project, unproject, mapCorners, normalizeLat, normalizeLon, frontX, frontY, depth };
+  return { project, unproject, mapCorners, normalizeLat, normalizeLon, depth };
 }
 
 export function paintReplay(
   canvas: HTMLCanvasElement,
   replay: WeatherReplay,
-  { index, view, rotation, clouds, precipitation, previous, progress, phase = 0, totals, accumulationLimit = 1, rainLimit = 75, selectedCell, area, zoom = 1, tilt = 0.48, pan }: {
+  { index, view, rotation, clouds, precipitation, cloudOpacity = .68, sectionRow, peakCell, spots = [], trail = [], hotspotThreshold = 2.5, levels = [], previous, progress, phase = 0, totals, accumulationLimit = 1, rainLimit = 75, selectedCell, area, zoom = 1, tilt = 0.48, pan }: {
     index: number;
     view: ReplayView;
     rotation: number;
     clouds: boolean;
     precipitation: boolean;
+    cloudOpacity?: number;
+    sectionRow?: number;
+    peakCell?: number;
+    spots?: readonly Hotspot[];
+    trail?: readonly Hotspot[];
+    hotspotThreshold?: number;
+    levels?: readonly number[];
     previous: number;
     progress: number;
     phase?: number;
@@ -276,9 +262,10 @@ export function paintReplay(
   output.clearRect(0, 0, width, height);
 
   const camera = replayCamera(width, height, area, view, rotation, zoom, tilt, pan);
-  const { project, mapCorners, normalizeLat, normalizeLon, frontX, frontY, depth } = camera;
+  const { project, mapCorners, normalizeLat, normalizeLon, depth } = camera;
   const { mapBounds } = area;
   const stack = view === "time";
+  const time = stack ? timeStack(replay, index) : undefined;
   const rain = view === "rain";
   const accumulation = view === "accumulation";
   const path = (polygon: Point[]) => {
@@ -287,13 +274,6 @@ export function paintReplay(
     polygon.slice(1).forEach(point => ctx.lineTo(...point));
     ctx.closePath();
   };
-  const fill = (polygon: Point[], color: string) => {
-    path(polygon);
-    ctx.fillStyle = color;
-    ctx.fill();
-  };
-  const shade = (color: readonly number[], brightness = 1) =>
-    "rgb(" + color.map(channel => Math.min(255, Math.round(channel * brightness))).join(",") + ")";
   const plane = (z: number) => ([[0, 0, z], [1, 0, z], [1, 1, z], [0, 1, z]] satisfies World[]).map(project);
   const drawRaster = (raster: HTMLCanvasElement, z: number, alpha: number, [dx, dy]: Point = [0, 0], blur = 0) => {
     const [x, y] = project([dx, dy, z]);
@@ -311,7 +291,7 @@ export function paintReplay(
     ctx.restore();
   };
   const drawTexture = (values: readonly (number | null)[], z: number, alpha: number, layer: ReplayTextureLayer = "rain") =>
-    drawRaster(replayTexture(values, replay.cols, replay.rows, layer, rainLimit), z, alpha);
+    drawRaster(replayTexture(values, replay.cols, replay.rows, layer, accumulation && layer === "accumulation" ? accumulationLimit : rainLimit), z, alpha);
   // Data and geographic outlines share this transform; never mask data with land.
   const geoPoint = (lon: number, lat: number, z = 0): Point => project([
     normalizeLon(lon), normalizeLat(lat), z,
@@ -350,7 +330,6 @@ export function paintReplay(
   const gridX = 1 / (replay.cols - 1);
   const gridY = 1 / (replay.rows - 1);
   const map = mapCorners.map(project);
-  const lowerMap = mapCorners.map(([lon, lat]) => project([lon, lat, -.034]));
   const cellSize = (z: number) => {
     const [x, y] = project([.5, .5, z]);
     const [ax, ay] = project([.5 + gridX, .5, z]);
@@ -358,12 +337,13 @@ export function paintReplay(
     return (Math.hypot(ax - x, ay - y) + Math.hypot(bx - x, by - y)) / 2;
   };
   const current = replay.rain[index];
-  const raining = area.hasData && (rain || (view === "weather" && precipitation));
-  const field = area.hasData && (rain || (view === "weather" && clouds)) ? cloudField(replay, current.time) : undefined;
+  const raining = area.hasData && view === "weather" && precipitation;
+  const field = area.hasData && view === "weather" && clouds ? cloudField(replay, current.time) : undefined;
+  const cut = sectionRow === undefined ? undefined : sectionRow * gridY;
   const cameraKey = [canvas.width, canvas.height, rotation, zoom, tilt, pan?.join(",") ?? "", view, area.id, replay.id].join("|");
-  const animated = area.hasData && (rain || view === "weather");
+  const animated = raining;
 
-  cachedLayer(canvas, "scene", animated ? [cameraKey, index, raining, field?.key ?? "", rainLimit].join("|") : undefined,
+  cachedLayer(canvas, "scene", animated ? [cameraKey, index, field?.key ?? "", rainLimit, cut].join("|") : undefined,
     ratio, output, target => {
       ctx = target;
       paintScene();
@@ -371,29 +351,17 @@ export function paintReplay(
     });
 
   function paintScene() {
-    // A soft sky glow and a cast shadow lift the map slab off the dark background.
     const [glowX, glowY] = project([.5, .5]);
-    const glow = ctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, Math.max(width, height) * .65);
-    glow.addColorStop(0, "rgba(52, 82, 114, .55)");
-    glow.addColorStop(.5, "rgba(24, 42, 64, .28)");
-    glow.addColorStop(1, "rgba(9, 20, 29, 0)");
+    const glow = ctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, Math.max(width, height) * .61);
+    glow.addColorStop(0, "#1b3344");
+    glow.addColorStop(.6, "#102431");
+    glow.addColorStop(1, "#09141d");
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, width, height);
-    ctx.save();
-    ctx.filter = "blur(20px)";
-    fill(lowerMap.map(([x, y]) => [x, y + 22] satisfies Point), "rgba(0, 4, 10, .55)");
-    ctx.restore();
-    fill([map[frontX[0]], map[frontX[1]], lowerMap[frontX[1]], lowerMap[frontX[0]]], "#a8a5a0");
-    fill([map[frontY[0]], map[frontY[1]], lowerMap[frontY[1]], lowerMap[frontY[0]]], "#c8c4bd");
-    fill(map, "#f5f3ef");
-    paintLand(area.mapPolygons, "#c9c6c0");
+    paintLand(area.mapPolygons, "#1b3541");
 
-    if (raining) drawTexture(current.values, .008, 1);
-    if (field) {
-      // Cloud shadows fall slightly away from the upper-left sun.
-      drawRaster(densityRaster(field.density, replay.cols, replay.rows, [26, 38, 56], rain ? .22 : .34),
-        .006, 1, [.018, .026], cellSize(0) * 1.6);
-    }
+    if (area.hasData && (view === "weather" || rain)) drawTexture(current.values, .008, rain ? .7 : .78);
+    if (accumulation && totals) drawTexture(totals, .005, .91, "accumulation");
 
     const { west: mapWest, south: mapSouth, east: mapEast, north: mapNorth } = mapBounds;
     const tickCount = width < 480 ? 3 : 5;
@@ -402,31 +370,23 @@ export function paintReplay(
     ctx.save();
     ctx.setLineDash([3, 5]);
     ctx.lineWidth = 0.8;
-    ctx.strokeStyle = "rgba(92, 88, 80, .27)";
+    ctx.strokeStyle = "rgba(165, 213, 226, .24)";
     ctx.beginPath();
     for (const lon of longitudes) mapLine(lon, mapSouth, lon, mapNorth);
     for (const lat of latitudes) mapLine(mapWest, lat, mapEast, lat);
     ctx.stroke();
     ctx.restore();
-    paintBoundaries(area.mapPolygons, "#635e57", 1.15);
-    paintBoundaries(area.focusPolygons, "#3a3732", 1.65);
-    path(map);
-    ctx.strokeStyle = "#777168";
-    ctx.lineWidth = 1.05;
-    ctx.stroke();
+    paintBoundaries(area.mapPolygons, "rgba(180, 216, 225, .53)", 1.05);
+    paintBoundaries(area.focusPolygons, "#b2d3e0", 1.35);
 
     // Anchor both scale axes to the nearest corner so labels stay outside the map.
     const corner = map.reduce((nearest, point, i) => point[1] > map[nearest][1] ? i : nearest, 0);
     const edgeLon = corner === 0 || corner === 3 ? mapWest : mapEast;
     const edgeLat = corner < 2 ? mapSouth : mapNorth;
-    ctx.strokeStyle = "#3b3833";
-    ctx.lineWidth = 1.15;
-    ctx.beginPath();
-    mapLine(mapWest, edgeLat, mapEast, edgeLat);
-    mapLine(edgeLon, mapSouth, edgeLon, mapNorth);
-    ctx.stroke();
+    ctx.strokeStyle = "#7897a9";
+    ctx.lineWidth = 1;
     ctx.font = (width < 480 ? 10 : 11) + "px system-ui, sans-serif";
-    ctx.fillStyle = "#fff";
+    ctx.fillStyle = "#b5cbd9";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     const tick = (point: Point, outward: Point, label: string) => {
@@ -450,176 +410,153 @@ export function paintReplay(
     }
     ctx.font = "12px system-ui, sans-serif";
 
-    if (stack && area.hasData) {
-      const frames = stackFrameIndices(replay, index);
-      const axis = mapCorners.reduce((right, point) => project(point)[0] > project(right)[0] ? point : right);
-      const ceiling = frames.length * timeStep + voxelHeight + .077;
-      const lift = ([lon, lat]: World, z: number) => project([lon, lat, z]);
-      const axisFloor = project(axis);
-      const axisTop = lift(axis, ceiling);
-      const backIndex = mapCorners.reduce((back, point, i) =>
-        depth(point) < depth(mapCorners[back]) ? i : back, 0);
-      const rear = mapCorners[backIndex];
-      const walls = [mapCorners[(backIndex + 1) % 4], mapCorners[(backIndex + 3) % 4]];
-      for (const [i, end] of walls.entries()) {
-        fill([project(rear), project(end), lift(end, ceiling), lift(rear, ceiling)],
-          i === 0 ? "#efede9" : "#f4f2ef");
-      }
-
-      ctx.save();
-      ctx.setLineDash([4, 5]);
-      ctx.lineWidth = .8;
-      ctx.strokeStyle = "#b7b2a9";
-      ctx.beginPath();
-      for (let layer = 0; layer < frames.length; layer++) {
-        const z = (layer + 1) * timeStep + voxelHeight;
-        ctx.moveTo(...lift(walls[0], z));
-        ctx.lineTo(...lift(rear, z));
-        ctx.lineTo(...lift(walls[1], z));
-      }
-      for (const end of walls) {
-        const columns: World[] = end[1] === rear[1]
-          ? longitudes.map(lon => [normalizeLon(lon), rear[1]])
-          : latitudes.map(lat => [rear[0], normalizeLat(lat)]);
-        for (const point of columns) {
-          ctx.moveTo(...project(point));
-          ctx.lineTo(...lift(point, ceiling));
-        }
-      }
-      ctx.stroke();
-      ctx.restore();
-
-      const voxels: { lon: number; lat: number; z: number; rate: number; depth: number }[] = [];
-      for (const [layer, frame] of frames.entries()) {
-        const z = (layer + 1) * timeStep;
-        for (const [cell, value] of replay.rain[frame].values.entries()) {
-          if (value == null || value < .2) continue;
-          const lon = (cell % replay.cols) * gridX;
-          const lat = Math.floor(cell / replay.cols) * gridY;
-          voxels.push({ lon, lat, z, rate: value, depth: depth([lon, lat, z]) });
-        }
-      }
-      // Paint back to front so the time slabs occlude each other naturally when rotated.
-      voxels.sort((a, b) => a.depth - b.depth);
-      for (const { lon, lat, z, rate } of voxels) {
-        const west = Math.max(0, lon - .48 * gridX);
-        const east = Math.min(1, lon + .48 * gridX);
-        const south = Math.max(0, lat - .48 * gridY);
-        const north = Math.min(1, lat + .48 * gridY);
-        const corners: Point[] = [[west, south], [east, south], [east, north], [west, north]];
-        const bottom = corners.map(([x, y]) => project([x, y, z]));
-        const top = corners.map(([x, y]) => project([x, y, z + voxelHeight]));
-        const color = rainColor(rate, rainLimit);
-        fill([top[frontX[0]], top[frontX[1]], bottom[frontX[1]], bottom[frontX[0]]], shade(color, .69));
-        fill([top[frontY[0]], top[frontY[1]], bottom[frontY[1]], bottom[frontY[0]]], shade(color, .83));
-        fill(top, shade(color));
-      }
-
-      ctx.beginPath();
-      ctx.moveTo(...axisFloor);
-      ctx.lineTo(...axisTop);
-      ctx.strokeStyle = "#574f45";
-      ctx.lineWidth = 1;
-      ctx.stroke();
+    if (time && area.hasData) {
+      const { frames, last, heightAt } = time;
+      const axis: World = [1, 0];
+      const caption = project([axis[0], axis[1], .98]);
+      strokeLine([project(axis), caption], "#a5beca", 1);
       ctx.textAlign = "left";
       ctx.font = "600 11px system-ui, sans-serif";
-      ctx.fillStyle = "#fff";
-      ctx.fillText("UTC", Math.min(width - 36, axisTop[0] + 6), axisTop[1] - 9);
-      for (const [layer, frame] of frames.entries()) {
-        const [x, y] = project([axis[0], axis[1], (layer + 1) * timeStep + voxelHeight]);
+      ctx.fillStyle = "#cfe4ef";
+      ctx.fillText("时间 UTC", Math.min(width - 53, caption[0] + 7), caption[1] - 9);
+      for (const frame of frames) {
+        const z = heightAt(frame);
         const active = frame === index;
-        ctx.strokeStyle = active ? "#9f2d22" : "#777168";
-        ctx.beginPath();
-        ctx.moveTo(x - 3, y);
-        ctx.lineTo(x + 4, y);
+        path(plane(z));
+        ctx.fillStyle = active ? "rgba(28, 77, 91, .54)" : "rgba(17, 46, 66, .3)";
+        ctx.fill();
+        ctx.lineWidth = active ? 1.35 : .75;
+        ctx.strokeStyle = active ? "#80e3ea" : "rgba(134, 190, 216, .44)";
         ctx.stroke();
-        ctx.fillStyle = active ? "#fff" : "#e2ebf0";
-        ctx.font = (active ? "650 " : "") + "11px system-ui, sans-serif";
-        ctx.fillText(utcClock(replay.rain[frame].time), Math.min(width - 36, x + 7), y);
+        drawTexture(replay.rain[frame].values, z, active ? .97 : .33);
+        paintBoundaries(area.mapPolygons, active ? "rgba(227, 249, 255, .76)" : "rgba(187, 217, 232, .38)", .9, z);
+        const [x, y] = project([axis[0], axis[1], z]);
+        strokeLine([[x - 3, y], [x + 5, y]], active ? "#8ce9f2" : "#a5beca", 1);
+        ctx.fillStyle = active ? "#a2f2ff" : "#c5d4de";
+        const stamp = replay.rain[frame].time;
+        const label = replay.rain[frames[0]].time.slice(0, 10) !== replay.rain[last].time.slice(0, 10)
+          ? stamp.slice(5, 10) + " " + utcClock(stamp) : utcClock(stamp);
+        const activeY = project([axis[0], axis[1], heightAt(index)])[1];
+        if (active || Math.abs(y - activeY) >= 13) {
+          ctx.fillText(label, Math.min(width - (label.length > 5 ? 68 : 35), x + 7), y);
+        }
+      }
+      paintTrail(trail.filter(spot => spot.frame >= frames[0] && spot.frame <= last), heightAt);
+    }
+
+    if (rain && area.hasData) {
+      paintContours(current.values, [...new Set([hotspotThreshold, 10, 25])].sort((a, b) => a - b), "mm/h");
+      paintTrail(trail, () => 0);
+      for (const spot of spots) {
+        const [x, y] = project(spot.center);
+        const active = trail.some(item => item.id === spot.id);
+        ctx.beginPath();
+        ctx.arc(x, y, active ? 5 : 3, 0, Math.PI * 2);
+        ctx.fillStyle = active ? "#8cf5ff" : "#ffdf9f";
+        ctx.fill();
+        if (active) {
+          ctx.fillStyle = "#e5fbff";
+          ctx.textAlign = "left";
+          ctx.font = "600 11px system-ui, sans-serif";
+          ctx.fillText("热点 " + spot.id, x + 9, y - 8);
+        }
       }
     }
 
-    if (accumulation && area.hasData && totals) {
-      const surface = smoothAccumulation(totals, replay.cols, replay.rows);
-      const relief = [];
-      for (let row = 0; row < replay.rows - 1; row++) {
-        for (let col = 0; col < replay.cols - 1; col++) {
-          const corners = [[col, row], [col + 1, row], [col + 1, row + 1], [col, row + 1]];
-          const values = corners.map(([x, y]) => surface[y * replay.cols + x]);
-          if (values.some(value => value == null)) continue;
-          const mean = values.reduce<number>((sum, value) => sum + (value ?? 0), 0) / 4;
-          if (mean < .2) continue;
-          // Light the relief from the upper-left so ridges and basins read as a surface.
-          const [h0, h1, h2, h3] = values.map(value => (value ?? 0) / accumulationLimit);
-          const light = Math.max(.72, Math.min(1.16, 1 - ((h1 + h2 - h0 - h3) * .9 + (h2 + h3 - h0 - h1) * .6) * 6));
-          const points = corners.map(([x, y], corner) =>
-            project([x * gridX, y * gridY, .7 * Math.min(1, (values[corner] ?? 0) / accumulationLimit)]));
-          const depth = project([(col + .5) * gridX, (row + .5) * gridY])[1];
-          relief.push({ points, depth, mean, light });
+    if (accumulation && totals) {
+      paintContours(totals, levels, "mm");
+      if (peakCell !== undefined) {
+        const [x, y] = project(cellPosition(replay, peakCell));
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, Math.PI * 2);
+        ctx.fillStyle = "#fff8eb";
+        ctx.fill();
+        ctx.font = "600 11px system-ui, sans-serif";
+        ctx.textAlign = "left";
+        ctx.strokeStyle = "#0c1c2a";
+        ctx.lineWidth = 3;
+        const label = (totals[peakCell] ?? 0).toFixed(1) + " mm";
+        ctx.strokeText(label, x + 8, y - 6);
+        ctx.fillText(label, x + 8, y - 6);
+      }
+    }
+
+  }
+
+  function strokeLine(points: Point[], color: string, width: number) {
+    if (!points.length) return;
+    ctx.beginPath();
+    ctx.moveTo(...points[0]);
+    points.slice(1).forEach(point => ctx.lineTo(...point));
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.stroke();
+  }
+
+  function paintContours(values: readonly (number | null)[], thresholds: readonly number[], unit: string) {
+    for (const [index, level] of thresholds.entries()) {
+      const segments = contourSegments(values, replay.cols, replay.rows, level);
+      ctx.beginPath();
+      for (const [first, last] of segments) {
+        ctx.moveTo(...project(first));
+        ctx.lineTo(...project(last));
+      }
+      ctx.strokeStyle = index === 0 ? "#d5f8ff" : index === 1 ? "#fff4ce" : "#fff";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      // Label a segment near the outside of each contour to keep the interior legible.
+      const label = segments.findLast(([point]) => point[0] < .8 && point[1] > .18);
+      if (!label) continue;
+      const [x, y] = project(label[0]);
+      ctx.font = "600 10px system-ui, sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.strokeStyle = "#0b1824";
+      ctx.lineWidth = 3;
+      ctx.strokeText(level + " " + unit, x + 4, y - 5);
+      ctx.fillText(level + " " + unit, x + 4, y - 5);
+    }
+  }
+
+  function paintTrail(path: readonly Hotspot[], heightAt: (frame: number) => number) {
+    const points = path.map(spot => project([...spot.center, heightAt(spot.frame)]));
+    strokeLine(points, "#0a2631", 4);
+    strokeLine(points, "#7ff4ff", 1.8);
+    for (const [i, [x, y]] of points.entries()) {
+      ctx.beginPath();
+      ctx.arc(x, y, 2.9, 0, Math.PI * 2);
+      ctx.fillStyle = "#aaf7ff";
+      ctx.fill();
+      const previous = points[i - 1];
+      if (previous) {
+        const angle = Math.atan2(y - previous[1], x - previous[0]);
+        if (Math.hypot(x - previous[0], y - previous[1]) > 13) {
+          strokeLine([[x - 9 * Math.cos(angle - .45), y - 9 * Math.sin(angle - .45)],
+            [x, y], [x - 9 * Math.cos(angle + .45), y - 9 * Math.sin(angle + .45)]], "#7ff4ff", 1.8);
         }
       }
-      relief.sort((a, b) => a.depth - b.depth);
-      for (const { points, mean, light } of relief) {
-        const color = shade(scaleColor(accumulationScale, mean / accumulationLimit), light);
-        fill(points, color);
-        ctx.strokeStyle = color;
-        ctx.lineWidth = .5;
-        ctx.stroke();
+      if (rain && i < points.length - 1) {
+        ctx.font = "600 10px system-ui, sans-serif";
+        ctx.textAlign = "right";
+        ctx.fillText(utcClock(replay.rain[path[i].frame].time), x - 6, y - 6);
       }
     }
   }
 
   if (raining) {
     const previousValues = replay.rain[previous].values;
-    const ground = cellSize(0);
-    const rateAt = (cellIndex: number) => {
-      const value = current.values[cellIndex];
-      if (value == null) return 0;
-      const before = previousValues[cellIndex] ?? value;
-      return rain ? value : before + (value - before) * progress;
-    };
-    // Translucent rain shafts and splash rings under the heavier cells, sampled every other cell.
-    const { curtain } = cloudSprites();
-    const splashes: [Point, number][] = [];
-    for (let row = 0; row < replay.rows; row += 2) {
-      for (let col = 0; col < replay.cols; col += 2) {
-        const cellIndex = row * replay.cols + col;
-        const rate = rateAt(cellIndex);
-        if (rate < 3) continue;
-        const strength = Math.sqrt(Math.min(1, rate / rainLimit));
-        const [x, y] = project([col * gridX, row * gridY, 0]);
-        const [, top] = project([col * gridX, row * gridY, rainCeiling]);
-        const shaft = ground * (1.6 + 2 * strength);
-        ctx.globalAlpha = Math.min(.42, .07 + .4 * strength);
-        ctx.drawImage(curtain, x - shaft / 2, top, shaft, y - top);
-        if (rate >= 6) splashes.push([[x, y], (phase * 1.6 + rainRandom(cellIndex, 71)) % 1]);
-      }
-    }
-    ctx.globalAlpha = 1;
-    ctx.lineWidth = .8;
-    for (const [fresh, alpha] of [[true, "rgba(70, 100, 140, .45)"], [false, "rgba(70, 100, 140, .2)"]] as const) {
-      ctx.strokeStyle = alpha;
-      ctx.beginPath();
-      for (const [[x, y], age] of splashes) {
-        if (age < .5 !== fresh) continue;
-        const radius = ground * (.3 + 1.1 * age);
-        ctx.moveTo(x + radius, y);
-        ctx.ellipse(x, y, radius, radius * tilt, 0, 0, Math.PI * 2);
-      }
-      ctx.stroke();
-    }
     ctx.strokeStyle = rainStroke;
     ctx.lineWidth = 1.05;
     ctx.beginPath();
-    for (let row = 0; row < replay.rows; row++) {
+    for (let row = sectionRow ?? 0; row < replay.rows; row++) {
       for (let col = 0; col < replay.cols; col++) {
         const cellIndex = row * replay.cols + col;
         const value = current.values[cellIndex];
         if (value == null) continue;
         const before = previousValues[cellIndex] ?? value;
-        const rate = rain ? value : before + (value - before) * progress;
+        const rate = before + (value - before) * progress;
         if (rate < 0.4) continue;
-        const drops = Math.ceil(Math.sqrt(rate) * 1.62);
+        const drops = Math.ceil(Math.sqrt(rate) * 1.05);
         for (let drop = 0; drop < drops; drop++) {
           const seed = 1 + cellIndex * 23 + drop;
           const x = Math.max(0, Math.min(1, (col + (rainRandom(seed, 9) - 0.5) * 0.9) * gridX));
@@ -636,9 +573,9 @@ export function paintReplay(
 
   if (field) {
     const density = field.density;
-    cachedLayer(canvas, "clouds", [cameraKey, field.key].join("|"), ratio, output, target => {
+    cachedLayer(canvas, "clouds", [cameraKey, field.key, cloudOpacity, cut].join("|"), ratio, output, target => {
       ctx = target;
-      paintClouds(density, rain ? .62 : 1);
+      paintClouds(density, cloudOpacity);
       ctx = output;
     });
   }
@@ -647,10 +584,10 @@ export function paintReplay(
   function paintClouds(density: Float32Array, strength: number) {
     const { lit, shade: base } = cloudSprites();
     const cell = cellSize(cloudBase);
-    drawRaster(densityRaster(density, replay.cols, replay.rows, [228, 235, 244], .5 * strength),
-      cloudBase + .04, 1, [0, 0], cell * 1.2);
+    if (cut === undefined) drawRaster(densityRaster(density, replay.cols, replay.rows, [228, 235, 244], .4 * strength),
+      cloudBase + .04, 1, [0, 0], cell);
     const puffs: { x: number; y: number; radius: number; alpha: number; amount: number; variant: number; depth: number }[] = [];
-    for (let row = 0; row < replay.rows; row++) {
+    for (let row = sectionRow ?? 0; row < replay.rows; row++) {
       for (let col = 0; col < replay.cols; col++) {
         const cellIndex = row * replay.cols + col;
         const amount = density[cellIndex];
@@ -659,7 +596,7 @@ export function paintReplay(
         for (let puff = 0; puff < count; puff++) {
           const seed = 7 + cellIndex * 5 + puff;
           const lon = clamp01((col + (rainRandom(seed, 3) - .5) * 1.4) * gridX);
-          const lat = clamp01((row + (rainRandom(seed, 5) - .5) * 1.4) * gridY);
+          const lat = Math.max(cut ?? 0, clamp01((row + (rainRandom(seed, 5) - .5) * 1.4) * gridY));
           const z = cloudBase + amount * cloudDepth * (.25 + .75 * rainRandom(seed, 7));
           const [x, y] = project([lon, lat, z]);
           puffs.push({
@@ -682,8 +619,27 @@ export function paintReplay(
     ctx.globalAlpha = 1;
   }
 
+  if (area.hasData && cut !== undefined) {
+    const left = project([0, cut]), right = project([1, cut]);
+    const topLeft = project([0, cut, cloudBase + cloudDepth]);
+    const topRight = project([1, cut, cloudBase + cloudDepth]);
+    path([left, right, topRight, topLeft]);
+    ctx.fillStyle = "rgba(77, 191, 206, .09)";
+    ctx.fill();
+    ctx.setLineDash([4, 4]);
+    strokeLine([left, topLeft, topRight, right], "#75acb6", 1);
+    ctx.setLineDash([]);
+    strokeLine([left, right], "#8ceaff", 1.6);
+    ctx.fillStyle = "#b7f0fb";
+    ctx.textAlign = "center";
+    ctx.font = "600 11px system-ui, sans-serif";
+    ctx.fillText("A", left[0] - 9, left[1]);
+    ctx.fillText("B", right[0] + 9, right[1]);
+  }
+
   if (area.hasData && selectedCell !== undefined) {
-    const [x, y] = project([(selectedCell % replay.cols) * gridX, Math.floor(selectedCell / replay.cols) * gridY]);
+    const position = cellPosition(replay, selectedCell);
+    const [x, y] = project([...position, time?.heightAt(index) ?? 0]);
     ctx.beginPath();
     ctx.arc(x, y, 6, 0, Math.PI * 2);
     ctx.fillStyle = "#3f3229";
@@ -705,13 +661,20 @@ type ViewState = {
   index: number;
   clouds: boolean;
   precipitation: boolean;
+  cloudOpacity: number;
+  sectionRow?: number;
+  peakCell?: number;
+  spots: readonly Hotspot[];
+  trail: readonly Hotspot[];
+  hotspotThreshold: number;
+  levels: readonly number[];
   totals?: readonly (number | null)[];
   accumulationLimit: number;
   rainLimit: number;
   selectedCell?: number;
 };
 
-export function createReplayScene(canvas: HTMLCanvasElement, labels: HTMLDivElement, onContextLoss: () => void, onPick?: (cell: number) => void) {
+export function createReplayScene(canvas: HTMLCanvasElement, onContextLoss: () => void, onPick?: (cell: number, hotspot: number | undefined, view: ReplayView) => void) {
   if (!canvas.getContext("2d")) throw new Error("Weather canvas unavailable");
   let replay: WeatherReplay | undefined;
   let area: ReplayArea | undefined;
@@ -734,7 +697,7 @@ export function createReplayScene(canvas: HTMLCanvasElement, labels: HTMLDivElem
     requested = 0;
     if (!replay || !area || !state || document.hidden) return;
     const animateRain = area.hasData && !motion.matches
-      && (state.view === "rain" || (state.view === "weather" && state.precipitation));
+      && state.view === "weather" && state.precipitation;
     if (animateRain && lastDraw && now - lastDraw < 30) {
       redraw();
       return;
@@ -743,7 +706,7 @@ export function createReplayScene(canvas: HTMLCanvasElement, labels: HTMLDivElem
     lastDraw = animateRain ? now : 0;
     const progress = motion.matches ? 1 : Math.min(1, (now - started) / 240);
     paintReplay(canvas, replay, { ...state, area, rotation, zoom: zoomLevel, tilt, pan, previous, progress, phase });
-    if (animateRain || (state.view === "weather" && progress < 1)) redraw();
+    if (animateRain) redraw();
   }
   function redraw() {
     if (!requested && !document.hidden) requested = requestAnimationFrame(draw);
@@ -753,9 +716,10 @@ export function createReplayScene(canvas: HTMLCanvasElement, labels: HTMLDivElem
     redraw();
   }
   function reset() {
-    rotation = 0.42;
+    const topDown = state?.view === "rain" || state?.view === "accumulation";
+    rotation = topDown ? 0 : 0.42;
     zoomLevel = 1;
-    tilt = 0.48;
+    tilt = topDown ? 1 : 0.48;
     pan = [0, 0];
     redraw();
   }
@@ -777,7 +741,7 @@ export function createReplayScene(canvas: HTMLCanvasElement, labels: HTMLDivElem
       pinchDistance = distance;
       pan = [pan[0] + (event.clientX - before[0]) / 2, pan[1] + (event.clientY - before[1]) / 2];
       redraw();
-    } else if (!tap && (event.shiftKey || event.buttons === 2)) {
+    } else if (!tap && (state?.view === "rain" || state?.view === "accumulation" || event.shiftKey || event.buttons === 2)) {
       pan = [pan[0] + event.clientX - before[0], pan[1] + event.clientY - before[1]];
       redraw();
     } else if (!tap) {
@@ -790,9 +754,17 @@ export function createReplayScene(canvas: HTMLCanvasElement, labels: HTMLDivElem
     if (event.type === "pointerup" && tap?.id === event.pointerId && replay && area?.hasData && state) {
       const bounds = canvas.getBoundingClientRect();
       const camera = replayCamera(bounds.width, bounds.height, area, state.view, rotation, zoomLevel, tilt, pan);
-      const [col, row] = camera.unproject(event.clientX - bounds.left, event.clientY - bounds.top);
+      const x = event.clientX - bounds.left, y = event.clientY - bounds.top;
+      const altitude = state.view === "time" ? timeStack(replay, state.index).heightAt(state.index) : 0;
+      const shift = camera.project([0, 0, altitude])[1] - camera.project([0, 0])[1];
+      const [col, row] = camera.unproject(x, y - shift);
       if (col >= 0 && col <= 1 && row >= 0 && row <= 1) {
-        onPick?.(Math.round(row * (replay.rows - 1)) * replay.cols + Math.round(col * (replay.cols - 1)));
+        const cell = Math.round(row * (replay.rows - 1)) * replay.cols + Math.round(col * (replay.cols - 1));
+        const hotspot = state.view === "rain" ? state.spots.find(spot => {
+          const [cx, cy] = camera.project(spot.center);
+          return Math.hypot(cx - x, cy - y) <= 9;
+        }) ?? state.spots.find(spot => spot.cells.includes(cell)) : undefined;
+        onPick?.(cell, hotspot?.id, state.view);
       }
     }
     if (tap?.id === event.pointerId) tap = undefined;
@@ -814,15 +786,17 @@ export function createReplayScene(canvas: HTMLCanvasElement, labels: HTMLDivElem
   canvas.addEventListener("contextlost", onContextLoss);
   document.addEventListener("visibilitychange", onVisibility);
   motion.addEventListener("change", redraw);
-  labels.replaceChildren();
   return {
     update(archive: WeatherReplay, nextArea: ReplayArea, next: ViewState) {
-      previous = replay === archive ? state?.index ?? next.index : next.index;
-      if (next.index !== state?.index) started = performance.now();
-      if (area?.id !== nextArea.id) reset();
+      if (next.index !== state?.index || replay !== archive) {
+        previous = replay === archive ? state?.index ?? next.index : next.index;
+        started = performance.now();
+      }
+      const changedView = state?.view !== next.view || area?.id !== nextArea.id;
       replay = archive;
       area = nextArea;
       state = next;
+      if (changedView) reset();
       redraw();
     },
     rotate(angle: number) { rotation += angle; redraw(); },
@@ -841,7 +815,6 @@ export function createReplayScene(canvas: HTMLCanvasElement, labels: HTMLDivElem
       canvas.removeEventListener("contextlost", onContextLoss);
       document.removeEventListener("visibilitychange", onVisibility);
       motion.removeEventListener("change", redraw);
-      labels.replaceChildren();
     },
   };
 }

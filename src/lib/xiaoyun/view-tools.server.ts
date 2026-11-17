@@ -6,7 +6,8 @@ import { layerGroups, regionTargets, technologies } from "@/lib/mock-map-data";
 import countries from "@/lib/country-centers.generated.json" with { type: "json" };
 import wdi from "../../../public/data/economy/wdi.json" with { type: "json" };
 import gep from "../../../public/data/economy/gep.json" with { type: "json" };
-import { replayRegions } from "@/lib/weather-replay/regions";
+import { replayRegionOptions, replayRegions } from "@/lib/weather-replay/regions";
+import { replayViews } from "@/lib/weather-replay/views";
 import { carbonPeriods } from "@/lib/topic-analysis/climate";
 import { generationMonths } from "@/lib/topic-analysis/energy";
 import { readPublishedHistory, readRegionalGeneration } from "@/lib/topic-analysis/published.server";
@@ -14,6 +15,11 @@ import { readRenewableScenario } from "@/lib/topic-analysis/scenario.server";
 import { isMapView, pageLocation, patchViewFilters, type ActivePage, type PageChange, filterPatchSchema, type mapPatchSchema } from "./page-actions";
 import { XiaoyunContextError } from "./context.server";
 
+const weatherAreas = [
+  ...replayRegionOptions,
+  { value: "usa", label: replayRegions.usa.label },
+  { value: "bahamas", label: replayRegions.bahamas.label },
+];
 const match = (name: string, input: string) => chineseLabelMatches(name, input);
 const economics = new Set(wdi.countries.map(item => item.code));
 const forecast = new Set(Object.keys(gep.values).filter(key => gep.values[key as keyof typeof gep.values].some(value => value !== null)));
@@ -22,7 +28,7 @@ const layers = [...layerGroups.map(item => ({ ...item, field: "layers" })), ...t
 export function mapToolCatalog() {
   return {
     layers: layers.map(layer => ({ id: layer.key, label: layer.label })),
-    weatherReplay: Object.entries(replayRegions).map(([id, { label }]) => ({ id, label })),
+    weatherReplay: weatherAreas.map(({ value: id, label }) => ({ id, label })),
     place: "使用中文地名、ISO3 或站内区域代码。电源统计模式支持中国省份和全国，气象回放使用档案区域。",
   };
 }
@@ -49,7 +55,7 @@ export function readMapView(page: ActivePage | undefined) {
     ? `${mapType} · ${statistics ? "三维中国地图" : "三维地球"}${geography} · 已打开图层 ${visible.join("、") || "无"}`
     : page.view === "globe-carbon" ? `${projection}${geography}`
       : page.view === "globe-economy" ? `${place ?? "全球"} · ${query.get("scene") === "outlook" ? "增长展望" : "统计地图"}`
-        : [query.get("replay") ? "区域回放" : "地球视图", Object.entries(replayRegions).find(([id]) => id === query.get("replayRegion"))?.[1].label].filter(Boolean).join(" · ");
+        : [query.get("replay") ? "区域回放" : "地球视图", weatherAreas.find(({ value }) => value === query.get("replayRegion"))?.label].filter(Boolean).join(" · ");
   return { view: page.view, state: Object.fromEntries(query), summary: `${location.label} · ${detail}` };
 }
 
@@ -82,20 +88,25 @@ export function setMapView(page: ActivePage | undefined, patch: z.infer<typeof m
   }
   if (patch.powerView) changed.push({ facilities: "电源设施", generation: "省级发电量", capacity: "省级装机容量" }[patch.powerView]);
   if (patch.replay) {
-    query.delete("replayFrame");
     if (patch.replay === "globe") query.delete("replay");
     else query.set("replay", patch.replay);
-    changed.push({ globe: "气象地球", weather: "云雨叠加", time: "降水时空层", rain: "三维雨幕", accumulation: "累计降雨"}[patch.replay]);
+    changed.push(patch.replay === "globe" ? "气象地球" : replayViews[patch.replay].title);
   }
   if (patch.place) {
     const place = patch.place;
     if (view === "globe-weather") {
-      const region = Object.entries(replayRegions).find(([key, item]) =>
-        match(key, place) || match(item.label.split(" · ")[0], place));
-      if (!region || region[0] === "china" || !["weather", "time", "rain", "accumulation"].includes(query.get("replay") ?? "")) throw new XiaoyunContextError("气象定位支持区域回放中的档案地区，请先选对应回放。");
-      query.set("replayRegion", region[0]);
-      query.delete("replayFrame");
-      changed.push(region[1].label);
+      const region = weatherAreas.find(({ value, label }) => match(value, place) ||
+        label.split(" · ").some(name => match(name, place)) || (value === "china" && place === "中国"));
+      const replayView = query.get("replay");
+      if (!region || !replayView || !Object.hasOwn(replayViews, replayView)) {
+        throw new XiaoyunContextError("气象定位支持区域回放中的档案地区，请先选对应回放。");
+      }
+      if (region.value !== (query.get("replayRegion") ?? "archive")) {
+        query.set("replayRegion", region.value);
+        query.delete("replayFrame");
+        query.delete("replayPoint");
+      }
+      changed.push(region.label);
     } else {
       const province = findChinaProvince(place) ?? chinaProvinces.find(item => match(item.name, place));
       const target = regionTargets.find(item => item.enabled && [item.id, item.code, item.label].some(name => match(name, place)));

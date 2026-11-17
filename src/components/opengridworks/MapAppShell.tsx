@@ -62,7 +62,7 @@ import {
 import { generationSeries } from "@/lib/topic-analysis/history";
 import { GlobeNavigation } from "@/components/opengridworks/GlobeNavigation";
 import { GlobeLoading } from "@/components/opengridworks/GlobeLoading";
-import { readReplayRegion, replayRegionOptions } from "@/lib/weather-replay/regions";
+import { readReplayRegion, replayRegionAt, replayRegionOptions } from "@/lib/weather-replay/regions";
 import { replayViews, type WeatherScene } from "@/lib/weather-replay/views";
 import { WeatherSceneSwitcher } from "./WeatherSceneSwitcher";
 import { loadWeatherReplayData } from "@/app/visualization/weather-replay/replay-loader";
@@ -2819,7 +2819,12 @@ function animateWeatherParticles(
   context.restore();
 }
 
-function EarthProjectViewport({ active, hash, onLoad }: { active: boolean; hash?: string; onLoad: (document: Document) => void }) {
+function EarthProjectViewport({ active, hash, onLoad, onLocation }: {
+  active: boolean;
+  hash?: string;
+  onLoad: (document: Document) => void;
+  onLocation: (point: [number, number] | null) => void;
+}) {
   const [source] = useState(() => "/earth/index.html?workspace" + (hash ? "#" + hash : ""));
   const [loading, setLoading] = useState(true);
   const requestedHash = useRef(hash);
@@ -2834,8 +2839,13 @@ function EarthProjectViewport({ active, hash, onLoad }: { active: boolean; hash?
 
   useEffect(() => {
     function receiveReady(event: MessageEvent) {
-      if (event.origin === window.location.origin && event.source === frame.current?.contentWindow &&
-          (event.data === "ogw-weather-ready" || event.data === "ogw-weather-rendered" || event.data === "ogw-weather-error")) syncDocument();
+      if (event.origin !== window.location.origin || event.source !== frame.current?.contentWindow) return;
+      if (event.data === "ogw-weather-ready" || event.data === "ogw-weather-rendered" || event.data === "ogw-weather-error") syncDocument();
+      if (active && event.data?.type === "ogw-weather-location") {
+        const point: unknown = event.data.coordinates;
+        if (point === null) onLocation(null);
+        else if (Array.isArray(point) && point.length === 2 && point.every(Number.isFinite)) onLocation([point[0], point[1]]);
+      }
     }
     window.addEventListener("message", receiveReady);
     const sync = requestAnimationFrame(syncDocument);
@@ -2843,7 +2853,7 @@ function EarthProjectViewport({ active, hash, onLoad }: { active: boolean; hash?
       cancelAnimationFrame(sync);
       window.removeEventListener("message", receiveReady);
     };
-  }, [syncDocument]);
+  }, [active, onLocation, syncDocument]);
 
   useEffect(() => {
     if (!active || hash === requestedHash.current) return;
@@ -5569,6 +5579,10 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
   if (stage && !retainedStages[stage]) setRetainedStages({ ...retainedStages, [stage]: true });
   if (activeProject === "power" && powerView === "facilities" && !powerAssetsRequested) setPowerAssetsRequested(true);
   const weatherReady = useCallback((frameDocument: Document) => setWeatherDocument(frameDocument), []);
+  const [weatherPoint, setWeatherPoint] = useState<[number, number] | null>(null);
+  const replayCandidate = weatherPoint ? replayRegionAt(...weatherPoint) : undefined;
+  const rememberReplayPoint = useCallback((point: [number, number]) =>
+    replaceWorkspaceContext({ replayPoint: point.map(value => value.toFixed(4)).join(",") }), []);
   const rememberReplayFrame = useCallback((replayFrame: number) => replaceWorkspaceContext({ replayFrame }), []);
   useEffect(() => {
     if (!weatherGlobeActive || !weatherDocument) return;
@@ -6126,14 +6140,24 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
       <div className="og-globe-stage" hidden={economyActive || resourceScene}>
         {retainedStages.weather && (
           <div className="og-weather-original og-weather-globe-stage" hidden={!weatherGlobeActive}>
-            <EarthProjectViewport active={weatherGlobeActive} hash={activeProject === "weather" ? context.weather : undefined} onLoad={weatherReady} />
+            <EarthProjectViewport active={weatherGlobeActive} hash={activeProject === "weather" ? context.weather : undefined} onLoad={weatherReady} onLocation={setWeatherPoint} />
+            {weatherGlobeActive && weatherPoint && replayCandidate && (
+              <button type="button" className="og-weather-replay-entry" onClick={() => navigate("weather", {
+                replay: "weather", replayRegion: replayCandidate.value,
+                replayPoint: weatherPoint.map(value => value.toFixed(4)).join(","),
+                replayFrame: (context.replayRegion ?? "archive") === replayCandidate.value ? context.replayFrame : undefined,
+              })}>
+                <span>{replayCandidate.label}</span><strong>查看历史区域回放 <ArrowUpRight size={14} /></strong>
+              </button>
+            )}
             {weatherGlobeActive && !cinematic && <WeatherComparisonPanel />}
           </div>
         )}
         {activeProject === "weather" && !resourceScene && weatherScene !== "globe" && (
           <div className="og-weather-replay-stage og-weather-field-stage">
             <WeatherReplayPlayer query="" scene={weatherScene}
-              region={context.replayRegion} initialFrame={context.replayFrame} onFrameChange={rememberReplayFrame} />
+              region={context.replayRegion} initialFrame={context.replayFrame} onFrameChange={rememberReplayFrame}
+              initialPoint={readGridPoint(context.replayPoint) ?? undefined} onPointChange={rememberReplayPoint} />
           </div>
         )}
         {provinceFrame && (
@@ -6335,7 +6359,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
                   <>
                     <WorkspaceFilterSelect label="回放区域" value={context.replayRegion ?? "archive"}
                       options={replayRegionOptions} onChange={value => navigate("weather", {
-                        replayRegion: readReplayRegion(value), replayFrame: undefined,
+                        replayRegion: readReplayRegion(value), replayFrame: undefined, replayPoint: undefined,
                       })} />
                     <p className="og-weather-sidebar-status">{replayViews[weatherScene].description}</p>
                   </>

@@ -1,8 +1,8 @@
 export const replayViews = {
-  weather: { title: "云雨叠加", description: "区域云层与降雨粒子叠加，粒子密度表示雨势" },
-  time: { title: "降水时空层", description: "按档案间隔分层，体素颜色表示降水率" },
-  rain: { title: "降雨粒子", description: "降水率决定粒子密度，雨滴沿垂直方向下落" },
-  accumulation: { title: "累计降水", description: "从回放起点积分至当前时刻，查看累计热点" },
+  weather: { title: "云雨结构", description: "沿剖线对照云场与地面降水，云体高度为示意" },
+  time: { title: "降水时空演变", description: "以 UTC 时间为竖轴，查看雨带在各时刻的空间分布" },
+  rain: { title: "降水热点追踪", description: "从连续帧识别强降水区，沿轨迹查看中心位置和强度" },
+  accumulation: { title: "累计降水", description: "在地图上比较累计雨量、等值线和覆盖面积" },
 } as const;
 
 export type ReplayView = keyof typeof replayViews;

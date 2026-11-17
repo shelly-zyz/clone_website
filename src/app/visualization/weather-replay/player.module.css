@@ -69,20 +69,6 @@
 
 .canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; }
 .canvas:active { cursor: grabbing; }
-.mapLabels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
-.mapLabels span {
-  position: absolute;
-  top: 0;
-  left: 0;
-  padding: 1px 3px;
-  color: #4b4338;
-  background: #fffdf9e8;
-  border-radius: 2px;
-  font-size: 10px;
-  line-height: 1.2;
-  white-space: nowrap;
-}
-.mapLabels span[data-active="true"] { color: #312a22; font-weight: 650; }
 .loadState { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px 16px; color: #bbcfdd; font-size: 13px; }
 .emptyNotice {
   position: absolute;
@@ -148,7 +134,7 @@
   .emptyNotice { inset-block: 33px auto; }
   .cameraControls { gap: 1px; }
   .stageLabels { inset: 7px 8px auto; }
-  .stageLabels > span, .mapLabels span { font-size: 9px; }
+  .stageLabels > span { font-size: 9px; }
   .layers { gap: 0 9px; font-size: 10px; }
   .layers label { min-height: 20px; }
   .sources { font-size: 9px; }
@@ -293,16 +279,6 @@
 .legendScale { width: 10px; height: 100%; flex: none; }
 .legendValues { flex-direction: column; padding-block: 1px; line-height: 1; }
 .peak strong { color: #fff; font-size: 12px; }
-.metrics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; }
-.metrics div {
-  display: grid;
-  gap: 2px;
-  padding: 7px;
-  border-radius: 6px;
-  background: #182631;
-}
-.metrics span { color: #b9c9d3; font-size: 10px; }
-.metrics strong { color: #eef7f6; font-size: 14px; }
 .barRow {
   --band-color: #658bd1;
   display: grid; grid-template-columns: 45px minmax(0, 1fr) 22px; gap: 5px;
@@ -322,12 +298,18 @@
   .embedded .loadState { top: 106px; }
   .embedded .header { top: 106px; left: 9px; right: 9px; width: auto; transform: none; padding: 7px 9px; }
   .embedded .controls { bottom: calc(var(--og-globe-nav-space, 68px) + 7px); left: 7px; right: 7px; width: auto; transform: none; }
-  .embedded .legend { right: auto; left: 7px; bottom: calc(var(--og-globe-nav-space, 68px) + 137px); width: 87px; }
-  .embedded .legendRamp { height: 75px; }
+  .embedded .stage .canvas {
+    top: 203px;
+    height: max(165px, calc(100% - var(--og-globe-nav-space, 68px) - 335px));
+    mask-image: linear-gradient(transparent, #000 12%, #000 86%, transparent);
+  }
+  .embedded .legend { right: auto; left: 7px; top: 171px; bottom: auto; width: 88px; }
+  .embedded .legendRamp { height: 47px; }
+  .embedded .stage[data-view="time"] .peak { display: none; }
   .embedded .readings {
     inset: 171px 7px auto auto;
     width: min(270px, calc(100% - 14px));
-    max-height: calc(100% - 352px);
+    max-height: min(40svh, calc(100% - 171px - var(--og-globe-nav-space, 68px) - 142px));
     z-index: 3;
     border-radius: 9px;
     width: fit-content;
@@ -338,4 +320,42 @@
 }
 
 .embedded:has(.scene[data-immersive="true"]) .readings { display: none; }
-.embedded:has(.scene[data-immersive="true"]) .legend { right: 16px; }
+@media (min-width: 901px) {
+  .embedded:has(.scene[data-immersive="true"]) .legend { right: 16px; }
+}
+
+.heading p { line-height: 1.45; }
+.layers { align-items: center; }
+.layers input[type="range"] { width: clamp(48px, 8vw, 85px); }
+.layers select, .readingsSelect select {
+  min-width: 0;
+  max-width: 100%;
+  padding: 4px 7px;
+  border-radius: 4px;
+  background: #203948;
+  color: #e4f1f7;
+}
+.readingsSelect { display: grid; gap: 4px; font-size: 11px; color: #b6cfdb; }
+.readingsValues { padding: 8px 0; }
+.readingsCaption { white-space: normal; }
+.readingsFigure > svg { width: 100%; }
+.sliceList { display: grid; gap: 4px; }
+.sliceList button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 5px;
+  background: #182a36;
+  text-align: left;
+  font-size: 11px;
+}
+.sliceList button[aria-pressed="true"] { background: #24525e; color: #dcfbff; }
+.sliceList button:hover { background: #306477; }
+.barRow { grid-template-columns: 47px minmax(0, 1fr) minmax(47px, auto); }
+.stage[data-view="accumulation"] .canvas, .stage[data-view="rain"] .canvas { cursor: crosshair; }
+.stage .canvas:active { cursor: grabbing; }
+@media (max-width: 600px) {
+  .layers label { min-height: 24px; }
+}

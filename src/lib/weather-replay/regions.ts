@@ -21,3 +21,10 @@ export const replayRegionOptions = [
   { value: "archive", label: replayRegions.archive.label },
   ...catalog.map(({ value, label }) => ({ value, label })),
 ];
+
+export function replayRegionAt(longitude: number, latitude: number) {
+  const contains = ({ west, east, south, north }: { west: number; east: number; south: number; north: number }) =>
+    longitude >= west && longitude <= east && latitude >= south && latitude <= north;
+  return catalog.find(({ bounds }) => contains(bounds))
+    ?? (contains({ west: -80, east: -64, south: 23, north: 35 }) ? { value: "archive", label: replayRegions.archive.label } : undefined);
+}

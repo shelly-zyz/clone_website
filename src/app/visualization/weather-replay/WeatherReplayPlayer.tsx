@@ -10,20 +10,22 @@ import { updateAnalysisQuery, useAnalysisQuery } from "../useAnalysisLocation";
 import { replayViewOrder, replayViews, type ReplayView } from "@/lib/weather-replay/views";
 import { createReplayScene } from "./replay-canvas";
 import { ReplayReadings } from "./ReplayReadings";
-import { accumulateRain, satelliteAt, utcClock } from "./replay-data";
-import { prepareReplayArea, regionalPeak, type ReplayGeography } from "./replay-geography";
+import { accumulateRain, accumulationStart, areaStats, cellAreas, maxContinuousAccumulation, satelliteAt, stackFrameIndices, trackHotspots, utcClock, utcStamp } from "./replay-data";
+import { gridCoordinate, prepareReplayArea, regionalPeak, type ReplayGeography } from "./replay-geography";
 import { loadWeatherReplayData } from "./replay-loader";
 import { accumulationScale, rainScale } from "./replay-palette";
 import styles from "./player.module.css";
 
 type ReplayRequest = { query: string; replay: WeatherReplay; geography: ReplayGeography; localArchive: boolean } | { query: string; error: string };
 
-export function WeatherReplayPlayer({ query, scene, region, initialFrame, onFrameChange }: {
+export function WeatherReplayPlayer({ query, scene, region, initialFrame, initialPoint, onFrameChange, onPointChange }: {
   query: string;
   scene?: ReplayView;
   region?: ReplayRegionId;
   initialFrame?: number;
+  initialPoint?: [number, number];
   onFrameChange?: (frame: number) => void;
+  onPointChange?: (point: [number, number]) => void;
 }) {
   const [selectedView, setSelectedView] = useState<ReplayView>("weather");
   const view = scene ?? selectedView;
@@ -49,17 +51,17 @@ export function WeatherReplayPlayer({ query, scene, region, initialFrame, onFram
   }, [attempt, caseQuery, requestKey, useGlobalGeography]);
 
   return (
-    <section className={embedded ? styles.embedded : styles.standalone} aria-label="区域风暴 3D 回放">
+    <section className={embedded ? styles.embedded : styles.standalone} aria-label="区域气象回放">
       {!embedded && (
         <div className={styles.standaloneHeading}>
-          <h1>区域风暴 3D 回放</h1>
+          <h1>区域气象回放</h1>
           <WorkspaceFilterSelect label="回放区域" value={regionId} options={replayRegionOptions}
             onChange={value => updateAnalysisQuery({ region: readReplayRegion(value) })} />
         </div>
       )}
       {current && "replay" in current ? (
         <ReplayControls key={requestKey} replay={current.replay} geography={current.geography} region={regionId} view={view}
-          initialFrame={initialFrame} localArchive={current.localArchive} onFrameChange={onFrameChange} onViewChange={embedded ? undefined : setSelectedView} />
+          initialFrame={initialFrame} initialPoint={initialPoint} onPointChange={onPointChange} localArchive={current.localArchive} onFrameChange={onFrameChange} onViewChange={embedded ? undefined : setSelectedView} />
       ) : current ? (
         <div className={styles.loadState}>
           <p role="alert">{current.error}</p>
@@ -71,7 +73,7 @@ export function WeatherReplayPlayer({ query, scene, region, initialFrame, onFram
   );
 }
 
-function ReplayControls({ replay, geography, region, view, onViewChange, initialFrame, localArchive, onFrameChange }: {
+function ReplayControls({ replay, geography, region, view, onViewChange, initialFrame, localArchive, initialPoint, onPointChange, onFrameChange }: {
   replay: WeatherReplay;
   geography: ReplayGeography;
   region: ReplayRegionId;
@@ -79,16 +81,34 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
   localArchive: boolean;
   onViewChange?: (view: ReplayView) => void;
   initialFrame?: number;
+  initialPoint?: [number, number];
+  onPointChange?: (point: [number, number]) => void;
   onFrameChange?: (frame: number) => void;
 }) {
   const legendId = useId();
   const final = replay.rain.length - 1;
   const [playing, setPlaying] = useState(false);
-  const [point, setPoint] = useState<{ cell: number; region: ReplayRegionId }>();
-  const selectedCell = point?.region === region ? point.cell : undefined;
+  const { west, east, south, north } = replay.bounds;
+  const initialCell = initialPoint && initialPoint[0] >= west && initialPoint[0] <= east && initialPoint[1] >= south && initialPoint[1] <= north
+    ? Math.round((initialPoint[0] - west) / (east - west) * (replay.cols - 1))
+      + Math.round((initialPoint[1] - south) / (north - south) * (replay.rows - 1)) * replay.cols : undefined;
+  const [point, setPoint] = useState(initialCell);
+  const [sourceCell, setSourceCell] = useState(initialCell);
+  if (sourceCell !== initialCell) {
+    setSourceCell(initialCell);
+    setPoint(initialCell);
+  }
+  const [trackId, setTrackId] = useState<number>();
   const [clouds, setClouds] = useState(true);
+  const [cloudOpacity, setCloudOpacity] = useState(65);
+  const [section, setSection] = useState(true);
+  const [transect, setTransect] = useState<number>();
   const [immersive, setImmersive] = useState(false);
-  const [precipitation, setPrecipitation] = useState(true);
+  const [precipitation, setPrecipitation] = useState(false);
+  const [windowHours, setWindowHours] = useState(0);
+  const selectedCell = point;
+  const sectionRow = view === "weather" && section ? transect ?? (point === undefined ? Math.floor(replay.rows / 2) : Math.floor(point / replay.cols)) : undefined;
+  const planView = view === "rain" || view === "accumulation";
   const [sourceFrame, setSourceFrame] = useState(initialFrame);
   const [index, setIndex] = useState(Math.min(initialFrame ?? (replay.metadata ? 2 : 8), final));
   if (sourceFrame !== initialFrame) {
@@ -101,7 +121,6 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
   }
 
   const canvas = useRef<HTMLCanvasElement>(null);
-  const overlay = useRef<HTMLDivElement>(null);
   const renderer = useRef<ReturnType<typeof createReplayScene>>(null);
   const [drawingFailed, setDrawingFailed] = useState(false);
   const [renderAttempt, setRenderAttempt] = useState(0);
@@ -110,11 +129,27 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
   const timestamp = replay.rain[index].time;
   const satellite = satelliteAt(replay, timestamp);
   const currentPeak = peaks[index];
-  const accumulated = useMemo(() => accumulateRain(replay), [replay]);
-  const totals = area.hasData && view === "accumulation" ? accumulated[index] : undefined;
+  const weights = useMemo(() => cellAreas(replay), [replay]);
+  const hotspotThreshold = 2.5;
+  const tracking = useMemo(() => trackHotspots(replay, weights, hotspotThreshold), [replay, weights]);
+  const spots = tracking.frames[index];
+  const activeSpot = trackId === undefined
+    ? spots.find(spot => selectedCell !== undefined && spot.cells.includes(selectedCell)) ?? spots[0]
+    : spots.find(spot => spot.id === trackId);
+  const track = tracking.tracks.get(trackId ?? activeSpot?.id ?? -1) ?? [];
+  const slices = stackFrameIndices(replay, index);
+  const trail = view === "time" ? track : view === "rain" ? track.filter(spot => spot.frame <= index) : [];
+  const availableWindows = useMemo(() => [6, 12, 24].filter(hours =>
+    replay.rain.some((_, frame) => accumulationStart(replay, frame, hours) !== undefined)), [replay]);
+  const start = view === "accumulation" ? accumulationStart(replay, index, windowHours) : undefined;
+  const accumulated = useMemo(() => start === undefined ? [] : accumulateRain(replay, start), [replay, start]);
+  const totals = start === undefined ? undefined : accumulated[index - start];
   const accumulationPeak = totals ? regionalPeak(totals, area.cells) : null;
-  const accumulationPeaks = useMemo(() => accumulated.map(grid => regionalPeak(grid, area.cells)), [area.cells, accumulated]);
-  const accumulationLimit = Math.max(25, Math.ceil(Math.max(0, ...accumulationPeaks.map(value => value ?? 0)) / 25) * 25);
+  // Keep a common scale while moving across time or changing the window.
+  const accumulationLimit = useMemo(() => Math.max(10, Math.ceil(maxContinuousAccumulation(replay) / 10) * 10), [replay]);
+  const levels = accumulationLimit >= 60 ? [5, 25, 50] : [1, 5, 10];
+  const accumulationStats = totals ? areaStats(totals, weights, levels) : undefined;
+  const peakCell = view === "accumulation" && accumulationPeak ? accumulationStats?.peakCell : undefined;
   const legendStops = view === "accumulation" ? accumulationScale : rainScale;
   const forecast = replay.metadata;
   const rainLimit = forecast ? Math.max(5, Math.ceil(Math.max(0, ...peaks.map(peak => peak ?? 0)) / 5) * 5) : 75;
@@ -122,10 +157,15 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
   const legendStopMax = legendStops[legendStops.length - 1][0];
 
   useEffect(() => {
-    if (!canvas.current || !overlay.current) return;
+    if (!canvas.current) return;
     let fail = 0;
     try {
-      renderer.current = createReplayScene(canvas.current, overlay.current, () => setDrawingFailed(true), cell => setPoint({ cell, region }));
+      renderer.current = createReplayScene(canvas.current, () => setDrawingFailed(true), (cell, hotspot, pickedView) => {
+        setPoint(cell);
+        if (pickedView === "weather") setTransect(undefined);
+        if (pickedView === "rain") setTrackId(hotspot);
+        onPointChange?.(gridCoordinate(replay, cell % replay.cols, Math.floor(cell / replay.cols)));
+      });
     } catch {
       fail = requestAnimationFrame(() => setDrawingFailed(true));
     }
@@ -134,11 +174,11 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
       renderer.current?.dispose();
       renderer.current = null;
     };
-  }, [renderAttempt, region]);
+  }, [onPointChange, renderAttempt, replay]);
 
   useEffect(() => {
-    renderer.current?.update(replay, area, { view, index, clouds, precipitation, totals, accumulationLimit, rainLimit, selectedCell });
-  }, [accumulationLimit, area, clouds, index, precipitation, rainLimit, renderAttempt, replay, selectedCell, totals, view]);
+    renderer.current?.update(replay, area, { view, index, clouds, cloudOpacity: cloudOpacity / 100, sectionRow, peakCell, precipitation, totals, accumulationLimit, rainLimit, selectedCell, spots, trail, hotspotThreshold, levels });
+  });
 
   useEffect(() => {
     if (!playing || !area.hasData) return;
@@ -183,6 +223,7 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
     if (playing) {
       setPlaying(false);
     } else {
+      if (view === "rain" && activeSpot) setTrackId(activeSpot.id);
       if (index >= final) {
         setIndex(0);
         onFrameChange?.(0);
@@ -193,9 +234,9 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
 
   const displayPeak = view === "accumulation" ? accumulationPeak : currentPeak;
   const unit = view === "accumulation" ? "mm" : "mm/h";
-  const showsRainParticles = view === "rain" || (view === "weather" && precipitation);
+  const showsRainParticles = view === "weather" && precipitation;
   const missing = !area.hasData ? "该区域暂无已发布的云雨回放。"
-    : displayPeak === null ? view === "accumulation" ? "所选窗口缺测，无法计算累计降水。" : "当前降水帧缺测。" : "";
+    : displayPeak === null ? view === "accumulation" ? "当前时刻缺少所选时段的连续降水数据。" : "当前降水帧缺测。" : "";
   function selectFrame(frame: number) {
     setPlaying(false);
     setIndex(frame);
@@ -209,10 +250,10 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
           <h2>{replayViews[view].title}</h2>
           <p>{area.label}{area.hasData && " · " + timestamp.slice(0, 10)}</p>
         </div>
-        <div className={styles.cameraControls} role="group" aria-label="三维视角">
-          <button className={styles.button} type="button" title="旋转视角" aria-label="旋转视角" onClick={() => renderer.current?.rotate(Math.PI / 3)}>
+        <div className={styles.cameraControls} role="group" aria-label="地图视角">
+          {!planView && <button className={styles.button} type="button" title="旋转视角" aria-label="旋转视角" onClick={() => renderer.current?.rotate(Math.PI / 3)}>
             <Rotate3D size={16} aria-hidden="true" />
-          </button>
+          </button>}
           <button className={styles.button} type="button" title="缩小" aria-label="缩小" onClick={() => renderer.current?.zoom(1 / 1.2)}>
             <Minus size={15} aria-hidden="true" />
           </button>
@@ -240,11 +281,10 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
       <div className={styles.scene} data-immersive={immersive}>
         <div className={styles.stage} data-view={view}>
           <canvas ref={canvas} role="img" aria-label={area.label + " · " + replayViews[view].description} className={styles.canvas} />
-          <div ref={overlay} className={styles.mapLabels} aria-hidden="true" />
           {area.hasData && (
             <div className={styles.stageLabels}>
               <span className={styles.sceneTime}><Compass size={13} aria-hidden="true" /> {utcClock(timestamp)} UTC</span>
-              {view === "time" && <span>时间切片 · UTC</span>}
+              {view === "time" && <span>竖轴 · UTC 时间</span>}
               {showsRainParticles && <span>粒子密度 · 降水率</span>}
             </div>
           )}
@@ -257,8 +297,7 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
           {area.hasData && (
             <div className={styles.legend}>
               <span>{view === "accumulation" ? "累计降水" : "降水率"} · {unit}</span>
-              {(view !== "weather" || precipitation) && (
-                <div className={styles.legendRamp} role="img" aria-label={`${unit}，0 至 ${legendMax}`}>
+              <div className={styles.legendRamp} role="img" aria-label={`${unit}，0 至 ${legendMax}`}>
                   <svg className={styles.legendScale} aria-hidden="true" focusable="false">
                     <defs>
                       <linearGradient id={legendId} x1="0" x2="0" y1="1" y2="0">
@@ -270,30 +309,50 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
                     <rect width="100%" height="100%" rx="3" fill={`url(#${legendId})`} />
                   </svg>
                   <span className={styles.legendValues}><span>{legendMax}</span><span>{legendMax / 2}</span><span>0</span></span>
-                </div>
-              )}
-              {displayPeak !== null && (
+              </div>
+              {view === "time" && displayPeak !== null && (
                 <span className={styles.peak}>区域峰值 <strong>{displayPeak.toFixed(1)}</strong> {unit}
-                  {!forecast && view !== "accumulation" && displayPeak >= 75 && " · PARDIG 档案上限"}
-                  {view === "rain" && displayPeak === 0 && " · 无降水"}</span>
+                  {!forecast && displayPeak >= 75 && " · PARDIG 档案上限"}
+                </span>
               )}
             </div>
           )}
         </div>
         {area.hasData && <ReplayReadings replay={replay} view={view} frame={index} cell={selectedCell}
-          peaks={view === "accumulation" ? accumulationPeaks : peaks} totals={accumulated}
-          limit={legendMax} cells={area.cells} satelliteTime={clouds ? satellite?.time : undefined}
-          onFrame={selectFrame} />}
+          peaks={peaks} totals={accumulated} accumulationStart={start} accumulationStats={accumulationStats}
+          levels={levels} weights={weights} limit={legendMax} sectionRow={sectionRow} slices={slices}
+          satellite={clouds ? satellite : undefined} spots={spots} track={track} trackId={trackId ?? activeSpot?.id}
+          threshold={hotspotThreshold} onTrack={setTrackId} onFrame={selectFrame} />}
+
       </div>
       {area.hasData && (
         <div className={styles.controls}>
           {view === "weather" && (
-            <div className={styles.layers}>
-              <label><input type="checkbox" checked={clouds} onChange={event => setClouds(event.target.checked)} /> {forecast ? "总云量（%）" : "红外亮温（K）"} · 云层高度示意</label>
-              <label><input type="checkbox" checked={precipitation} onChange={event => setPrecipitation(event.target.checked)} /> 降水强度</label>
+            <div className={styles.layers} role="group" aria-label="云雨结构图层">
+              <label><input type="checkbox" checked={clouds} onChange={event => setClouds(event.target.checked)} /> 云体示意</label>
+              <label><input type="checkbox" checked={precipitation} onChange={event => setPrecipitation(event.target.checked)} /> 降雨粒子</label>
+              <label><input type="checkbox" checked={section} onChange={event => setSection(event.target.checked)} /> 垂直剖面</label>
+              <label>云体不透明度 <input type="range" min={10} max={100} value={cloudOpacity} disabled={!clouds}
+                aria-valuetext={cloudOpacity + "%"} onChange={event => setCloudOpacity(Number(event.target.value))} /></label>
+              {sectionRow !== undefined && <label>剖线纬度 <input type="range" min={0} max={replay.rows - 1} value={sectionRow}
+                aria-valuetext={(south + sectionRow / (replay.rows - 1) * (north - south)).toFixed(2) + "°"}
+                onChange={event => setTransect(Number(event.target.value))} /></label>}
             </div>
           )}
-          {view === "accumulation" && <p className={styles.description}>自 {utcClock(replay.rain[0].time)} UTC 积分 · mm</p>}
+          {view === "accumulation" && <div className={styles.layers}>
+            <label>累计时段 <select value={windowHours} onChange={event => {
+              const hours = Number(event.target.value);
+              setWindowHours(hours);
+              if (accumulationStart(replay, index, hours) === undefined) {
+                const next = replay.rain.findIndex((_, frame) => frame >= index && accumulationStart(replay, frame, hours) !== undefined);
+                selectFrame(next >= 0 ? next : replay.rain.findLastIndex((_, frame) => accumulationStart(replay, frame, hours) !== undefined));
+              }
+            }}>
+              <option value={0}>档案起点至当前</option>
+              {availableWindows.map(hours => <option key={hours} value={hours}>过去 {hours} 小时</option>)}
+            </select></label>
+            {start !== undefined && <span>{utcStamp(replay.rain[start].time)} → {utcStamp(timestamp)} UTC</span>}
+          </div>}
           <div className="flex items-center gap-3 sm:gap-5">
             <button className={styles.playButton} type="button" onClick={togglePlay} disabled={final === 0}>
               {playing ? <Pause size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}
