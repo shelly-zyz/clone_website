@@ -3654,11 +3654,11 @@
   border-radius: 8px;
 }
 
+/* Center the topic bar on the viewport and only shift it right when the sidebar would cover it. */
 .og-globe-workspace .og-globe-navigation {
-  left: var(--og-stage-left);
-  right: var(--og-gutter);
-  width: min(420px, calc(100% - var(--og-stage-left) - var(--og-gutter)));
-  margin-inline: auto;
+  --og-globe-nav-width: min(420px, calc(100% - var(--og-stage-left) - var(--og-gutter)));
+  left: max(var(--og-stage-left), calc(50% - var(--og-globe-nav-width) / 2));
+  width: var(--og-globe-nav-width);
   transform: none;
 }
 
@@ -3850,9 +3850,6 @@
 }
 .is-earth-project .og-weather-sidebar-filters { border: 0; }
 .is-earth-project .og-weather-field-stage { inset: 0; border: 0; border-radius: 0; }
-.is-earth-project .og-weather-volume-stage {
-  inset: var(--og-stage-top) var(--og-gutter) 0 var(--og-stage-left);
-}
 .og-weather-globe-stage { position: absolute; inset: 0; }
 @media (min-width: 901px) {
   .is-earth-project > .og-globe-stage:has(.og-weather-field-stage, .og-weather-globe-stage:not([hidden])) {
@@ -3874,7 +3871,6 @@
 }
 
 @media (max-width: 900px) {
-  .is-earth-project .og-weather-volume-stage { inset: 0; }
   .og-weather-globe-stage {
     display: flex;
     flex-direction: column;
@@ -3893,4 +3889,41 @@
     transform: translateY(-122px);
     pointer-events: none;
   }
+}
+
+/* Globe topics share one full-viewport stage, so every globe opens centered at the same size. */
+@media (min-width: 901px) {
+  .og-globe-workspace:not(.is-cinematic, .is-power-statistics, .is-carbon-atlas) .og-globe-stage:not(:has([data-outlook="true"])),
+  .is-earth-project .og-weather-globe-stage .og-earth-project {
+    inset: 0;
+  }
+  .og-globe-workspace:not(.is-cinematic, .is-power-statistics, .is-carbon-atlas) .og-globe-stage .maplibregl-ctrl-bottom-right {
+    right: var(--og-stage-right);
+    bottom: calc(var(--og-globe-nav-space) + var(--og-stage-footer) + var(--og-mobile-dock));
+  }
+  /* Regional replay scenes run edge to edge, under the floating cards and topic bar. */
+  .is-earth-project > .og-globe-stage:has(.og-weather-field-stage) { inset: 0; }
+}
+
+/* Immersive replay keeps only the scene, its header and the timeline. */
+.og-app-shell:has([data-immersive="true"]) { --og-globe-nav-space: 0px; }
+.og-app-shell:has([data-immersive="true"]) :is(.og-workspace-sidebar, .og-workspace-mobile-header, .og-globe-navigation,
+  .og-assistant-mount, .og-info-button, .og-top-toolbar) {
+  display: none;
+}
+
+@keyframes og-globe-enter {
+  from { opacity: 0; transform: scale(.94); }
+}
+
+.og-weather-globe-stage:not([hidden]) .og-earth-project,
+.og-workspace-map-layer:not([hidden]),
+.og-retained-economy:not([hidden]) .og-globe-stage {
+  animation: og-globe-enter 560ms cubic-bezier(.22, .7, .25, 1) backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .og-weather-globe-stage .og-earth-project,
+  .og-workspace-map-layer,
+  .og-retained-economy .og-globe-stage { animation: none; }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { Compass, Minus, Pause, Play, Plus, Rotate3D, Scan } from "lucide-react";
+import { Compass, Maximize2, Minimize2, Minus, Pause, Play, Plus, Rotate3D, Scan } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { GlobeLoading } from "@/components/opengridworks/GlobeLoading";
 import { WorkspaceFilterSelect } from "@/components/opengridworks/WorkspaceSidebar";
@@ -87,6 +87,7 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
   const [point, setPoint] = useState<{ cell: number; region: ReplayRegionId }>();
   const selectedCell = point?.region === region ? point.cell : undefined;
   const [clouds, setClouds] = useState(true);
+  const [immersive, setImmersive] = useState(false);
   const [precipitation, setPrecipitation] = useState(true);
   const [sourceFrame, setSourceFrame] = useState(initialFrame);
   const [index, setIndex] = useState(Math.min(initialFrame ?? (replay.metadata ? 2 : 8), final));
@@ -154,6 +155,30 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
     return () => window.clearTimeout(timer);
   }, [area.hasData, final, index, onFrameChange, playing]);
 
+  useEffect(() => {
+    if (!immersive) return;
+    // Leaving browser fullscreen (Esc or the system control) also leaves the immersive layout.
+    const onFullscreen = () => { if (!document.fullscreenElement) setImmersive(false); };
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setImmersive(false); };
+    document.addEventListener("fullscreenchange", onFullscreen);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("fullscreenchange", onFullscreen);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [immersive]);
+
+  function toggleImmersive() {
+    if (immersive) {
+      setImmersive(false);
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+      return;
+    }
+    setImmersive(true);
+    const shell = canvas.current?.closest("main") ?? document.documentElement;
+    if (!document.fullscreenElement && shell.requestFullscreen) void shell.requestFullscreen().catch(() => undefined);
+  }
+
   function togglePlay() {
     if (playing) {
       setPlaying(false);
@@ -197,6 +222,10 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
           <button className={styles.button} type="button" title="重置视角" aria-label="重置视角" onClick={() => renderer.current?.reset()}>
             <Scan size={15} aria-hidden="true" />
           </button>
+          <button className={styles.button} type="button" aria-pressed={immersive}
+            title={immersive ? "退出沉浸" : "沉浸全屏"} aria-label={immersive ? "退出沉浸" : "沉浸全屏"} onClick={toggleImmersive}>
+            {immersive ? <Minimize2 size={15} aria-hidden="true" /> : <Maximize2 size={15} aria-hidden="true" />}
+          </button>
         </div>
       </header>
       {onViewChange && (
@@ -208,7 +237,7 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
           ))}
         </div>
       )}
-      <div className={styles.scene}>
+      <div className={styles.scene} data-immersive={immersive}>
         <div className={styles.stage} data-view={view}>
           <canvas ref={canvas} role="img" aria-label={area.label + " · " + replayViews[view].description} className={styles.canvas} />
           <div ref={overlay} className={styles.mapLabels} aria-hidden="true" />

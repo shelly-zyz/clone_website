@@ -63,7 +63,7 @@ import { generationSeries } from "@/lib/topic-analysis/history";
 import { GlobeNavigation } from "@/components/opengridworks/GlobeNavigation";
 import { GlobeLoading } from "@/components/opengridworks/GlobeLoading";
 import { readReplayRegion, replayRegionOptions } from "@/lib/weather-replay/regions";
-import { isReplayView, weatherSceneViews, type WeatherScene } from "@/lib/weather-replay/views";
+import { replayViews, type WeatherScene } from "@/lib/weather-replay/views";
 import { WeatherSceneSwitcher } from "./WeatherSceneSwitcher";
 import { loadWeatherReplayData } from "@/app/visualization/weather-replay/replay-loader";
 import { WeatherSidebarFilters } from "@/components/opengridworks/WeatherSidebarFilters";
@@ -141,8 +141,6 @@ type ProjectMode = Exclude<WorkspaceTopic, "economy">;
 type PowerView = NonNullable<WorkspaceContext["powerView"]>;
 const PowerStatisticsMap = dynamic(() => import("./PowerStatisticsMap").then(module => module.PowerStatisticsMap));
 const WeatherResourceScene = dynamic(() => import("./WeatherResourceScene").then(module => module.WeatherResourceScene));
-const WeatherRadar = dynamic(() => import("./WeatherRadar").then(module => module.WeatherRadar));
-const WeatherWind = dynamic(() => import("./WeatherWind").then(module => module.WeatherWind));
 const WeatherComparisonPanel = dynamic(
   () => import("./WeatherComparison").then(module => module.WeatherComparisonPanel),
   { ssr: false },
@@ -6085,7 +6083,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
   const activePlanned = visibleLayers.plannedUpgrades;
   const sidebarSummary = {
     power: statsActive ? "中国省级电力统计" : `${activeRegion.label} · ${regionStats.totalPlants.toLocaleString()} 个可见项目`,
-    weather: weatherScene === "globe" ? "全球风场、洋流与波浪" : weatherSceneViews[weatherScene].title,
+    weather: weatherScene === "globe" ? "全球风场、洋流与波浪" : replayViews[weatherScene].title,
     carbon: "GRACED · 全球 0.1° 网格",
     economy: "",
   }[activeProject];
@@ -6131,10 +6129,9 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
           </div>
         )}
         {activeProject === "weather" && !resourceScene && weatherScene !== "globe" && (
-          <div className={`og-weather-replay-stage og-weather-field-stage${isReplayView(weatherScene) ? "" : " og-weather-volume-stage"}`}>
-            {weatherScene === "radar" ? <WeatherRadar /> :
-              weatherScene === "wind" ? <WeatherWind /> : <WeatherReplayPlayer query="" scene={weatherScene}
-                region={context.replayRegion} initialFrame={context.replayFrame} onFrameChange={rememberReplayFrame} />}
+          <div className="og-weather-replay-stage og-weather-field-stage">
+            <WeatherReplayPlayer query="" scene={weatherScene}
+              region={context.replayRegion} initialFrame={context.replayFrame} onFrameChange={rememberReplayFrame} />
           </div>
         )}
         {provinceFrame && (
@@ -6328,11 +6325,11 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
                 </button>
                 {weatherScene === "globe" ? <WeatherSidebarFilters frameDocument={weatherDocument} /> : (
                   <>
-                    {isReplayView(weatherScene) && <WorkspaceFilterSelect label="回放区域" value={context.replayRegion ?? "archive"}
+                    <WorkspaceFilterSelect label="回放区域" value={context.replayRegion ?? "archive"}
                       options={replayRegionOptions} onChange={value => navigate("weather", {
                         replayRegion: readReplayRegion(value), replayFrame: undefined,
-                      })} />}
-                    <p className="og-weather-sidebar-status">{weatherSceneViews[weatherScene].description}</p>
+                      })} />
+                    <p className="og-weather-sidebar-status">{replayViews[weatherScene].description}</p>
                   </>
                 )}
               </>

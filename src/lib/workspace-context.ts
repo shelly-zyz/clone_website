@@ -1,6 +1,6 @@
 import { resolveWorkspaceTopic, workspaceHref, type WorkspaceTopic } from "./globe-topics";
 import { readReplayRegion, type ReplayRegionId } from "./weather-replay/regions";
-import { weatherSceneViews, type WeatherScene } from "./weather-replay/views";
+import { replayViews, type WeatherScene } from "./weather-replay/views";
 
 export type WorkspaceContext = {
   country?: string;
@@ -87,7 +87,7 @@ export function readWorkspaceContext(search: URLSearchParams): WorkspaceContext 
     sector: readId(search.get("sector")),
     projection: projection === "globe" || projection === "map" ? projection : undefined,
     weather: weather && /^[A-Za-z0-9_,./:@=+%-]{1,180}$/.test(weather) ? weather : undefined,
-    replay: replay && Object.hasOwn(weatherSceneViews, replay) ? replay as keyof typeof weatherSceneViews : undefined,
+    replay: replay && Object.hasOwn(replayViews, replay) ? replay as keyof typeof replayViews : undefined,
     replayFrame: replayFrame && /^\d{1,4}$/.test(replayFrame) ? Number(replayFrame) : undefined,
     replayRegion: readReplayRegion(search.get("replayRegion")),
     powerView: powerView === "generation" || powerView === "capacity" || powerView === "facilities" ? powerView : undefined,

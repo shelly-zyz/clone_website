@@ -7,9 +7,12 @@ import type { ReplayView } from "@/lib/weather-replay/views";
 type Point = [number, number];
 type World = [number, number, number?];
 
-const rainCeiling = 0.64;
-const rainTail = 0.026;
-const rainStroke = "rgba(127, 56, 40, .82)";
+// Clouds float above the map; rain starts just under the cloud base and falls to the ground.
+const cloudBase = .36;
+const cloudDepth = .2;
+const rainCeiling = .33;
+const rainTail = 0.03;
+const rainStroke = "rgba(64, 92, 128, .62)";
 const timeStep = .165;
 const voxelHeight = .055;
 
@@ -34,6 +37,164 @@ function rainRandom(seed: number, salt: number) {
 
 export const utcClock = (iso: string) => iso.slice(11, 16);
 
+type Grid = readonly (number | null)[];
+type CloudField = { density: Float32Array; key: string };
+const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
+const densities = new WeakMap<Grid, Float32Array>();
+
+/** Cloud amount from infrared brightness temperature or GFS cover, softened over neighboring cells. */
+function cloudDensity(values: Grid, cols: number, rows: number, cover: boolean) {
+  const saved = densities.get(values);
+  if (saved) return saved;
+  let field = new Float32Array(values.length);
+  values.forEach((value, i) => {
+    if (value != null) field[i] = clamp01(cover ? (value - 30) / 70 : (282 - value) / 80);
+  });
+  for (let pass = 0; pass < 2; pass++) {
+    const next = new Float32Array(field.length);
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        let sum = 0, weights = 0;
+        for (let y = Math.max(0, row - 1); y <= Math.min(rows - 1, row + 1); y++) {
+          for (let x = Math.max(0, col - 1); x <= Math.min(cols - 1, col + 1); x++) {
+            const weight = (x === col ? 2 : 1) * (y === row ? 2 : 1);
+            sum += field[y * cols + x] * weight;
+            weights += weight;
+          }
+        }
+        next[row * cols + col] = sum / weights;
+      }
+    }
+    field = next;
+  }
+  // Thin the clouds toward the data edge so the deck dissolves instead of ending in a straight line.
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const edge = Math.min(row, col, rows - 1 - row, cols - 1 - col);
+      field[row * cols + col] *= clamp01((edge + .5) / 6);
+    }
+  }
+  densities.set(values, field);
+  return field;
+}
+
+/** Blend the two satellite frames around the rain time so clouds evolve between sparse IR scans. */
+function cloudField(replay: WeatherReplay, time: string): CloudField | undefined {
+  const frame = satelliteAt(replay, time);
+  if (!frame) return;
+  const cover = replay.metadata?.cloudVariable === "cover";
+  const from = cloudDensity(frame.values, replay.cols, replay.rows, cover);
+  const next = replay.satellite[replay.satellite.indexOf(frame) + 1];
+  const span = next ? Date.parse(next.time) - Date.parse(frame.time) : 0;
+  const t = span > 0 ? clamp01((Date.parse(time) - Date.parse(frame.time)) / span) : 0;
+  if (!next || t <= 0) return { density: from, key: frame.time };
+  const to = cloudDensity(next.values, replay.cols, replay.rows, cover);
+  return { density: from.map((value, i) => value + (to[i] - value) * t), key: frame.time + ">" + t.toFixed(3) };
+}
+
+function densityRaster(density: Float32Array, cols: number, rows: number, color: readonly [number, number, number], opacity: number) {
+  const image = document.createElement("canvas");
+  image.width = cols;
+  image.height = rows;
+  const painter = image.getContext("2d");
+  if (!painter) return image;
+  const pixels = painter.createImageData(cols, rows);
+  density.forEach((amount, i) => {
+    if (amount < .04) return;
+    pixels.data.set(color, i * 4);
+    pixels.data[i * 4 + 3] = Math.round(255 * opacity * Math.min(1, amount * 1.25));
+  });
+  painter.putImageData(pixels, 0, 0);
+  return image;
+}
+
+// Overlapping lobes give each puff an irregular cumulus edge instead of a perfect disc.
+const puffLobes = [
+  [[64, 66, 44], [42, 72, 28], [88, 70, 30], [58, 46, 28], [78, 52, 24]],
+  [[62, 64, 42], [36, 66, 26], [90, 62, 28], [70, 44, 30], [52, 84, 24]],
+  [[66, 62, 40], [44, 54, 30], [86, 78, 28], [40, 82, 22], [84, 46, 24]],
+] as const;
+let sprites: { lit: HTMLCanvasElement[]; shade: HTMLCanvasElement[]; curtain: HTMLCanvasElement } | undefined;
+
+function puffSprite(lobes: (typeof puffLobes)[number], light: boolean) {
+  const image = document.createElement("canvas");
+  image.width = image.height = 128;
+  const painter = image.getContext("2d");
+  if (!painter) return image;
+  for (const [x, y, r] of lobes) {
+    // Lit puffs are brightest toward the upper-left sun; the shade sprite darkens the cloud base.
+    const glow = painter.createRadialGradient(x - r * (light ? .32 : 0), y - r * (light ? .38 : 0), r * .08, x, y, r);
+    glow.addColorStop(0, light ? "rgba(255, 255, 255, .92)" : "rgba(70, 82, 102, .85)");
+    glow.addColorStop(light ? .5 : .55, light ? "rgba(238, 243, 249, .62)" : "rgba(92, 104, 124, .42)");
+    glow.addColorStop(1, light ? "rgba(214, 224, 236, 0)" : "rgba(110, 122, 142, 0)");
+    painter.fillStyle = glow;
+    painter.beginPath();
+    painter.arc(x, y, r, 0, Math.PI * 2);
+    painter.fill();
+  }
+  return image;
+}
+
+function cloudSprites() {
+  if (sprites) return sprites;
+  const curtain = document.createElement("canvas");
+  curtain.width = 32;
+  curtain.height = 128;
+  const painter = curtain.getContext("2d");
+  if (painter) {
+    const fall = painter.createLinearGradient(0, 0, 0, 128);
+    fall.addColorStop(0, "rgba(118, 136, 162, 0)");
+    fall.addColorStop(.22, "rgba(118, 136, 162, .55)");
+    fall.addColorStop(1, "rgba(96, 118, 150, .9)");
+    painter.fillStyle = fall;
+    painter.fillRect(0, 0, 32, 128);
+    const edge = painter.createLinearGradient(0, 0, 32, 0);
+    edge.addColorStop(0, "rgba(0, 0, 0, 0)");
+    edge.addColorStop(.5, "#000");
+    edge.addColorStop(1, "rgba(0, 0, 0, 0)");
+    painter.globalCompositeOperation = "destination-in";
+    painter.fillStyle = edge;
+    painter.fillRect(0, 0, 32, 128);
+  }
+  sprites = {
+    lit: puffLobes.map(lobes => puffSprite(lobes, true)),
+    shade: puffLobes.map(lobes => puffSprite(lobes, false)),
+    curtain,
+  };
+  return sprites;
+}
+
+const layers = new WeakMap<HTMLCanvasElement, Map<string, { key: string; image: HTMLCanvasElement }>>();
+
+/** Reuse static scene layers while only the falling rain animates. */
+function cachedLayer(owner: HTMLCanvasElement, name: string, key: string | undefined, ratio: number,
+  output: CanvasRenderingContext2D, paint: (target: CanvasRenderingContext2D) => void) {
+  if (key === undefined) {
+    paint(output);
+    return;
+  }
+  let named = layers.get(owner);
+  if (!named) layers.set(owner, named = new Map());
+  let entry = named.get(name);
+  if (!entry) named.set(name, entry = { key: "", image: document.createElement("canvas") });
+  if (entry.key !== key) {
+    entry.image.width = owner.width;
+    entry.image.height = owner.height;
+    const target = entry.image.getContext("2d");
+    if (!target) {
+      paint(output);
+      return;
+    }
+    target.setTransform(ratio, 0, 0, ratio, 0, 0);
+    paint(target);
+    entry.key = key;
+  }
+  output.save();
+  output.setTransform(1, 0, 0, 1, 0, 0);
+  output.drawImage(entry.image, 0, 0);
+  output.restore();
+}
+
 function replayCamera(width: number, height: number, area: ReplayArea, view: ReplayView,
   rotation: number, zoom: number, tilt: number, pan: Point = [0, 0]) {
   const { south, north, west, east } = area.bounds;
@@ -57,9 +218,9 @@ function replayCamera(width: number, height: number, area: ReplayArea, view: Rep
   const ys = map.map(point => point[1] * tilt);
   const left = Math.min(...xs), right = Math.max(...xs);
   const bottom = Math.max(...ys), top = Math.min(...ys) - (area.hasData ? view === "time" ? .43 : .33 : 0);
-  const scale = Math.min(width * (width > 960 ? .54 : .87) / (right - left), height * .70 / (bottom - top)) * zoom;
+  const scale = Math.min(width * (width > 960 ? .6 : .87) / (right - left), height * .72 / (bottom - top)) * zoom;
   const centerX = (left + right) / 2, centerY = (top + bottom) / 2;
-  const offsetX = width * .5 + pan[0], offsetY = height * .50 + pan[1];
+  const offsetX = width * .5 + pan[0], offsetY = height * .47 + pan[1];
   const project = ([lon, lat, z = 0]: World): Point => {
     const [x, depth] = toView([lon, lat]);
     return [offsetX + (x - centerX) * scale, offsetY + (depth * tilt - z * .48 - centerY) * scale];
@@ -97,10 +258,12 @@ export function paintReplay(
     pan?: Point;
   },
 ) {
-  const ctx = canvas.getContext("2d");
+  const output = canvas.getContext("2d");
   const width = canvas.clientWidth;
   const height = canvas.clientHeight;
-  if (!ctx || !width || !height) return;
+  if (!output || !width || !height) return;
+  // Painters draw through `ctx`, which points at a cached layer while that layer is rebuilt.
+  let ctx = output;
 
   const ratio = Math.min(window.devicePixelRatio || 1, 2);
   const rasterWidth = Math.round(width * ratio);
@@ -109,8 +272,8 @@ export function paintReplay(
     canvas.width = rasterWidth;
     canvas.height = rasterHeight;
   }
-  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-  ctx.clearRect(0, 0, width, height);
+  output.setTransform(ratio, 0, 0, ratio, 0, 0);
+  output.clearRect(0, 0, width, height);
 
   const camera = replayCamera(width, height, area, view, rotation, zoom, tilt, pan);
   const { project, mapCorners, normalizeLat, normalizeLon, frontX, frontY, depth } = camera;
@@ -132,21 +295,23 @@ export function paintReplay(
   const shade = (color: readonly number[], brightness = 1) =>
     "rgb(" + color.map(channel => Math.min(255, Math.round(channel * brightness))).join(",") + ")";
   const plane = (z: number) => ([[0, 0, z], [1, 0, z], [1, 1, z], [0, 1, z]] satisfies World[]).map(project);
-  const drawTexture = (values: readonly (number | null)[], z: number, alpha: number, layer: ReplayTextureLayer = "rain") => {
-    const raster = replayTexture(values, replay.cols, replay.rows, layer, rainLimit);
-    const [x, y] = project([0, 0, z]);
-    const [rightX, rightY] = project([1, 0, z]);
-    const [downX, downY] = project([0, 1, z]);
+  const drawRaster = (raster: HTMLCanvasElement, z: number, alpha: number, [dx, dy]: Point = [0, 0], blur = 0) => {
+    const [x, y] = project([dx, dy, z]);
+    const [rightX, rightY] = project([1 + dx, dy, z]);
+    const [downX, downY] = project([dx, 1 + dy, z]);
     ctx.save();
     path(plane(z));
     ctx.clip();
     ctx.globalAlpha = alpha;
+    if (blur) ctx.filter = "blur(" + blur.toFixed(1) + "px)";
     ctx.imageSmoothingEnabled = true;
     ctx.transform((rightX - x) / (replay.cols - 1), (rightY - y) / (replay.cols - 1),
       (downX - x) / (replay.rows - 1), (downY - y) / (replay.rows - 1), x, y);
     ctx.drawImage(raster, -.5, -.5);
     ctx.restore();
   };
+  const drawTexture = (values: readonly (number | null)[], z: number, alpha: number, layer: ReplayTextureLayer = "rain") =>
+    drawRaster(replayTexture(values, replay.cols, replay.rows, layer, rainLimit), z, alpha);
   // Data and geographic outlines share this transform; never mask data with land.
   const geoPoint = (lon: number, lat: number, z = 0): Point => project([
     normalizeLon(lon), normalizeLat(lat), z,
@@ -186,165 +351,263 @@ export function paintReplay(
   const gridY = 1 / (replay.rows - 1);
   const map = mapCorners.map(project);
   const lowerMap = mapCorners.map(([lon, lat]) => project([lon, lat, -.034]));
-  fill([map[frontX[0]], map[frontX[1]], lowerMap[frontX[1]], lowerMap[frontX[0]]], "#a8a5a0");
-  fill([map[frontY[0]], map[frontY[1]], lowerMap[frontY[1]], lowerMap[frontY[0]]], "#c8c4bd");
-  fill(map, "#f5f3ef");
-  paintLand(area.mapPolygons, "#c9c6c0");
-
-  const current = replay.rain[index];
-  const satellite = satelliteAt(replay, current.time);
-  if (area.hasData && (rain || view === "weather" && precipitation)) drawTexture(current.values, .008, 1);
-
-  const { west: mapWest, south: mapSouth, east: mapEast, north: mapNorth } = mapBounds;
-  const tickCount = width < 480 ? 3 : 5;
-  const longitudes = coordinateTicks(mapWest, mapEast, tickCount);
-  const latitudes = coordinateTicks(mapSouth, mapNorth, tickCount);
-  ctx.save();
-  ctx.setLineDash([3, 5]);
-  ctx.lineWidth = 0.8;
-  ctx.strokeStyle = "rgba(92, 88, 80, .27)";
-  ctx.beginPath();
-  for (const lon of longitudes) mapLine(lon, mapSouth, lon, mapNorth);
-  for (const lat of latitudes) mapLine(mapWest, lat, mapEast, lat);
-  ctx.stroke();
-  ctx.restore();
-  paintBoundaries(area.mapPolygons, "#635e57", 1.15);
-  paintBoundaries(area.focusPolygons, "#3a3732", 1.65);
-  path(map);
-  ctx.strokeStyle = "#777168";
-  ctx.lineWidth = 1.05;
-  ctx.stroke();
-
-  // Anchor both scale axes to the nearest corner so labels stay outside the map.
-  const corner = map.reduce((nearest, point, i) => point[1] > map[nearest][1] ? i : nearest, 0);
-  const edgeLon = corner === 0 || corner === 3 ? mapWest : mapEast;
-  const edgeLat = corner < 2 ? mapSouth : mapNorth;
-  ctx.strokeStyle = "#3b3833";
-  ctx.lineWidth = 1.15;
-  ctx.beginPath();
-  mapLine(mapWest, edgeLat, mapEast, edgeLat);
-  mapLine(edgeLon, mapSouth, edgeLon, mapNorth);
-  ctx.stroke();
-  ctx.font = (width < 480 ? 10 : 11) + "px system-ui, sans-serif";
-  ctx.fillStyle = "#fff";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  const tick = (point: Point, outward: Point, label: string) => {
-    const dx = outward[0] - point[0];
-    const dy = outward[1] - point[1];
-    const distance = Math.hypot(dx, dy) || 1;
-    const x = dx / distance;
-    const y = dy / distance;
-    ctx.beginPath();
-    ctx.moveTo(...point);
-    ctx.lineTo(point[0] + x * 4, point[1] + y * 4);
-    ctx.stroke();
-    ctx.fillText(label, point[0] + x * 17, point[1] + y * 15);
+  const cellSize = (z: number) => {
+    const [x, y] = project([.5, .5, z]);
+    const [ax, ay] = project([.5 + gridX, .5, z]);
+    const [bx, by] = project([.5, .5 + gridY, z]);
+    return (Math.hypot(ax - x, ay - y) + Math.hypot(bx - x, by - y)) / 2;
   };
-  for (const lon of longitudes) {
-    tick(geoPoint(lon, edgeLat), geoPoint(lon, edgeLat + (edgeLat === mapSouth ? -0.1 : 0.1)), coordinateLabel(lon, true));
-  }
-  for (const lat of latitudes) {
-    if (Math.abs(lat - edgeLat) < (mapNorth - mapSouth) * 0.15) continue;
-    tick(geoPoint(edgeLon, lat), geoPoint(edgeLon + (edgeLon === mapWest ? -0.1 : 0.1), lat), coordinateLabel(lat, false));
-  }
-  ctx.font = "12px system-ui, sans-serif";
+  const current = replay.rain[index];
+  const raining = area.hasData && (rain || (view === "weather" && precipitation));
+  const field = area.hasData && (rain || (view === "weather" && clouds)) ? cloudField(replay, current.time) : undefined;
+  const cameraKey = [canvas.width, canvas.height, rotation, zoom, tilt, pan?.join(",") ?? "", view, area.id, replay.id].join("|");
+  const animated = area.hasData && (rain || view === "weather");
 
-  if (stack && area.hasData) {
-    const frames = stackFrameIndices(replay, index);
-    const axis = mapCorners.reduce((right, point) => project(point)[0] > project(right)[0] ? point : right);
-    const ceiling = frames.length * timeStep + voxelHeight + .077;
-    const lift = ([lon, lat]: World, z: number) => project([lon, lat, z]);
-    const axisFloor = project(axis);
-    const axisTop = lift(axis, ceiling);
-    const backIndex = mapCorners.reduce((back, point, i) =>
-      depth(point) < depth(mapCorners[back]) ? i : back, 0);
-    const rear = mapCorners[backIndex];
-    const walls = [mapCorners[(backIndex + 1) % 4], mapCorners[(backIndex + 3) % 4]];
-    for (const [i, end] of walls.entries()) {
-      fill([project(rear), project(end), lift(end, ceiling), lift(rear, ceiling)],
-        i === 0 ? "#efede9" : "#f4f2ef");
-    }
+  cachedLayer(canvas, "scene", animated ? [cameraKey, index, raining, field?.key ?? "", rainLimit].join("|") : undefined,
+    ratio, output, target => {
+      ctx = target;
+      paintScene();
+      ctx = output;
+    });
 
+  function paintScene() {
+    // A soft sky glow and a cast shadow lift the map slab off the dark background.
+    const [glowX, glowY] = project([.5, .5]);
+    const glow = ctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, Math.max(width, height) * .65);
+    glow.addColorStop(0, "rgba(52, 82, 114, .55)");
+    glow.addColorStop(.5, "rgba(24, 42, 64, .28)");
+    glow.addColorStop(1, "rgba(9, 20, 29, 0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, width, height);
     ctx.save();
-    ctx.setLineDash([4, 5]);
-    ctx.lineWidth = .8;
-    ctx.strokeStyle = "#b7b2a9";
+    ctx.filter = "blur(20px)";
+    fill(lowerMap.map(([x, y]) => [x, y + 22] satisfies Point), "rgba(0, 4, 10, .55)");
+    ctx.restore();
+    fill([map[frontX[0]], map[frontX[1]], lowerMap[frontX[1]], lowerMap[frontX[0]]], "#a8a5a0");
+    fill([map[frontY[0]], map[frontY[1]], lowerMap[frontY[1]], lowerMap[frontY[0]]], "#c8c4bd");
+    fill(map, "#f5f3ef");
+    paintLand(area.mapPolygons, "#c9c6c0");
+
+    if (raining) drawTexture(current.values, .008, 1);
+    if (field) {
+      // Cloud shadows fall slightly away from the upper-left sun.
+      drawRaster(densityRaster(field.density, replay.cols, replay.rows, [26, 38, 56], rain ? .22 : .34),
+        .006, 1, [.018, .026], cellSize(0) * 1.6);
+    }
+
+    const { west: mapWest, south: mapSouth, east: mapEast, north: mapNorth } = mapBounds;
+    const tickCount = width < 480 ? 3 : 5;
+    const longitudes = coordinateTicks(mapWest, mapEast, tickCount);
+    const latitudes = coordinateTicks(mapSouth, mapNorth, tickCount);
+    ctx.save();
+    ctx.setLineDash([3, 5]);
+    ctx.lineWidth = 0.8;
+    ctx.strokeStyle = "rgba(92, 88, 80, .27)";
     ctx.beginPath();
-    for (let layer = 0; layer < frames.length; layer++) {
-      const z = (layer + 1) * timeStep + voxelHeight;
-      ctx.moveTo(...lift(walls[0], z));
-      ctx.lineTo(...lift(rear, z));
-      ctx.lineTo(...lift(walls[1], z));
-    }
-    for (const end of walls) {
-      const columns: World[] = end[1] === rear[1]
-        ? longitudes.map(lon => [normalizeLon(lon), rear[1]])
-        : latitudes.map(lat => [rear[0], normalizeLat(lat)]);
-      for (const point of columns) {
-        ctx.moveTo(...project(point));
-        ctx.lineTo(...lift(point, ceiling));
-      }
-    }
+    for (const lon of longitudes) mapLine(lon, mapSouth, lon, mapNorth);
+    for (const lat of latitudes) mapLine(mapWest, lat, mapEast, lat);
     ctx.stroke();
     ctx.restore();
+    paintBoundaries(area.mapPolygons, "#635e57", 1.15);
+    paintBoundaries(area.focusPolygons, "#3a3732", 1.65);
+    path(map);
+    ctx.strokeStyle = "#777168";
+    ctx.lineWidth = 1.05;
+    ctx.stroke();
 
-    const voxels: { lon: number; lat: number; z: number; rate: number; depth: number }[] = [];
-    for (const [layer, frame] of frames.entries()) {
-      const z = (layer + 1) * timeStep;
-      for (const [cell, value] of replay.rain[frame].values.entries()) {
-        if (value == null || value < .2) continue;
-        const lon = (cell % replay.cols) * gridX;
-        const lat = Math.floor(cell / replay.cols) * gridY;
-        voxels.push({ lon, lat, z, rate: value, depth: depth([lon, lat, z]) });
+    // Anchor both scale axes to the nearest corner so labels stay outside the map.
+    const corner = map.reduce((nearest, point, i) => point[1] > map[nearest][1] ? i : nearest, 0);
+    const edgeLon = corner === 0 || corner === 3 ? mapWest : mapEast;
+    const edgeLat = corner < 2 ? mapSouth : mapNorth;
+    ctx.strokeStyle = "#3b3833";
+    ctx.lineWidth = 1.15;
+    ctx.beginPath();
+    mapLine(mapWest, edgeLat, mapEast, edgeLat);
+    mapLine(edgeLon, mapSouth, edgeLon, mapNorth);
+    ctx.stroke();
+    ctx.font = (width < 480 ? 10 : 11) + "px system-ui, sans-serif";
+    ctx.fillStyle = "#fff";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const tick = (point: Point, outward: Point, label: string) => {
+      const dx = outward[0] - point[0];
+      const dy = outward[1] - point[1];
+      const distance = Math.hypot(dx, dy) || 1;
+      const x = dx / distance;
+      const y = dy / distance;
+      ctx.beginPath();
+      ctx.moveTo(...point);
+      ctx.lineTo(point[0] + x * 4, point[1] + y * 4);
+      ctx.stroke();
+      ctx.fillText(label, point[0] + x * 17, point[1] + y * 15);
+    };
+    for (const lon of longitudes) {
+      tick(geoPoint(lon, edgeLat), geoPoint(lon, edgeLat + (edgeLat === mapSouth ? -0.1 : 0.1)), coordinateLabel(lon, true));
+    }
+    for (const lat of latitudes) {
+      if (Math.abs(lat - edgeLat) < (mapNorth - mapSouth) * 0.15) continue;
+      tick(geoPoint(edgeLon, lat), geoPoint(edgeLon + (edgeLon === mapWest ? -0.1 : 0.1), lat), coordinateLabel(lat, false));
+    }
+    ctx.font = "12px system-ui, sans-serif";
+
+    if (stack && area.hasData) {
+      const frames = stackFrameIndices(replay, index);
+      const axis = mapCorners.reduce((right, point) => project(point)[0] > project(right)[0] ? point : right);
+      const ceiling = frames.length * timeStep + voxelHeight + .077;
+      const lift = ([lon, lat]: World, z: number) => project([lon, lat, z]);
+      const axisFloor = project(axis);
+      const axisTop = lift(axis, ceiling);
+      const backIndex = mapCorners.reduce((back, point, i) =>
+        depth(point) < depth(mapCorners[back]) ? i : back, 0);
+      const rear = mapCorners[backIndex];
+      const walls = [mapCorners[(backIndex + 1) % 4], mapCorners[(backIndex + 3) % 4]];
+      for (const [i, end] of walls.entries()) {
+        fill([project(rear), project(end), lift(end, ceiling), lift(rear, ceiling)],
+          i === 0 ? "#efede9" : "#f4f2ef");
+      }
+
+      ctx.save();
+      ctx.setLineDash([4, 5]);
+      ctx.lineWidth = .8;
+      ctx.strokeStyle = "#b7b2a9";
+      ctx.beginPath();
+      for (let layer = 0; layer < frames.length; layer++) {
+        const z = (layer + 1) * timeStep + voxelHeight;
+        ctx.moveTo(...lift(walls[0], z));
+        ctx.lineTo(...lift(rear, z));
+        ctx.lineTo(...lift(walls[1], z));
+      }
+      for (const end of walls) {
+        const columns: World[] = end[1] === rear[1]
+          ? longitudes.map(lon => [normalizeLon(lon), rear[1]])
+          : latitudes.map(lat => [rear[0], normalizeLat(lat)]);
+        for (const point of columns) {
+          ctx.moveTo(...project(point));
+          ctx.lineTo(...lift(point, ceiling));
+        }
+      }
+      ctx.stroke();
+      ctx.restore();
+
+      const voxels: { lon: number; lat: number; z: number; rate: number; depth: number }[] = [];
+      for (const [layer, frame] of frames.entries()) {
+        const z = (layer + 1) * timeStep;
+        for (const [cell, value] of replay.rain[frame].values.entries()) {
+          if (value == null || value < .2) continue;
+          const lon = (cell % replay.cols) * gridX;
+          const lat = Math.floor(cell / replay.cols) * gridY;
+          voxels.push({ lon, lat, z, rate: value, depth: depth([lon, lat, z]) });
+        }
+      }
+      // Paint back to front so the time slabs occlude each other naturally when rotated.
+      voxels.sort((a, b) => a.depth - b.depth);
+      for (const { lon, lat, z, rate } of voxels) {
+        const west = Math.max(0, lon - .48 * gridX);
+        const east = Math.min(1, lon + .48 * gridX);
+        const south = Math.max(0, lat - .48 * gridY);
+        const north = Math.min(1, lat + .48 * gridY);
+        const corners: Point[] = [[west, south], [east, south], [east, north], [west, north]];
+        const bottom = corners.map(([x, y]) => project([x, y, z]));
+        const top = corners.map(([x, y]) => project([x, y, z + voxelHeight]));
+        const color = rainColor(rate, rainLimit);
+        fill([top[frontX[0]], top[frontX[1]], bottom[frontX[1]], bottom[frontX[0]]], shade(color, .69));
+        fill([top[frontY[0]], top[frontY[1]], bottom[frontY[1]], bottom[frontY[0]]], shade(color, .83));
+        fill(top, shade(color));
+      }
+
+      ctx.beginPath();
+      ctx.moveTo(...axisFloor);
+      ctx.lineTo(...axisTop);
+      ctx.strokeStyle = "#574f45";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.textAlign = "left";
+      ctx.font = "600 11px system-ui, sans-serif";
+      ctx.fillStyle = "#fff";
+      ctx.fillText("UTC", Math.min(width - 36, axisTop[0] + 6), axisTop[1] - 9);
+      for (const [layer, frame] of frames.entries()) {
+        const [x, y] = project([axis[0], axis[1], (layer + 1) * timeStep + voxelHeight]);
+        const active = frame === index;
+        ctx.strokeStyle = active ? "#9f2d22" : "#777168";
+        ctx.beginPath();
+        ctx.moveTo(x - 3, y);
+        ctx.lineTo(x + 4, y);
+        ctx.stroke();
+        ctx.fillStyle = active ? "#fff" : "#e2ebf0";
+        ctx.font = (active ? "650 " : "") + "11px system-ui, sans-serif";
+        ctx.fillText(utcClock(replay.rain[frame].time), Math.min(width - 36, x + 7), y);
       }
     }
-    // Paint back to front so the time slabs occlude each other naturally when rotated.
-    voxels.sort((a, b) => a.depth - b.depth);
-    for (const { lon, lat, z, rate } of voxels) {
-      const west = Math.max(0, lon - .48 * gridX);
-      const east = Math.min(1, lon + .48 * gridX);
-      const south = Math.max(0, lat - .48 * gridY);
-      const north = Math.min(1, lat + .48 * gridY);
-      const corners: Point[] = [[west, south], [east, south], [east, north], [west, north]];
-      const bottom = corners.map(([x, y]) => project([x, y, z]));
-      const top = corners.map(([x, y]) => project([x, y, z + voxelHeight]));
-      const color = rainColor(rate, rainLimit);
-      fill([top[frontX[0]], top[frontX[1]], bottom[frontX[1]], bottom[frontX[0]]], shade(color, .69));
-      fill([top[frontY[0]], top[frontY[1]], bottom[frontY[1]], bottom[frontY[0]]], shade(color, .83));
-      fill(top, shade(color));
-    }
 
-    ctx.beginPath();
-    ctx.moveTo(...axisFloor);
-    ctx.lineTo(...axisTop);
-    ctx.strokeStyle = "#574f45";
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.textAlign = "left";
-    ctx.font = "600 11px system-ui, sans-serif";
-    ctx.fillStyle = "#fff";
-    ctx.fillText("UTC", Math.min(width - 36, axisTop[0] + 6), axisTop[1] - 9);
-    for (const [layer, frame] of frames.entries()) {
-      const [x, y] = project([axis[0], axis[1], (layer + 1) * timeStep + voxelHeight]);
-      const active = frame === index;
-      ctx.strokeStyle = active ? "#9f2d22" : "#777168";
-      ctx.beginPath();
-      ctx.moveTo(x - 3, y);
-      ctx.lineTo(x + 4, y);
-      ctx.stroke();
-      ctx.fillStyle = active ? "#fff" : "#e2ebf0";
-      ctx.font = (active ? "650 " : "") + "11px system-ui, sans-serif";
-      ctx.fillText(utcClock(replay.rain[frame].time), Math.min(width - 36, x + 7), y);
+    if (accumulation && area.hasData && totals) {
+      const surface = smoothAccumulation(totals, replay.cols, replay.rows);
+      const relief = [];
+      for (let row = 0; row < replay.rows - 1; row++) {
+        for (let col = 0; col < replay.cols - 1; col++) {
+          const corners = [[col, row], [col + 1, row], [col + 1, row + 1], [col, row + 1]];
+          const values = corners.map(([x, y]) => surface[y * replay.cols + x]);
+          if (values.some(value => value == null)) continue;
+          const mean = values.reduce<number>((sum, value) => sum + (value ?? 0), 0) / 4;
+          if (mean < .2) continue;
+          // Light the relief from the upper-left so ridges and basins read as a surface.
+          const [h0, h1, h2, h3] = values.map(value => (value ?? 0) / accumulationLimit);
+          const light = Math.max(.72, Math.min(1.16, 1 - ((h1 + h2 - h0 - h3) * .9 + (h2 + h3 - h0 - h1) * .6) * 6));
+          const points = corners.map(([x, y], corner) =>
+            project([x * gridX, y * gridY, .7 * Math.min(1, (values[corner] ?? 0) / accumulationLimit)]));
+          const depth = project([(col + .5) * gridX, (row + .5) * gridY])[1];
+          relief.push({ points, depth, mean, light });
+        }
+      }
+      relief.sort((a, b) => a.depth - b.depth);
+      for (const { points, mean, light } of relief) {
+        const color = shade(scaleColor(accumulationScale, mean / accumulationLimit), light);
+        fill(points, color);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = .5;
+        ctx.stroke();
+      }
     }
   }
 
-  if (area.hasData && clouds && satellite && view === "weather") {
-    drawTexture(satellite.values, .53, .92, replay.metadata?.cloudVariable === "cover" ? "cloudCover" : "infrared");
-  }
-
-  if (area.hasData && (rain || (view === "weather" && precipitation))) {
+  if (raining) {
     const previousValues = replay.rain[previous].values;
+    const ground = cellSize(0);
+    const rateAt = (cellIndex: number) => {
+      const value = current.values[cellIndex];
+      if (value == null) return 0;
+      const before = previousValues[cellIndex] ?? value;
+      return rain ? value : before + (value - before) * progress;
+    };
+    // Translucent rain shafts and splash rings under the heavier cells, sampled every other cell.
+    const { curtain } = cloudSprites();
+    const splashes: [Point, number][] = [];
+    for (let row = 0; row < replay.rows; row += 2) {
+      for (let col = 0; col < replay.cols; col += 2) {
+        const cellIndex = row * replay.cols + col;
+        const rate = rateAt(cellIndex);
+        if (rate < 3) continue;
+        const strength = Math.sqrt(Math.min(1, rate / rainLimit));
+        const [x, y] = project([col * gridX, row * gridY, 0]);
+        const [, top] = project([col * gridX, row * gridY, rainCeiling]);
+        const shaft = ground * (1.6 + 2 * strength);
+        ctx.globalAlpha = Math.min(.42, .07 + .4 * strength);
+        ctx.drawImage(curtain, x - shaft / 2, top, shaft, y - top);
+        if (rate >= 6) splashes.push([[x, y], (phase * 1.6 + rainRandom(cellIndex, 71)) % 1]);
+      }
+    }
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = .8;
+    for (const [fresh, alpha] of [[true, "rgba(70, 100, 140, .45)"], [false, "rgba(70, 100, 140, .2)"]] as const) {
+      ctx.strokeStyle = alpha;
+      ctx.beginPath();
+      for (const [[x, y], age] of splashes) {
+        if (age < .5 !== fresh) continue;
+        const radius = ground * (.3 + 1.1 * age);
+        ctx.moveTo(x + radius, y);
+        ctx.ellipse(x, y, radius, radius * tilt, 0, 0, Math.PI * 2);
+      }
+      ctx.stroke();
+    }
     ctx.strokeStyle = rainStroke;
     ctx.lineWidth = 1.05;
     ctx.beginPath();
@@ -371,30 +634,52 @@ export function paintReplay(
     ctx.stroke();
   }
 
-  if (accumulation && area.hasData && totals) {
-    const surface = smoothAccumulation(totals, replay.cols, replay.rows);
-    const relief = [];
-    for (let row = 0; row < replay.rows - 1; row++) {
-      for (let col = 0; col < replay.cols - 1; col++) {
-        const corners = [[col, row], [col + 1, row], [col + 1, row + 1], [col, row + 1]];
-        const values = corners.map(([x, y]) => surface[y * replay.cols + x]);
-        if (values.some(value => value == null)) continue;
-        const mean = values.reduce<number>((sum, value) => sum + (value ?? 0), 0) / 4;
-        if (mean < .2) continue;
-        const points = corners.map(([x, y], corner) =>
-          project([x * gridX, y * gridY, .7 * Math.min(1, (values[corner] ?? 0) / accumulationLimit)]));
-        const depth = project([(col + .5) * gridX, (row + .5) * gridY])[1];
-        relief.push({ points, depth, mean });
+  if (field) {
+    const density = field.density;
+    cachedLayer(canvas, "clouds", [cameraKey, field.key].join("|"), ratio, output, target => {
+      ctx = target;
+      paintClouds(density, rain ? .62 : 1);
+      ctx = output;
+    });
+  }
+
+  // Volumetric cloud puffs, painted back to front with darker bases under thick convective cells.
+  function paintClouds(density: Float32Array, strength: number) {
+    const { lit, shade: base } = cloudSprites();
+    const cell = cellSize(cloudBase);
+    drawRaster(densityRaster(density, replay.cols, replay.rows, [228, 235, 244], .5 * strength),
+      cloudBase + .04, 1, [0, 0], cell * 1.2);
+    const puffs: { x: number; y: number; radius: number; alpha: number; amount: number; variant: number; depth: number }[] = [];
+    for (let row = 0; row < replay.rows; row++) {
+      for (let col = 0; col < replay.cols; col++) {
+        const cellIndex = row * replay.cols + col;
+        const amount = density[cellIndex];
+        if (amount < .1 || (amount < .4 && (row + col) % 2)) continue;
+        const count = amount > .62 ? 2 : 1;
+        for (let puff = 0; puff < count; puff++) {
+          const seed = 7 + cellIndex * 5 + puff;
+          const lon = clamp01((col + (rainRandom(seed, 3) - .5) * 1.4) * gridX);
+          const lat = clamp01((row + (rainRandom(seed, 5) - .5) * 1.4) * gridY);
+          const z = cloudBase + amount * cloudDepth * (.25 + .75 * rainRandom(seed, 7));
+          const [x, y] = project([lon, lat, z]);
+          puffs.push({
+            x, y, amount,
+            radius: cell * (1.15 + 1.9 * amount) * (.75 + .5 * rainRandom(seed, 11)),
+            alpha: strength * (.16 + .6 * amount) * (.8 + .2 * rainRandom(seed, 13)),
+            variant: Math.floor(rainRandom(seed, 17) * puffLobes.length),
+            depth: depth([lon, lat, z]),
+          });
+        }
       }
     }
-    relief.sort((a, b) => a.depth - b.depth);
-    for (const { points, mean } of relief) {
-      const color = shade(scaleColor(accumulationScale, mean / accumulationLimit));
-      fill(points, color);
-      ctx.strokeStyle = color;
-      ctx.lineWidth = .5;
-      ctx.stroke();
+    puffs.sort((a, b) => a.depth - b.depth);
+    for (const { x, y, radius, alpha, amount, variant } of puffs) {
+      ctx.globalAlpha = alpha * (.3 + .7 * amount);
+      ctx.drawImage(base[variant], x - radius, y - radius * .64, radius * 2, radius * 2);
+      ctx.globalAlpha = alpha;
+      ctx.drawImage(lit[variant], x - radius, y - radius, radius * 2, radius * 2);
     }
+    ctx.globalAlpha = 1;
   }
 
   if (area.hasData && selectedCell !== undefined) {

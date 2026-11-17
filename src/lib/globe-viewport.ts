@@ -24,7 +24,10 @@ export function overviewZoom(container: HTMLElement, overview: MapOverview, lati
   if (overview === "atlas") return Math.max(-2, Math.min(1.55, Math.log2(size / 512)));
   if (overview === "china") return Math.max(-2, Math.min(3.35, Math.log2(size / 106)));
   const latitudeScale = Math.max(0.2, Math.cos(latitude * Math.PI / 180));
-  return Math.max(-2, Math.log2(size * 0.84 * latitudeScale / 140));
+  // Desktop globes fill the viewport; this share keeps their radius at a third of the shorter side,
+  // matching the embedded weather globe (public/earth globes.js fit).
+  const share = window.matchMedia("(min-width: 901px)").matches ? 0.745 : 0.84;
+  return Math.max(-2, Math.log2(size * share * latitudeScale / 140));
 }
 
 export function observeMapViewport(map: Map, isAtlas = () => false) {

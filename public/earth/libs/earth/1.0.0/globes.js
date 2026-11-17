@@ -74,7 +74,10 @@ var globes = function() {
                 var bounds = d3.geo.path().projection(defaultProjection).bounds({type: "Sphere"});
                 var hScale = (bounds[1][0] - bounds[0][0]) / defaultProjection.scale();
                 var vScale = (bounds[1][1] - bounds[0][1]) / defaultProjection.scale();
-                return Math.min(view.width / hScale, view.height / vScale) * 0.9;
+                // In the desktop workspace the globe shares the size of the other topic globes.
+                var workspace = document.documentElement.classList.contains("ogw-workspace") &&
+                    window.parent.matchMedia("(min-width: 901px)").matches;
+                return Math.min(view.width / hScale, view.height / vScale) * (workspace ? 0.698 : 0.9);
             },
 
             /**
