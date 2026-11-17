@@ -270,7 +270,11 @@
   overflow: auto;
   scrollbar-width: thin;
 }
-.embedded .readingsBody { background: var(--og-panel-fill, rgb(10 17 26 / 64%)); }
+.embedded .readingsBody {
+  background: var(--og-panel-fill, rgb(10 17 26 / 64%));
+  -webkit-backdrop-filter: var(--og-panel-backdrop);
+  backdrop-filter: var(--og-panel-backdrop);
+}
 .embedded .legend {
   top: calc(var(--og-stage-top, 100px) + 10px);
   left: calc(var(--og-stage-left, 240px) + 10px);

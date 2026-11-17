@@ -3324,7 +3324,8 @@
   --og-switcher-top: var(--og-rail-top);
   --og-space-glow: 32 55 81;
   --og-space-haze: 70 99 151;
-  --og-panel-fill: rgb(10 17 26 / 64%);
+  --og-panel-fill: linear-gradient(155deg, rgb(33 47 62 / 55%), rgb(9 16 27 / 60%) 75%);
+  --og-panel-backdrop: blur(14px) saturate(125%);
   --og-stage-transition: 240ms ease;
   background:
     radial-gradient(ellipse at 51% 48%, rgb(var(--og-space-glow) / 45%), transparent 70%),
@@ -3409,8 +3410,21 @@
 
 .og-globe-workspace .og-workspace-sidebar {
   inset: var(--og-workspace-top) auto var(--og-gutter) var(--og-gutter);
+}
+
+.og-globe-workspace :is(
+  .og-workspace-sidebar,
+  .og-forecast-region > aside,
+  .og-weather-globe-stage > aside,
+  .og-economy-profile-region > aside,
+  [data-power-analysis-dock] > aside
+) {
   background: var(--og-panel-fill);
-  border-radius: 8px;
+  -webkit-backdrop-filter: var(--og-panel-backdrop);
+  backdrop-filter: var(--og-panel-backdrop);
+  border: 0;
+  border-radius: 14px;
+  box-shadow: none;
 }
 
 /* Center the topic bar on the viewport and only shift it right when the sidebar would cover it. */
@@ -3626,11 +3640,6 @@
 .is-earth-project {
   --og-weather-control-fill: rgb(255 255 255 / 10%);
   --og-weather-control-hover: rgb(255 255 255 / 17%);
-}
-.is-earth-project .og-workspace-sidebar {
-  backdrop-filter: blur(3px);
-  border: 0;
-  border-radius: 13px;
 }
 .is-earth-project .og-workspace-action,
 .is-earth-project .og-filter-select select,

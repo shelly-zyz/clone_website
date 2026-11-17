@@ -188,7 +188,6 @@
   padding: 11px 10px;
   border-radius: 12px;
   background: var(--og-panel-fill, rgb(10 17 26 / 64%));
-  backdrop-filter: blur(3px);
   color: #ecf5f9;
 }
 .rail > * { flex: none; }
