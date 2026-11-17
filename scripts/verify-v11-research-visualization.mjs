@@ -63,6 +63,27 @@ async function exported(project, figure, format, filename) {
 const catalog = await post({ action: "catalog" });
 const project = await post({ action: "start", domain: "electricity" });
 const other = await post({ action: "start", domain: "economy" });
+assert.equal(catalog.sources.business_datasets.find(item => item.id === "annual-capacity").unit, "GW");
+assert.ok(catalog.sources.business_datasets.find(item => item.id === "published:electricity_generation_current"));
+const capacity = [{ kind: "annual-capacity", composition_year: 2025 }];
+const recommended = await post({ action: "recommend", datasets: capacity }, project);
+assert.deepEqual(recommended.choices.find(item => item.structure === "composition").charts, ["ring", "composition-columns"]);
+assert.equal(recommended.datasets[0].sample_count, 6);
+const ring = await post({ action: "render", job: job(capacity, { kind: "ring", structure: "composition" }) }, project);
+assert.equal(ring.render.option.series.filter(item => item.type === "pie").length, 2);
+const province = [fixture("power", "electricity_generation_current", {
+  province_comparison: true, start_date: "2025-12-01", end_date: "2025-12-31",
+})];
+const provinceOptions = await post({ action: "recommend", datasets: province }, project);
+assert.deepEqual(provinceOptions.choices[0].charts.slice(0, 3), ["rank", "horizontal-bars", "columns"]);
+const rank = await post({ action: "render", job: job(province, { kind: "rank", structure: "categories" }) }, project);
+const editable = (await exported(project, rank, "drawio", "province.drawio")).toString();
+assert.match(editable, /<mxGraphModel/);
+assert.match(editable, /内蒙古/);
+assert.match(editable, /<object label="" tooltip=/);
+assert.doesNotMatch(editable, /data:image/);
+await post({ action: "export", artifact_id: ring.artifact_id, format: "drawio" }, project, 422);
+console.log("PASS business catalog, official capacity and province structures, real ring and editable vector objects");
 const primary = job(windSolar);
 const power = await post({ action: "render", job: primary }, project);
 assert.equal(power.plan.engine, "echarts");
@@ -138,7 +159,9 @@ if (process.env.OGW_VIZ_VERIFY_GRIDS === "true") {
 await mcp(project, async (client, call) => {
   const { tools } = await client.listTools();
   const names = tools.map(item => item.name);
-  assert.equal(names.length, 35);
+  assert.equal(names.length, 36);
+  const choices = await call("viz.recommend_charts", { datasets: capacity });
+  assert.deepEqual(choices.choices, recommended.choices);
   const domainCalls = [
     ["electricity.analyze_generation_mix", { datasets: windSolar }, "stack"],
     ["meteorology.analyze_wind_field", { datasets: [wind] }, weather.plan.datasets[1].sample_count - weather.plan.datasets[1].missing < 4 ? "trend" : "box"],

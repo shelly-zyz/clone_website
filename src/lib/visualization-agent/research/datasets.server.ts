@@ -13,10 +13,11 @@ import { resolveDataResult } from "@/lib/data-agent/state.server";
 import type { DataResult } from "@/lib/data-agent/result-profile";
 import { readBundledReplay, readWeatherReplay } from "@/lib/weather-replay/storage.server";
 import { WEATHER_METRICS } from "@/lib/weather-earth";
+import { officialAnnual, powerRecords } from "@/lib/topic-analysis/power";
 import wdi from "../../../../public/data/economy/wdi.json" with { type: "json" };
 import gep from "../../../../public/data/economy/gep.json" with { type: "json" };
 import growth from "../../../../public/data/economy/real-growth.json" with { type: "json" };
-import { dataIdentity, domains, VisualizationError, type DatasetMetadata, type DatasetPoint,
+import { dataIdentity, domains, economyMetrics, VisualizationError, type BusinessDataset, type DatasetMetadata, type DatasetPoint,
   type DatasetProfile, type DatasetRequest, type VisualizationDataContract } from "./contracts";
 
 export type ProjectAccess = { project_id: string; key: string };
@@ -141,6 +142,34 @@ const economyConfig = {
   exports: { key: "NE.EXP.GNFS.CD", title: "商品与服务出口（现价）", unit: "USD" },
   "growth-outlook": { key: "NY.GDP.MKTP.KD.ZG", title: "实际 GDP 增速", unit: "%" },
 } as const;
+
+function annualCapacity(query: Extract<DatasetRequest, { kind: "annual-capacity" }>) {
+  const version = hash(JSON.stringify(powerRecords));
+  if (query.version && query.version !== version) absent("当前年度装机档案没有指定版本。");
+  const series = query.source ?? "electricity";
+  const mix = query.composition_year !== undefined;
+  const records = powerRecords.filter(record => mix ? +record.year === query.composition_year :
+    +record.year >= (query.start_year ?? 1960) && +record.year <= (query.end_year ?? 2200));
+  const part = series === "electricity" ? undefined : powerRecords[0].parts.find(item => item.id === series);
+  const rows = records.flatMap(record => {
+    const timestamp = record.year + "-12-31T00:00:00.000Z";
+    return mix ? record.parts.map(item => ({ timestamp, label: item.name, region_id: item.id, value: item.capacity, quality_flag: 0 }))
+      : [{ timestamp, label: record.year, region_id: "CHN", value: part ? record.parts.find(item => item.id === part.id)?.capacity ?? null : record.capacity, quality_flag: 0 }];
+  });
+  return materialize({
+    dataset_id: "nbs_annual_power_capacity", series_id: mix ? "composition" : series, metric_id: "installed_capacity_year_end",
+    title: mix ? query.composition_year + " 年全国年末装机组成" : "全国年末装机量" + (part ? " · " + part.name : ""),
+    domain: "electricity", source_id: officialAnnual.label, source_version: version,
+    source_url: records.length ? records.map(record => record.source.href) : [officialAnnual.href],
+    dimensions: { shape: mix ? "category" : "time", time_grain: "year" },
+    unit: "GW", time_zone: "UTC", data_type: "official_statistics", publication_time: null,
+    retrieved_at: new Date().toISOString(),
+    last_updated_at: null, forecast_origin: null, model_id: null, model_version: null, interval_method: null,
+    transform_history: mix ? ["其他及口径差额为总装机减去各项已单列装机容量"] : [],
+    aggregation_method: "年末全国存量", region_label: "中国全国", truncated: false,
+    rules: "全国公报年末发电装机。构成中的其他项含未单列电源和统计差额。",
+  }, rows);
+}
 
 function economyDataset(query: Extract<DatasetRequest, { kind: "economy" }>) {
   const code = query.country;
@@ -366,6 +395,7 @@ async function resolveOne(request: DatasetRequest, access: ProjectAccess) {
     data = await fromDataResult(result);
   } else if (request.kind === "forecast-job") data = await fromForecast(request.job_id, access);
   else if (request.kind === "economy") data = economyDataset(request);
+  else if (request.kind === "annual-capacity") data = annualCapacity(request);
   else if (request.kind === "approved") data = await approvedArchive(request);
   else if (request.kind === "gfs-grid") data = await fromGfs(request);
   else {
@@ -373,7 +403,7 @@ async function resolveOne(request: DatasetRequest, access: ProjectAccess) {
     data = replay.data;
     resolved = replay.resolved;
   }
-  if ("version" in resolved || resolved.kind === "economy" || resolved.kind === "approved" || resolved.kind === "replay-grid" || resolved.kind === "gfs-grid") {
+  if (resolved.kind !== "published" && resolved.kind !== "result" && resolved.kind !== "forecast-job") {
     resolved = { ...resolved, version: data.source_version };
   }
   return { data, profile: validateDataset(data, resolved) };
@@ -391,6 +421,45 @@ export async function resolveDatasets(requests: DatasetRequest[], access: Projec
 
 export async function researchCatalog() {
   const [catalog, power] = await Promise.all([listDataCatalog().catch(() => undefined), listDataCatalog("power").catch(() => undefined)]);
-  return { published: catalog?.datasets ?? [], power_regions: power?.region_codes ?? [], published_available: Boolean(catalog), economic_editions: { wdi: growth.lastUpdated, gep: gep.edition },
+  const published = catalog?.datasets ?? [];
+  const business_datasets: BusinessDataset[] = published.flatMap(({ topic, metrics }) => metrics.map(metric => ({
+    id: "published:" + metric.metric_code, label: businessNames[metric.metric_code] ?? metric.name, domain: datasetDomain[topic],
+    unit: metric.unit, frequency: metric.time_grain,
+    request: { kind: "published", query: topic === "power"
+      ? { topic, metric_code: metric.metric_code, limit: 120, region_code: "000000000000" }
+      : { topic, metric_code: metric.metric_code, limit: 120 } },
+  })));
+  business_datasets.unshift({ id: "annual-capacity", label: "装机量 · 全国年末", domain: "electricity", unit: "GW", frequency: "year",
+    request: { kind: "annual-capacity", source: "electricity", start_year: +powerRecords[0].year, end_year: +powerRecords.at(-1)!.year } });
+  business_datasets.push(...economyMetrics.map((metric): BusinessDataset => ({
+    id: "economy:" + metric, label: metric === "growth-outlook" ? "实际 GDP 增速展望" : economyConfig[metric].title,
+    domain: "economy", unit: economyConfig[metric].unit, frequency: "year", request: { kind: "economy", metric, country: "CHN" },
+  })), {
+    id: "replay-grid:rain", label: "降水率 · 美国东南部回放", domain: "meteorology", unit: "mm/h", frequency: "frame",
+    request: { kind: "replay-grid", field: "rain", id: "us-southeast-2026-09-26", archive: true },
+  }, {
+    id: "replay-grid:satellite", label: "红外亮温 · 美国东南部回放", domain: "meteorology", unit: "K", frequency: "frame",
+    request: { kind: "replay-grid", field: "satellite", id: "us-southeast-2026-09-26", archive: true },
+  });
+  const weatherDir = join(process.cwd(), ".weather-cache");
+  const manifest = await readSmallFile(join(weatherDir, "manifest.json"), 64_000)
+    .then(body => z.object({ refreshStatus: z.enum(["live", "cached"]) }).safeParse(JSON.parse(body.toString())).success).catch(() => false);
+  const grids = manifest ? await Promise.all(WEATHER_METRICS.map(async metric => ({
+    metric, available: await stat(join(weatherDir, metric.key + ".json")).then(file => file.isFile()).catch(() => false),
+  }))) : [];
+  for (const { metric, available } of grids) {
+    if (available) business_datasets.push({ id: "gfs-grid:" + metric.key, label: metric.label + " · 空间网格", domain: "meteorology",
+      unit: metric.unit, frequency: "frame", request: { kind: "gfs-grid", field: metric.key } });
+  }
+  return { published, business_datasets, power_regions: power?.region_codes ?? [], published_available: Boolean(catalog), economic_editions: { wdi: growth.lastUpdated, gep: gep.edition },
     approved_catalog: Boolean(process.env.OGW_VIS_DATA_CATALOG), global_grid: { fields: WEATHER_METRICS.map(item => item.key), cache: "GFS" } };
 }
+
+const businessNames: Record<string, string> = {
+  electricity_generation_current: "发电量 · 本期值", electricity_generation_cumulative: "发电量 · 累计值",
+  electricity_generation_yoy: "发电量 · 本期同比", electricity_generation_cumulative_yoy: "发电量 · 累计同比",
+  grid_temperature_mean: "气温 · 全球格点均值", grid_wind_speed_10m_mean: "10 米风速 · 全球格点均值",
+  grid_wind_speed_100m_mean: "100 米风速 · 全球格点均值", grid_surface_wind_gust_mean: "阵风 · 全球格点均值",
+  global_grid_emission_rate_sum: "全球电力部门排放速率", global_grid_nonzero_cell_count: "非零排放格点数",
+  global_grid_total_cell_count: "排放格点总数",
+};

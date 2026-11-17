@@ -100,7 +100,7 @@ export function domainsForMessage(message: string, fallback: Domain) {
 
 export const engineCharts: Record<Engine, readonly ChartKind[]> = {
   echarts: ["trend", "columns", "rank", "stack", "box", "scatter", "correlation", "forecast", "forecast-diagnostics",
-    "waterfall", "dumbbell", "flow", "calendar", "grid", "rose", "trend-distribution"],
+    "waterfall", "dumbbell", "flow", "calendar", "grid", "rose", "trend-distribution", "horizontal-bars", "ring", "composition-columns"],
   flint: ["trend", "columns"],
   matplotlib: ["trend", "columns", "rank", "stack", "box", "violin", "density", "scatter", "correlation", "forecast",
     "forecast-diagnostics", "waterfall", "dumbbell", "grid", "rose", "trend-distribution"],

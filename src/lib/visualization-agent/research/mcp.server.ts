@@ -38,6 +38,9 @@ export function registerResearchTools(server: McpServer, key: string | null, sig
   server.registerTool("viz.profile_dataset", {
     description: "校验项目和数据引用，返回字段、时间、单位、版本及有效样本。", inputSchema: scoped({ datasets }),
   }, args => result(() => invoke({ action: "profile", datasets: args.datasets }, args.project_id)));
+  server.registerTool("viz.recommend_charts", {
+    description: "核验所选指标与数据范围，返回有样本证据的数据结构和可用图型。", inputSchema: scoped({ datasets }),
+  }, args => result(() => invoke({ action: "recommend", datasets: args.datasets }, args.project_id)));
   server.registerTool("viz.create_plan", {
     description: "根据授权数据制定单一渲染计划，返回适用的图型、校验和分析统计。", inputSchema: job,
   }, args => result(() => invoke({ action: "plan", job: args.job }, args.project_id)));

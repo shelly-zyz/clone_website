@@ -4,22 +4,28 @@ import { dataQuerySchema } from "@/lib/data-agent/contracts";
 export const domains = ["electricity", "meteorology", "carbon", "economy"] as const;
 export type Domain = typeof domains[number];
 export const chartKinds = ["trend", "columns", "rank", "stack", "box", "violin", "density", "scatter", "correlation",
-  "forecast", "forecast-diagnostics", "waterfall", "dumbbell", "flow", "calendar", "grid", "surface", "rose", "trend-distribution"] as const;
+  "forecast", "forecast-diagnostics", "waterfall", "dumbbell", "flow", "calendar", "grid", "surface", "rose", "trend-distribution",
+  "horizontal-bars", "ring", "composition-columns"] as const;
 export type ChartKind = typeof chartKinds[number];
+export const dataStructures = ["timeline", "categories", "composition", "grid", "forecast", "flow", "relationship"] as const;
+export type DataStructure = typeof dataStructures[number];
 export const engines = ["echarts", "flint", "matplotlib", "plotly"] as const;
 export type Engine = typeof engines[number];
 export const themes = ["academic-light", "academic-monochrome", "editorial-modern", "scientific-spectrum", "dashboard-glass", "dark-analytics"] as const;
 export const layouts = ["auto", "focus", "vertical", "horizontal", "2x2", "3x2"] as const;
-export const exportFormats = ["svg", "png", "pdf", "json", "python"] as const;
+export const exportFormats = ["svg", "png", "pdf", "json", "python", "drawio"] as const;
 export type ExportFormat = typeof exportFormats[number];
 
 const release = z.string().regex(/^[a-f0-9]{64}$/);
 const year = z.number().int().min(1960).max(2200);
 const country = z.string().regex(/^[A-Z]{3}$/);
 export const economyMetrics = ["real-growth", "gdp", "gdp-per-capita", "exports", "growth-outlook"] as const;
+export const capacitySources = ["electricity", "thermal-power", "hydro-power", "nuclear-power", "wind-power", "solar-power", "other"] as const;
 
 export const datasetRequestSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("published"), query: dataQuerySchema }),
+  z.strictObject({ kind: z.literal("annual-capacity"), source: z.enum(capacitySources).optional(),
+    start_year: year.optional(), end_year: year.optional(), composition_year: year.optional(), version: release.optional() }),
   z.strictObject({ kind: z.literal("result"), result_id: z.uuid() }),
   z.strictObject({ kind: z.literal("forecast-job"), job_id: z.uuid() }),
   z.strictObject({ kind: z.literal("economy"), metric: z.enum(economyMetrics), country,
@@ -31,6 +37,7 @@ export const datasetRequestSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("approved"), id: z.string().regex(/^[a-z][a-z0-9-]{1,50}$/), version: release.optional() }),
 ]);
 export type DatasetRequest = z.infer<typeof datasetRequestSchema>;
+export type BusinessDataset = { id: string; label: string; domain: Domain; unit: string; frequency: string; request: DatasetRequest };
 
 export const styleSchema = z.strictObject({
   theme: z.enum(themes).optional(), font: z.enum(["Arial", "Microsoft YaHei", "Noto Sans CJK SC", "DejaVu Sans"]).optional(),
@@ -42,6 +49,7 @@ export type FigureStyle = z.infer<typeof styleSchema>;
 
 export const figurePatchSchema = z.strictObject({
   domain: z.enum(domains).optional(),
+  structure: z.enum(dataStructures).optional(),
   title: z.string().trim().min(1).max(100).optional(),
   kind: z.enum(["auto", ...chartKinds]).optional(),
   mode: z.enum(["interactive", "paper"]).optional(),
@@ -146,6 +154,8 @@ export type VisualizationResult = {
   viewport: { rows: number; panels: number; compact_model?: FigureModel };
 };
 
+export type FigureRecommendations = { datasets: DatasetProfile[]; choices: { structure: DataStructure; charts: ChartKind[] }[] };
+export type GuidedVisualization = { recipe: VisualizationJob["configuration"]; recommendation: FigureRecommendations; explanation?: string };
 export const figureReference = { figure_id: z.uuid(), revision: z.number().int().min(1).max(30).optional() };
 export const projectKeySchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
 
@@ -154,10 +164,12 @@ export const workspaceRequestSchema = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("catalog") }),
   z.strictObject({ action: z.literal("session-source"), session_id: z.uuid() }),
   z.strictObject({ action: z.literal("profile"), datasets: z.array(datasetRequestSchema).min(1).max(6) }),
+  z.strictObject({ action: z.literal("recommend"), datasets: z.array(datasetRequestSchema).min(1).max(6) }),
   z.strictObject({ action: z.literal("render"), job: visualizationJobSchema }),
   z.strictObject({ action: z.literal("edit"), task_id: z.uuid(), patch: figureEditSchema, artifact_id: z.uuid() }),
   z.strictObject({ action: z.literal("ask"), task_id: z.uuid(), message: z.string().trim().min(1).max(500),
-    domain: z.enum(domains), artifact_id: z.uuid().optional() }),
+    domain: z.enum(domains), artifact_id: z.uuid().optional(), draft: figurePatchSchema.optional(), guided: z.literal(true).optional(),
+    dialogue: z.array(z.object({ question: z.string().max(500), reply: z.string().max(180) })).max(3).optional() }),
   z.strictObject({ action: z.literal("save"), artifact_id: z.uuid(), figure_id: z.uuid().optional(),
     expected_revision: z.number().int().min(1).max(30).optional() }),
   z.strictObject({ action: z.literal("list") }),

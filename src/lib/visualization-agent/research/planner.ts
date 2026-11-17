@@ -3,6 +3,8 @@ import { VisualizationError, type ChartKind, type DatasetProfile, type Engine, t
 import { engineCharts, skillsFor } from "./registry";
 import { contrast, figureDesign } from "./themes";
 import { figureInsights } from "./insights";
+import { structureCharts } from "./structures";
+import { hasEditableDrawing } from "./drawio";
 
 export type Evidence = { data: VisualizationDataContract; profile: DatasetProfile }[];
 type Recipe = VisualizationJob["configuration"];
@@ -12,6 +14,7 @@ const names: Record<ChartKind, string> = {
   density: "密度图", scatter: "散点图", correlation: "相关矩阵", forecast: "预测图", "forecast-diagnostics": "预测与误差",
   waterfall: "瀑布图", dumbbell: "哑铃图", flow: "桑基图", calendar: "日历热图", grid: "空间热图",
   surface: "三维网格曲面", rose: "风向玫瑰图", "trend-distribution": "趋势与分布",
+  "horizontal-bars": "横向条形图", ring: "双层环图", "composition-columns": "构成柱图",
 };
 
 const incompatible = (message: string): never => { throw new VisualizationError("INCOMPATIBLE", message); };
@@ -88,7 +91,7 @@ function distribution(items: VisualizationDataContract[], kind: "box" | "violin"
   }));
 }
 
-function category(items: VisualizationDataContract[], kind: "rank" | "columns" | "dumbbell" | "waterfall" | "rose"): FigurePanel[] {
+function category(items: VisualizationDataContract[], kind: "rank" | "horizontal-bars" | "columns" | "dumbbell" | "waterfall" | "rose"): FigurePanel[] {
   if (kind === "dumbbell") {
     if (items.length !== 2 || !items.every(item => item.dimensions.shape === "category") || !sameMetric(items)) {
       return incompatible("哑铃图需要两个同指标、同单位的类别截面。");
@@ -103,7 +106,7 @@ function category(items: VisualizationDataContract[], kind: "rank" | "columns" |
       ({ name: item.title + " · " + (item.observation_time.start?.slice(0, 10) ?? ""), unit: item.unit, data: pairs.map(pair => i ? pair.b : pair.a) })) }];
   }
   return items.map(item => {
-    if (kind === "rank" && item.dimensions.shape !== "category") incompatible("排行需要可比较的类别截面。");
+    if ((kind === "rank" || kind === "horizontal-bars") && item.dimensions.shape !== "category") incompatible("排行需要可比较的类别截面。");
     if (kind === "waterfall" && (item.dimensions.shape !== "category" || !/贡献|变动|净变化|delta|contribution/i.test(item.title + item.metric_id + item.aggregation_method))) {
       incompatible("瀑布图需要已发布或已计算的增减贡献量。");
     }
@@ -111,7 +114,7 @@ function category(items: VisualizationDataContract[], kind: "rank" | "columns" |
       item.rows.some(row => row.value !== null && row.value < 0))) incompatible("风向玫瑰图需要真实方向分组及非负的频数或比例。");
     if (item.dimensions.shape === "time" && kind === "columns") return timeline([item], item.title, kind);
     if (item.dimensions.shape !== "category") return incompatible("当前数据不是可用于图表的类别截面。");
-    const rows = kind === "rank" ? item.rows.toSorted((a, b) => (b.value ?? -Infinity) - (a.value ?? -Infinity)) : item.rows;
+    const rows = kind === "rank" || kind === "horizontal-bars" ? item.rows.toSorted((a, b) => (b.value ?? -Infinity) - (a.value ?? -Infinity)) : item.rows;
     return { kind, title: item.title, axis: "category", x: rows.map(row => row.label), series: [{ name: item.title, unit: item.unit, data: rows.map(row => row.value) }] };
   });
 }
@@ -268,11 +271,16 @@ export function planFigure(job: VisualizationJob, evidence: Evidence, available:
   const predict = items.some(item => item.is_forecast) && time && sameMetric(items);
   const minimum = Math.min(...items.map(item => observations(item).length));
   const candidates: ChartKind[] = grid ? ["grid", "surface"] : flow ? ["flow"] : categories
-    ? ["rank", "columns", ...(items.length === 2 && sameMetric(items) ? ["dumbbell" as const] : [])]
+    ? ["rank", "columns", "horizontal-bars", ...(items.length === 2 && sameMetric(items) ? ["dumbbell" as const] : [])]
     : time ? [...(predict ? ["forecast" as const] : []), "trend", "columns", ...(minimum >= 4 ? ["trend-distribution" as const, "box" as const] : []),
       ...(minimum >= 8 ? ["violin" as const, "density" as const] : []), ...(items.length >= 2 ? ["correlation" as const] : [])] : [];
-  const chart = request.kind && request.kind !== "auto" ? request.kind : candidates[0];
+  const allowed = request.structure && structureCharts[request.structure];
+  const chart = request.kind && request.kind !== "auto" ? request.kind : candidates.find(kind => !allowed || allowed.includes(kind));
   if (!chart) return incompatible("选择可比较的数据形状，或为不同形状分别创建图件。");
+  if (allowed && !allowed.includes(chart)) return incompatible("该图样与所选数据结构不匹配。");
+  if (request.structure === "timeline" && !time || request.structure === "categories" && !categories) {
+    return incompatible("请选择与图样匹配的时间序列或类别截面。");
+  }
   const paper = request.mode === "paper" || request.engine === "matplotlib" || chart === "violin" || chart === "density";
   if (request.mode === "interactive" && (chart === "violin" || chart === "density" || request.engine === "matplotlib")) {
     return incompatible("当前小提琴和密度配方请使用论文模式。");
@@ -311,7 +319,15 @@ export function planFigure(job: VisualizationJob, evidence: Evidence, available:
         if (!panels.some(panel => panel.kind === "box")) warnings.push("误差箱线需要至少 4 期匹配样本。当前显示逐期误差。");
       }
       break;
-    case "columns": case "rank": case "waterfall": case "dumbbell": case "rose":
+    case "ring": case "composition-columns": {
+      if (items.length !== 1 || !categories || items[0].dataset_id !== "nbs_annual_power_capacity" || items[0].series_id !== "composition" ||
+        items[0].rows.some(row => row.value === null || row.value < 0) || !items[0].rows.some(row => (row.value ?? 0) > 0)) {
+        return incompatible("请选择同年全国年末装机的互斥分项。");
+      }
+      panels = category(items, "columns").map(panel => ({ ...panel, kind: chart }));
+      break;
+    }
+    case "columns": case "rank": case "horizontal-bars": case "waterfall": case "dumbbell": case "rose":
       panels = category(items, chart); break;
     case "box": case "violin": case "density":
       panels = distribution(items, chart);
@@ -368,6 +384,7 @@ export function planFigure(job: VisualizationJob, evidence: Evidence, available:
     layout, design: style, output: engine === "matplotlib" ? ["svg", "png", "pdf", "json", "python"] : ["svg", "json"],
     validations, transformations: [...new Set(transformations)], datasets: evidence.map(item => item.profile),
   };
+  if (hasEditableDrawing(model)) plan.output.push("drawio");
   if (contrast(style.foreground, style.background) < 4.5) throw new VisualizationError("VALIDATION_FAILED", "图件文字对比度不足。");
   if (paper && style.height_mm / (model.focus ? Math.ceil((panels.length - 1) / model.columns) + 1 : Math.ceil(panels.length / model.columns)) < 36) {
     throw new VisualizationError("VALIDATION_FAILED", "版面高度不足。请增加图件高度或减少子图。");

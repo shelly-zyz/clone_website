@@ -6,9 +6,12 @@ import { assertDataProject, readDataSession } from "@/lib/data-agent/state.serve
 import { themes, type FigureEdit, type VisualizationJob, type VisualizationResult, type WorkspaceRequest, VisualizationError } from "./contracts";
 import { researchCatalog, resolveDatasets, type ProjectAccess } from "./datasets.server";
 import { cachePreview, listFigures, readFigure, readPreview, saveFigure, type Artifact, type SavedFigure } from "./library.server";
-import { planFigure, type Recipe } from "./planner";
+import { planFigure, type Evidence, type Recipe } from "./planner";
 import { availableEngines, exportECharts, exportPaper, pythonSource, renderingCapabilities, renderFigure } from "./render.server";
 import { domainTools, engineCharts, skillRegistry } from "./registry";
+import { exportDrawio, hasEditableDrawing } from "./drawio";
+import { recommendFigures } from "./recommendations";
+import { structureCharts } from "./structures";
 
 function capabilities() {
   const engines = renderingCapabilities();
@@ -59,6 +62,9 @@ export function patchFigure(base: Recipe, { clear, ...patch }: FigureEdit): Reci
     if (!patch.style?.theme) delete style.theme;
   }
   const recipe = { ...base, ...patch, style };
+  if (!patch.structure && patch.kind && patch.kind !== "auto" && recipe.structure && !structureCharts[recipe.structure].includes(patch.kind)) {
+    delete recipe.structure;
+  }
   for (const field of clear ?? []) {
     if (field === "title") delete recipe.title;
     else delete recipe.style[field];
@@ -71,13 +77,15 @@ function receipt(artifact: Artifact, saved?: SavedFigure): VisualizationResult {
   const panelCount = model.panels.length;
   return {
     task_id: artifact.task, artifact_id: artifact.artifact_id, figure_id: saved?.figure_id ?? artifact.artifact_id, revision: saved?.revision ?? null,
-    recipe: artifact.recipe, plan, validation, statistics, insights, render: artifact.render, engine_version: artifact.engine_version,
+    recipe: artifact.recipe, plan: { ...plan, output: !plan.output.includes("drawio") && hasEditableDrawing(model)
+      ? [...plan.output, "drawio"] : plan.output },
+    validation, statistics, insights, render: artifact.render, engine_version: artifact.engine_version,
     viewport: { panels: panelCount, rows: model.focus ? 1 + Math.ceil((panelCount - 1) / model.columns) : Math.ceil(panelCount / model.columns),
       compact_model: plan.engine === "echarts" ? model : undefined },
   };
 }
 
-async function build(job: VisualizationJob, access: ProjectAccess, signal: AbortSignal, prior?: Artifact): Promise<Artifact> {
+async function build(job: VisualizationJob, access: ProjectAccess, signal: AbortSignal, prior?: Artifact, resolved?: Evidence): Promise<Artifact> {
   const key = cacheId(access.project_id, job.task_id);
   const mark = stable(job.configuration);
   const priorRun = fromCache(key);
@@ -93,8 +101,8 @@ async function build(job: VisualizationJob, access: ProjectAccess, signal: Abort
       if (completed.fingerprint !== mark) throw new VisualizationError("CONFLICT", "此任务编号已绑定其他绘图配置。");
       return completed;
     }
-    const evidence = prior && sameSources(prior.recipe, job.configuration)
-      ? prior.evidence : await resolveDatasets(job.configuration.datasets, access, signal);
+    const evidence = resolved ?? (prior && sameSources(prior.recipe, job.configuration)
+      ? prior.evidence : await resolveDatasets(job.configuration.datasets, access, signal));
     const prepared = planFigure(job, evidence, availableEngines());
     const recipe = { ...job.configuration, mode: prepared.plan.engine === "matplotlib" ? "paper" as const : "interactive" as const,
       datasets: evidence.map(item => item.profile.query) };
@@ -125,6 +133,7 @@ export function researchWorkspace(command: Command, access: ProjectAccess, signa
       }
       case "render": return receipt(await build(command.job, access, signal));
       case "profile": return { datasets: (await resolveDatasets(command.datasets, access, signal)).map(item => item.profile) };
+      case "recommend": return recommendFigures(await resolveDatasets(command.datasets, access, signal), availableEngines());
       case "plan": {
         const evidence = await resolveDatasets(command.job.configuration.datasets, access, signal);
         const { plan, validation, statistics, insights } = planFigure(command.job, evidence, availableEngines());
@@ -141,9 +150,24 @@ export function researchWorkspace(command: Command, access: ProjectAccess, signa
       case "ask": {
         const artifact = command.artifact_id ? await reference(access.project_id, command.artifact_id) : undefined;
         const { planIntent } = await import("./intent.server");
-        const patch = await planIntent(command.message, command.domain, artifact, signal);
-        const configuration = patchFigure(artifact?.recipe ?? { datasets: [] }, patch);
+        const base = patchFigure(artifact?.recipe ?? { domain: command.domain, datasets: [] }, command.draft ?? {});
+        const patch = await planIntent(command.message, command.domain, artifact, signal, command.guided
+          ? { configuration: base, dialogue: command.dialogue } : undefined);
+        const configuration = patchFigure(base, patch);
         if (!configuration.datasets.length) throw new VisualizationError("DATA_GAP", "情报空白。请提供已发布指标、数据引用或更明确的范围。");
+        if (command.guided && !artifact) {
+          const evidence = await resolveDatasets(configuration.datasets, access, signal);
+          const recommendation = recommendFigures(evidence, availableEngines());
+          if (!recommendation.choices.length) throw new VisualizationError("INCOMPATIBLE", "没有可用于当前数据组合的图样，请分别制图或检查数据范围。");
+          const recipe = { ...configuration, domain: recommendation.datasets[0].domain, datasets: recommendation.datasets.map(item => item.query) };
+          const kind = recipe.kind;
+          if (!kind || kind === "auto") {
+            return { recipe, recommendation, explanation: "已核对数据。可以从参考图里选一种样式。" };
+          }
+          const structures = recommendation.choices.filter(choice => choice.charts.includes(kind));
+          recipe.structure = structures.find(choice => choice.structure === recipe.structure)?.structure ?? structures[0]?.structure;
+          return receipt(await build({ task_id: command.task_id, configuration: recipe }, access, signal, undefined, evidence));
+        }
         return receipt(await build({ task_id: command.task_id, configuration }, access, signal, artifact));
       }
       case "save": {
@@ -161,8 +185,14 @@ export function researchWorkspace(command: Command, access: ProjectAccess, signa
       case "export": {
         const artifact = await reference(access.project_id, command.artifact_id);
         const { format } = command;
-        if (!artifact.prepared.plan.output.includes(format)) throw new VisualizationError("INCOMPATIBLE", "此引擎没有所选格式的导出配方。");
         const filename = "opengridworks-" + artifact.artifact_id.slice(0, 8) + "." + (format === "python" ? "py" : format);
+        if (format === "drawio") {
+          const { model, plan } = artifact.prepared;
+          if (!hasEditableDrawing(model)) throw new VisualizationError("INCOMPATIBLE", "当前图型或样本数量超出可编辑 Draw.io 图件范围。");
+          const bytes = Buffer.from(exportDrawio(model, plan.design, artifact.artifact_id));
+          return { filename, contentType: "application/xml", bytes, sha256: createHash("sha256").update(bytes).digest("hex") };
+        }
+        if (!artifact.prepared.plan.output.includes(format)) throw new VisualizationError("INCOMPATIBLE", "此引擎没有所选格式的导出配方。");
         const type = { svg: "image/svg+xml", png: "image/png", pdf: "application/pdf", json: "application/json", python: "text/x-python" }[format];
         if (format === "json") {
           const { model, plan, validation, statistics, insights } = artifact.prepared;

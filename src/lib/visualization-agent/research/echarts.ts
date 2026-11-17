@@ -60,6 +60,25 @@ export function buildECharts(model: FigureModel, design: FigureDesign, narrow = 
       top: design.legend === "top" || rightLegend ? top + rowPct * 0.13 + "%" : top + rowPct * 0.87 + "%",
       left: rightLegend ? undefined : left + 3 + "%", right: right + 3 + "%", itemWidth: 11, itemHeight: 7, textStyle: labels(design) });
 
+    if (panel.kind === "ring") {
+      const total = panel.series[0].data.reduce<number>((sum, value) => sum + (value ?? 0), 0);
+      const data = panel.series[0].data.flatMap((value, i) => !value ? [] : [{
+        name: x[i], value, itemStyle: { color: design.colors[i % design.colors.length] },
+      }]);
+      const center: [string, string] = [left + width / 2 + "%", top + rowPct * 0.49 + "%"];
+      const radii = Math.min(95, rowPct * 1.7);
+      series.push(
+        { type: "pie", data, center, radius: [radii * .69, radii], padAngle: 2, label: { show: false }, tooltip: { formatter: "{b} {c} " + unit + "（{d}%）" } },
+        { type: "pie", data: data.map(item => ({ ...item, itemStyle: { color: item.itemStyle.color + "72" } })),
+          center, radius: [radii * .52, radii * .66], padAngle: 2, label: { show: false }, silent: true },
+      );
+      titles.push({ text: total.toLocaleString("zh-CN", { maximumFractionDigits: 2 }), subtext: "年末总装机 · " + unit,
+        left: center[0], top: center[1], textAlign: "center", textVerticalAlign: "middle", itemGap: 4,
+        textStyle: { color: design.foreground, fontSize: design.font_size + 5 }, subtextStyle: labels(design) });
+      legends.push({ type: "scroll", data: data.map(item => item.name), left: left + 3 + "%", right: right + 3 + "%",
+        top: top + rowPct * .82 + "%", textStyle: labels(design) });
+      continue;
+    }
     if (panel.kind === "flow") {
       const links = panel.links ?? [];
       const nodes = [...new Set(links.flatMap(link => [link.source, link.target]))];
@@ -95,7 +114,7 @@ export function buildECharts(model: FigureModel, design: FigureDesign, narrow = 
     }
 
     const axisIndex = grids.length;
-    const horizontal = panel.kind === "rank" || panel.kind === "dumbbell";
+    const horizontal = panel.kind === "rank" || panel.kind === "horizontal-bars" || panel.kind === "dumbbell";
     const cells = panel.kind === "grid" || panel.kind === "correlation";
     const categoryAxis = { type: "category" as const, axisLabel: { ...labels(design), width: 104, overflow: "truncate" as const },
       axisLine: { lineStyle: stroke(design) }, axisTick: { show: false } };
@@ -176,10 +195,13 @@ export function buildECharts(model: FigureModel, design: FigureDesign, narrow = 
             { ...binding, type: "scatter", name: item.name, symbolSize: x.length > 20 ? 7 : 12,
               data: item.data.flatMap((value, n) => value === null ? [] : [[value, x[n]]]),
               itemStyle: { color, borderColor: design.background, borderWidth: 1.25 } });
-        } else if (panel.kind === "columns") {
-          series.push({ ...binding, type: "bar", name: item.name, data, barMaxWidth: 28, itemStyle: {
+        } else if (panel.kind === "columns" || panel.kind === "horizontal-bars" || panel.kind === "composition-columns") {
+          const bars = panel.kind === "composition-columns" ? item.data.map((value, n) => ({
+            value, itemStyle: { color: design.colors[n % design.colors.length] },
+          })) : data;
+          series.push({ ...binding, type: "bar", name: item.name, data: bars, barMaxWidth: 28, itemStyle: {
             color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color }, { offset: 1, color: color + "85" }] },
-            borderRadius: [3, 3, 0, 0],
+            borderRadius: horizontal ? [0, 3, 3, 0] : [3, 3, 0, 0],
           } });
         } else {
           const stack = panel.kind === "stack";

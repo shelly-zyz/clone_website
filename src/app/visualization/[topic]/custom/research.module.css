@@ -95,48 +95,22 @@
 .choices[data-domain="economy"] { --topic-ink: #5a5087; --topic-surface: #f2eff8; --topic-line: #c8bddf; }
 .choiceHeading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 14px; }
 .choiceHeading h3 { color: var(--ink); font-size: 14px; font-weight: 740; }
-.choiceActions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
-.choices .exampleSelect { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.exampleSelect span { white-space: nowrap; }
-.choices .exampleSelect select { min-height: 28px; width: auto; max-width: min(56vw, 228px); }
-.topicChoices, .chartChoices, .extraChoices { display: grid; gap: 7px; }
-.topicChoices { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 5px; }
-.chartChoices, .extraChoices { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.choiceHeading > span { color: var(--muted); font-size: 12px; }
+.topicChoices, .chartChoices { display: grid; gap: 7px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.topicChoices { margin-bottom: 5px; }
 .topicChoices button { min-height: 39px; font-size: 13px; }
 .topicChoices button[aria-pressed="true"], .chartChoices button[aria-pressed="true"] {
   color: var(--topic-ink);
   background: var(--topic-surface);
   border-color: var(--topic-line);
 }
-.chartChoices button, .extraChoices button { position: relative; min-width: 0; gap: 8px; justify-content: start; text-align: left; }
-.chartChoices button { align-items: start; min-height: 75px; padding: 9px 8px; }
-.chartChoices button:disabled, .extraChoices button:disabled { background: #f5f8f7; opacity: .75; }
-.chartChoiceText, .extraChoices button > span { display: grid; gap: 3px; line-height: 1.4; }
-.chartChoiceText strong { padding-right: 9px; }
-.chartChoices small, .extraChoices small { color: var(--muted); font-size: 10px; font-weight: 500; }
-.chartIcon {
-  display: grid;
-  place-items: center;
-  flex: 0 0 30px;
-  height: 30px;
-  color: var(--topic-ink);
-  background: var(--topic-surface);
-  border-radius: 6px;
-}
+.chartChoices button { position: relative; min-width: 0; gap: 6px; justify-content: start; text-align: left; }
+.chartChoiceText { display: grid; gap: 3px; line-height: 1.4; }
+.chartChoiceText small { color: var(--muted); font-size: 11px; font-weight: 500; }
 .choiceCheck { position: absolute; right: 5px; top: 5px; }
-.moreChoices { color: var(--muted); font-size: 11px; }
-.moreChoices summary { width: fit-content; cursor: pointer; }
-.extraChoices { margin-top: 7px; }
-.extraChoices button { padding: 8px; }
-.extraChoices button > svg { flex: none; color: var(--topic-ink); }
 @media (min-width: 711px) {
   .topicChoices { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .chartChoices { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-  .extraChoices { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-}
-@media (min-width: 1024px) {
-  .chartChoices button { min-height: 66px; align-items: center; }
-  .chartIcon { flex-basis: 36px; height: 36px; }
+  .chartChoices { grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); }
 }
 
 .workspaceGrid { display: grid; gap: 12px; padding: 12px; align-items: start; }
@@ -288,3 +262,44 @@
   .workspaceGrid { grid-template-columns: minmax(190px, .91fr) minmax(0, 3.2fr) minmax(190px, 1fr); }
   .inspector { grid-column: auto; }
 }
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 0 0 12px;
+  border-bottom: 1px solid var(--line);
+  list-style: none;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+.steps li { display: flex; align-items: center; gap: 6px; }
+.steps li > span { display: grid; flex: 0 0 22px; height: 22px; place-items: center; border: 1px solid var(--line); border-radius: 50%; }
+.steps [aria-current="step"] { color: var(--topic-ink); }
+.steps [aria-current="step"] > span { color: #fff; background: var(--topic-ink); border-color: var(--topic-ink); }
+.choices h3 { font-size: 14px; font-weight: 740; }
+.metricPicker, .wizardActions, .structureChoices { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px; }
+.metricPicker label, .stepInput { width: min(100%, 365px); }
+.metricList { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); }
+.sourceTop { align-items: center; justify-content: space-between; }
+.sourceTop strong { min-width: 0; overflow-wrap: anywhere; font-size: 13px; }
+.structureChoices button[aria-pressed="true"] { color: var(--topic-ink); background: var(--topic-surface); border-color: var(--topic-line); }
+.chartChoices button { display: grid; align-content: start; padding: 8px; }
+.chartReference { width: 100%; height: auto; max-height: 96px; }
+.chartChoices button .choiceCheck { right: 7px; top: 7px; color: var(--topic-ink); }
+.coverage { display: grid; gap: 3px; margin: 0; padding: 9px 0 4px; border-top: 1px solid var(--line); list-style: none; }
+.coverage li { display: flex; flex-wrap: wrap; gap: 2px 8px; color: var(--muted); font-size: 11px; }
+.coverage strong { color: var(--green-dark); }
+.wizardActions { justify-content: space-between; }
+.assistantLink { display: inline-flex; gap: 5px; align-items: center; padding: 6px; color: var(--green-dark); font-size: 12px; font-weight: 670; }
+.dialogue { display: grid; gap: 8px; font-size: 12px; }
+.dialogue > div { padding: 8px; border: 1px solid var(--line); border-radius: 6px; }
+.dialogue p { color: var(--muted); margin-bottom: 5px; }
+.localEditor { position: fixed; inset: 0; margin: auto; width: min(96vw, 1400px); height: min(88vh, 880px); padding: 0; border: 1px solid #b9d3ce; border-radius: 12px; background: white; }
+.localEditor[open] { display: flex; flex-direction: column; }
+.localEditor::backdrop { background: #102b3862; }
+.localEditor > header { display: flex; align-items: center; justify-content: space-between; flex: none; padding: 8px 15px; border-bottom: 1px solid var(--line); font-size: 15px; }
+.localEditor > p { padding: 8px 15px; color: var(--muted); font-size: 12px; }
+.localEditor iframe { min-height: 0; width: 100%; flex: 1; border: 0; }

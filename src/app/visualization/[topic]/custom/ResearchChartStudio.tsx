@@ -1,20 +1,22 @@
 "use client";
 
-import { Bookmark, ChevronDown, FlaskConical, Maximize, PanelsTopLeft, Plus, Sparkles } from "lucide-react";
+import { Bookmark, ChevronDown, FlaskConical, Maximize, PanelsTopLeft, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { EChartsType } from "echarts";
 import { z } from "zod";
 import { type WorkspaceTopic } from "@/lib/globe-topics";
 import { xiaoyunContextSchema } from "@/lib/xiaoyun/contracts";
 import {
-  figurePatchSchema, layouts, projectKeySchema, themes, type ChartKind, type DatasetRequest, type Domain, type FigureEdit,
-  type ExportFormat, type FigureStyle, type VisualizationJob, type VisualizationResult, type WorkspaceRequest,
+  datasetRequestSchema, figurePatchSchema, layouts, projectKeySchema, themes, type ChartKind, type DatasetRequest, type Domain, type FigureEdit,
+  type ExportFormat, type FigureRecommendations, type FigureStyle, type GuidedVisualization, type VisualizationJob, type VisualizationResult, type WorkspaceRequest,
 } from "@/lib/visualization-agent/research/contracts";
 import { ResearchExport, ResearchInspector, type ListedFigure, type SavedFigure } from "./ResearchInspector";
 import { ResearchPreview } from "./ResearchPreview";
-import { ResearchChartChoices } from "./ResearchChartChoices";
+import { ResearchChartChoices, type ResearchStep } from "./ResearchChartChoices";
+import { ResearchDrawioEditor } from "./ResearchDrawioEditor";
 import { ResearchSourceFields, type ResearchCatalog } from "./ResearchSourceFields";
-import { chartNames, chartRequirement, exampleRecipe, layoutNames, newSource, presets, themeNames, topicDomain } from "./research-controls";
+import { allProvinceGeneration, chartNames, datasetLabel, initialStructures, interactiveOnly, layoutNames, metricId, promptExamples,
+  selectedStructure, structureDataset, themeNames, topicDomain } from "./research-controls";
 import styles from "./research.module.css";
 
 type Draft = VisualizationJob["configuration"];
@@ -25,7 +27,7 @@ type Credentials = z.infer<typeof credentialSchema>;
 const legendNames = { top: "顶部", bottom: "底部", right: "右侧", none: "隐藏" } as const;
 
 class RequestError extends Error {
-  constructor(readonly status: number, message: string) { super(message); }
+  constructor(readonly status: number, message: string, readonly code?: string) { super(message); }
 }
 
 function restoreProject() {
@@ -40,9 +42,21 @@ function download(href: string, name: string) {
   anchor.click();
 }
 
+function downloadDrawing(xml: string, name: string) {
+  const url = URL.createObjectURL(new Blob([xml], { type: "application/xml" }));
+  download(url, name);
+  window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
 export function ResearchChartStudio({ topic }: { topic: WorkspaceTopic }) {
   const [domain, setDomain] = useState<Domain>(topicDomain[topic]);
-  const [draft, setDraft] = useState<Draft>(() => exampleRecipe(topicDomain[topic]));
+  const [draft, setDraft] = useState<Draft>(() => ({ domain: topicDomain[topic], datasets: [], mode: "interactive" }));
+  const [step, setStep] = useState<ResearchStep>(1);
+  const [recommendation, setRecommendation] = useState<FigureRecommendations>();
+  const [month, setMonth] = useState("");
+  const [yearOverride, setYear] = useState<number>();
+  const [dialogue, setDialogue] = useState<{ question: string; reply: string }[]>([]);
+  const [drawing, setDrawing] = useState<{ xml: string; reference: string }>();
   const [figure, setFigure] = useState<VisualizationResult>();
   const [saved, setSaved] = useState<SavedFigure>();
   const [library, setLibrary] = useState<ListedFigure[]>();
@@ -68,8 +82,8 @@ export function ResearchChartStudio({ topic }: { topic: WorkspaceTopic }) {
     }
     const response = await fetch("/api/visualization/workspace", { method: "POST", headers, body: JSON.stringify(command), signal, cache: "no-store" });
     if (!response.ok) {
-      const body = await response.json().catch(() => ({})) as { error?: string };
-      throw new RequestError(response.status, body.error ?? "无法完成制图请求，请重试。");
+      const body = await response.json().catch(() => ({})) as { error?: string; code?: string };
+      throw new RequestError(response.status, body.error ?? "无法完成制图请求，请重试。", body.code);
     }
     return response;
   }, []);
@@ -80,7 +94,11 @@ export function ResearchChartStudio({ topic }: { topic: WorkspaceTopic }) {
     void request({ action: "catalog" }, controller.signal).then(async response => {
       if (controller.signal.aborted) return;
       setCatalog(await response.json() as ResearchCatalog);
-    }).catch(() => undefined);
+    }).catch(error => {
+      if (controller.signal.aborted) return;
+      if (error instanceof RequestError && error.status === 401) setAuthRequired(true);
+      else setAttention("暂时无法读取指标目录，请刷新重试。");
+    });
     return () => {
       catalogRequest.current?.abort();
       pending.current?.abort();
@@ -126,14 +144,29 @@ export function ResearchChartStudio({ topic }: { topic: WorkspaceTopic }) {
   function update(result: VisualizationResult) {
     const nextDomain = result.recipe.domain ?? result.plan.datasets[0]?.domain;
     if (nextDomain) setDomain(nextDomain);
-    setDraft(result.recipe);
+    const structure = selectedStructure(result.recipe, result.plan.chart);
+    setDraft({ ...result.recipe, structure, kind: result.plan.chart });
+    setRecommendation(current => current && raw(current.datasets.map(item => item.query)) === raw(result.recipe.datasets) &&
+      current.choices.some(choice => choice.structure === structure && choice.charts.includes(result.plan.chart)) ? current : {
+      datasets: result.plan.datasets, choices: structure ? [{ structure, charts: [result.plan.chart] }] : [],
+    });
+    const province = result.recipe.datasets.find(item => item.kind === "published" && item.query.topic === "power" && item.query.province_comparison);
+    if (province?.kind === "published") setMonth(province.query.start_date?.slice(0, 7) ?? "");
+    const capacity = result.recipe.datasets.find(item => item.kind === "annual-capacity");
+    if (capacity?.kind === "annual-capacity" && capacity.composition_year) setYear(capacity.composition_year);
     setFigure(result);
+    setStep(3);
   }
 
   function selectTopic(next: Domain) {
     if (domain === next) return;
     setDomain(next);
-    setDraft(exampleRecipe(next));
+    setDraft({ domain: next, datasets: [], mode: "interactive" });
+    setStep(1);
+    setRecommendation(undefined);
+    setMonth("");
+    setYear(undefined);
+    setDialogue([]);
     setFigure(undefined);
     setSaved(undefined);
     setPrompt("");
@@ -144,7 +177,7 @@ export function ResearchChartStudio({ topic }: { topic: WorkspaceTopic }) {
   function chooseChart(kind: ChartKind) {
     setDraft(value => {
       const mode = kind === "violin" || kind === "density" ? "paper"
-        : kind === "calendar" || kind === "flow" ? "interactive" : value.mode ?? "interactive";
+        : interactiveOnly(kind) ? "interactive" : value.mode ?? "interactive";
       const changeMode = mode !== (value.mode ?? "interactive");
       const resetEngine = changeMode || value.engine === "flint" && kind !== "trend" && kind !== "columns";
       return { ...value, domain, kind, mode, engine: resetEngine ? "auto" : value.engine,
@@ -153,7 +186,45 @@ export function ResearchChartStudio({ topic }: { topic: WorkspaceTopic }) {
   }
 
   function changeDataset(index: number, source: DatasetRequest) {
-    setDraft(value => ({ ...value, datasets: value.datasets.map((data, i) => i === index ? source : data) }));
+    setDraft(value => ({ ...value, structure: undefined, kind: undefined, datasets: value.datasets.map((data, i) => i === index ? source : data) }));
+    setRecommendation(undefined);
+  }
+
+  function chooseData() {
+    setStep(1);
+    setRecommendation(undefined);
+    setAttention("");
+  }
+
+  function chooseStructure() {
+    const options = initialStructures(draft.datasets);
+    if (!options.length || !datasetRequestSchema.array().safeParse(draft.datasets).success) {
+      setAttention("请先选择指标，并核对地区和时间范围。");
+      return;
+    }
+    const first = draft.datasets[0];
+    if (!month && first.kind === "published") setMonth(first.query.start_date?.slice(0, 7) ?? "");
+    setRecommendation(undefined);
+    setDraft(value => ({ ...value, structure: value.structure && options.includes(value.structure) ? value.structure :
+      options.length === 1 ? options[0] : undefined, kind: undefined }));
+    setStep(2);
+    setAttention("");
+  }
+
+  function showRecommendations() {
+    const structure = draft.structure;
+    if (!structure || structure === "categories" && allProvinceGeneration(draft.datasets) && !month) return;
+    void run("正在核对数据并筛选图样…", async signal => {
+      const datasets = structureDataset(draft.datasets, structure, month, year);
+      const result = await call<FigureRecommendations>({ action: "recommend", datasets }, signal);
+      const choice = result.choices.find(item => item.structure === structure);
+      if (!choice) throw new RequestError(422, "这组数据无法生成所选结构，请调整范围或切换数据结构。");
+      setRecommendation(result);
+      setDraft(value => ({ ...value, datasets: result.datasets.map(item => item.query),
+        kind: value.kind && value.kind !== "auto" && choice.charts.includes(value.kind) ? value.kind : undefined }));
+      setStep(3);
+      return "";
+    });
   }
 
   function setStyle(patch: FigureStyle) {
@@ -177,12 +248,33 @@ export function ResearchChartStudio({ topic }: { topic: WorkspaceTopic }) {
   }
 
   function ask() {
+    const question = prompt.trim();
+    if (!question) return;
     void run("小云正在规划图件…", async signal => {
-      const response = await call<VisualizationResult>({ action: "ask", task_id: crypto.randomUUID(), domain, message: prompt,
-        artifact_id: figure?.artifact_id }, signal);
-      update(response);
-      setPrompt("");
-      return figure ? "修改已应用" : "图件已生成";
+      const patch = draft.datasets.length ? figurePatchSchema.safeParse(draft).data : undefined;
+      try {
+        const response = await call<VisualizationResult | GuidedVisualization>({ action: "ask", task_id: crypto.randomUUID(), domain, message: question,
+          artifact_id: figure?.artifact_id, draft: patch, guided: true, dialogue }, signal);
+        setPrompt("");
+        setDialogue([]);
+        if ("recommendation" in response) {
+          setDomain(response.recipe.domain ?? response.recommendation.datasets[0]?.domain ?? domain);
+          const choices = response.recommendation.choices;
+          const structure = response.recipe.structure && choices.some(item => item.structure === response.recipe.structure)
+            ? response.recipe.structure : choices.length === 1 ? choices[0].structure : undefined;
+          setDraft({ ...response.recipe, structure });
+          setRecommendation(response.recommendation);
+          setStep(structure ? 3 : 2);
+          return response.explanation ?? "";
+        }
+        update(response);
+        return figure ? "修改已应用" : "图件已生成";
+      } catch (error) {
+        if (!(error instanceof RequestError) || error.code !== "CLARIFICATION") throw error;
+        setDialogue(turns => [...turns, { question, reply: error.message.slice(0, 180) }].slice(-3));
+        setPrompt("");
+        return "";
+      }
     });
   }
 
@@ -231,7 +323,11 @@ export function ResearchChartStudio({ topic }: { topic: WorkspaceTopic }) {
         });
       project.current = access;
       try { localStorage.setItem(storageKey, JSON.stringify(access)); } catch { /* The current page can still use the project. */ }
-      if (result) setDraft({ ...exampleRecipe(domain), datasets: [{ kind: "result", result_id: result.result_id }] });
+      if (result) {
+        setDraft({ domain, mode: "interactive", datasets: [{ kind: "result", result_id: result.result_id }] });
+        setStep(1);
+        setRecommendation(undefined);
+      }
       setFigure(undefined);
       setSaved(undefined);
       setLibrary(undefined);
@@ -257,15 +353,36 @@ export function ResearchChartStudio({ topic }: { topic: WorkspaceTopic }) {
     });
   }
 
+  function openDrawio() {
+    if (!figure) return;
+    void run("正在生成可编辑图件…", async signal => {
+      const access = await ensureProject(signal);
+      const response = await request({ action: "export", artifact_id: figure.artifact_id, format: "drawio" }, signal, access);
+      setDrawing({ xml: await response.text(), reference: figure.artifact_id.slice(0, 8) });
+      return "";
+    });
+  }
+  const saveDrawing = useCallback((xml: string) => {
+    downloadDrawing(xml, "opengridworks-" + drawing?.reference + "-edited.drawio");
+  }, [drawing?.reference]);
   const onPreviewError = useCallback(() => setAttention("画布加载失败，请重新打开图件。"), []);
   const paper = draft.mode === "paper";
   const engineEnabled = (id: string) => catalog?.engines.find(engine => engine.id === id)?.available;
-  const isDirty = raw(draft) !== raw(figure?.recipe);
-  const profiles = figure && raw(draft.datasets) === raw(figure.recipe.datasets) ? figure.plan.datasets : undefined;
+  const isDirty = Boolean(figure && raw(draft) !== raw({ ...figure.recipe, kind: figure.plan.chart,
+    structure: selectedStructure(figure.recipe, figure.plan.chart) }));
   const selectedChart = draft.kind && draft.kind !== "auto" ? draft.kind : undefined;
-  const incompatible = selectedChart && chartRequirement(selectedChart, draft.datasets, profiles);
-  const canGenerate = Boolean(selectedChart && !incompatible);
-  const draftNeedsApplying = figure ? isDirty : Boolean(selectedChart);
+  const canGenerate = Boolean(step === 3 && selectedChart && recommendation?.choices.some(choice =>
+    choice.structure === draft.structure && choice.charts.includes(selectedChart)));
+  const allMetrics = catalog?.sources.business_datasets ?? [];
+  const metrics = allMetrics.filter(item => item.domain === domain);
+  const annual = allMetrics.find(item => item.id === "annual-capacity")?.request;
+  const firstCapacityYear = annual?.kind === "annual-capacity" ? annual.start_year ?? 2020 : 2020;
+  const lastCapacityYear = annual?.kind === "annual-capacity" ? annual.end_year ?? 2025 : 2025;
+  const years = Array.from({ length: lastCapacityYear - firstCapacityYear + 1 }, (_, i) => lastCapacityYear - i);
+  const year = yearOverride ?? lastCapacityYear;
+  const needMonth = draft.structure === "categories" && allProvinceGeneration(draft.datasets);
+  const localEditor = figure?.plan.output.includes("drawio") && typeof window !== "undefined" &&
+    ["127.0.0.1", "localhost"].includes(window.location.hostname);
 
   return <section className={styles.workspace} aria-labelledby="research-title">
     <header className={styles.header}>
@@ -274,6 +391,7 @@ export function ResearchChartStudio({ topic }: { topic: WorkspaceTopic }) {
         <div><h2 id="research-title">科研制图工作区</h2><p>在一张画布上对照已发布数据，保存图件与来源版本。</p></div>
       </div>
       <div className={styles.commands}>
+        <a className={styles.assistantLink} href="#research-instruction"><Sparkles size={16} aria-hidden />和小云一起制图</a>
         <button type="button" disabled={busy} onClick={list}><Bookmark size={16} aria-hidden />图件库</button>
         <button type="button" className={styles.primary} disabled={busy || !figure} onClick={() => save()}>保存图件</button>
       </div>
@@ -305,32 +423,57 @@ export function ResearchChartStudio({ topic }: { topic: WorkspaceTopic }) {
     {(attention || status) && <div className={styles.notice} data-error={Boolean(attention)} role={attention ? "alert" : "status"}>
       {attention || status}
     </div>}
-    <ResearchChartChoices domain={domain} draft={draft} profiles={profiles} busy={busy} paperAvailable={engineEnabled("matplotlib")}
-      onDomain={selectTopic} onChart={chooseChart} onExample={index => {
-        setDraft(exampleRecipe(domain, index));
-        setAttention("");
-      }} generate={<button className={styles.primary} type="submit" form="research-figure-configuration" disabled={busy || !canGenerate}>
-        {figure ? "应用所选图样" : "生成图件"}
-      </button>} />
+    <ResearchChartChoices domain={domain} draft={draft} step={step} recommendation={recommendation} busy={busy}
+      onDomain={selectTopic} onChart={chooseChart} onData={chooseData}
+      onStructure={structure => setDraft(value => ({ ...value, structure, kind: undefined }))}
+      month={month} year={year} years={years} onMonth={setMonth} onYear={setYear}
+      dataInputs={<>
+        <div className={styles.metricPicker}>
+          <label>数据指标<select value="" disabled={busy || draft.datasets.length >= 6} onChange={event => {
+            const selected = allMetrics.find(item => item.id === event.target.value);
+            if (selected) setDraft(value => ({ ...value, structure: undefined, kind: undefined, datasets: [...value.datasets, selected.request] }));
+            else if (event.target.value === "forecast-job") setDraft(value => ({ ...value, structure: undefined, kind: undefined,
+              datasets: [...value.datasets, { kind: "forecast-job", job_id: "" }] }));
+            else if (event.target.value === "approved") setDraft(value => ({ ...value, structure: undefined, kind: undefined,
+              datasets: [...value.datasets, { kind: "approved", id: "" }] }));
+          }}>
+            <option value="" disabled>{catalog ? "选择要绘制的指标" : "正在读取指标目录…"}</option>
+            {metrics.map(item => <option key={item.id} value={item.id}>{item.label}（{item.unit}）</option>)}
+            <option value="forecast-job">我的预测或回测结果</option>
+            {catalog?.sources.approved_catalog && <option value="approved">我的审核归档数据</option>}
+          </select></label>
+          <button type="button" className={styles.textButton} disabled={busy} onClick={useXiaoyunProject}>使用小云已有问数结果</button>
+        </div>
+        <div className={styles.metricList}>
+          {draft.datasets.map((data, index) => <ResearchSourceFields key={index + ":" + metricId(data)} data={data}
+            label={datasetLabel(data, allMetrics, figure?.plan.datasets[index])} index={index} catalog={catalog}
+            onChange={source => changeDataset(index, source)} onRemove={() =>
+              setDraft(value => ({ ...value, structure: undefined, kind: undefined, datasets: value.datasets.filter((_, i) => index !== i) }))} />)}
+        </div>
+      </>}
+      controls={step === 1 ? <button className={styles.primary} type="button" disabled={busy || !draft.datasets.length} onClick={chooseStructure}>下一步</button>
+        : step === 2 ? <button className={styles.primary} type="button" disabled={busy || !draft.structure || needMonth && !month}
+          onClick={showRecommendations}>查看参考图</button>
+          : <>
+            <button type="button" className={styles.textButton} disabled={busy} onClick={() => {
+              setRecommendation(undefined);
+              setStep(2);
+            }}>返回数据结构</button>
+            <button className={styles.primary} type="submit" form="research-figure-configuration" disabled={busy || !canGenerate}>
+              {figure ? "应用所选图样" : "生成图件"}
+            </button>
+          </>} />
     <div className={styles.workspaceGrid}>
-      <details className={styles.config} open>
-        <summary>数据与绘图设置<ChevronDown size={15} aria-hidden /></summary>
+      <details className={styles.config} open={step === 3}>
+        <summary>绘图设置<ChevronDown size={15} aria-hidden /></summary>
         <form id="research-figure-configuration" onSubmit={event => { event.preventDefault(); submitDraft(); }}>
           <fieldset disabled={busy}>
-            <button type="button" className={styles.textButton} onClick={useXiaoyunProject}>使用小云已有问数项目</button>
-            {draft.datasets.map((data, index) => <ResearchSourceFields key={index} data={data} index={index} catalog={catalog}
-              onChange={source => changeDataset(index, source)} onRemove={draft.datasets.length > 1 ? () =>
-                setDraft(value => ({ ...value, datasets: value.datasets.filter((_, i) => index !== i) })) : undefined} />)}
-            <button type="button" className={styles.add} disabled={draft.datasets.length >= 6}
-              onClick={() => setDraft(value => ({ ...value, datasets: [...value.datasets, newSource(domain)] }))}>
-              <Plus size={15} aria-hidden />添加数据来源
-            </button>
             <label>绘图模式<select value={paper ? "paper" : "interactive"} onChange={event => {
               const mode = event.target.value as Draft["mode"];
               setDraft(value => ({ ...value, mode, engine: undefined, style: { ...value.style, theme: undefined } }));
             }}>
               <option value="interactive" disabled={selectedChart === "violin" || selectedChart === "density"}>网页交互</option>
-              <option value="paper" disabled={engineEnabled("matplotlib") === false || selectedChart === "calendar" || selectedChart === "flow"}>论文图件</option>
+              <option value="paper" disabled={engineEnabled("matplotlib") === false || interactiveOnly(selectedChart)}>论文图件</option>
             </select></label>
             <label>引擎<select value={draft.engine ?? "auto"}
               onChange={event => setDraft(value => ({ ...value, engine: event.target.value as Draft["engine"] }))}>
@@ -374,7 +517,6 @@ export function ResearchChartStudio({ topic }: { topic: WorkspaceTopic }) {
                 </div>
               </div>
             </details>
-            {incompatible && <p className={styles.hint}>{incompatible}，或重新选择图样。</p>}
             <button className={styles.primary} type="submit" disabled={busy || !canGenerate}>{figure ? "应用到图件" : "生成图件"}</button>
           </fieldset>
         </form>
@@ -398,11 +540,12 @@ export function ResearchChartStudio({ topic }: { topic: WorkspaceTopic }) {
             : <div className={styles.empty}>
               <span><PanelsTopLeft size={30} strokeWidth={1.5} aria-hidden /></span>
               <strong>{selectedChart ? chartNames[selectedChart] : "选择一种图样"}</strong>
-              <p>{incompatible || (selectedChart ? "将按左侧所选指标和时间生成。" : "也可以在小云制图中描述你的研究问题。")}</p>
+              <p>{selectedChart ? "将按已核对的指标和时间生成。" : "也可以在小云制图中描述你的研究问题。"}</p>
               <button className={styles.primary} type="button" onClick={submitDraft} disabled={busy || !canGenerate}>生成当前图件</button>
             </div>}
           {figure && <footer className={styles.canvasBar}>
             <ResearchExport figure={figure} busy={busy} onExport={exportFigure} />
+            {localEditor && <button type="button" disabled={busy} onClick={openDrawio}>在本机 Draw.io 打开</button>}
             {saved && <label>修订
               <select value={figure.revision ?? ""} onChange={event => open(saved.figure_id, Number(event.target.value))} disabled={busy}>
                 {!figure.revision && <option value="" disabled>未保存</option>}
@@ -416,20 +559,23 @@ export function ResearchChartStudio({ topic }: { topic: WorkspaceTopic }) {
       </div>
 
       <aside className={styles.inspector} aria-label="智能编辑与数据解读">
-        <form className={styles.ask} onSubmit={event => { event.preventDefault(); if (!draftNeedsApplying) ask(); }}>
+        <form className={styles.ask} onSubmit={event => { event.preventDefault(); ask(); }}>
           <h3><Sparkles size={16} aria-hidden />小云制图</h3>
-          <label htmlFor="research-instruction">{figure ? "修改当前图件" : "描述研究问题"}</label>
+          {dialogue.length > 0 && <div className={styles.dialogue} aria-live="polite">{dialogue.map((turn, index) => <div key={index}>
+            <p>{turn.question}</p><strong>{turn.reply}</strong>
+          </div>)}</div>}
+          <label htmlFor="research-instruction">{dialogue.length ? "回答小云" : figure ? "修改当前图件" : "描述研究问题"}</label>
           <textarea id="research-instruction" value={prompt} onChange={event => setPrompt(event.target.value)} maxLength={500}
-            rows={3} placeholder={figure ? "比如：换成学术黑白" : presets[domain].prompt} disabled={busy} />
+            rows={3} placeholder={figure ? "比如：换成学术黑白" : promptExamples[domain]} disabled={busy} />
           <div className={styles.askActions}>
-            <button type="button" className={styles.textButton} disabled={busy} onClick={() => setPrompt(figure ? "换成学术黑白" : presets[domain].prompt)}>填入示例</button>
-            <button type="submit" className={styles.primary} disabled={busy || !prompt.trim() || draftNeedsApplying}>{figure ? "提交修改" : "让小云制图"}</button>
+            <button type="button" className={styles.textButton} disabled={busy} onClick={() => setPrompt(figure ? "换成学术黑白" : promptExamples[domain])}>填入示例</button>
+            <button type="submit" className={styles.primary} disabled={busy || !prompt.trim()}>{figure ? "提交修改" : "让小云制图"}</button>
           </div>
-          {draftNeedsApplying && <p className={styles.hint}>{figure ? "先应用所选图样与数据，再用小云修改。" : "先按选定图样生成，再用小云修改。"}</p>}
         </form>
         <ResearchInspector figure={figure} saved={saved} />
       </aside>
     </div>
+    {drawing && <ResearchDrawioEditor drawing={drawing.xml} onClose={() => setDrawing(undefined)} onSave={saveDrawing} />}
   </section>;
 }
 
