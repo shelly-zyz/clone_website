@@ -15,10 +15,10 @@ const fields = {
 type Metric = keyof typeof fields;
 type FieldSource = "analysis" | "forecast";
 const metrics = Object.keys(fields) as Metric[];
-const colors = [[0, [46, 33, 124]], [.18, [38, 91, 183]], [.37, [54, 174, 210]],
-  [.52, [166, 214, 176]], [.69, [248, 224, 127]], [.85, [246, 151, 72]], [1, [181, 57, 62]]] as const;
-const windColors = [[0, [34, 57, 151]], [.23, [49, 128, 191]], [.5, [205, 225, 221]],
-  [.76, [241, 152, 99]], [1, [183, 50, 64]]] as const;
+const colors = [[0, [42, 53, 105]], [.20, [75, 109, 174]], [.38, [85, 158, 180]],
+  [.56, [134, 192, 172]], [.72, [184, 216, 168]], [.87, [233, 217, 160]], [1, [208, 154, 111]]] as const;
+const windColors = [[0, [58, 83, 153]], [.24, [81, 146, 179]], [.5, [205, 222, 217]],
+  [.75, [227, 195, 139]], [1, [186, 113, 91]]] as const;
 const colorScale = (metric: Metric) => metric === "u10" ? windColors : colors;
 
 type PackedField = { analysis: string; forecast: string; quantum: number; unit: string };
@@ -176,7 +176,15 @@ export function WeatherComparisonPanel() {
                   <figcaption className={styles.rowTitle}>
                     <span className={styles.metric}><b>{meta.short}</b> {meta.name} <small>{meta.unit}</small></span>
                     <span className={styles.legend} aria-label={`共同色标 ${meta.range[0]} 至 ${meta.range[1]} ${meta.unit}`}>
-                      <span>{meta.range[0]}</span><span className={styles.legendRamp} data-diverging={key === "u10"} />
+                      <span>{meta.range[0]}</span>
+                      <svg className={styles.legendRamp} viewBox="0 0 46 4" aria-hidden="true">
+                        <defs><linearGradient id={`${panelId}-${key}`}>
+                          {colorScale(key).map(([offset, rgb]) => (
+                            <stop key={offset} offset={offset} stopColor={`rgb(${rgb.join(",")})`} />
+                          ))}
+                        </linearGradient></defs>
+                        <rect width="46" height="4" rx="1" fill={`url(#${panelId}-${key})`} />
+                      </svg>
                       <span>{meta.range[1]}</span>
                     </span>
                   </figcaption>

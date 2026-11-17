@@ -6,18 +6,10 @@ import type { ReplayView } from "@/lib/weather-replay/views";
 import type { WeatherReplay } from "@/lib/weather-replay/model";
 import { gridCoordinate } from "./replay-geography";
 import { utcClock } from "./replay-data";
-import { scaleColor } from "./replay-palette";
+import { ForecastVisualization, weatherChartColor } from "@/components/opengridworks/ForecastVisualization";
 import styles from "./player.module.css";
 
 type Reading = number | null;
-const chartRainScale = [
-  [0, [109, 137, 129]], [.025, [145, 148, 180]], [.075, [178, 150, 188]],
-  [.18, [212, 137, 166]], [.38, [243, 145, 152]], [.65, [255, 169, 151]], [1, [255, 212, 180]],
-] as const;
-const chartWidth = 224;
-const chartHeight = 123;
-const plot = { left: 25, right: 203, top: 8, bottom: 99 };
-const plotWidth = plot.right - plot.left;
 const value = (reading: Reading, unit: string) => reading == null ? "缺测" : `${reading.toFixed(1)} ${unit}`;
 
 export function ReplayReadings({ replay, view, frame, cell, peaks, totals, limit, cells, satelliteTime, onFrame }: {
@@ -41,9 +33,6 @@ export function ReplayReadings({ replay, view, frame, cell, peaks, totals, limit
   const seriesName = cell === undefined ? "区域峰值" : accumulated ? "选点累计量" : "选点降水率";
   const chartTitle = accumulated ? "累计降水走势" : "降水率走势";
   const last = points.length - 1;
-  const chartX = (index: number) => plot.left + index * plotWidth / Math.max(1, last);
-  const chartY = (amount: number) => plot.bottom - Math.max(0, Math.min(1, amount / limit)) * (plot.bottom - plot.top);
-  const colorAt = (amount: number) => `rgb(${scaleColor(chartRainScale, amount / limit).join(",")})`;
   const ranges = [0, .2, 2.5, 10, 25];
   const distribution = ranges.map(() => 0);
   let observed = 0, total = 0;
@@ -66,20 +55,14 @@ export function ReplayReadings({ replay, view, frame, cell, peaks, totals, limit
     return count ? sum / count : null;
   }));
   const bandMax = Math.max(.2, ...latitudeBands.flat().map(amount => amount ?? 0));
-  const segments: { index: number; amount: number }[][] = [];
-  let segment: (typeof segments)[number] = [];
-  for (const [index, amount] of points.entries()) {
-    if (amount === null) {
-      segment = [];
-      continue;
-    }
-    if (!segment.length) segments.push(segment);
-    segment.push({ index, amount });
-  }
-  const timeTicks = [...new Set([0, Math.floor(last / 2), last])];
+  const spansDates = replay.rain[0].time.slice(0, 10) !== replay.rain[last].time.slice(0, 10);
+  const samples = points.map((amount, index) => {
+    const date = replay.rain[index].time;
+    const clock = utcClock(date);
+    const tickLabel = spansDates ? `${date.slice(5, 10)} ${clock}` : clock;
+    return { date, position: last ? index / last : .5, value: amount, dateLabel: tickLabel + " UTC", tickLabel };
+  });
   const current = points[frame];
-  const areaId = `${panelId}-area`;
-  const accent = "#e8a8bc";
 
   return (
     <aside className={styles.readings} aria-label="当前场景读数">
@@ -101,60 +84,13 @@ export function ReplayReadings({ replay, view, frame, cell, peaks, totals, limit
           {accumulated && <div><dt>累计起点</dt><dd>{utcClock(replay.rain[0].time)} UTC</dd></div>}
           {view === "time" && <div><dt>图层间隔</dt><dd>{replay.metadata?.stepMinutes ?? 30} 分钟</dd></div>}
         </dl>
-        <figure className={styles.readingsFigure}>
-          <figcaption className={styles.readingsCaption}>
-            <span>{chartTitle}</span><span>{unit} · UTC</span>
-          </figcaption>
-          <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className={styles.readingsChart}
-            role="img" aria-label={`${seriesName}走势，单位 ${unit}。点击图表或使用回放时间轴选择时刻。`}
-            onPointerUp={event => {
-              const box = event.currentTarget.getBoundingClientRect();
-              const x = (event.clientX - box.left) / box.width * chartWidth;
-              const index = Math.round((x - plot.left) * last / plotWidth);
-              onFrame(Math.max(0, Math.min(last, index)));
-            }}>
-            <defs>
-              <linearGradient id={areaId} x1="0" x2="0" y1="0" y2="1" gradientUnits="objectBoundingBox">
-                <stop offset="0" stopColor="#cf9caa" stopOpacity=".44" />
-                <stop offset="1" stopColor="#9382a3" stopOpacity=".03" />
-              </linearGradient>
-            </defs>
-            {[0, limit / 2, limit].map(amount => (
-              <g key={amount}>
-                <line x1={plot.left} x2={plot.right} y1={chartY(amount)} y2={chartY(amount)} className={styles.readingsGrid} />
-                <text x={plot.left - 5} y={chartY(amount)} textAnchor="end" dominantBaseline="middle" className={styles.readingsTick}>{amount}</text>
-              </g>
-            ))}
-            {timeTicks.map(index => (
-              <g key={index}>
-                <line x1={chartX(index)} x2={chartX(index)} y1={plot.top} y2={plot.bottom} className={styles.readingsGrid} />
-                <text x={chartX(index)} y={chartHeight - 7} textAnchor="middle" className={styles.readingsTick}>
-                  {utcClock(replay.rain[index].time)}
-                </text>
-              </g>
-            ))}
-            {segments.map(run => {
-              const first = chartX(run[0].index);
-              const path = "M" + run.map(({ index, amount }) => `${chartX(index)} ${chartY(amount)}`).join(" L");
-              return (
-                <g key={run[0].index}>
-                  {run.length > 1 && <path d={`${path} V${plot.bottom} H${first} Z`} fill={`url(#${areaId})`} />}
-                  <path d={path} stroke={accent} className={styles.readingsLine} />
-                  {run.map(({ index, amount }) => (
-                    <circle key={index} cx={chartX(index)} cy={chartY(amount)} r="2.45" fill={colorAt(amount)} className={styles.readingsSample} />
-                  ))}
-                </g>
-              );
-            })}
-            <path d={`M${plot.left} ${plot.top} V${plot.bottom} H${plot.right}`} className={styles.readingsAxes} />
-            <line x1={chartX(frame)} x2={chartX(frame)} y1={plot.top} y2={plot.bottom} stroke={accent} className={styles.readingsPlayhead} />
-            {current !== null && <circle cx={chartX(frame)} cy={chartY(current)} r="4.2" fill={colorAt(current)} className={styles.readingsCurrent} />}
-            {!segments.length && (
-              <text x={(plot.left + plot.right) / 2} y={(plot.top + plot.bottom) / 2}
-                textAnchor="middle" className={styles.readingsTick}>暂无有效读数</text>
-            )}
-          </svg>
-        </figure>
+        <section className={styles.readingsFigure} aria-label={chartTitle}>
+          <h4 className={styles.readingsCaption}>{chartTitle}<span>UTC</span></h4>
+          <ForecastVisualization topic="weather" observed label={`${seriesName}走势，单位 ${unit}。点击图表或使用回放时间轴选择时刻。`}
+            unit={unit} formatValue={amount => value(amount, unit)} samples={samples}
+            valueCeiling={Math.max(limit, 0.01, ...points.map(amount => amount ?? 0))}
+            selectedDate={samples[frame]?.date} onSampleSelect={onFrame} />
+        </section>
         <figure className={styles.readingsFigure}>
           <figcaption className={styles.readingsCaption}><span>降水强度分布</span><span>有效格点 %</span></figcaption>
           {["<0.2", "0.2–2.5", "2.5–10", "10–25", "≥25"].map((label, i) => (
@@ -172,7 +108,7 @@ export function ReplayReadings({ replay, view, frame, cell, peaks, totals, limit
                 <text x="1" y={row * 14 + 12} className={styles.readingsTick}>{["南", "中", "北"][row]}</text>
                 {band.map((amount, i) => (
                   <rect key={i} x={17 + i * 206 / band.length} y={3 + row * 14} width={206 / band.length - 1} height="12"
-                    fill={amount == null ? "#222635" : colorAt(amount / bandMax * limit)}>
+                    fill={amount == null ? "#202934" : weatherChartColor(amount / bandMax)} rx=".85">
                     <title>{utcClock(replay.rain[i].time)} UTC · {value(amount, "mm/h")}</title>
                   </rect>
                 ))}

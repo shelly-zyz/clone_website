@@ -18,11 +18,12 @@ type Surface = { near: Vertex[]; far: Vertex[]; opacity: number };
 
 const palettes = {
   power: [0x4772d2, 0x4cafd2, 0x62cebd, 0xafd398, 0xf2cb86],
-  weather: [0x7474d4, 0x628be0, 0x65b9e1, 0x83d5dc, 0xc2f0e8],
+  weather: [0x5477c6, 0x58a4c1, 0x76bcae, 0xa6d4a8, 0xe8d797],
   carbon: [0x496db8, 0x4d9cc3, 0x67bfb5, 0xa8d3a4, 0xdbce9c],
   economy: [0x796bcc, 0x997ed9, 0xcb9ecb, 0xebb69f, 0xecc78c],
 } as const;
 const benchmarkPalette = [0x4c6197, 0x5d7fb6, 0x77a3ca, 0x9abdd3, 0xbacbdc];
+const frontEdge = { left: 43, width: 174 };
 const axisNumber = new Intl.NumberFormat("zh-CN", { notation: "compact", maximumSignificantDigits: 4 });
 
 const blend = (from: number, to: number, amount: number) => from + (to - from) * amount;
@@ -37,12 +38,16 @@ function colorFor(stops: readonly number[], value: number) {
   return "#" + channels.map(channel => channel.toString(16).padStart(2, "0")).join("");
 }
 
+export function weatherChartColor(ratio: number) {
+  return colorFor(palettes.weather, ratio);
+}
+
 function vertex(point: Profile, depth = 0, lift = 0, level = point.level): Vertex {
   return { time: point.time, level, depth, lift };
 }
 
 function project({ time, level, depth, lift }: Vertex) {
-  return [43 + time * 174 + depth * 24, 130 + time * 9 - level * 94 - depth * 20 + lift] as const;
+  return [frontEdge.left + time * frontEdge.width + depth * 24, 130 + time * 9 - level * 94 - depth * 20 + lift] as const;
 }
 
 function coordinate(point: Vertex) {
@@ -98,10 +103,9 @@ function surfacesFor(profile: Profile[], topic: WorkspaceTopic, baseline: number
       return [{ near: ridge, far: bevel, opacity: 0.42 }, { near: ridge, far: back, opacity: 0.96 }];
     }
     case "weather": {
-      const back = profile.map(point => vertex(point, depth + 0.38 + 0.55 * taper(point), -2 * taper(point)));
-      const trailing = profile.map(point => vertex(point, depth + 1.02 + 0.18 * taper(point), 8 * taper(point)));
-      const hem = profile.map(point => vertex(point, depth - 0.11 - 0.13 * taper(point), 2 + 6 * taper(point)));
-      return [{ near: back, far: trailing, opacity: 0.23 }, { near: ridge, far: back, opacity: 0.78 }, { near: ridge, far: hem, opacity: 0.37 }];
+      const shoulder = profile.map(point => vertex(point, depth + 0.38 + .16 * taper(point), 0, blend(point.level, baseline, 0.15)));
+      const foot = profile.map(point => vertex(point, depth + .94, 1, blend(point.level, baseline, 0.77)));
+      return [{ near: shoulder, far: foot, opacity: .34 }, { near: ridge, far: shoulder, opacity: .88 }];
     }
     case "carbon": {
       const shoulder = profile.map(point => vertex(point, depth + 0.38, 0, blend(point.level, baseline, hasInterval ? 0.04 : 0.18)));
@@ -131,13 +135,14 @@ type Projection = {
   baseline: number;
 };
 
-function SeriesSurface({ samples, palette, topic, projection, colorRatio, formatValue, benchmark = false, hasInterval = false }: {
+function SeriesSurface({ samples, palette, topic, projection, colorRatio, formatValue, selectedDate, benchmark = false, hasInterval = false }: {
   samples: readonly ForecastSample[];
   palette: readonly number[];
   topic: WorkspaceTopic;
   projection: Projection;
   colorRatio: (value: number) => number;
   formatValue: (value: number) => string;
+  selectedDate?: string;
   benchmark?: boolean;
   hasInterval?: boolean;
 }) {
@@ -182,8 +187,9 @@ function SeriesSurface({ samples, palette, topic, projection, colorRatio, format
               const [x, y] = project(vertex({ time, level }, depth));
               const interval = hasInterval && hasBand(sample) ? ` · P10 ${formatValue(sample.p10)} · P90 ${formatValue(sample.p90)}` : "";
               return (
-                <circle key={sample.date} cx={x} cy={y} r={profile.length > 14 ? 1.9 : 2.55}
-                  fill={color(value)} className={styles.point}>
+                <circle key={sample.date} cx={x} cy={y}
+                  r={sample.date === selectedDate ? 4.2 : profile.length > 14 ? 1.9 : 2.55}
+                  fill={color(value)} className={styles.point} data-current={sample.date === selectedDate || undefined}>
                   <title>{sample.dateLabel} · {formatValue(value)}{interval}</title>
                 </circle>
               );
@@ -195,11 +201,16 @@ function SeriesSurface({ samples, palette, topic, projection, colorRatio, format
   );
 }
 
-export function ForecastVisualization({ samples, comparison, topic, observed, label, unit, formatValue }: {
+export function ForecastVisualization({
+  samples, comparison, topic, observed, label, unit, formatValue, valueCeiling, selectedDate, onSampleSelect,
+}: {
   samples: ForecastSample[];
   comparison?: { primaryLabel: string; label: string; samples: ForecastSample[] };
   topic: WorkspaceTopic;
   observed: boolean;
+  valueCeiling?: number;
+  selectedDate?: string;
+  onSampleSelect?: (index: number) => void;
   label: string;
   unit: string;
   formatValue: (value: number) => string;
@@ -208,8 +219,8 @@ export function ForecastVisualization({ samples, comparison, topic, observed, la
   const bands = topic === "carbon" ? continuousRuns(samples, hasBand) : [];
   const values = [...samples, ...(comparison?.samples ?? [])].flatMap(({ value }) => value === null ? [] : [value]);
   const bounds = bands.flatMap(run => run.flatMap(({ p10, p90 }) => [p10, p90]));
-  const min = Math.min(...values, ...bounds);
-  const max = Math.max(...values, ...bounds);
+  const min = valueCeiling === undefined ? Math.min(...values, ...bounds) : 0;
+  const max = valueCeiling ?? Math.max(...values, ...bounds);
   const span = max - min;
   const padding = (span || Math.abs(max) || 1) * 0.13;
   const low = min >= 0 ? Math.max(0, min - padding) : min - padding;
@@ -222,12 +233,25 @@ export function ForecastVisualization({ samples, comparison, topic, observed, la
   const middle = crossesZero && Math.min(-min, max) / span > 0.16 ? 0 : min / 2 + max / 2;
   const ticks = min === max ? [min] : [max, middle, min];
   const seenTicks = new Set<string>();
+  const selected = samples.find(sample => sample.date === selectedDate);
   const first = samples[0];
   const last = samples[samples.length - 1];
 
   return (
     <figure className={styles.graphic} data-topic={topic} data-observed={observed}>
-      <svg viewBox="0 0 260 166" role="img" aria-label={label} aria-describedby={`${id}-description`} className={styles.plot}>
+      <svg viewBox="0 0 260 166" role="img" aria-label={label} aria-describedby={`${id}-description`} className={styles.plot}
+        data-interactive={Boolean(onSampleSelect)}
+        onPointerUp={onSampleSelect ? event => {
+          const svg = event.currentTarget;
+          const transform = svg.getScreenCTM();
+          if (!transform) return;
+          const x = new DOMPoint(event.clientX, event.clientY).matrixTransform(transform.inverse()).x;
+          const position = (x - frontEdge.left) / frontEdge.width;
+          const index = samples.reduce((best, sample, index) => (
+            Math.abs(sample.position - position) < Math.abs(samples[best].position - position) ? index : best
+          ), 0);
+          onSampleSelect(index);
+        } : undefined}>
         <desc id={`${id}-description`}>{[
           `时间序列，单位 ${unit}。标记为原始值。`,
           comparison && `${comparison.primaryLabel}与${comparison.label}使用相同尺度。`,
@@ -246,6 +270,9 @@ export function ForecastVisualization({ samples, comparison, topic, observed, la
         </defs>
         <ellipse cx="132" cy="137" rx="108" ry="11" fill={`url(#${id}-shadow)`} opacity="0.45" aria-hidden="true" />
         <path d="M43 136 L225 145" className={styles.timeAxis} />
+        {selected && <path d={`M${coordinate(vertex({ time: selected.position, level: 1 }))}L${coordinate(vertex({ time: selected.position, level: 0 }))}`}
+          className={styles.playhead} />}
+        {!values.length && <text x="130" y="87" textAnchor="middle">暂无有效读数</text>}
         {crossesZero && (
           <path d={`M${coordinate(vertex({ time: 0, level: baseline }))}L${coordinate(vertex({ time: 1, level: baseline }))}`}
             className={styles.zero} />
@@ -269,7 +296,7 @@ export function ForecastVisualization({ samples, comparison, topic, observed, la
             colorRatio={colorRatio} formatValue={formatValue} benchmark />
         )}
         <SeriesSurface samples={samples} palette={palettes[topic]} topic={topic} projection={projection}
-          colorRatio={colorRatio} formatValue={formatValue} hasInterval={bands.length > 0} />
+          colorRatio={colorRatio} formatValue={formatValue} selectedDate={selectedDate} hasInterval={bands.length > 0} />
         {ticks.map(value => {
           const tick = axisNumber.format(value);
           if (seenTicks.has(tick)) return null;

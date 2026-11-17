@@ -6,6 +6,7 @@ import { useWorkspaceResource } from "@/hooks/use-workspace-resource";
 import { findChinaProvince } from "@/lib/china-provinces";
 import type { RenewableScenario } from "@/lib/topic-analysis/history";
 import { analysisContextHref, type WorkspaceContext } from "@/lib/workspace-context";
+import { ForecastVisualization } from "./ForecastVisualization";
 import { YearFilter } from "./YearFilter";
 import { ScenarioRanking, ScenarioScene } from "./ScenarioScene";
 import { ScenarioProvinceGlobe } from "./ScenarioProvinceGlobe";
@@ -56,13 +57,14 @@ export function WeatherResourceScene({ context, onChange, onBack }: {
           </select>
         </label>
         {selected?.monthly.some(value => value !== null) ? (
-          <figure className={styles.monthly} aria-label="月度容量因子">
-            <figcaption>月度容量因子</figcaption>
-            <div>{selected.monthly.map((value, index) => (
-              <span key={index} style={{ height: `${Math.max(2, (value ?? 0) * 100)}%` }}
-                title={`${index + 1} 月 · ${value === null ? "缺测" : percentage(value * 100)}`} data-missing={value === null} />
-            ))}</div>
-          </figure>
+          <section className={styles.monthly} aria-label="月度容量因子">
+            <h3>月度容量因子</h3>
+            <ForecastVisualization topic="weather" observed label="月度容量因子" unit="%" formatValue={percentage}
+              valueCeiling={100} samples={selected.monthly.map((value, index) => ({
+                date: String(index + 1), position: index / 11, value: value === null ? null : value * 100,
+                dateLabel: `${index + 1} 月`, tickLabel: `${index + 1} 月`,
+              }))} />
+          </section>
         ) : null}
         <p className={styles.source}>{data ? `${data.origin === "archive" ? "项目情景归档" : "已发布情景"} · ${data.generatedAt.slice(0, 10)}` : "容量因子按已发布情景计算。"}</p>
         <Link className={styles.link} href={analysisContextHref("renewables", { region: selectedId, year, technology })}>

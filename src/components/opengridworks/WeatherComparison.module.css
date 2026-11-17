@@ -62,8 +62,7 @@
 .mini { display: block; width: 100%; height: auto; aspect-ratio: 2; }
 
 .legend { display: inline-flex; align-items: center; gap: 4px; color: #a6bfcd; font-size: 9px; }
-.legendRamp { width: 46px; height: 4px; border-radius: 1px; background: linear-gradient(90deg, #2e217c, #265bb7 18%, #36aed2 37%, #a6d6b0 52%, #f8e07f 69%, #f69748 85%, #b5393e); }
-.legendRamp[data-diverging="true"] { background: linear-gradient(90deg, #223997, #3180bf 23%, #cde1dd, #f19863 76%, #b73240); }
+.legendRamp { display: block; width: 46px; height: 4px; }
 .attribution { margin-top: 3px; color: #adc4d1; font-size: 10px; }
 .attribution a { color: #a0e0ed; }
 .status { display: grid; justify-items: start; gap: 8px; color: #bed6e3; font-size: 12px; }
@@ -82,6 +81,6 @@
   .timeline button { min-width: 44px; min-height: 44px; }
 }
 
-.comparison { border: 0; background: rgba(14, 25, 38, .90); backdrop-filter: blur(15px); border-radius: 12px; }
-.header, .row { border: 0; }
-.columns { background: #172331; border-radius: 5px; padding-inline: 5px; }
+.comparison { border: 0; background: linear-gradient(150deg, #131d26, #0b1219 65%); border-radius: 12px; }
+.header, .row { border-color: #24343e; }
+.columns { background: #16222c; border-radius: 5px; padding-inline: 5px; }

@@ -8,7 +8,7 @@
   --forecast-haze: #356096;
 }
 
-.graphic[data-topic="weather"] { --forecast-haze: #466caa; }
+.graphic[data-topic="weather"] { --forecast-haze: #327b80; }
 .graphic[data-topic="carbon"] { --forecast-haze: #326a72; }
 .graphic[data-topic="economy"] { --forecast-haze: #645d97; }
 
@@ -47,6 +47,10 @@
   stroke: #eff8ff;
   stroke-width: 0.95;
 }
+
+.plot[data-interactive="true"] { cursor: crosshair; touch-action: pan-y; }
+.playhead { fill: none; stroke: #aeefe0; stroke-width: .8; stroke-dasharray: 2 4; opacity: .43; }
+.point[data-current="true"] { stroke: #f5fffb; stroke-width: 1.5; }
 
 .point:hover { stroke-width: 1.7; }
 
