@@ -99,39 +99,10 @@
 
 .browseLink:hover { background: #a2efe4; }
 
-.heroVisual {
-  position: relative;
-  isolation: isolate;
-  display: grid;
-  place-items: center;
+.heroSpacer {
   justify-self: end;
   width: min(100%, 365px);
-}
-
-.orbit {
-  position: absolute;
-  inset: 2% 9%;
-  z-index: 1;
-  pointer-events: none;
-  border: 1px solid #a9dfe479;
-  border-radius: 50%;
-  transform: rotate(33deg) scaleX(0.7);
-}
-
-.orbit::after {
-  position: absolute;
-  inset: 9% -33%;
-  border: 1px dashed #b3dce868;
-  border-radius: 50%;
-  content: "";
-  transform: rotate(-56deg) scaleX(0.78);
-}
-
-.heroImage {
-  width: 100%;
-  height: auto;
-  mix-blend-mode: screen;
-  mask-image: radial-gradient(circle, #000 60%, transparent 72%);
+  aspect-ratio: 1;
 }
 
 .groupBar {
@@ -500,7 +471,7 @@
 
 @media (min-width: 1320px) {
   .heroContent { gap: 70px; }
-  .heroVisual { justify-self: center; }
+  .heroSpacer { justify-self: center; }
 }
 
 @media (max-width: 1020px) {

@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import { ArrowUpRight, ChartArea, ChevronDown } from "lucide-react";
 import { resolveWorkspaceTopic } from "@/lib/globe-topics";
@@ -64,18 +63,7 @@ export default async function VisualizationPage({ searchParams }: {
               浏览专题 <ChevronDown size={17} strokeWidth={1.8} aria-hidden="true" />
             </a>
           </div>
-          <div className={styles.heroVisual}>
-            <div className={styles.orbit} aria-hidden="true" />
-            <Image
-              className={styles.heroImage}
-              src="/intro/graced-night-v1.webp"
-              alt="GRACED 全球电力部门碳排放分布"
-              width={960}
-              height={960}
-              sizes="(max-width: 680px) 40vw, 345px"
-              loading="eager"
-            />
-          </div>
+          <div className={styles.heroSpacer} aria-hidden="true" />
         </section>
       </div>
       <AnalysisGroupNav />
