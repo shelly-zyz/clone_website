@@ -159,6 +159,7 @@ try {
   await cdp("Page.reload");
   await until("performance.timeOrigin !== " + previousPage +
     " && document.readyState==='complete' && document.getElementById('research-title')", "reloaded workspace");
+  await until("Boolean(document.querySelector('[aria-label=分步制图] option[value=\"economy:real-growth\"]'))", "reloaded workspace hydrated");
   await activate("图件库");
   await until("document.querySelector('[aria-label=已保存的图件] button')", "saved project listing");
   await js("document.querySelector('[aria-label=已保存的图件] button').click()");
