@@ -9,7 +9,7 @@ type World = [number, number, number?];
 
 const rainCeiling = 0.64;
 const rainTail = 0.026;
-const rainStroke = "rgba(239, 190, 132, .88)";
+const rainStroke = "rgba(127, 56, 40, .82)";
 const timeStep = .165;
 const voxelHeight = .055;
 
@@ -186,10 +186,10 @@ export function paintReplay(
   const gridY = 1 / (replay.rows - 1);
   const map = mapCorners.map(project);
   const lowerMap = mapCorners.map(([lon, lat]) => project([lon, lat, -.034]));
-  fill([map[frontX[0]], map[frontX[1]], lowerMap[frontX[1]], lowerMap[frontX[0]]], "#14222d");
-  fill([map[frontY[0]], map[frontY[1]], lowerMap[frontY[1]], lowerMap[frontY[0]]], "#203340");
-  fill(map, "#213542");
-  paintLand(area.mapPolygons, "#405461");
+  fill([map[frontX[0]], map[frontX[1]], lowerMap[frontX[1]], lowerMap[frontX[0]]], "#a8a5a0");
+  fill([map[frontY[0]], map[frontY[1]], lowerMap[frontY[1]], lowerMap[frontY[0]]], "#c8c4bd");
+  fill(map, "#f5f3ef");
+  paintLand(area.mapPolygons, "#c9c6c0");
 
   const current = replay.rain[index];
   const satellite = satelliteAt(replay, current.time);
@@ -202,16 +202,16 @@ export function paintReplay(
   ctx.save();
   ctx.setLineDash([3, 5]);
   ctx.lineWidth = 0.8;
-  ctx.strokeStyle = "rgba(190, 209, 220, .22)";
+  ctx.strokeStyle = "rgba(92, 88, 80, .27)";
   ctx.beginPath();
   for (const lon of longitudes) mapLine(lon, mapSouth, lon, mapNorth);
   for (const lat of latitudes) mapLine(mapWest, lat, mapEast, lat);
   ctx.stroke();
   ctx.restore();
-  paintBoundaries(area.mapPolygons, "#a3b6c1", 1.15);
-  paintBoundaries(area.focusPolygons, "#d0dce3", 1.65);
+  paintBoundaries(area.mapPolygons, "#635e57", 1.15);
+  paintBoundaries(area.focusPolygons, "#3a3732", 1.65);
   path(map);
-  ctx.strokeStyle = "#8ca0ad";
+  ctx.strokeStyle = "#777168";
   ctx.lineWidth = 1.05;
   ctx.stroke();
 
@@ -219,7 +219,7 @@ export function paintReplay(
   const corner = map.reduce((nearest, point, i) => point[1] > map[nearest][1] ? i : nearest, 0);
   const edgeLon = corner === 0 || corner === 3 ? mapWest : mapEast;
   const edgeLat = corner < 2 ? mapSouth : mapNorth;
-  ctx.strokeStyle = "#b1c3ce";
+  ctx.strokeStyle = "#3b3833";
   ctx.lineWidth = 1.15;
   ctx.beginPath();
   mapLine(mapWest, edgeLat, mapEast, edgeLat);
@@ -263,13 +263,13 @@ export function paintReplay(
     const walls = [mapCorners[(backIndex + 1) % 4], mapCorners[(backIndex + 3) % 4]];
     for (const [i, end] of walls.entries()) {
       fill([project(rear), project(end), lift(end, ceiling), lift(rear, ceiling)],
-        i === 0 ? "#12212c" : "#172a36");
+        i === 0 ? "#efede9" : "#f4f2ef");
     }
 
     ctx.save();
     ctx.setLineDash([4, 5]);
     ctx.lineWidth = .8;
-    ctx.strokeStyle = "#405563";
+    ctx.strokeStyle = "#b7b2a9";
     ctx.beginPath();
     for (let layer = 0; layer < frames.length; layer++) {
       const z = (layer + 1) * timeStep + voxelHeight;
@@ -318,7 +318,7 @@ export function paintReplay(
     ctx.beginPath();
     ctx.moveTo(...axisFloor);
     ctx.lineTo(...axisTop);
-    ctx.strokeStyle = "#a3b6c1";
+    ctx.strokeStyle = "#574f45";
     ctx.lineWidth = 1;
     ctx.stroke();
     ctx.textAlign = "left";
@@ -328,7 +328,7 @@ export function paintReplay(
     for (const [layer, frame] of frames.entries()) {
       const [x, y] = project([axis[0], axis[1], (layer + 1) * timeStep + voxelHeight]);
       const active = frame === index;
-      ctx.strokeStyle = active ? "#9f2d22" : "#8ca0ad";
+      ctx.strokeStyle = active ? "#9f2d22" : "#777168";
       ctx.beginPath();
       ctx.moveTo(x - 3, y);
       ctx.lineTo(x + 4, y);

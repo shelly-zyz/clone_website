@@ -75,7 +75,7 @@ function recorder() {
       fills.add(this.fillStyle);
       if (this.fillStyle?.startsWith('rgb(')) surfaces.push(this.fillStyle);
     },
-    stroke(){ if (this.strokeStyle === "rgba(239, 190, 132, .88)") drops.push(...path); },
+    stroke(){ if (this.strokeStyle === "rgba(127, 56, 40, .82)") drops.push(...path); },
     fillText(label){ labels.push(label); },
     drawImage(image){ rasters.push(image); },
   }, {get(target,key){return key in target ? target[key] : () => {}; }});
@@ -132,8 +132,8 @@ paintReplay(accumulated.canvas, replay, { ...common, view:'accumulation', totals
 paintReplay(mono.canvas, replay, { ...common, view:'accumulation', totals, accumulationLimit:150 });
 assert(accumulated.surfaces.length > 0);
 for (const recording of [overlay, stack, accumulated, renderRain(1, 0, 'rain')]) {
-  assert(recording.fills.has('#213542'), 'each mode uses an opaque water surface');
-  assert(recording.fills.has('#405461'), 'each mode uses opaque land');
+  assert(recording.fills.has('#f5f3ef'), 'each mode uses an opaque water surface');
+  assert(recording.fills.has('#c9c6c0'), 'each mode uses opaque land');
 }
 assert.deepEqual(accumulated.surfaces, mono.surfaces, 'a fixed scale yields stable colors for the same archived frame');
 function renderRain(rate, phase, view, precipitation = true) {
