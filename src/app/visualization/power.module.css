@@ -54,7 +54,7 @@
 .composition { display: grid; align-items: center; min-width: 0; gap: 8px; padding-block: 10px; }
 .composition .plot > div { height: clamp(140px, 17vw, 200px); }
 .ringLegend { min-width: 0; padding: 0; list-style: none; }
-.ringLegend button {
+.ringLegend button, .ringRow {
   display: grid;
   width: 100%;
   min-height: 28px;
@@ -78,7 +78,43 @@
 .ringLegend [data-tone="champagne"], .sourceButtons [data-tone="champagne"] { --tone: #ead39d; }
 .ringLegend [data-tone="lavender"], .sourceButtons [data-tone="lavender"] { --tone: #9698c9; }
 .ringLegend [data-tone="mint"], .sourceButtons [data-tone="mint"] { --tone: #87c5c0; }
-.ringLegend [data-tone="rose"] { --tone: #dcadbd; }
+.ringLegend [data-tone="rose"], .sourceButtons [data-tone="rose"] { --tone: #dcadbd; }
+.ringRow { cursor: default; }
+.topicRingLegend { max-height: 204px; overflow-y: auto; overscroll-behavior: contain; }
+.topicGrid { display: grid; min-width: 0; gap: 16px; align-items: start; }
+.topicFigure .figureBody { margin-top: 8px; }
+.topicFigure .plot > div { height: 248px; }
+.topicFigure .plot > div[data-chart-kind="map"] { height: 232px; }
+.topicFigure .topicComposition .plot > div { height: clamp(172px, 18vw, 250px); }
+.topicFigure[data-lead="true"] .plot > div { height: clamp(260px, 31vw, 378px); }
+.topicFigure[data-active-view="true"] .plot > div { height: clamp(260px, 36vw, 422px); }
+.topicFigure .plot > div:where([data-chart-kind="rose"], [data-chart-kind="bubble"], [data-chart-kind="map"]) {
+  background: radial-gradient(ellipse at 50% 48%, #eef3fa, #fff 76%);
+}
+.topicFigure .caption { overflow-wrap: anywhere; }
+.topicFigure .figureHeader p { letter-spacing: .035em; }
+.topicFigure .figureFooter { justify-content: space-between; }
+
+@media (min-width: 650px) {
+  .topicGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .topicGrid[data-mosaic="true"] > :last-child:nth-child(even) { grid-column: 1 / -1; }
+  .topicFigure[data-lead="true"] .topicComposition, .topicFigure[data-active-view="true"] .topicComposition {
+    grid-template-columns: minmax(0, 1.35fr) minmax(132px, 1fr);
+  }
+}
+
+@media (min-width: 850px) {
+  .topicFigure[data-active-view="true"] .figureBody { padding-top: 6px; }
+  .topicFigure[data-lead="true"] .figureHeader h2 { font-size: clamp(22px, 2.2vw, 32px); }
+}
+
+@media (min-width: 1060px) {
+  .topicGrid[data-mosaic="true"] { grid-template-columns: minmax(0, 1.53fr) minmax(0, 1fr); }
+  .topicGrid[data-mosaic="true"] > :first-child { grid-row: span 2; }
+  .topicGrid > :first-child .plot > div { height: clamp(285px, 30vw, 387px); }
+  .topicGrid > :first-child .topicComposition .plot > div { height: clamp(245px, 24vw, 320px); }
+  .topicGrid > :first-child .ribbonStage { height: clamp(330px, 28vw, 440px); }
+}
 
 .ribbonStage { position: relative; height: clamp(240px, 44vw, 460px); background: radial-gradient(ellipse at 52% 53%, #f0f4fa 0%, #fff 72%); }
 .ribbonStage > div { height: 100%; }

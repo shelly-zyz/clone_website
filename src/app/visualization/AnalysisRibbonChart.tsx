@@ -5,21 +5,22 @@ import { useEffect, useRef, useState } from "react";
 import { reading } from "@/lib/topic-analysis/data-story";
 import type { AnalysisChartSpec } from "@/lib/topic-analysis/model";
 import { AnalysisPlot } from "./AnalysisPlot";
-import { mountPowerRibbonScene } from "./power-ribbon-scene";
+import { mountAnalysisRibbonScene } from "./analysis-ribbon-scene";
 import styles from "./power.module.css";
 
-export function PowerRibbonChart({ spec, highlight, select }: {
+export function AnalysisRibbonChart({ spec, highlight, select }: {
   spec: AnalysisChartSpec;
   highlight?: string;
-  select: (year: string, source?: string) => void;
+  select?: (period: string, series?: string) => void;
 }) {
   const host = useRef<HTMLDivElement>(null);
-  const scene = useRef<ReturnType<typeof mountPowerRibbonScene>>(undefined);
+  const scene = useRef<ReturnType<typeof mountAnalysisRibbonScene>>(undefined);
   const selection = useRef(select);
   const view = useRef({ year: spec.focus, highlight });
   const [mode, setMode] = useState<"3d" | "2d" | "unavailable">("3d");
   const [current, setCurrent] = useState<{ year: string; source: string; value: number }>();
-  const { labels, series } = spec;
+  const { id, labels, series, title, unit } = spec;
+  const capacity = id === "capacity-comparison";
 
   useEffect(() => { selection.current = select; }, [select]);
   useEffect(() => {
@@ -34,9 +35,9 @@ export function PowerRibbonChart({ spec, highlight, select }: {
       if (!entry.isIntersecting) return;
       observer.disconnect();
       try {
-        scene.current = mountPowerRibbonScene(element, labels, series, {
+        scene.current = mountAnalysisRibbonScene(element, labels, series, unit, capacity, {
           inspect: setCurrent,
-          select: point => selection.current(point.year, point.source),
+          select: point => selection.current?.(point.year, point.source),
           unavailable: () => setMode("unavailable"),
         });
       } catch { scene.current = undefined; }
@@ -49,19 +50,19 @@ export function PowerRibbonChart({ spec, highlight, select }: {
       scene.current?.dispose();
       scene.current = undefined;
     };
-  }, [labels, series, mode]);
+  }, [capacity, labels, series, unit, mode]);
 
   return <div className={styles.ribbons} data-renderer={mode === "3d" ? "webgl" : "echarts"}>
     <div className={styles.ribbonStage}>
       {mode === "3d" ? <>
-        <div className={styles.ribbonCanvas} ref={host} role="img" aria-label="按年份和电源分层的三维装机容量图，单位 GW" />
+        <div className={styles.ribbonCanvas} ref={host} role="img" aria-label={title + "，三维分层曲带，单位 " + unit} />
         {current && <div className={styles.ribbonReading}>
-          <span>{current.year} 年 · {current.source}</span><strong>{reading(current.value, "GW")}</strong>
+          <span>{current.year}{/^\d{4}$/.test(current.year) && " 年"} · {current.source}</span><strong>{reading(current.value, unit)}</strong>
         </div>}
-      </> : <AnalysisPlot spec={spec} highlight={highlight} onCategory={year => select(year)} />}
+      </> : <AnalysisPlot spec={spec} highlight={highlight} onCategory={select ? period => select(period) : undefined} />}
     </div>
     <div className={styles.ribbonActions}>
-      <p>{mode === "3d" ? "横向拖动旋转 · 点击年度采样点" : mode === "unavailable" ? "当前设备以二维展示同一组年度数据" : "点击年度采样点切换年份"}</p>
+      <p>{mode === "3d" ? (select ? "拖动旋转 · 点击采样点联动筛选" : "拖动旋转 · 悬停采样点查看数值") : select ? "点击采样点联动筛选" : "二维曲带"}</p>
       <div role="group" aria-label="曲面视角">
         {mode === "3d" && <>
           <button type="button" aria-label="向左旋转" title="向左旋转" onClick={() => scene.current?.rotate(-1)}><ChevronLeft size={15} /></button>

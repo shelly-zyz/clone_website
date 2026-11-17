@@ -1,8 +1,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import type { Series } from "@/lib/topic-analysis/model";
-import { powerTone } from "@/lib/topic-analysis/power";
-import { researchColors } from "@/lib/topic-analysis/research-palette";
+import { analysisTone, researchColors } from "@/lib/topic-analysis/research-palette";
 
 type Reading = { year: string; source: string; value: number };
 const width = 10.8;
@@ -10,7 +9,7 @@ const height = 5.1;
 const depth = 7.4;
 const vec = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 
-export function mountPowerRibbonScene(host: HTMLElement, labels: readonly string[], series: readonly Series[], handlers: {
+export function mountAnalysisRibbonScene(host: HTMLElement, labels: readonly string[], series: readonly Series[], unitLabel: string, capacity: boolean, handlers: {
   inspect: (reading?: Reading) => void;
   select: (reading: Reading) => void;
   unavailable: () => void;
@@ -22,7 +21,6 @@ export function mountPowerRibbonScene(host: HTMLElement, labels: readonly string
   const overlay = document.createElement("canvas");
   const context = overlay.getContext("2d");
   if (!context) { renderer.dispose(); return; }
-  canvas.className = "power-ribbon-input";
   host.append(canvas, overlay);
   const scene = new THREE.Scene();
   const camera = new THREE.OrthographicCamera(-9, 9, 6, -6, 0.1, 100);
@@ -43,7 +41,11 @@ export function mountPowerRibbonScene(host: HTMLElement, labels: readonly string
   const light = new THREE.DirectionalLight(0xfff9ee, 2.2);
   light.position.set(-4, 10, 7);
   scene.add(light);
-  const top = Math.max(400, 400 * Math.ceil(Math.max(0, ...series.flatMap(part => part.values.map(value => value ?? 0))) / 400));
+  const maximum = Math.max(0, ...series.flatMap(part => part.values.map(value => value ?? 0)));
+  const magnitude = 10 ** Math.floor(Math.log10(maximum / 4 || 1));
+  const step = [1, 2, 2.5, 5, 10].find(candidate => candidate >= (maximum / 4) / magnitude) ?? 10;
+  const top = capacity ? Math.max(400, 400 * Math.ceil(maximum / 400)) : 4 * step * magnitude;
+  const tick = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 });
   const xs = labels.map((_, i) => -width / 2 + i * width / Math.max(labels.length - 1, 1));
   const ys = [0, 1, 2, 3, 4].map(i => (i / 4) * height);
   const zs = series.map((_, i) => depth / 2 - (i + 0.5) * depth / series.length);
@@ -73,7 +75,7 @@ export function mountPowerRibbonScene(host: HTMLElement, labels: readonly string
   const bands = series.map((part, index) => {
     const z = zs[index];
     const halfBand = 0.39;
-    const tone = researchColors[powerTone(part.name)];
+    const tone = researchColors[analysisTone(part.name, index)];
     const base = new THREE.Color(tone.base).lerp(new THREE.Color(tone.ink), 0.18);
     const pale = new THREE.Color(tone.light);
     const pigment = new THREE.Color(tone.base);
@@ -137,12 +139,14 @@ export function mountPowerRibbonScene(host: HTMLElement, labels: readonly string
     context.fillStyle = "#60758d";
     ys.forEach((y, index) => {
       const p = project(vec(-width / 2 - 0.23, y, -depth / 2));
-      context.fillText(String(index * top / 4), p.x, p.y);
+      context.fillText(tick.format(index * top / 4), p.x, p.y);
     });
     const unit = project(vec(-width / 2, height + 0.47, -depth / 2));
-    context.fillText("GW", unit.x, unit.y);
+    context.fillText(unitLabel, unit.x, unit.y);
     context.textAlign = "center";
+    const stride = Math.max(1, Math.ceil(xs.length / Math.max(5, Math.floor(size.w / 54))));
     xs.forEach((x, i) => {
+      if (i % stride && selected !== labels[i]) return;
       const p = project(vec(x, 0, depth / 2 + 0.46));
       context.fillStyle = selected === labels[i] ? "#4d5f8e" : "#60758d";
       context.font = `${selected === labels[i] ? "700 " : ""}11px Inter, sans-serif`;

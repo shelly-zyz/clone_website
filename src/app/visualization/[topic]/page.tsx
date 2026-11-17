@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { analysisTopicOrder, analysisTopics } from "@/lib/topic-analysis/catalog";
+import { archivedRenewableScenario } from "@/lib/topic-analysis/scenario.server";
 import { AnalysisHeader } from "../AnalysisHeader";
 import { AnalysisWorkbench } from "../AnalysisWorkbench";
 import styles from "../page.module.css";
@@ -38,7 +39,8 @@ export default async function TopicAnalysisPage({ params, searchParams }: PagePr
   return (
     <main className={styles.page} id="topic-analysis-page">
       <div className={styles.hero}><AnalysisHeader topic={analysisTopics[key].globe} detail /></div>
-      <AnalysisWorkbench key={key} topic={key} initialQuery={initialQuery.toString()} />
+      <AnalysisWorkbench key={key} topic={key} initialQuery={initialQuery.toString()}
+        initialScenario={key === "renewables" ? archivedRenewableScenario() : undefined} />
     </main>
   );
 }

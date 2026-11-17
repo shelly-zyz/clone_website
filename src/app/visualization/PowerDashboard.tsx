@@ -12,7 +12,7 @@ import { AnalysisInsights, AnalysisNarrative } from "./AnalysisNarrative";
 import { AnalysisPlot } from "./AnalysisPlot";
 import styles from "./power.module.css";
 
-const RibbonChart = dynamic(() => import("./PowerRibbonChart").then(module => module.PowerRibbonChart), {
+const RibbonChart = dynamic(() => import("./AnalysisRibbonChart").then(module => module.AnalysisRibbonChart), {
   ssr: false, loading: () => <div className={styles.ribbonStage} />,
 });
 

@@ -117,7 +117,7 @@ function heatmap(spec: AnalysisChartSpec, compact: boolean, tooltip: TooltipComp
     },
     dataZoom: zoom ? periodSlider("y", first, last - 1) : undefined,
     series: [{
-      type: "heatmap", name: spec.title, data: values, silent: compact, itemStyle: { borderColor: "#fff", borderWidth: 1.5 },
+      type: "heatmap", name: spec.title, data: values, silent: compact, itemStyle: { borderColor: "#fff", borderWidth: numberOfYears > 24 ? 1.1 : 2.8, borderRadius: 4 },
       emphasis: { itemStyle: { borderColor: "#223b4c", borderWidth: 2 } },
     }],
   };
@@ -152,11 +152,11 @@ function mapOptions(spec: Extract<AnalysisChartSpec, { kind: "map" }>, compact: 
     series: [{
       type: "map", map: worldMap, nameProperty: "ADM0_A3", silent: compact, roam: false,
       top: 4, bottom: compact ? 4 : 46, left: 7, right: 7,
-      itemStyle: { areaColor: "#e9eef0", borderColor: "#fff", borderWidth: 0.55 },
-      emphasis: { label: { show: false }, itemStyle: { areaColor: "#ffcd58" } },
+      itemStyle: { areaColor: "#e9eef5", borderColor: "#fff", borderWidth: 0.72, shadowBlur: 6, shadowColor: "#58759d39" },
+      emphasis: { label: { show: false }, itemStyle: { areaColor: champagne.base } },
       data: spec.mapIds.map((id, index) => ({
         name: id, value: spec.series[0].values[index] ?? undefined,
-        ...(spec.labels[index] === spec.focus ? { itemStyle: { borderColor: "#a45719", borderWidth: 1.5 } } : {}),
+        ...(spec.labels[index] === spec.focus ? { itemStyle: { borderColor: lavender.ink, borderWidth: 1.5 } } : {}),
       })),
     }],
   };
@@ -172,7 +172,11 @@ function bubble(spec: Extract<AnalysisChartSpec, { kind: "bubble" }>, compact: b
     return [{
       name, value: [x, y, spec.sizes[index]], symbolSize: (compact ? 5 : 7) + Math.sqrt(spec.sizes[index] / maximum) * (compact ? 17 : 42),
       itemStyle: {
-        color: focused ? roseTone.ink : spec.categoryColors?.[index] ?? ice.base,
+        color: { type: "radial" as const, x: .34, y: .26, r: .73, colorStops: [
+          { offset: 0, color: "#fcfdff" },
+          { offset: .53, color: focused ? roseTone.base : spec.categoryColors?.[index] ?? ice.base },
+          { offset: 1, color: focused ? roseTone.ink : interpolateColor(spec.categoryColors?.[index] ?? ice.base, ice.ink, .49) },
+        ] },
         ...(focused ? { opacity: 1, borderColor: "#fff", borderWidth: 1.5 } : {}),
       },
       label: focused && !compact ? { show: true, formatter: name, color: ink, position: "top" as const } : undefined,
@@ -201,7 +205,7 @@ function bubble(spec: Extract<AnalysisChartSpec, { kind: "bubble" }>, compact: b
     },
     series: [{
       type: "scatter", data: data.sort((a, b) => Number(a.name === spec.focus) - Number(b.name === spec.focus) || b.value[2] - a.value[2]), silent: compact, color: ice.base,
-      itemStyle: { opacity: 0.79, borderColor: ice.ink, borderWidth: 0.65 },
+      itemStyle: { opacity: .88, borderColor: "#fff", borderWidth: .75, shadowBlur: 5, shadowColor: "#4b658933" },
       emphasis: { focus: "self", scale: 1.12, label: { show: true, formatter: "{b}", position: "top", color: ink } },
     }],
   };
@@ -226,9 +230,9 @@ function treemap(spec: AnalysisChartSpec, compact: boolean, tooltip: TooltipComp
 }
 
 function rose(spec: AnalysisChartSpec, compact: boolean, tooltip: TooltipComponentOption): ChartOptions {
-  const colors = [mint.base, ice.base, ice.ink, lavender.base, roseTone.base, champagne.base, sage.base, mint.ink];
+  const colors = [mint, ice, lavender, lavender, roseTone, champagne, sage, mint];
   return {
-    polar: { radius: compact ? "65%" : "69%", center: ["50%", "50%"] },
+    polar: { radius: compact ? "66%" : "76%", center: ["50%", "50%"] },
     angleAxis: {
       type: "category", data: [...spec.labels], startAngle: 112.5,
       axisLine: { show: false }, axisTick: { show: false }, axisLabel: { ...axisLabel, fontSize: compact ? 10 : 13 },
@@ -240,56 +244,12 @@ function rose(spec: AnalysisChartSpec, compact: boolean, tooltip: TooltipCompone
     },
     tooltip: { ...tooltip, trigger: "item" },
     series: [{
-      type: "bar", coordinateSystem: "polar", silent: compact, name: spec.series[0].name, barWidth: "78%",
-      data: spec.series[0].values.map((value, index) => ({ value, itemStyle: { color: colors[index] } })),
-    }],
-  };
-}
-
-function donut(spec: Extract<AnalysisChartSpec, { kind: "donut" }>, compact: boolean, tooltip: TooltipComponentOption): ChartOptions {
-  const { center } = spec;
-  return {
-    tooltip: { ...tooltip, trigger: "item", formatter: params => {
-      const item = Array.isArray(params) ? params[0] : params;
-      return `${item.name}\n${readValue(item.value, spec.unit)} · ${readValue(item.percent, "%")}`;
-    } },
-    legend: {
-      show: !compact, type: "scroll", left: "center", bottom: 2, textStyle: legendStyle, selectedMode: false,
-    },
-    title: {
-      text: readValue(center.value, center.unit), subtext: compact ? undefined : center.label,
-      left: "center", top: compact ? "50%" : "44%", textVerticalAlign: "middle", itemGap: 6,
-      textStyle: { color: ink, fontSize: compact ? 17 : 27, fontWeight: 720 },
-      subtextStyle: { color: "#4e6470", fontSize: 12 },
-    },
-    series: [{
-      type: "pie", radius: compact ? ["46%", "77%"] : ["49%", "78%"], center: ["50%", compact ? "50%" : "46%"],
-      label: { show: false }, labelLine: { show: false }, padAngle: 1.4, minShowLabelAngle: 5, silent: compact,
-      itemStyle: { borderRadius: 4 },
-      data: spec.labels.flatMap((name, index) => {
-        const value = spec.series[0].values[index];
-        return value !== null && value > 0
-          ? [{ name, value, itemStyle: { color: spec.categoryColors?.[index] ?? spec.color } }] : [];
+      type: "bar", coordinateSystem: "polar", silent: compact, name: spec.series[0].name, barWidth: "73%",
+      data: spec.series[0].values.map((value, index) => {
+        const tone = colors[index % colors.length];
+        return { name: spec.labels[index], value, itemStyle: { color: verticalFill(tone.light, tone.ink),
+          borderColor: "#fff", borderWidth: 1, shadowBlur: 8, shadowColor: tone.base + "6b" } };
       }),
-    }],
-  };
-}
-
-function sankey(spec: Extract<AnalysisChartSpec, { kind: "sankey" }>, compact: boolean, tooltip: TooltipComponentOption): ChartOptions {
-  return {
-    tooltip: { ...tooltip, trigger: "item", formatter: params => {
-      const item = Array.isArray(params) ? params[0] : params;
-      const link = item.dataIndex >= 0 && item.dataType === "edge" ? spec.links[item.dataIndex] : undefined;
-      return `${link ? link.source + " → " + link.target : item.name}\n${readValue(item.value, spec.unit)}`;
-    } },
-    series: [{
-      type: "sankey", draggable: false, silent: compact, nodeWidth: compact ? 8 : 16, nodeGap: compact ? 8 : 16,
-      left: compact ? 4 : 15, right: compact ? 40 : 63, top: 12, bottom: 12,
-      label: { color: ink, fontSize: compact ? 9 : 12, distance: compact ? 3 : 7 },
-      data: spec.nodes.map(({ name, value, color }) => ({ name, value, itemStyle: { color } })),
-      links: spec.links,
-      lineStyle: { color: "gradient", curveness: 0.55, opacity: 0.46 },
-      emphasis: { focus: "adjacency", lineStyle: { opacity: 0.75 } },
     }],
   };
 }
@@ -301,7 +261,7 @@ function waterfall(spec: AnalysisChartSpec, compact: boolean, tooltip: TooltipCo
     if (value === null) return [];
     const from = index === last ? 0 : cumulative;
     cumulative = index === last ? value : from + value;
-    const color = index === last ? spec.color : (spec.categoryColors?.[index] ?? (value < 0 ? "#e46a59" : "#25ada0"));
+    const color = index === last ? spec.color : (spec.categoryColors?.[index] ?? (value < 0 ? roseTone.base : mint.base));
     return [{ name: spec.labels[index], value: [index, from, cumulative, value], itemStyle: { color } }];
   });
   const positions = bars.flatMap(bar => bar.value.slice(1, 3));
@@ -508,7 +468,14 @@ function cartesian(spec: AnalysisChartSpec, compact: boolean, tooltip: TooltipCo
 
 export function chartOptions(spec: AnalysisChartSpec, compact: boolean, highlight?: string): ChartOptions {
   const power = powerPlotOptions(spec, compact, highlight);
-  if (power) return power;
+  if (power) {
+    if ((spec.kind === "line" || spec.kind === "area") && spec.zoom && spec.labels.length > 12 && !compact) {
+      const dataZoom = periodSlider("x", Math.max(0, spec.labels.length - 60), spec.labels.length - 1)
+        .map(item => spec.series.length > 1 ? { ...item, bottom: 26 } : item);
+      return { ...power, dataZoom };
+    }
+    return power;
+  }
   const tooltip: TooltipComponentOption = {
     show: !compact, confine: true, renderMode: "richText", trigger: "axis",
     textStyle: { color: ink, fontSize: 12 }, valueFormatter: value => readValue(value, spec.unit),
@@ -520,8 +487,6 @@ export function chartOptions(spec: AnalysisChartSpec, compact: boolean, highligh
     case "bubble": return { ...base, ...bubble(spec, compact, tooltip) };
     case "treemap": return { ...base, ...treemap(spec, compact, tooltip) };
     case "rose": return { ...base, ...rose(spec, compact, tooltip) };
-    case "donut": return { ...base, ...donut(spec, compact, tooltip) };
-    case "sankey": return { ...base, ...sankey(spec, compact, tooltip) };
     case "waterfall": return { ...base, ...waterfall(spec, compact, tooltip) };
     case "calendar": return { ...base, ...calendar(spec, compact, tooltip) };
     case "boxplot": return { ...base, ...boxplot(spec, compact, tooltip) };

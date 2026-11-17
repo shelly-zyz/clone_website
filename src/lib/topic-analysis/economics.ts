@@ -76,7 +76,7 @@ export function buildEconomyAnalysis(code: string, year: number, view: EconomyIn
         id: "gdp-ranking", label: "规模排行", title: `${year} 年${name}最高的经济体`,
         caption: "展示站内 WDI 快照中该指标有值的前十个国家或地区。点击排行可切换国家档案。",
         kind: "horizontal", labels: ranking.map(item => item.label), unit, color,
-        categoryColors: ranking.map(item => item.code === country.code ? "#d38a38" : color),
+        focus: country.label,
         series: [{ name, values: ranking.map(item => item.value) }], sources: [indicatorSource],
       },
       {
@@ -122,7 +122,7 @@ export function buildTradeAnalysis(code: string, year: number, startYear?: numbe
         id: "export-relationship", label: "开放度气泡图", title: `${year} 年经济规模与出口开放度`,
         caption: "横轴为 GDP（对数坐标），纵轴为出口占 GDP 比重。气泡面积随出口规模增大。紫色表示出口占比达到 100%，转口贸易等可使该比重超过 100%。点击气泡可切换经济体。",
         kind: "bubble", labels: economies.map(item => item.label), unit: "%", xUnit: "亿美元", xLog: true, color, focus: country.label,
-        categoryColors: economies.map(item => item.share >= 100 ? "#805ee2" : "#20b8bc"),
+        categoryColors: economies.map(item => item.share >= 100 ? "#9698c9" : "#91b7d5"),
         sizes: economies.map(item => item.exports), sizeName: "商品与服务出口额", sizeUnit: "亿美元",
         series: [
           { name: "GDP", values: economies.map(item => item.gdp) },
@@ -132,9 +132,9 @@ export function buildTradeAnalysis(code: string, year: number, startYear?: numbe
       },
       {
         id: "exports-mix", label: "出口规模格局", title: `${year} 年主要出口经济体`,
-        caption: "面积表示出口额，展示站内快照中出口额有值的前 12 个经济体。点击方块可切换经济体。",
-        kind: "treemap", labels: top.map(item => item.label), unit: "亿美元", color,
-        categoryColors: top.map((item, index) => item.label === country.label ? "#f6c751" : exportPalette[index % exportPalette.length]),
+        caption: "扇区以图示前 12 个经济体的出口额之和为分母。点击扇区可切换经济体。",
+        kind: "donut", labels: top.map(item => item.label), unit: "亿美元", color, focus: country.label,
+        center: { value: top.length ? top.reduce((sum, item) => sum + item.value, 0) : null, label: "图示前列经济体合计", unit: "亿美元" },
         series: [{ name: "商品与服务出口额", values: top.map(item => item.value) }], sources: [exportSource],
       },
       {
@@ -155,7 +155,6 @@ export function buildTradeAnalysis(code: string, year: number, startYear?: numbe
   };
 }
 
-const exportPalette = ["#21afa7", "#649be7", "#a18aeb", "#e87260", "#e9b749", "#77b56e"];
 const forecastComparison = ["CHN", "USA", "IND", "DEU", "BRA"];
 
 export function buildEconomicComparison(codes: readonly string[], startYear: number, endYear: number,
@@ -253,7 +252,7 @@ export function buildOutlookAnalysis(code: string, year: number, compared?: read
         id: "growth-ranking", label: "预测排行", title: `${year} 年预测增速最高的经济体`,
         caption: "按此版预测值排序，展示有国家或地区标识的前十名。点击排行可切换增长路径。",
         kind: "horizontal", labels: ranking.map(item => item.label), unit: "%", color,
-        categoryColors: ranking.map(item => item.code === country.code ? "#d38a38" : color),
+        focus: country.label,
         series: [{ name: "实际 GDP 增速预测", values: ranking.map(item => item.current) }], sources: [forecastSource],
       },
     ],

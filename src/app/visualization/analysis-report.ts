@@ -1,5 +1,6 @@
 import type { DataStory } from "@/lib/topic-analysis/data-story";
 import { formatAnalysisValue, hasChartValues, type AnalysisChartSpec, type Metric } from "@/lib/topic-analysis/model";
+import { hasLayeredRibbons } from "@/lib/topic-analysis/research-palette";
 import { renderReportChart } from "./AnalysisPlot";
 
 export type ReportFigure = { spec: AnalysisChartSpec; story: DataStory };
@@ -51,7 +52,8 @@ export async function buildTopicReport(report: TopicReport) {
     if (hasChartValues(spec)) {
       try {
         const svg = await renderReportChart(spec);
-        plot = '<img alt="' + html(spec.title) + '" src="data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg) + '">';
+        plot = '<img alt="' + html(spec.title) + '" src="data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg) + '">'
+          + (spec.kind === "donut" ? fallbackTable(spec) : "");
       } catch {
         plot = "<p>图形暂无法嵌入。以下为本图数值。</p>" + fallbackTable(spec);
       }
@@ -64,7 +66,7 @@ export async function buildTopicReport(report: TopicReport) {
       ...story.sections,
       ...story.highlights.slice(1).filter(item => !story.sections.some(section => section.text === item.text)),
     ].map(({ label, text }) => "<div><dt>" + html(label) + "</dt><dd>" + html(text) + "</dd></div>").join("");
-    const note = spec.id === "capacity-comparison" ? "报告采用相同数据的二维图，深度信息见在线交互图。" : "";
+    const note = hasLayeredRibbons(spec.id) ? "报告采用相同数据的二维曲带，三维视角见在线图表。" : "";
     figures.push('<section class="figure"><h2>' + html(spec.title) + '</h2><figure>' + plot
       + '<figcaption>' + html(spec.caption + (note ? " " + note : "")) + ' ' + refs + '</figcaption></figure>'
       + '<dl class="story">' + sections + '</dl></section>');

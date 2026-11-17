@@ -9,6 +9,20 @@ export const researchColors = {
 
 export type ResearchColor = keyof typeof researchColors;
 
+const toneOrder = ["ice", "lavender", "mint", "rose", "champagne", "sage"] as const;
+const energyTones: Record<string, ResearchColor> = {
+  火电: "ice", 水电: "sage", 核电: "champagne", 风电: "lavender", 太阳能: "mint", 光伏: "mint",
+  原煤: "ice", 原油: "lavender", 天然气: "mint", 其他及口径差额: "rose",
+};
+
+export function analysisTone(label: string, index: number): ResearchColor {
+  return Object.hasOwn(energyTones, label) ? energyTones[label] : toneOrder[index % toneOrder.length];
+}
+
+export function hasLayeredRibbons(id: string) {
+  return id === "capacity-comparison" || id === "fuel-index" || id === "renewable-complementarity";
+}
+
 export const researchInk = "#263442";
 export const researchRule = "#e5ebf0";
 
