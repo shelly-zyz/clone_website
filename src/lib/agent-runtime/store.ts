@@ -22,7 +22,8 @@ export async function createAgentSession(projectId: string, kind: AgentKind, sta
     await client.query(
       "INSERT INTO projects.agent_session(id,project_id,kind) VALUES($1,$2,$3) ON CONFLICT (id) DO NOTHING", [stableId, projectId, kind]);
     const { rows: [row] } = await client.query<SessionRow>(
-      "SELECT id,project_id,revision,summary,recent FROM projects.agent_session WHERE id=$1 AND project_id=$2 AND kind=$3",
+      `SELECT id,project_id,revision,summary,recent FROM projects.agent_session
+       WHERE id=$1 AND project_id=$2 AND kind=$3 AND COALESCE(summary->>'format','') NOT LIKE 'research-%'`,
       [stableId, projectId, kind]);
     if (!row) throw new Error("Agent session identity conflict.");
     return { session_id: row.id, project_id: row.project_id, revision: row.revision, summary: row.summary, recent: row.recent };
@@ -33,7 +34,7 @@ export async function getAgentSession(projectId: string, id: string, kind: Agent
   return runDataAgentWrite("green_agent_context", async client => {
     const { rows } = await client.query<SessionRow>(`
       SELECT id,project_id,revision,summary,recent FROM projects.agent_session
-      WHERE id=$1 AND project_id=$2 AND kind=$3
+      WHERE id=$1 AND project_id=$2 AND kind=$3 AND COALESCE(summary->>'format','') NOT LIKE 'research-%'
     `, [id, projectId, kind]);
     const row = rows[0];
     return row && { session_id: row.id, project_id: row.project_id, revision: row.revision, summary: row.summary, recent: row.recent };

@@ -6,7 +6,7 @@ import { withAgentRun } from "./policy.server";
 import { getPiModel } from "@/lib/data-agent/pi.server";
 
 export async function selectWithPi<T>(input: {
-  prompt: string; context: unknown; tool: "select_chart" | "plan_analysis"; schema: z.ZodType<T>; signal: AbortSignal;
+  prompt: string; context: unknown; tool: "select_chart" | "plan_analysis"; schema: z.ZodType<T>; signal: AbortSignal; maxTokens?: number;
 }): Promise<T | undefined> {
   return withAgentRun(input.tool === "select_chart" ? "chartPlan" : "analysisPlan", input.signal, async guard => {
     const { models, model, apiKey } = getPiModel();
@@ -30,7 +30,7 @@ export async function selectWithPi<T>(input: {
       },
       streamFn: (currentModel, context, options) => {
         guard.model();
-        return models.streamSimple(currentModel, context, { ...options, maxTokens: 240, maxRetries: 0 });
+        return models.streamSimple(currentModel, context, { ...options, maxTokens: input.maxTokens ?? 240, maxRetries: 0 });
       },
       toolExecution: "sequential",
       beforeToolCall: async ({ toolCall }) => guard.tool(toolCall.name),

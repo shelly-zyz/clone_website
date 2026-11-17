@@ -2,6 +2,7 @@ import { z } from "zod";
 import { mcpResult, serveAgentMcp } from "@/lib/agent-runtime/mcp.server";
 import { chartBackends, chartTypes, sceneFields } from "@/lib/visualization-agent/contracts";
 import { registerCustomChart, visualizationMcpName } from "@/lib/visualization-agent/custom-mcp.server";
+import { registerResearchTools } from "@/lib/visualization-agent/research/mcp.server";
 import { visualizeResult } from "@/lib/visualization-agent/visualization.server";
 
 export const runtime = "nodejs";
@@ -19,5 +20,6 @@ export async function POST(request: Request) {
       description: "按已发布 OSM 电力点构建 MapLibre 地球或 Three.js 三维点图。", inputSchema: z.strictObject(sceneFields),
     }, args => mcpResult(() => visualizeResult({ action: "scene", ...args }, key, request.signal)));
     registerCustomChart(server, { key, signal: request.signal });
+    registerResearchTools(server, key, request.signal);
   });
 }
