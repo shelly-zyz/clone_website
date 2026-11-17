@@ -4,6 +4,7 @@ import { Minus, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ProvincePowerFrame } from "@/lib/china-power-statistics";
 import type { MapCameraState } from "@/types/opengridworks";
+import { GlobeLoading } from "./GlobeLoading";
 import type { ChinaPowerGeography } from "./power-statistics-geometry";
 import { createPowerStatisticsScene } from "./power-statistics-scene";
 import styles from "./PowerStatisticsMap.module.css";
@@ -15,7 +16,6 @@ type Props = Parameters<typeof createPowerStatisticsScene>[2] & {
   initialCamera?: MapCameraState;
   focus?: { nonce: number; camera?: MapCameraState };
   screenshotRequest: number;
-  onReady: () => void;
   onScreenshotComplete: (message: string) => void;
 };
 
@@ -50,14 +50,10 @@ export function PowerStatisticsMap(props: Props) {
         map.update(current.frame, current.selected);
         map.focus(current.focus && current.focus.nonce !== initialFocus.current ? current.focus.camera : current.initialCamera, false);
         setStatus("ready");
-        requestAnimationFrame(() => {
-          if (!controller.signal.aborted) latest.current.onReady();
-        });
       })
       .catch(() => {
         if (controller.signal.aborted) return;
         setStatus("error");
-        latest.current.onReady();
       });
     return () => {
       controller.abort();
@@ -86,11 +82,9 @@ export function PowerStatisticsMap(props: Props) {
   return (
     <section className={styles.viewport} aria-label="中国省级电力统计三维地图" data-map-ready={status === "ready"}>
       <canvas ref={canvas} className={styles.canvas} aria-hidden="true" />
-      {status !== "ready" ? (
-        <p className={styles.status} role="status">
-          {status === "loading" ? "正在加载中国省级边界…" : "当前浏览器无法绘制三维地图，可在筛选栏查看统计。"}
-        </p>
-      ) : (
+      {status === "loading" && <GlobeLoading label="正在加载中国省级电力地图" />}
+      {status === "error" && <p className={styles.status} role="status">当前浏览器无法绘制三维地图，可在筛选栏查看统计。</p>}
+      {status === "ready" && (
         <>
           <div className={styles.controls} role="group" aria-label="电力地图缩放">
             <button type="button" aria-label="放大地图" onClick={() => scene.current?.zoom(1.25)}><Plus size={17} /></button>

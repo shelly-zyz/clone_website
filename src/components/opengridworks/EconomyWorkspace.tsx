@@ -215,8 +215,8 @@ function EconomyProfile({
   );
 }
 
-export function EconomyWorkspace({ active, basemap, onBasemapError, initialContext, onReady }: {
-  active: boolean; basemap: MapTheme; onBasemapError: () => void; initialContext?: WorkspaceContext; onReady?: () => void;
+export function EconomyWorkspace({ active, basemap, onBasemapError, initialContext }: {
+  active: boolean; basemap: MapTheme; onBasemapError: () => void; initialContext?: WorkspaceContext;
 }) {
   const { data: snapshot, retry: retrySnapshot } = useSnapshot<EconomySnapshot>(wdiPath);
   const { data: outlook, retry: retryOutlook } = useSnapshot<EconomicOutlook>(gepPath);
@@ -342,7 +342,7 @@ export function EconomyWorkspace({ active, basemap, onBasemapError, initialConte
   const globe = (
     <EconomyGlobe active={active} basemap={basemap} onBasemapError={onBasemapError} values={outlookActive ? forecastValues : values}
       metric={metric} outlook={outlookActive} selected={selected} country={country} camera={camera} cameraRevision={cameraRevision}
-      onSelect={pickCountry} onReady={onReady} />
+      onSelect={pickCountry} />
   );
 
   return (

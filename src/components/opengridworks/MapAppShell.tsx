@@ -55,12 +55,12 @@ import {
   chinaPowerAnnualFrame, type ProvincePowerFrame,
 } from "@/lib/china-power-statistics";
 import { carbonAtlasCenter, observeMapViewport, overviewZoom, type MapOverview } from "@/lib/globe-viewport";
-import { finishGlobeHandoff } from "@/lib/globe-handoff";
 import {
   analysisContextHref, readGridPoint, readWorkspaceCamera, replaceWorkspaceContext, type WorkspaceContext,
 } from "@/lib/workspace-context";
 import { generationSeries } from "@/lib/topic-analysis/history";
 import { GlobeNavigation } from "@/components/opengridworks/GlobeNavigation";
+import { GlobeLoading } from "@/components/opengridworks/GlobeLoading";
 import { readReplayRegion, replayRegionOptions } from "@/lib/weather-replay/regions";
 import { replayViews, type WeatherScene } from "@/lib/weather-replay/views";
 import { WeatherSceneSwitcher } from "./WeatherSceneSwitcher";
@@ -2807,6 +2807,7 @@ function animateWeatherParticles(
 
 function EarthProjectViewport({ active, hash, onLoad }: { active: boolean; hash?: string; onLoad: (document: Document) => void }) {
   const [source] = useState(() => "/earth/index.html?workspace" + (hash ? "#" + hash : ""));
+  const [loading, setLoading] = useState(true);
   const requestedHash = useRef(hash);
   const frame = useRef<HTMLIFrameElement>(null);
   const syncDocument = useCallback(() => {
@@ -2814,17 +2815,20 @@ function EarthProjectViewport({ active, hash, onLoad }: { active: boolean; hash?
     if (!document?.getElementById("menu")) return;
     frame.current?.contentWindow?.postMessage(active ? "ogw-weather-show" : "ogw-weather-hide", window.location.origin);
     onLoad(document);
-    if (active && document.documentElement.dataset.ogwWeatherRendered) finishGlobeHandoff("weather");
+    if (document.documentElement.dataset.ogwWeatherRendered || document.querySelector("#status.bad")) setLoading(false);
   }, [active, onLoad]);
 
   useEffect(() => {
     function receiveReady(event: MessageEvent) {
       if (event.origin === window.location.origin && event.source === frame.current?.contentWindow &&
-          (event.data === "ogw-weather-ready" || event.data === "ogw-weather-rendered")) syncDocument();
+          (event.data === "ogw-weather-ready" || event.data === "ogw-weather-rendered" || event.data === "ogw-weather-error")) syncDocument();
     }
     window.addEventListener("message", receiveReady);
-    syncDocument();
-    return () => window.removeEventListener("message", receiveReady);
+    const sync = requestAnimationFrame(syncDocument);
+    return () => {
+      cancelAnimationFrame(sync);
+      window.removeEventListener("message", receiveReady);
+    };
   }, [syncDocument]);
 
   useEffect(() => {
@@ -2846,6 +2850,7 @@ function EarthProjectViewport({ active, hash, onLoad }: { active: boolean; hash?
         loading="eager"
         onLoad={syncDocument}
       />
+      {loading && <GlobeLoading label="正在加载气象地球" />}
     </section>
   );
 }
@@ -2876,7 +2881,6 @@ function MapViewport({
   carbonFrame,
   carbonScale,
   carbonPlanar,
-  onReady,
   initialCamera,
   initialOverview,
   focusRequest,
@@ -2913,7 +2917,6 @@ function MapViewport({
   carbonFrame: CarbonFrame | null;
   carbonScale: number;
   carbonPlanar: boolean;
-  onReady: () => void;
   initialCamera?: MapCameraState;
   initialOverview?: MapOverview;
   focusRequest: FocusRequest | null;
@@ -2946,7 +2949,6 @@ function MapViewport({
   const carbonFrameRef = useRef(carbonFrame);
   const carbonScaleRef = useRef(carbonScale);
   const carbonPlanarRef = useRef(carbonPlanar);
-  const readyRef = useRef(onReady);
   const initialView = useRef({ camera: initialCamera ?? defaultRegion, overview: initialOverview });
   const previousCarbonPlanar = useRef(carbonPlanar);
   const carbonSource = useRef<{ frame: CarbonFrame; scale?: number } | undefined>(undefined);
@@ -2973,8 +2975,7 @@ function MapViewport({
     carbonFrameRef.current = carbonFrame;
     carbonScaleRef.current = carbonScale;
     carbonPlanarRef.current = carbonPlanar;
-    readyRef.current = onReady;
-  }, [active, carbonScale, carbonPlanar, onReady, activeProject, carbonFrame, generationFrame, generationHeatmapActive, generationHeatmapData, onCameraChange, onHoverTooltip, onRegionHover, onScreenshotComplete, onSelectFeature, weatherField, weatherMetric]);
+  }, [active, carbonScale, carbonPlanar, activeProject, carbonFrame, generationFrame, generationHeatmapActive, generationHeatmapData, onCameraChange, onHoverTooltip, onRegionHover, onScreenshotComplete, onSelectFeature, weatherField, weatherMetric]);
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) {
@@ -2998,10 +2999,7 @@ function MapViewport({
         canvasContextAttributes: { preserveDrawingBuffer: true },
       });
     } catch {
-      const fallback = requestAnimationFrame(() => {
-        setMapUnavailable(true);
-        readyRef.current();
-      });
+      const fallback = requestAnimationFrame(() => setMapUnavailable(true));
       return () => cancelAnimationFrame(fallback);
     }
 
@@ -3034,8 +3032,6 @@ function MapViewport({
       window.requestAnimationFrame(() => {
         if (mapRef.current !== map) return;
         map.resize();
-        map.once("render", () => readyRef.current());
-        map.triggerRepaint();
       });
       setReady(true);
       if (activeRef.current) cameraRef.current({
@@ -3828,6 +3824,7 @@ function MapViewport({
     <div className="og-map-viewport" aria-label={activeProject === "carbon" ? "交互式碳排放地球" : "交互式电源项目地图"} data-map-ready={ready}>
       <div className="og-starfield" aria-hidden="true" />
       <div ref={mapContainerRef} className="og-maplibre-container" />
+      {!ready && !mapUnavailable && <GlobeLoading label={activeProject === "carbon" ? "正在加载碳排放地球" : "正在加载电力地球"} />}
       {mapUnavailable ? <p className="og-map-unavailable" role="status">当前浏览器无法绘制地图，仍可使用专题分析。</p> : null}
       <canvas
         ref={weatherOverlayRef}
@@ -5525,8 +5522,6 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
   const stage = economyActive ? "economy" : weatherGlobeActive ? "weather" : sharedMapActive ? "map" : null;
   if (stage && !retainedStages[stage]) setRetainedStages({ ...retainedStages, [stage]: true });
   if (activeProject === "power" && powerView === "facilities" && !powerAssetsRequested) setPowerAssetsRequested(true);
-  const globeReady = useCallback(() => finishGlobeHandoff(activeProject), [activeProject]);
-  const economyReady = useCallback(() => finishGlobeHandoff("economy"), []);
   const weatherReady = useCallback((frameDocument: Document) => setWeatherDocument(frameDocument), []);
   const rememberReplayFrame = useCallback((replayFrame: number) => replaceWorkspaceContext({ replayFrame }), []);
   useEffect(() => {
@@ -6074,7 +6069,6 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
             basemap={economyMapThemes.find(({ key }) => key === economyMapTheme) ?? defaultMapTheme}
             onBasemapError={fallbackEconomyBasemap}
             initialContext={context}
-            onReady={economyReady}
           />
           <div className="og-layer-cards" aria-label="经济地球底图控制">
             <BasemapButton theme={economyMapTheme} expanded={activePanel === "mapType"} onClick={() => togglePanel("mapType")} />
@@ -6115,7 +6109,6 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
               },
             } : undefined}
             screenshotRequest={screenshotRequest}
-            onReady={globeReady}
             onCamera={setMapCamera}
             onHover={setHoverTooltip}
             onSelect={id => { if (findChinaProvince(id)) selectPowerProvince(id, false); }}
@@ -6152,7 +6145,6 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
               carbonPlanar={carbonPlanar}
               initialCamera={contextCamera(activeProject, context)}
               initialOverview={contextOverview(activeProject, context)}
-              onReady={globeReady}
               focusRequest={focusRequest}
               screenshotRequest={screenshotRequest}
               cinematic={cinematic}

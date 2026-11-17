@@ -2,8 +2,8 @@
 
 import { Compass, Minus, Pause, Play, Plus, Rotate3D, Scan } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { GlobeLoading } from "@/components/opengridworks/GlobeLoading";
 import { WorkspaceFilterSelect } from "@/components/opengridworks/WorkspaceSidebar";
-import { finishGlobeHandoff } from "@/lib/globe-handoff";
 import type { WeatherReplay } from "@/lib/weather-replay/model";
 import { readReplayRegion, replayRegionOptions, type ReplayRegionId } from "@/lib/weather-replay/regions";
 import { updateAnalysisQuery, useAnalysisQuery } from "../useAnalysisLocation";
@@ -42,12 +42,6 @@ export function WeatherReplayPlayer({ query, scene, region, initialFrame, onFram
     return () => { current = false; };
   }, [attempt, query]);
 
-  useEffect(() => {
-    if (!embedded || !current) return;
-    const frame = requestAnimationFrame(() => finishGlobeHandoff("weather"));
-    return () => cancelAnimationFrame(frame);
-  }, [current, embedded]);
-
   return (
     <section className={embedded ? styles.embedded : styles.standalone} aria-label="区域风暴 3D 回放">
       {!embedded && (
@@ -65,7 +59,8 @@ export function WeatherReplayPlayer({ query, scene, region, initialFrame, onFram
           <p role="alert">{current.error}</p>
           <button className={styles.button} onClick={() => { setResponse(undefined); setAttempt(value => value + 1); }}>重试</button>
         </div>
-      ) : <p className={styles.loadState} role="status">正在加载区域边界、云图和降水帧…</p>}
+      ) : embedded ? <GlobeLoading label="正在加载区域天气回放" />
+        : <p className={styles.loadState} role="status">正在加载区域边界、云图和降水帧…</p>}
     </section>
   );
 }
