@@ -2,7 +2,7 @@
 
 import { Minus, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { ProvincePowerFrame } from "@/lib/china-power-statistics";
+import { powerDemoNotice, type ProvincePowerFrame } from "@/lib/china-power-statistics";
 import type { MapCameraState } from "@/types/opengridworks";
 import { GlobeLoading } from "./GlobeLoading";
 import type { ChinaPowerGeography } from "./power-statistics-geometry";
@@ -89,6 +89,7 @@ export function PowerStatisticsMap(props: Props) {
   return (
     <section className={styles.viewport} aria-label="中国省级电力统计三维地图" data-map-ready={status === "ready"}>
       <canvas ref={canvas} className={styles.canvas} aria-hidden="true" />
+      {props.frame.demo && <p className={styles.demoNotice} role="status">{powerDemoNotice}</p>}
       {status === "loading" && <GlobeLoading label="正在加载中国省级电力地图" />}
       {status === "error" && <p className={styles.status} role="status">当前浏览器无法绘制三维地图，可在筛选栏查看统计。</p>}
       {status === "ready" && (

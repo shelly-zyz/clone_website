@@ -4,7 +4,7 @@ import {
   Vector2, Vector3, WebGLRenderer, LineSegments, type BufferGeometry, type Material,
 } from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { powerAmount, powerMapColors, powerMapNoData, provincePowerRatio, type ProvincePowerFrame } from "@/lib/china-power-statistics";
+import { powerAmount, powerDemoNotice, powerMapColors, powerMapNoData, provincePowerRatio, type ProvincePowerFrame } from "@/lib/china-power-statistics";
 import type { MapCameraState } from "@/types/opengridworks";
 import {
   buildPowerGeography, fitPowerMapBounds, powerDetailLines, powerProjection, projectPowerPoint,
@@ -405,7 +405,20 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
     },
     screenshot() {
       draw();
-      return canvas.toDataURL("image/png");
+      if (!frame?.demo) return canvas.toDataURL("image/png");
+      const output = document.createElement("canvas");
+      output.width = canvas.width;
+      output.height = canvas.height;
+      const context = output.getContext("2d")!;
+      context.drawImage(canvas, 0, 0);
+      const fontSize = Math.max(14, Math.round(output.width / 65));
+      context.font = `600 ${fontSize}px system-ui, sans-serif`;
+      context.fillStyle = "#304033";
+      context.fillRect(0, output.height - fontSize * 3, output.width, fontSize * 3);
+      context.fillStyle = "#dfecd6";
+      context.textAlign = "center";
+      context.fillText(powerDemoNotice, output.width / 2, output.height - fontSize, output.width - 24);
+      return output.toDataURL("image/png");
     },
     dispose() {
       controller.abort();

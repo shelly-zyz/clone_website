@@ -46,6 +46,12 @@
   line-height: 1.2;
 }
 
+.header:is([data-topic="power"], [data-topic="economy"], [data-topic="carbon"]) h2 {
+  flex: 1;
+  font-size: clamp(16px, 7cqi, 20px);
+  white-space: nowrap;
+}
+
 .content {
   min-height: 0;
   overflow: auto;

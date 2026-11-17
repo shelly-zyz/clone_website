@@ -55,6 +55,22 @@
   pointer-events: none;
 }
 
+.demoNotice {
+  position: absolute;
+  z-index: 2;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100% - 32px);
+  padding: 6px 10px;
+  border-radius: 5px;
+  background: #304033;
+  color: #dfecd6;
+  font-size: 12px;
+  text-align: center;
+  pointer-events: none;
+}
+
 .status {
   position: absolute;
   inset: 45% 10px auto;

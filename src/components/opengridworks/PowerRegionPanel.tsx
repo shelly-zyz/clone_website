@@ -3,7 +3,7 @@
 import { ArrowUpRight } from "lucide-react";
 import { chinaProvinces } from "@/lib/china-provinces";
 import {
-  type chinaPowerAnnualFrame, powerAmount, provincePowerMax, type ProvincePowerFrame,
+  type chinaPowerAnnualFrame, powerAmount, powerDemoNotice, provincePowerMax, type ProvincePowerFrame,
 } from "@/lib/china-power-statistics";
 import monthly from "@/lib/topic-analysis/nbs-monthly.json";
 import { generationSeries } from "@/lib/topic-analysis/history";
@@ -41,7 +41,7 @@ export function PowerViews({ view, onView }: { view: PowerView; onView: (view: P
 export function PowerMapHeading({ frame }: { frame: ProvincePowerFrame }) {
   return (
     <div className={styles.mapHeading}>
-      <strong>{frame.period} · {frame.label}</strong>
+      <strong>{frame.period} · {frame.label}{frame.demo ? " · 非真实统计" : ""}</strong>
       <span>{frame.unit}</span>
     </div>
   );
@@ -128,7 +128,7 @@ function PowerMapLegend({ frame }: { frame: ProvincePowerFrame }) {
   );
 }
 
-export function PowerMonthlyPanel({ frame, data, region, category, onRegionChange, onMonthChange, onCategory }: {
+export function PowerMonthlyPanel({ frame, data, region, category, onRegionChange, onMonthChange, onCategory, onDemoChange }: {
   frame: ProvincePowerFrame;
   data: MonthlyData;
   region: string;
@@ -136,21 +136,25 @@ export function PowerMonthlyPanel({ frame, data, region, category, onRegionChang
   onRegionChange: (region: string) => void;
   onMonthChange: (month: string) => void;
   onCategory: (id: string) => void;
+  onDemoChange: (enabled: boolean) => void;
 }) {
-  const monthlyReport = data.versionUnavailable ? undefined : monthly.find(item => item.date === data.month);
+  const demo = frame.demo === true;
+  const displayMonth = demo ? frame.period : data.month;
+  const monthOptions = [...new Set([...data.months, displayMonth].filter(Boolean))].sort().toReversed();
+  const monthlyReport = demo || data.versionUnavailable ? undefined : monthly.find(item => item.date === data.month);
   const local = frame.regions.find(item => item.code === region);
   const selected = chinaProvinces.find(item => item.code === region);
   const product = generationSeries.find(item => item.id === category) ?? generationSeries[0];
   const publishedValue = product.id === "electricity" ? data.total : data.composition.find(item => item.id === product.id)?.value;
-  const breakdown = data.published ? data.composition : monthlyReport ? generationSeries.slice(1).map(item => ({
+  const breakdown = demo ? [] : data.published ? data.composition : monthlyReport ? generationSeries.slice(1).map(item => ({
     ...item, value: monthlyReport.values[item.id] ?? null,
   })) : [];
   const maximum = Math.max(...breakdown.map(item => item.value ?? 0), 1);
-  const total = selected ? local?.value : data.published ? publishedValue : monthlyReport?.values[product.id];
-  const source = data.published ? "https://data.stats.gov.cn/easyquery.htm?cn=" + (selected ? "E0101" : "A01") : monthlyReport?.source;
-  const yoy = selected ? null : data.published
+  const total = selected ? local?.value : demo ? frame.total : data.published ? publishedValue : monthlyReport?.values[product.id];
+  const source = demo ? undefined : data.published ? "https://data.stats.gov.cn/easyquery.htm?cn=" + (selected ? "E0101" : "A01") : monthlyReport?.source;
+  const yoy = selected || demo ? null : data.published
     ? product.id === "electricity" ? data.yoy : null : monthlyReport?.yoy[product.id];
-  const monthlyStatus = data.versionUnavailable ? "该发布版本暂不可读取。"
+  const monthlyStatus = demo ? powerDemoNotice : data.versionUnavailable ? "该发布版本暂不可读取。"
     : data.publishedPending || data.regionalPending ? "正在读取月度发布数据…"
     : selected && total == null ? "该省本月暂无同口径数据。"
     : frame.regions.every(item => item.value == null) ? "暂无可用的分省月度发布数据，可切换到年度合计。"
@@ -159,12 +163,16 @@ export function PowerMonthlyPanel({ frame, data, region, category, onRegionChang
   return (
     <section className={styles.panel} aria-label="月度发电量">
       <div className={styles.filters}>
-        <WorkspaceFilterSelect label="统计月份" value={data.month}
-          options={data.months.toReversed().map(value => ({ value, label: value }))} onChange={onMonthChange} />
+        <WorkspaceFilterSelect label="统计月份" value={displayMonth}
+          options={monthOptions.map(value => ({ value, label: value }))} onChange={onMonthChange} />
         <WorkspaceFilterSelect label="地区" value={region} options={filterOptions} onChange={onRegionChange} />
       </div>
+      <label className={styles.demoMode}>
+        <input type="checkbox" checked={demo} onChange={event => onDemoChange(event.target.checked)} />
+        演示模式（人工合成，非真实统计）
+      </label>
       <header>
-        <span>{data.month || "月度发布"} · {product.name}</span>
+        <span>{displayMonth || "月度发布"} · {product.name}{demo ? " · 演示" : ""}</span>
         <h2>{selected?.name ?? "中国全国"}</h2>
       </header>
       <div className={styles.stat} aria-live="polite">
@@ -174,17 +182,21 @@ export function PowerMonthlyPanel({ frame, data, region, category, onRegionChang
       {monthlyStatus ? <p className={styles.note}>{monthlyStatus}</p> : null}
       <PowerMapLegend frame={frame} />
       <section className={styles.mix} aria-label="全国电源结构">
-        <h3>全国已公布分项</h3>
-        {breakdown.length ? breakdown.map(item => (
+        <h3>{demo ? "演示电源类型" : "全国已公布分项"}</h3>
+        {demo ? generationSeries.map(item => (
+          <button key={item.id} type="button" aria-pressed={category === item.id} onClick={() => onCategory(item.id)}>{item.name}</button>
+        )) : null}
+        {!demo && (breakdown.length ? breakdown.map(item => (
           <button key={item.id} type="button" aria-pressed={category === item.id} onClick={() => onCategory(item.id)}>
             <span>{item.name}</span><strong>{item.value == null ? "—" : powerAmount.format(item.value)}</strong>
             <progress aria-label={item.name} value={item.value ?? 0} max={maximum} />
           </button>
-        )) : <p className={styles.note}>本期未公布分电源统计。</p>}
+        )) : <p className={styles.note}>本期未公布分电源统计。</p>)}
       </section>
       <footer>
         {source ? <a href={source} target="_blank" rel="noreferrer">国家统计局 · 规模以上工业 <ArrowUpRight size={12} aria-hidden="true" /></a> : null}
-        {data.published ? <span>发布版本 {data.published.version.slice(0, 12)}</span> : null}
+        {!demo && data.published ? <span>发布版本 {data.published.version.slice(0, 12)}</span> : null}
+        {demo ? <span>本地固定样本，仅用于交互演示；未写入数据库。</span> : null}
       </footer>
     </section>
   );

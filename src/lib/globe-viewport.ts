@@ -2,12 +2,21 @@ import type { Map } from "maplibre-gl";
 
 export type MapOverview = "globe" | "atlas" | "china";
 
-export const carbonAtlasCenter: [number, number] = [0, 19];
+export const carbonAtlasCenter: [number, number] = [0, 0];
 
-function fittingSize(container: HTMLElement, atlas: boolean) {
+export function carbonAtlasCamera(center: { lng: number; lat: number }, zoom: number) {
+  // Keep a single world navigable without Mercator's viewport-fill constraint.
+  // Mercator's finite latitude limit is approximately 85.051 degrees.
+  return {
+    center: [Math.max(-180, Math.min(180, center.lng)), Math.max(-85.051, Math.min(85.051, center.lat))] as [number, number],
+    zoom: Math.max(-2, Math.min(24, zoom)),
+  };
+}
+
+function fittingSize(container: Pick<HTMLElement, "clientWidth" | "clientHeight">, atlas: boolean) {
   const { clientWidth: width, clientHeight: height } = container;
-  // In Mercator the inhabited latitudes occupy roughly 70% of a world tile.
-  return atlas ? Math.min(width * 0.95, height / 0.72) : Math.min(width, height);
+  // Fit the full Mercator world, including Antarctica, instead of inhabited latitudes only.
+  return atlas ? Math.min(width * 0.95, height * 0.9) : Math.min(width, height);
 }
 
 export function overviewZoom(container: HTMLElement, overview: MapOverview, latitude: number) {
@@ -25,7 +34,7 @@ export function observeMapViewport(map: Map, isAtlas = () => false) {
     const { clientWidth: width, clientHeight: height } = container;
     if (!width || !height || (width === previous.width && height === previous.height)) return;
     const atlas = isAtlas();
-    const before = atlas ? Math.min(previous.width * 0.95, previous.height / 0.72) : Math.min(previous.width, previous.height);
+    const before = fittingSize({ clientWidth: previous.width, clientHeight: previous.height }, atlas);
     const after = fittingSize(container, atlas);
     const zoom = map.getZoom();
     previous = { width, height };

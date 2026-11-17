@@ -99,6 +99,10 @@ after(() => {
   }
 });
 
+const { chinaPowerMonthlyDemoFrame, powerDemoNotice } = await import("@/lib/china-power-statistics");
+const { carbonAtlasCamera, carbonAtlasCenter, overviewZoom } = await import("@/lib/globe-viewport");
+const { readWorkspaceContext, workspaceContextHref } = await import("@/lib/workspace-context");
+
 const geo = JSON.parse(readFileSync(new URL("public/data/china-power/provinces.geojson", root), "utf8"));
 const { createPowerStatisticsScene } = await import("./power-statistics-scene.ts");
 const { buildPowerGeography, powerProjection } = await import("./power-statistics-geometry.ts");
@@ -237,6 +241,37 @@ state.react = {
 };
 state.createComponentScene = (...args) => state.componentFactory(...args);
 const { PowerStatisticsMap } = await import("./PowerStatisticsMap.tsx");
+
+test("月度演示：可复现、总量一致且明确标注非真实统计", () => {
+  const sample = chinaPowerMonthlyDemoFrame("2025-12");
+  assert.deepEqual(sample, chinaPowerMonthlyDemoFrame("2025-12"));
+  assert.equal(sample.demo, true);
+  assert.ok(powerDemoNotice.includes("非真实统计"));
+  assert.ok(sample.regions.every(row => Number.isFinite(row.value) && row.value > 0));
+  assert.ok(Math.abs(sample.total - sample.regions.reduce((sum, row) => sum + row.value, 0)) < .01);
+  assert.notDeepEqual(sample.regions, chinaPowerMonthlyDemoFrame("2025-07").regions);
+  assert.ok(chinaPowerMonthlyDemoFrame("2025-12", "wind-power").total < sample.total);
+  assert.equal(chinaPowerMonthlyDemoFrame("invalid").period, "2025-12");
+});
+
+test("碳二维：四种视口完整适配，南北移动不抬升zoom或锁定纬度", () => {
+  assert.deepEqual(carbonAtlasCenter, [0, 0]);
+  for (const [clientWidth, clientHeight] of [[390, 844], [1440, 900], [1024, 768], [900, 650]]) {
+    const zoom = overviewZoom({ clientWidth, clientHeight }, "atlas", 0);
+    assert.ok(512 * 2 ** zoom <= Math.min(clientWidth, clientHeight));
+    assert.equal(carbonAtlasCamera({ lng: 0, lat: 70 }, zoom).zoom, zoom);
+    assert.equal(carbonAtlasCamera({ lng: 0, lat: -70 }, zoom).center[1], -70);
+  }
+  assert.equal(carbonAtlasCamera({ lng: 0, lat: -100 }, 0).center[1], -85.051);
+});
+
+test("月度演示：URL仅在发电量视图启用", () => {
+  const href = workspaceContextHref("power", { powerView: "generation", powerDemo: "monthly", month: "2025-12" });
+  assert.equal(readWorkspaceContext(new URL(href, "http://localhost").searchParams).powerDemo, "monthly");
+  for (const powerView of ["capacity", "facilities"]) {
+    assert.equal(readWorkspaceContext(new URLSearchParams(`powerView=${powerView}&powerDemo=monthly`)).powerDemo, undefined);
+  }
+});
 test("组件：初始显式相机优先；没有相机时 selected fit；加载中及后续 focus 透传 provinceCode", async () => {
   for (const scenario of ["saved", "selected", "pending", "effect"]) {
     const refs = [];
