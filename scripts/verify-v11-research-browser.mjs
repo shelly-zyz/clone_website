@@ -124,8 +124,10 @@ try {
   assert.ok(downloads.some(file => file.endsWith(".png")));
   assert.ok(downloads.some(file => file.endsWith(".svg")));
 
+  const previousPage = await js("performance.timeOrigin");
   await cdp("Page.reload");
-  await until("document.readyState==='complete' && document.getElementById('research-title')", "reloaded workspace");
+  await until("performance.timeOrigin !== " + previousPage +
+    " && document.readyState==='complete' && document.getElementById('research-title')", "reloaded workspace");
   await activate("图件库");
   await until("document.querySelector('[aria-label=已保存的图件] button')", "saved project listing");
   await js("document.querySelector('[aria-label=已保存的图件] button').click()");
