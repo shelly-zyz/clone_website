@@ -332,9 +332,6 @@ export function EconomyWorkspace({ active, basemap, onBasemapError, initialConte
     points: predictedSeries.map(({ date }, index) => ({ date, value: outlook.values.WLT?.[index] ?? null })),
   } : undefined;
   const statisticsHref = analysisContextHref("outlook", { country: selected?.code ?? "WLT", year, metric, targetYear }, "growth-outlook");
-  const historyAnalysis = analysisContextHref(metric === "exports" ? "trade" : "economy", {
-    country: selected?.code, year, metric,
-  });
   const { min, max } = economyMetrics[metric];
   const yearOptions = snapshot?.years.toReversed().map(value => ({ value: String(value), label: `${value} 年` }))
     ?? [{ value: String(year), label: `${year} 年` }];
@@ -363,8 +360,7 @@ export function EconomyWorkspace({ active, basemap, onBasemapError, initialConte
       </nav>
       <div id={viewId} className="og-globe-stage" data-economy-data-ready={Boolean(snapshot && outlook)}
         data-view={outlookActive ? "outlook" : "history"}>{globe}</div>
-      <WorkspaceSidebar topic="economy" summary={outlookActive ? "世界银行 GEP · 实际 GDP 增速预测" : "世界银行 WDI · 全球经济指标"}
-        analysisHref={outlookActive ? statisticsHref : historyAnalysis}>
+      <WorkspaceSidebar topic="economy" summary={outlookActive ? "世界银行 GEP · 实际 GDP 增速预测" : "世界银行 WDI · 全球经济指标"}>
         <section className={styles.filters} aria-label={outlookActive ? "增长展望筛选" : "经济数据筛选"}>
           {snapshot && <CountrySearch countries={snapshot.countries} onSelect={chooseCountry} />}
           <WorkspaceFilterSelect label="国家或地区" options={countryOptions} value={country} onChange={chooseCountry} />

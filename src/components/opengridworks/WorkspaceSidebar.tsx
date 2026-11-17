@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowUpRight, ChevronDown, Play, Search, SlidersHorizontal, X } from "lucide-react";
 import { useId, useRef, useState, type ReactNode } from "react";
 import { globeTopics, type WorkspaceTopic } from "@/lib/globe-topics";
+import { rememberWorkspace } from "@/lib/workspace-context";
 
 export type WorkspaceFilterOption = { value: string; label: string; disabled?: boolean };
 
@@ -30,13 +31,12 @@ export function WorkspaceFilterSelect({ label, options, value, onChange }: {
   );
 }
 
-export function WorkspaceSidebar({ topic, summary, leadingFilter, children, onSearch, analysisHref }: {
+export function WorkspaceSidebar({ topic, summary, leadingFilter, children, onSearch }: {
   topic: WorkspaceTopic;
   summary: string;
   leadingFilter?: ReactNode;
   children: ReactNode;
   onSearch?: () => void;
-  analysisHref?: string;
 }) {
   const [open, setOpen] = useState(false);
   const sidebarId = useId();
@@ -103,7 +103,8 @@ export function WorkspaceSidebar({ topic, summary, leadingFilter, children, onSe
           ) : null}
           {children}
         </div>
-        <Link href={analysisHref ?? { pathname: "/visualization", query: { topic } }} className="og-workspace-visualization-link">
+        <Link href={{ pathname: "/visualization", query: { topic } }} className="og-workspace-visualization-link"
+          onNavigate={() => rememberWorkspace(topic)}>
           <span>专题分析</span>
           <ArrowUpRight size={17} aria-hidden="true" />
         </Link>

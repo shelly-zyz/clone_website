@@ -6051,14 +6051,8 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
     }).catch(() => showToast("可从地址栏复制当前地图链接。"));
   };
 
-  const powerAnalysisHref = monthlyDemo ? "/visualization?topic=power" : powerView === "capacity"
-    ? analysisContextHref("power", { year: annualPowerFrame?.year })
-    : analysisContextHref("generation", { year: annualPowerFrame?.year, month: monthlyGeneration ? reported.month : undefined,
-      region: selectedProvince, product: powerProduct, version: monthlyGeneration ? reported.published?.version ?? context.version : undefined },
-      powerView === "generation" ? "province-comparison" : "");
   const carbonTime = { frames: carbonFrames, date: carbonDate, playing: carbonPlaying, onDate: onCarbonDate, onPlay: setCarbonPlaying };
   const comparableCarbon = carbonSector === "Power";
-  const carbonAnalysisHref = analysisContextHref("carbon", { date: comparableCarbon ? carbonDate || undefined : undefined });
   const carbonCompareHref = comparableCarbon ? analysisContextHref("carbon", { date: carbonDate || undefined }, "carbon-comparison") : undefined;
   const displayedFeature = activeProject === "carbon"
     ? carbonFrame && selectedGrid ? carbonFeature(carbonFrame, ...selectedGrid, carbonScale) : null
@@ -6238,7 +6232,6 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
           <WorkspaceSidebar
             topic={activeProject}
             summary={sidebarSummary}
-            analysisHref={activeProject === "power" ? powerAnalysisHref : activeProject === "carbon" ? carbonAnalysisHref : undefined}
             onSearch={activeProject === "power" && powerView === "facilities" ? () => togglePanel("search") : undefined}
             leadingFilter={activeProject === "power" && powerView === "facilities" ? (
               <WorkspaceFilterSelect
