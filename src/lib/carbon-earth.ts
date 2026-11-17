@@ -69,29 +69,42 @@ export const carbonSectorLabels: Record<string, string> = {
   InternationalShipping: "国际航运",
 };
 
-let manifestPromise: Promise<CarbonManifest> | null = null;
+export type CarbonCatalogFrame = { date: string; sector: string; stats: Pick<CarbonFrameStats, "sumKgCPerHour"> };
+export type CarbonCatalog = {
+  frames: CarbonCatalogFrame[];
+  sectors: string[];
+  scales: Record<string, number>;
+  sources: Pick<CarbonManifest["sources"][number], "sector" | "month" | "fileName" | "url">[];
+};
 
-export async function loadCarbonManifest() {
-  manifestPromise ??= fetch("/api/carbon-earth?request=manifest", { cache: "no-store" })
+let catalogPromise: Promise<CarbonCatalog> | null = null;
+
+export async function loadCarbonCatalog() {
+  catalogPromise ??= fetch("/api/carbon-earth?request=catalog", { cache: "no-store" })
     .then((response) => {
       if (!response.ok) {
         throw new Error("无法读取碳排放数据目录。");
       }
-      return response.json() as Promise<CarbonManifest>;
+      return response.json() as Promise<CarbonCatalog>;
     })
     .catch((error: unknown) => {
-      manifestPromise = null;
+      catalogPromise = null;
       throw error;
     });
-  return manifestPromise;
+  return catalogPromise;
 }
 
-export async function loadCarbonFrame(meta: CarbonManifestFrame) {
+export async function loadCarbonFrame(selection: Pick<CarbonManifestFrame, "date" | "sector">, signal?: AbortSignal) {
   const canDecompress = typeof DecompressionStream !== "undefined";
-  const response = await fetch(canDecompress ? meta.endpoint : `${meta.endpoint}&raw=1`);
+  const params = new URLSearchParams({ request: "frame", date: selection.date, sector: selection.sector, meta: "1" });
+  if (!canDecompress) params.set("raw", "1");
+  const response = await fetch(`/api/carbon-earth?${params}`, { signal });
   if (!response.ok) {
     throw new Error("无法读取当前碳排放帧。");
   }
+  const metadata = response.headers.get("X-Carbon-Metadata");
+  if (!metadata) throw new Error("无法读取碳排放帧元数据。");
+  const meta = JSON.parse(metadata) as CarbonManifestFrame;
   const encoded = await response.arrayBuffer();
   const decoded = canDecompress ? await decompressGzip(encoded) : encoded;
   const expectedBytes = meta.grid.width * meta.grid.height * Float32Array.BYTES_PER_ELEMENT;
@@ -111,19 +124,33 @@ async function decompressGzip(encoded: ArrayBuffer) {
   return new Response(stream).arrayBuffer();
 }
 
-export function sampleCarbonFrame(frame: CarbonFrame, longitude: number, latitude: number) {
+export function carbonGridPoint(frame: CarbonFrame, longitude: number, latitude: number) {
   const { grid } = frame;
+  if (!Number.isFinite(longitude) || !Number.isFinite(latitude) || Math.abs(latitude) > 90) return null;
   const normalizedLongitude = ((longitude - grid.longitudeMin) % 360 + 360) % 360;
-  const x = Math.min(grid.width - 1, Math.max(0, Math.round(normalizedLongitude / grid.dx)));
-  const y = Math.min(grid.height - 1, Math.max(0, Math.round((grid.latitudeMax - latitude) / grid.dy)));
-  const value = frame.values[y * grid.width + x];
-  return Number.isFinite(value) && value > 0 ? value : 0;
+  const x = Math.round(normalizedLongitude / grid.dx) % grid.width;
+  const y = Math.round((grid.latitudeMax - latitude) / grid.dy);
+  if (y < 0 || y >= grid.height) return null;
+  const raw = frame.values[y * grid.width + x];
+  const lng = grid.longitudeMin + x * grid.dx;
+  return {
+    value: Number.isFinite(raw) && raw >= 0 ? raw : null,
+    longitude: ((lng + 180) % 360 + 360) % 360 - 180,
+    latitude: grid.latitudeMax - y * grid.dy,
+  };
 }
 
-export function buildCarbonHeatCollection(frame: CarbonFrame): FeatureCollection<Point, CarbonHeatProperties> {
+export function sampleCarbonFrame(frame: CarbonFrame, longitude: number, latitude: number) {
+  return carbonGridPoint(frame, longitude, latitude)?.value ?? 0;
+}
+
+export function carbonFrameColorMax(frame: CarbonManifestFrame) {
+  return Math.max(frame.stats.p99 || 0, frame.stats.p95 || 0, 1);
+}
+
+export function buildCarbonHeatCollection(frame: CarbonFrame, scaleMax = carbonFrameColorMax(frame)): FeatureCollection<Point, CarbonHeatProperties> {
   const features: Feature<Point, CarbonHeatProperties>[] = [];
   const { grid, values } = frame;
-  const scaleMax = Math.max(frame.stats.p99, frame.stats.p95, 1);
   const logarithmicScale = Math.log1p(scaleMax);
 
   for (let index = 0; index < values.length; index += 1) {
@@ -179,9 +206,8 @@ export function carbonColor(value: number, scaleMax: number, alpha = 0.84) {
 }
 
 export function formatCarbonValue(value: number) {
-  if (!Number.isFinite(value) || value <= 0) {
-    return "0 kgC/h";
-  }
+  if (!Number.isFinite(value) || value < 0) return "缺测";
+  if (value === 0) return "0 kgC/h";
   if (value >= 1_000_000) {
     return `${(value / 1_000_000).toFixed(2)} ktC/h`;
   }

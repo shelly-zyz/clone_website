@@ -84,6 +84,12 @@ body {
     will-change: transform;
 }
 
+/* Put the animated strokes over the scalar field, below geographic markers. */
+#map { z-index: 0; }
+#overlay { z-index: 1; }
+#animation { z-index: 2; pointer-events: none; }
+#foreground { z-index: 3; }
+
 #sponsor {
     position: absolute;
     text-align: right;
@@ -192,6 +198,35 @@ body {
 
 #menu .text-button.disabled {
     color: #475569;
+}
+
+.ogw-workspace #details {
+    top: auto;
+    right: 146px;
+    bottom: 16px;
+    left: auto;
+    width: min(280px, calc(100% - 162px));
+}
+
+@media (max-width: 900px) {
+    .ogw-workspace #details {
+        right: auto;
+        bottom: 12px;
+        left: 12px;
+        width: min(220px, calc(100% - 24px));
+    }
+}
+
+.ogw-workspace #earth,
+.ogw-workspace #menu,
+.ogw-workspace #status {
+    position: absolute;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.ogw-workspace #menu {
+    width: 220px;
 }
 
 #show-menu {

@@ -1,15 +1,15 @@
 # V11 共用数据库 Agent
 
-V11 第 1.5 节规定模块通过 `DataRef` 交接。第 2.4–2.7 节规定数据 Agent 读取已审核的语义目录，优先使用固定查询，再进入受控 Text-to-SQL。电源、气象和碳地球通过同一服务按专题取数。可视化、分析预测和知识 Agent 各自接收引用或工具结果。
+V11 第 1.5 节规定模块通过 `DataRef` 交接。第 2.4–2.7 节规定数据 Agent 读取已审核的语义目录，优先使用固定查询，再进入受控 Text-to-SQL。电源、气象和碳地球通过同一服务按专题取数。小云持有查询结果引用，并将其用于可视化、分析预测与来源回看。详见 [小云业务说明](./v11-visualization-analysis-agents.md)。
 
 ## 复用与改进
 
 - 复用 Greensystem 数据 Agent 的 Pi 工具循环、目录优先、每轮调用上限和 PostgreSQL 只读事务。自然语言入口按专题限定工具，模型只提供经 JSON Schema 检查的筛选条件。
 - 发布脚本把数据写入按专题分区的标准事实表。每个发布版本保存全部审核指标的口径、单位、可用序列及来源指纹。切换当前版本时保留历史版本。查询回传的 `query` 可以按原版本复现。
-- 查询区分空结果、来源缺测和真实零值。`green_agent_ro` 读取目录、语义指标和发布事实，查询不触发问答候选写入。
+- 查询区分空结果、来源缺测和真实零值。空结果或全缺测时，在同一只读事务内核查同版本、同指标、同地区和产品的有效观测日期。响应的 `diagnosis` 只提供覆盖边界与一个备选时段，原筛选、结果和查询哈希保持原样。小云保存待确认时段，用户明确接受后才按原版本重查，并续办原来要求的图表或分析。
 - 项目 Agent 采用 Pi 运行时。问数每轮从 PostgreSQL 加载最近四条问题和最后一份已确认的查询条件。批次清洗、发布和审核由程序及独立数据库角色负责。
-- 地图的统一入口是右下角的小云。把鼠标移到角色上即可打开文字输入，或开启麦克风。语音使用浏览器转写和播报，文字与语音共用 `/api/xiaoyun`。明确的地图指令直接走页面操作，Pi 总管把其他问题交给数据库 Agent 或通用问答。各地球的问数会话在同一浏览器标签页内独立保存，追问沿用上次的条件和数据版本。「展示来源」读取上次保存结果的来源与 `DataRef`。
-- 通用问答沿用 Pi 地图助手和最近四轮对话上下文。既有的 `/api/deepagent` 兼容入口仍可供调用方使用，早期实现保存在 `deepagent/`。
+- 地图的统一入口是右下角的小云。把鼠标移到角色上即可打开文字输入，或开启麦克风。语音使用浏览器转写和播报，文字与语音共用 `/api/xiaoyun`。明确的地图指令直接走页面操作，小云的 Pi 循环调用数据库 Agent 查数，再按结果引用调用图表或分析工具。各地球有独立的问数会话，追问按被引用的结果继承条件和版本。
+- 小云通用问答复用最近四轮对话上下文，可查看本站已发布指标的口径。既有的 `/api/deepagent` 兼容入口仍可供调用方使用，早期实现保存在 `deepagent/`。
 
 | 专题 | 查询范围 | 口径 |
 | --- | --- | --- |
@@ -19,14 +19,19 @@ V11 第 1.5 节规定模块通过 `DataRef` 交接。第 2.4–2.7 节规定数�
 
 目录中的 `metric` 是该版本默认指标，`metrics` 列出该版本当前获准查询的全部指标。查询用 `metric_code` 选择指标，电力查询可在该指标的 `series_codes` 中用 `product` 选择产品。省略 `metric_code` 时沿用原默认指标。旧版引用可继续使用，旧版只提供当时发布的指标。
 
+GRACED 速率和统计局发电量的指标规则与查询数据版本一起返回并随结果保存。规则有独立的版本标识，应用按已发布快照的指标、单位、时间粒度和来源类型匹配，历史查询的版本及哈希无需改写。GRACED 按日保留 `kgC/h`，月度发电量保留发布原值及缺测。年初至本月累计与累计同比跨年重置，当前只开放查数、出图和统计，本期发电量及本期同比可按实际连续观测预检预测。
+
 截至本次发布，气象仅有 2026-10-22 的一批 GFS 起报。降水和辐射的累计时段待核实，雪深源数据出现 `9999` 异常值，暂未纳入目录。
 
 ## 复现
+
+本地 `npm run dev` 会从 `$HOME/.config/opengridworks/data-agent-database.env` 读取只读数据连接与会话连接，并从 `xiaoyun-providers.env` 读取 Pi 和语音提供方配置。凭据文件须仅用户可读；加载器只传入 Agent 查询、会话及语音所需变量，不读取审核数据库连接或访问令牌。将 `DATA_AGENT_PI_ENABLED=true` 设在本机提供方配置中以启用自然语言入口；不要把密钥复制到项目目录或提交到 Git。
 
 1. 在完成 `scripts/v11-schema-baseline.sql` 的 `zyz` 库中，以管理员执行 `scripts/v11-data-agent-extensions.sql`。宿主先安装与 PostgreSQL 主版本匹配的扩展文件，并为 TimescaleDB 配置 `shared_preload_libraries`。再以 `zyz` 依次执行 `v11-data-agent-schema.sql`、`v11-data-agent-nbs.sql`、`v11-data-agent-refresh-log.sql`、`v11-data-agent-context.sql` 和 `v11-data-agent-tiles.sql`，文件都在 `scripts/` 下。升级 API 服务后执行 `v11-data-agent-publish.sql` 发布已有源表。
 2. 在服务端配置 `DATA_AGENT_DATABASE_URL`。生产环境给 JSON 和 MCP 客户端配置同一个服务端 Bearer token。自然语言入口另需配置 `DATA_AGENT_PI_ENABLED=true` 与 `DEEPSEEK_API_KEY`。
 3. `GET /api/data-agent` 读取当前目录。`POST /api/data-agent` 接受 `catalog`、`query`、`ask` 和会话操作。Streamable HTTP MCP 路径为 `/api/mcp/data-agent`，提供 `list_published_catalog`、`query_published_data` 和 `resolve_project_result`。
 4. 运行 `node scripts/verify-v11-data-agent.mjs` 验证三个专题。加 `--pi` 验证自然语言工具调用，加 `--sessions` 验证追问、会话恢复和业务取数。
+5. 配置 `DATA_AGENT_DATABASE_URL`、`DATA_AGENT_VERIFY_URL` 和现有业务令牌 `DATA_AGENT_TOKEN`，运行 `node scripts/verify-v11-data-agent-benchmarks.mjs`，用独立只读 SQL 对照三个专题的已发布数值、单位、缺测与版本。加 `--live` 验证真实 Pi 会话的诊断确认、图表与 StatsForecast 回测复用同一结果，以及跨项目访问隔离。
 
 ## 国家统计局更新和审核
 
@@ -40,6 +45,10 @@ V11 第 1.5 节规定模块通过 `DataRef` 交接。第 2.4–2.7 节规定数�
 
 - `create_project` 返回项目编号与访问密钥。后续 `create_session`、`get_session`、`resolve_result` 和带 `session` 的 `ask` 用 `X-Data-Project-Key` 提供该密钥。状态连接使用 `green_agent_context`。会话按修订号写入，复用上次查询条件的追问默认固定到上次版本。保存结果可由 HTTP 或 MCP 读取，项目密钥由调用方保管。
 - `/api/data/vector-tiles/postgis/{z}/{x}/{y}.pbf` 读取 PostGIS 动态瓦片。当前图层 `osm_power_points` 使用现有 OpenStreetMap 电力点，范围为 7 至 15 级，每瓦片最多 5,000 个点。更新源表后执行 `REFRESH MATERIALIZED VIEW CONCURRENTLY derived.osm_power_point`。调用地图时显示 OpenStreetMap 署名。
+- 本机使用 `npm run preview:open -- 3207` 打开当前预览。命令会先恢复已配置的数据库隧道，并验证发布目录、会话存储、Pi 真实查数和语音识别／合成，再打开首页。`--no-open` 只运行预检。页面加载、恢复可见或网络重新上线时也会检查小云与数据库连接。浏览器麦克风由用户主动开启。
+- 使用 SSH 转发的开发机可在 `~/.config/opengridworks/database-tunnel.env`（权限 `0600`）配置 `SSH_HOST`、`PG_HOST`、`PG_PORT` 和 `LOCAL_PORT`。SSH 使用现有主机别名和密钥，`LOCAL_PORT` 与本机地图数据库 URL 匹配。可用 `AGENT_LOCAL_PORT` 为数据库 Agent 和会话配置独立的转发端口，并在对应 URL 中使用该端口。开发预览运行期间会自动补建断开的本地转发。
+- 碳帧、电力资产和旧版地图图层通过服务端 `DATABASE_URL` 读取。本地开发可把该变量放在 `$HOME/.config/opengridworks/map-database.env`（权限 `0600`），经本机 SSH 转发连接 PostgreSQL。管理员在 `zyz` 执行 [预览地图只读授权](../scripts/v11-map-preview.sql) 后，可用现有 `green_v11_web_query` 登录，并在连接 URL 的 `options` 参数中设置 `-c role=green_v11_web_map -c default_transaction_read_only=on -c statement_timeout=20000`。地图角色只读现有地图 API 使用的表，数据 Agent 查询仍以 `green_agent_ro` 执行。重启后用 `/api/database/health`、`/api/data/map-assets` 和 `/api/carbon-earth?request=manifest` 检查。
+- 在配好 `wsl-yingzi` SSH 别名的开发机上运行 `npm run preview:ssh`，命令会建立或复用隧道，检查数据库状态并打开 `http://127.0.0.1:31861/workspace`。用这个地址测试小云问答。问答所需凭据由服务器预览进程读取，浏览器经私有隧道访问。
 - 查询结果保留 V11 的 `dataset_id`、`version`、`query_hash`、字段、单位、时间范围与质量信息。本期项目结果为限行内联数据，`artifact_uri` 为 `null`。语义 embedding 索引、Wren MDL、SQLGlot、SeaweedFS Parquet 与其他专题的定时源更新属于后续接入。
 
 ## 可视化交接
@@ -49,6 +58,6 @@ V11 第 1.5 节规定模块通过 `DataRef` 交接。第 2.4–2.7 节规定数�
 - 固定模板用 `{"action":"render","project_id":"<项目 UUID>","result_id":"<结果 UUID>","chart":"line"}`，也支持 `bar`，无需模型。
 - 自然语言用 `{"action":"ask","project_id":"<项目 UUID>","result_id":"<结果 UUID>","instruction":"请用柱状图比较各月"}`。Pi 只选择图表模板，由同一个服务从授权项目读取结果并调用本机 `mcp-echarts`。
 
-响应按 V11 的 `VisualizationSpec` 提供模板版本、原始 `DataRef`、字段映射、ECharts `options` 和预留的事件列表。MCP 只接收时间标签和有效观测值。服务核对 MCP 的图表类型和点位数据，再恢复原查询中的缺测位置。MCP 失败时返回错误，调用方可重试。该接口目前供业务调用方使用，地图中的小云尚未分派可视化请求。
+响应按 V11 的 `VisualizationSpec` 提供模板版本、原始 `DataRef`、字段映射、图表配置和预留的事件列表。ECharts MCP 接收时间标签和有效观测值。服务核对 MCP 的图表类型和点位数据，再恢复原查询中的缺测位置。小云的 `render_chart` 复用同一个图表服务，并在项目会话中保存图表及其输入引用。
 
 ![三个地球专题的 Pi 实测查询与 DataRef](pr-evidence/v11-data-agent-metrics.png)

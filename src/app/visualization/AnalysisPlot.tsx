@@ -1,0 +1,125 @@
+"use client";
+
+import { BarChart, BoxplotChart, CustomChart, HeatmapChart, LineChart, MapChart, PieChart, SankeyChart, ScatterChart, TreemapChart } from "echarts/charts";
+import { CalendarComponent, DataZoomComponent, GeoComponent, GridComponent, LegendComponent, MarkLineComponent, PolarComponent, TitleComponent, TooltipComponent, VisualMapComponent } from "echarts/components";
+import { getMap, init, registerMap, use as registerCharts, type ECElementEvent, type EChartsType } from "echarts/core";
+import { CanvasRenderer } from "echarts/renderers";
+import { useEffect, useRef, useState } from "react";
+import type { AnalysisChartSpec } from "@/lib/topic-analysis/model";
+import { chartOptions, worldMap } from "./plot-options";
+import styles from "./page.module.css";
+
+registerCharts([
+  BarChart, BoxplotChart, CustomChart, HeatmapChart, LineChart, MapChart, PieChart, SankeyChart, ScatterChart, TreemapChart, CanvasRenderer,
+  CalendarComponent, DataZoomComponent, GeoComponent, GridComponent, LegendComponent, MarkLineComponent, PolarComponent,
+  TitleComponent, TooltipComponent, VisualMapComponent,
+]);
+
+type WorldGeometry = {
+  type: "FeatureCollection";
+  features: { type: "Feature"; properties: { ADM0_A3: string }; geometry: unknown }[];
+};
+let worldRequest: Promise<void> | undefined;
+
+function loadWorld() {
+  if (getMap(worldMap)) return Promise.resolve();
+  worldRequest ??= fetch("/data/natural-earth/ne_50m_admin_0_countries.geojson").then(async response => {
+    if (!response.ok) throw new Error("Map unavailable");
+    const geometry = await response.json() as WorldGeometry;
+    geometry.features = geometry.features.filter(feature => feature.properties?.ADM0_A3 !== "ATA");
+    registerMap(worldMap, JSON.stringify(geometry));
+  }).catch((error: unknown) => {
+    worldRequest = undefined;
+    throw error;
+  });
+  return worldRequest;
+}
+
+export function AnalysisPlot({ spec, compact = false, onCategory, highlight }: {
+  spec: AnalysisChartSpec;
+  compact?: boolean;
+  highlight?: string;
+  onCategory?: (label: string, row?: string) => void;
+}) {
+  const container = useRef<HTMLDivElement>(null);
+  const chart = useRef<EChartsType | null>(null);
+  const [visible, setVisible] = useState(false);
+  const [mapError, setMapError] = useState(false);
+  const [mapAttempt, setMapAttempt] = useState(0);
+
+  useEffect(() => {
+    const element = container.current;
+    if (!element) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) return;
+      setVisible(true);
+      observer.disconnect();
+    }, { rootMargin: "240px" });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const element = container.current;
+    if (!visible || !element) return;
+    const instance = init(element, undefined, { renderer: "canvas" });
+    chart.current = instance;
+    const observer = new ResizeObserver(() => instance.resize());
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+      instance.dispose();
+      chart.current = null;
+    };
+  }, [visible]);
+
+  useEffect(() => {
+    const instance = chart.current;
+    if (!instance) return;
+    if (spec.kind !== "map") {
+      instance.setOption(chartOptions(spec, compact, highlight), { notMerge: true });
+      if (!onCategory || compact) return;
+      const onClick = (event: ECElementEvent) => {
+        if (spec.kind === "heatmap" && Array.isArray(event.value)) {
+          const [column, row] = event.value;
+          const label = typeof column === "number" ? spec.labels[column] : undefined;
+          const group = typeof row === "number" ? spec.series[row]?.name : undefined;
+          if (label && group) onCategory(label, group);
+        } else if (spec.kind === "sankey" && event.dataType === "edge") {
+          const link = spec.links[event.dataIndex];
+          if (link) onCategory(link.source, link.target);
+        } else if (event.name) onCategory(event.name);
+      };
+      instance.on("click", onClick);
+      return () => { instance.off("click", onClick); };
+    }
+    let active = true;
+    loadWorld().then(() => {
+      if (active) instance.setOption(chartOptions(spec, compact), { notMerge: true });
+    }).catch(() => {
+      if (active) setMapError(true);
+    });
+    const onClick = (event: ECElementEvent) => {
+      const index = spec.mapIds.indexOf(String(event.name));
+      if (index >= 0 && spec.series[0].values[index] !== null) onCategory?.(spec.labels[index]);
+    };
+    if (onCategory && !compact) instance.on("click", onClick);
+    return () => {
+      active = false;
+      instance.off("click", onClick);
+    };
+  }, [visible, spec, compact, mapAttempt, onCategory, highlight]);
+
+  return (
+    <div className={compact ? styles.previewPlot : styles.chartPlot} data-chart-kind={spec.kind}>
+      <div ref={container} className={styles.plotCanvas} aria-hidden={compact || undefined}
+        role={compact ? undefined : "img"} aria-label={compact ? undefined : spec.title} />
+      {mapError && !compact && (
+        <p className={styles.mapError}>地图边界加载失败。<button type="button" onClick={() => {
+          setMapError(false);
+          setMapAttempt(attempt => attempt + 1);
+        }}>重新加载</button></p>
+      )}
+    </div>
+  );
+}

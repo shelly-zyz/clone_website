@@ -1,46 +1,19 @@
 import "server-only";
 
+import { withBusinessAction } from "@/lib/agent-runtime/policy.server";
 import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
-import { datasets, generationProducts, metricSchema, powerProducts, type DataQuery, type Topic } from "./contracts";
+import { generationProducts, powerProducts, type DataQuery, type Topic } from "./contracts";
+import { catalogEntry, resolveVersion, versionSelect, type VersionRow } from "./catalog.server";
 import { DataAgentError, readDataAgent } from "./database.server";
+import type { QueryDiagnosis } from "./query-diagnosis";
 
-type VersionRow = {
-  id: string;
-  topic_id: Topic;
-  dataset_id: string;
-  version: string;
-  row_count: number;
-  published_at: Date;
-  metric_snapshot: unknown;
-  metrics: unknown[];
-};
-
-const versionSelect = `SELECT v.id, v.topic_id, v.dataset_id, v.version, v.row_count, v.published_at, v.metric_snapshot,
-    ARRAY(
-      SELECT snapshot.value
-      FROM jsonb_each(COALESCE(v.metrics_snapshot, jsonb_build_object(m.metric_code, v.metric_snapshot))) snapshot
-      JOIN semantic.sem_metric approved ON approved.topic_id = v.topic_id AND approved.dataset_id = v.dataset_id
-        AND approved.metric_code = snapshot.key AND approved.review_status = 'approved'
-      ORDER BY snapshot.key
-    ) AS metrics
-  FROM catalog.dataset_version v
-  JOIN semantic.sem_metric m ON m.topic_id = v.topic_id AND m.dataset_id = v.dataset_id
-    AND m.metric_code = v.metric_snapshot->>'metric_code' AND m.review_status = 'approved'`;
-
-function catalogEntry(row: VersionRow) {
-  return {
-    topic: row.topic_id, dataset_id: row.dataset_id, version: row.version,
-    published_at: row.published_at.toISOString(), row_count: row.row_count,
-    metric: metricSchema.parse(row.metric_snapshot),
-    metrics: row.metrics.map((metric) => metricSchema.parse(metric)),
-  };
-}
-
-export async function listDataCatalog(topic?: Topic) {
+export async function listDataCatalog(topic?: Topic, version?: string) {
   return readDataAgent(async (client) => {
     const versions = await client.query<VersionRow>(`${versionSelect}
-      WHERE v.is_current AND ($1::text IS NULL OR v.topic_id = $1) ORDER BY v.topic_id`, [topic ?? null]);
+      WHERE ($1::text IS NULL OR v.topic_id = $1)
+        AND (CASE WHEN $2::text IS NULL THEN v.is_current ELSE v.version = $2 END)
+      ORDER BY v.topic_id, (v.dataset_id = 'meteo_gfs_forecast') DESC, v.dataset_id`, [topic ?? null, version ?? null]);
     const catalog = versions.rows.map(catalogEntry);
     const power = versions.rows.find((row) => row.topic_id === "power");
     if (!power || topic !== "power") return { datasets: catalog };
@@ -50,15 +23,6 @@ export async function listDataCatalog(topic?: Topic) {
     const products = new Set(catalog[0].metrics.flatMap((metric) => metric.series_codes ?? generationProducts));
     return { datasets: catalog, region_codes: regions.rows, products: powerProducts.filter((product) => products.has(product)) };
   });
-}
-
-async function resolveVersion(client: PoolClient, query: DataQuery) {
-  const { rows } = await client.query<VersionRow>(`${versionSelect}
-    WHERE v.topic_id = $1 AND v.dataset_id = $2
-      AND (($3::text IS NULL AND v.is_current) OR v.version = $3)`,
-  [query.topic, datasets[query.topic], query.version ?? null]);
-  if (!rows[0]) throw new DataAgentError("VERSION_NOT_FOUND", "没有找到该专题已发布的数据版本。");
-  return rows[0];
 }
 
 type Observation = {
@@ -73,10 +37,35 @@ type Observation = {
   missing: number;
 };
 
-const factFilters = `topic_id = $1 AND dataset_version_id = $2 AND metric_code = $3
-  AND entity_code = $4 AND series_code = $5
+const seriesFilters = (comparison: boolean) => `topic_id = $1 AND dataset_version_id = $2 AND metric_code = $3
+  AND ${comparison ? "($4::text = '000000000000' AND entity_code ~ '^[1-9][0-9]0{10}$')" : "entity_code = $4"}
+  AND series_code = $5`;
+
+const factFilters = (comparison = false) => `${seriesFilters(comparison)}
   AND ($6::date IS NULL OR time_start >= $6::date::timestamptz)
   AND ($7::date IS NULL OR time_start < ($7::date + 1)::timestamptz)`;
+
+async function diagnoseQuery(client: PoolClient, query: DataQuery, filters: unknown[], issueTime: string | null,
+  comparison: boolean, timeGrain: string, status: "empty" | "missing"): Promise<QueryDiagnosis> {
+  // Only coverage metadata may extend beyond the requested dates. Keep all other filters fixed.
+  const { rows: [coverage] } = await client.query<{ start: string | null; end: string | null; nearest: string | null }>(`
+    SELECT (min(time_start)::date)::text AS start, (max(time_start)::date)::text AS "end",
+      COALESCE(max(time_start) FILTER (WHERE time_start < $6::date::timestamptz),
+        min(time_start) FILTER (WHERE time_start >= ($7::date + 1)::timestamptz))::date::text AS nearest
+    FROM standard.std_data_agent_fact
+    WHERE ${seriesFilters(comparison)} AND quality_flag = 0
+      AND (${query.topic === "meteo" ? "$8::timestamptz IS NULL OR " : ""}issue_time IS NOT DISTINCT FROM $8::timestamptz)`,
+  [...filters, issueTime]);
+  const nearest = coverage.nearest;
+  const monthEnd = nearest && timeGrain === "month" ? new Date(`${nearest}T00:00:00Z`) : null;
+  if (monthEnd) monthEnd.setUTCMonth(monthEnd.getUTCMonth() + 1, 0);
+  const end = monthEnd?.toISOString().slice(0, 10) ?? nearest;
+  return {
+    reason: status === "missing" ? "all_values_missing" : "no_matching_rows",
+    available_range: coverage.start && coverage.end ? { start: coverage.start, end: coverage.end } : null,
+    suggested_range: nearest && end ? { start_date: nearest, end_date: end } : null,
+  };
+}
 
 const legacySeries = { power: generationProducts, meteo: ["temperature"], carbon: ["Power"] } as const;
 
@@ -88,12 +77,20 @@ const outputSchema = [
 ];
 
 export async function queryData(query: DataQuery) {
+  return withBusinessAction("data", "query_published", () => executeDataQuery(query));
+}
+
+async function executeDataQuery(query: DataQuery) {
   return readDataAgent(async (client) => {
     const version = await resolveVersion(client, query);
     const entry = catalogEntry(version);
     const metric = entry.metrics.find(({ metric_code }) => metric_code === (query.metric_code ?? entry.metric.metric_code));
     if (!metric) throw new DataAgentError("INVALID_METRIC", "该指标未在所选专题和版本发布，或当前未通过审核。");
-    const entity = query.topic === "power" ? query.region_code : "global";
+    const comparison = query.topic === "power" && query.province_comparison === true;
+    if (comparison && metric.time_grain !== "month") {
+      throw new DataAgentError("INVALID_METRIC", "省级比较仅支持同一月份、同一口径的月度指标。");
+    }
+    const entity = query.topic === "power" ? query.region_code : query.topic === "meteo" ? query.region_code ?? "global" : "global";
     if (query.topic === "power" && entity !== "000000000000") {
       const region = await client.query(`
         SELECT 1 FROM standard.std_data_agent_fact
@@ -105,10 +102,15 @@ export async function queryData(query: DataQuery) {
     if (!seriesCodes.includes(series)) throw new DataAgentError("INVALID_SERIES", "该指标在所选版本中没有发布此产品序列。");
     const filters = [query.topic, version.id, metric.metric_code, entity, series, query.start_date ?? null, query.end_date ?? null];
     let issueTime = query.topic === "meteo" && query.issue_time ? new Date(query.issue_time).toISOString() : null;
+    if (query.topic === "meteo" && query.model && issueTime === null) {
+      const run = await client.query<{ issue_time: Date }>(
+        "SELECT issue_time FROM catalog.weather_model_releases WHERE dataset_version_id = $1", [version.id]);
+      issueTime = run.rows[0].issue_time.toISOString();
+    }
     if (query.topic === "meteo" && issueTime === null) {
       const latest = await client.query<{ issue_time: Date | null }>(`
         SELECT max(issue_time) AS issue_time FROM standard.std_data_agent_fact
-        WHERE ${factFilters}`, filters);
+        WHERE ${factFilters()}`, filters);
       issueTime = latest.rows[0]?.issue_time?.toISOString() ?? null;
     }
 
@@ -117,12 +119,17 @@ export async function queryData(query: DataQuery) {
         (count(*) OVER ())::integer AS matched,
         (count(*) FILTER (WHERE quality_flag = 1) OVER ())::integer AS missing
       FROM standard.std_data_agent_fact
-      WHERE ${factFilters} AND issue_time IS NOT DISTINCT FROM $8::timestamptz
-      ORDER BY time_start DESC LIMIT $9`, [...filters, issueTime, query.limit]);
+      WHERE ${factFilters(comparison)}
+        AND issue_time IS NOT DISTINCT FROM $8::timestamptz
+        ${comparison ? "AND time_start = $6::date::timestamptz" : ""}
+      ORDER BY ${comparison ? "std_data_agent_fact.value DESC NULLS LAST, entity_code ASC" : "time_start DESC"} LIMIT $9`, [...filters, issueTime, query.limit]);
 
     const matched = result.rows[0]?.matched ?? 0;
     const missing = result.rows[0]?.missing ?? 0;
-    const rows = result.rows.reverse().map((row) => ({
+    if (comparison && new Set(result.rows.map(row => row.entity_code)).size !== result.rows.length) {
+      throw new DataAgentError("INVALID_REGION", "发布版本含重复省级记录，无法生成同口径比较。");
+    }
+    const rows = (comparison ? result.rows : result.rows.reverse()).map((row) => ({
       time_start: row.time_start.toISOString(), issue_time: row.issue_time?.toISOString() ?? null,
       entity_code: row.entity_code, series_code: row.series_code, value: row.value,
       quality_flag: row.quality_flag, source_ref: row.source_ref,
@@ -130,19 +137,25 @@ export async function queryData(query: DataQuery) {
     const effectiveQuery = {
       topic: query.topic, version: version.version, start_date: query.start_date, end_date: query.end_date,
       limit: query.limit,
-      ...(query.topic === "power" ? { region_code: entity, product: series } : {}),
+      ...(query.topic === "power" ? { region_code: entity, product: series, ...(comparison ? { province_comparison: true as const } : {}) } : {}),
       ...(query.topic === "meteo" && issueTime ? { issue_time: issueTime } : {}),
+      ...(query.topic === "meteo" && query.model ? { model: query.model, region_code: entity } : {}),
       // Keep the legacy replay hash for a version's default metric.
       ...(metric.metric_code !== entry.metric.metric_code ? { metric_code: metric.metric_code } : {}),
     };
     const queryHash = createHash("sha256").update(JSON.stringify(effectiveQuery)).digest("hex");
+    const status = rows.length === 0 ? "empty" : missing === matched ? "missing" : "ok";
+    const diagnosis = status === "ok" ? undefined : await diagnoseQuery(client, query, filters, issueTime, comparison, metric.time_grain, status);
     return {
-      status: rows.length === 0 ? "empty" : missing === matched ? "missing" : "ok",
+      status,
+      ...(diagnosis ? { diagnosis } : {}),
       metric,
       query: effectiveQuery,
       data_ref: {
         dataset_id: version.dataset_id, version: version.version, query_hash: queryHash,
         schema: outputSchema, units: { value: metric.unit },
+        shape: comparison ? "category" as const : "time_series" as const,
+        dimensions: { x: comparison ? "entity_code" : "time_start", series: "series_code", time_grain: metric.time_grain },
         time_range: { start: rows[0]?.time_start ?? null, end: rows.at(-1)?.time_start ?? null },
         quality: { matched_rows: matched, returned_rows: rows.length, missing_rows: missing, truncated: rows.length < matched },
         artifact_uri: null,

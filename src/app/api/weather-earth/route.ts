@@ -100,7 +100,9 @@ async function readStatus(): Promise<WeatherStatus> {
   const cacheFresh = Boolean(manifest && Number.isFinite(generatedAt) && Date.now() - generatedAt < cacheMaxAgeMs);
   const fieldFilesPresent = await metricPresence();
   const wgrib2 = spawnSync("wgrib2", ["-version"], { encoding: "utf8", windowsHide: true });
-  const wgrib2Available = !wgrib2.error && wgrib2.status === 0;
+  const versionOutput = `${wgrib2.stdout ?? ""}\n${wgrib2.stderr ?? ""}`;
+  const wgrib2Available = !wgrib2.error
+    && (wgrib2.status === 0 || /\b\d+\.\d+\.\d+\b/.test(versionOutput));
   const message = manifest?.message
     ?? (!wgrib2Available ? "未检测到 wgrib2，当前显示内置演示气象场。" : undefined);
 

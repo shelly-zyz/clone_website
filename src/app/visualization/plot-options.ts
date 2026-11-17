@@ -1,0 +1,526 @@
+import type {
+  BarSeriesOption, BoxplotSeriesOption, CustomSeriesOption, HeatmapSeriesOption, LineSeriesOption, MapSeriesOption,
+  PieSeriesOption, SankeySeriesOption, ScatterSeriesOption, TreemapSeriesOption,
+} from "echarts/charts";
+import type {
+  CalendarComponentOption, DataZoomComponentOption, GridComponentOption, LegendComponentOption, MarkLineComponentOption,
+  PolarComponentOption, TitleComponentOption, TooltipComponentOption, VisualMapComponentOption,
+} from "echarts/components";
+import type { ComposeOption } from "echarts/core";
+import type { AnalysisChartSpec } from "@/lib/topic-analysis/model";
+import { powerPlotOptions } from "./power-plot-options";
+
+export const worldMap = "ogw-topic-world";
+export type ChartOptions = ComposeOption<BarSeriesOption | BoxplotSeriesOption | CustomSeriesOption | HeatmapSeriesOption
+  | LineSeriesOption | MapSeriesOption | PieSeriesOption | SankeySeriesOption | ScatterSeriesOption
+  | TreemapSeriesOption | CalendarComponentOption | DataZoomComponentOption | GridComponentOption | LegendComponentOption
+  | MarkLineComponentOption | PolarComponentOption | TitleComponentOption | TooltipComponentOption | VisualMapComponentOption>;
+
+const format = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 });
+const compactFormat = new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 1 });
+const ink = "#263c4c";
+const gridColor = "#e3ebee";
+const axisLabel = { color: ink, fontSize: 11, hideOverlap: true };
+const valueAxis = {
+  type: "value" as const, axisLabel: { ...axisLabel, formatter: (value: number) => compactFormat.format(value) },
+  splitLine: { lineStyle: { color: gridColor } },
+};
+const heatColors = ["#dcf5f1", "#68e0c8", "#0fb1bd", "#3976d1", "#6242bc"];
+const emissionColors = ["#fff2e1", "#ffd77a", "#ffab53", "#ec655a", "#aa3c81"];
+const mapColors = ["#c2f1ed", "#64ded3", "#14adbd", "#3781d6", "#6149b5"];
+const categoryAxis = (labels: readonly string[], compact: boolean) => ({
+  type: "category" as const, data: [...labels],
+  axisTick: { show: false }, axisLine: { lineStyle: { color: gridColor } },
+  axisLabel: { ...axisLabel, fontSize: compact ? 9 : 11 },
+});
+const legendStyle = { color: ink, fontSize: 11 };
+
+function labelColor(background: string) {
+  const channels = background.slice(1).match(/../g)?.map(pair => {
+    const channel = Number.parseInt(pair, 16) / 255;
+    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+  const luminance = channels && 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+  return luminance !== undefined && luminance > 0.22 ? "#102630" : "#fff";
+}
+
+function readValue(value: unknown, unit: string) {
+  return typeof value === "number" && Number.isFinite(value) ? format.format(value) + " " + unit : "暂无";
+}
+
+function periodSlider(axis: "x" | "y", start: number, end: number): DataZoomComponentOption[] {
+  const target = axis === "x" ? { xAxisIndex: 0 } : { yAxisIndex: 0 };
+  return [{
+    ...target, type: "slider", startValue: start, endValue: end, filterMode: "weakFilter",
+    showDataShadow: false, brushSelect: false,
+    ...(axis === "x" ? { bottom: 4, height: 18 } : { right: 6, width: 14 }),
+    fillerColor: "#2a8da82b", borderColor: "#d3e2e8",
+  }];
+}
+
+function heatmap(spec: AnalysisChartSpec, compact: boolean, tooltip: TooltipComponentOption): ChartOptions {
+  const numberOfYears = spec.series.length;
+  const visibleRows = compact ? 12 : 18;
+  const latestStart = Math.max(0, numberOfYears - visibleRows);
+  const focusRow = spec.series.findIndex(series => series.name === spec.focus);
+  const first = focusRow < 0 ? latestStart : Math.max(0, Math.min(latestStart, focusRow - Math.floor(visibleRows / 2)));
+  const last = Math.min(numberOfYears, first + visibleRows);
+  const rows = compact ? spec.series.slice(first, last) : spec.series;
+  const values = rows.flatMap((series, y) => series.values.flatMap((value, x) => {
+    if (value === null) return [];
+    const selected = spec.focusCell?.[0] === x && spec.focusCell[1] === (compact ? y + first : y);
+    return [{
+      value: [x, y, value],
+      ...(selected && { itemStyle: { borderColor: ink, borderWidth: 2.2 } }),
+    }];
+  }));
+  const numbers = values.map(item => item.value[2]);
+  const min = numbers.length ? Math.min(...numbers) : 0;
+  const max = numbers.length ? Math.max(...numbers) : 1;
+  const zoom = !compact && latestStart > 0;
+  const palette = spec.id === "power-explorer" ? ["#eef3fa", "#cad9ec", "#91b7d5", "#9698c9", "#5d6193"]
+    : spec.id.startsWith("carbon-") || spec.id.startsWith("emission-") ? emissionColors : heatColors;
+  return {
+    tooltip: {
+      ...tooltip, trigger: "item", formatter: params => {
+        const item = Array.isArray(params) ? params[0] : params;
+        const data = item.value;
+        return Array.isArray(data)
+          ? `${rows[Number(data[1])]?.name} · ${spec.labels[Number(data[0])]}\n${readValue(data[2], spec.unit)}`
+          : "";
+      },
+    },
+    grid: { left: compact ? 36 : 52, right: zoom ? 41 : 13, top: 8, bottom: compact ? 25 : 67 },
+    xAxis: {
+      type: "category", data: [...spec.labels], axisLabel: { ...axisLabel, fontSize: compact ? 9 : 11 },
+      splitArea: { show: true, areaStyle: { color: ["#eef3f5"] } }, axisTick: { show: false },
+      axisLine: { show: false },
+    },
+    yAxis: {
+      type: "category", data: rows.map(series => series.name), inverse: true,
+      axisLabel: {
+        ...axisLabel, fontSize: compact ? 9 : 11,
+        formatter: (name: string) => name === spec.focus ? "{selected|" + name + "}" : name,
+        rich: { selected: { color: "#086477", fontWeight: 800 } },
+      },
+      axisTick: { show: false }, axisLine: { show: false },
+    },
+    visualMap: {
+      show: !compact, type: "continuous", min, max: Math.max(min + 0.0001, max), dimension: 2,
+      orient: "horizontal", itemWidth: 11, itemHeight: 134, left: "center", bottom: 5,
+      text: [readValue(max, spec.unit), readValue(min, spec.unit)],
+      formatter: value => compactFormat.format(Number(value)), calculable: false, precision: 2,
+      inRange: { color: palette }, textStyle: { color: ink },
+    },
+    dataZoom: zoom ? periodSlider("y", first, last - 1) : undefined,
+    series: [{
+      type: "heatmap", name: spec.title, data: values, silent: compact, itemStyle: { borderColor: "#fff", borderWidth: 1.5 },
+      emphasis: { itemStyle: { borderColor: "#223b4c", borderWidth: 2 } },
+    }],
+  };
+}
+
+function mapOptions(spec: Extract<AnalysisChartSpec, { kind: "map" }>, compact: boolean, tooltip: TooltipComponentOption): ChartOptions {
+  const names = new Map(spec.mapIds.map((id, index) => [id, spec.labels[index]]));
+  const pieces = [
+    { lt: spec.stops[0], color: mapColors[0] },
+    ...spec.stops.slice(1).map((stop, index) => ({ gte: spec.stops[index], lt: stop, color: mapColors[index + 1] })),
+    { gte: spec.stops[spec.stops.length - 1], color: mapColors[mapColors.length - 1] },
+  ];
+  return {
+    tooltip: {
+      ...tooltip, trigger: "item", formatter: params => {
+        const item = Array.isArray(params) ? params[0] : params;
+        return `${names.get(item.name) ?? item.name}\n${readValue(item.value, spec.unit)}`;
+      },
+    },
+    visualMap: {
+      type: "piecewise", show: !compact, orient: "horizontal", left: "center", bottom: 6,
+      itemWidth: 13, itemHeight: 9, itemGap: 8, textStyle: { color: ink, fontSize: 10 },
+      pieces: pieces.map(piece => ({
+        ...piece,
+        label: "gte" in piece && piece.gte !== undefined
+          ? "lt" in piece && piece.lt !== undefined
+            ? compactFormat.format(piece.gte) + "–" + compactFormat.format(piece.lt)
+            : "≥" + compactFormat.format(piece.gte)
+          : "<" + compactFormat.format(spec.stops[0]),
+      })),
+    },
+    series: [{
+      type: "map", map: worldMap, nameProperty: "ADM0_A3", silent: compact, roam: false,
+      top: 4, bottom: compact ? 4 : 46, left: 7, right: 7,
+      itemStyle: { areaColor: "#e9eef0", borderColor: "#fff", borderWidth: 0.55 },
+      emphasis: { label: { show: false }, itemStyle: { areaColor: "#ffcd58" } },
+      data: spec.mapIds.map((id, index) => ({
+        name: id, value: spec.series[0].values[index] ?? undefined,
+        ...(spec.labels[index] === spec.focus ? { itemStyle: { borderColor: "#a45719", borderWidth: 1.5 } } : {}),
+      })),
+    }],
+  };
+}
+
+function bubble(spec: Extract<AnalysisChartSpec, { kind: "bubble" }>, compact: boolean, tooltip: TooltipComponentOption): ChartOptions {
+  const maximum = Math.max(1, ...spec.sizes);
+  const data = spec.labels.flatMap((name, index) => {
+    const x = spec.series[0].values[index];
+    const y = spec.series[1].values[index];
+    if (x === null || y === null) return [];
+    const focused = name === spec.focus;
+    return [{
+      name, value: [x, y, spec.sizes[index]], symbolSize: (compact ? 5 : 7) + Math.sqrt(spec.sizes[index] / maximum) * (compact ? 17 : 42),
+      itemStyle: {
+        color: focused ? "#f37448" : spec.categoryColors?.[index] ?? "#20b8bc",
+        ...(focused ? { opacity: 1, borderColor: "#fff", borderWidth: 1.5 } : {}),
+      },
+      label: focused && !compact ? { show: true, formatter: name, color: ink, position: "top" as const } : undefined,
+    }];
+  });
+  return {
+    tooltip: {
+      ...tooltip, trigger: "item", formatter: params => {
+        const item = Array.isArray(params) ? params[0] : params;
+        const data = item.value;
+        return Array.isArray(data) ? [
+          item.name, spec.series[0].name + "  " + readValue(data[0], spec.xUnit),
+          spec.series[1].name + "  " + readValue(data[1], spec.unit), spec.sizeName + "  " + readValue(data[2], spec.sizeUnit),
+        ].join("\n") : "";
+      },
+    },
+    grid: { left: 47, right: compact ? 13 : 25, top: compact ? 13 : 43, bottom: compact ? 28 : 60 },
+    xAxis: {
+      ...valueAxis, type: spec.xLog ? "log" : "value",
+      name: compact ? undefined : `${spec.series[0].name}（${spec.xUnit}）`,
+      nameLocation: "center", nameGap: 34, nameTextStyle: { color: ink },
+    },
+    yAxis: {
+      ...valueAxis, name: compact ? undefined : `${spec.series[1].name}（${spec.unit}）`,
+      nameTextStyle: { color: ink, align: "left" }, nameGap: 16,
+    },
+    series: [{
+      type: "scatter", data: data.sort((a, b) => Number(a.name === spec.focus) - Number(b.name === spec.focus) || b.value[2] - a.value[2]), silent: compact, color: "#31b4bc",
+      itemStyle: { opacity: 0.76, borderColor: "#397b98", borderWidth: 0.65 },
+      emphasis: { focus: "self", scale: 1.12, label: { show: true, formatter: "{b}", position: "top", color: ink } },
+    }],
+  };
+}
+
+function treemap(spec: AnalysisChartSpec, compact: boolean, tooltip: TooltipComponentOption): ChartOptions {
+  return {
+    tooltip: { ...tooltip, trigger: "item" },
+    series: [{
+      type: "treemap", left: 0, right: 0, top: 0, bottom: 0,
+      roam: false, nodeClick: false, breadcrumb: { show: false }, silent: compact, sort: "desc",
+      label: { show: true, fontSize: compact ? 10 : 14, fontWeight: 600, overflow: "truncate" },
+      itemStyle: { gapWidth: 2, borderColor: "#fff" },
+      data: spec.labels.flatMap((name, index) => {
+        const value = spec.series[0].values[index];
+        if (value === null || value <= 0) return [];
+        const color = spec.categoryColors?.[index] ?? spec.color;
+        return { name, value, itemStyle: { color }, label: { color: labelColor(color) } };
+      }),
+    }],
+  };
+}
+
+function rose(spec: AnalysisChartSpec, compact: boolean, tooltip: TooltipComponentOption): ChartOptions {
+  const colors = ["#45bac0", "#319bd0", "#637edc", "#9a80d7", "#e98277", "#ecae59", "#5ab99d", "#30a8aa"];
+  return {
+    polar: { radius: compact ? "65%" : "69%", center: ["50%", "50%"] },
+    angleAxis: {
+      type: "category", data: [...spec.labels], startAngle: 112.5,
+      axisLine: { show: false }, axisTick: { show: false }, axisLabel: { ...axisLabel, fontSize: compact ? 10 : 13 },
+      splitLine: { show: true, lineStyle: { color: gridColor } },
+    },
+    radiusAxis: {
+      type: "value", min: 0, axisLine: { show: false }, axisTick: { show: false },
+      axisLabel: { ...axisLabel, show: !compact, formatter: "{value}%" }, splitLine: { lineStyle: { color: gridColor } },
+    },
+    tooltip: { ...tooltip, trigger: "item" },
+    series: [{
+      type: "bar", coordinateSystem: "polar", silent: compact, name: spec.series[0].name, barWidth: "78%",
+      data: spec.series[0].values.map((value, index) => ({ value, itemStyle: { color: colors[index] } })),
+    }],
+  };
+}
+
+function donut(spec: Extract<AnalysisChartSpec, { kind: "donut" }>, compact: boolean, tooltip: TooltipComponentOption): ChartOptions {
+  const { center } = spec;
+  return {
+    tooltip: { ...tooltip, trigger: "item", formatter: params => {
+      const item = Array.isArray(params) ? params[0] : params;
+      return `${item.name}\n${readValue(item.value, spec.unit)} · ${readValue(item.percent, "%")}`;
+    } },
+    legend: {
+      show: !compact, type: "scroll", left: "center", bottom: 2, textStyle: legendStyle, selectedMode: false,
+    },
+    title: {
+      text: readValue(center.value, center.unit), subtext: compact ? undefined : center.label,
+      left: "center", top: compact ? "50%" : "44%", textVerticalAlign: "middle", itemGap: 6,
+      textStyle: { color: ink, fontSize: compact ? 17 : 27, fontWeight: 720 },
+      subtextStyle: { color: "#4e6470", fontSize: 12 },
+    },
+    series: [{
+      type: "pie", radius: compact ? ["46%", "77%"] : ["49%", "78%"], center: ["50%", compact ? "50%" : "46%"],
+      label: { show: false }, labelLine: { show: false }, padAngle: 1.4, minShowLabelAngle: 5, silent: compact,
+      itemStyle: { borderRadius: 4 },
+      data: spec.labels.flatMap((name, index) => {
+        const value = spec.series[0].values[index];
+        return value !== null && value > 0
+          ? [{ name, value, itemStyle: { color: spec.categoryColors?.[index] ?? spec.color } }] : [];
+      }),
+    }],
+  };
+}
+
+function sankey(spec: Extract<AnalysisChartSpec, { kind: "sankey" }>, compact: boolean, tooltip: TooltipComponentOption): ChartOptions {
+  return {
+    tooltip: { ...tooltip, trigger: "item", formatter: params => {
+      const item = Array.isArray(params) ? params[0] : params;
+      const link = item.dataIndex >= 0 && item.dataType === "edge" ? spec.links[item.dataIndex] : undefined;
+      return `${link ? link.source + " → " + link.target : item.name}\n${readValue(item.value, spec.unit)}`;
+    } },
+    series: [{
+      type: "sankey", draggable: false, silent: compact, nodeWidth: compact ? 8 : 16, nodeGap: compact ? 8 : 16,
+      left: compact ? 4 : 15, right: compact ? 40 : 63, top: 12, bottom: 12,
+      label: { color: ink, fontSize: compact ? 9 : 12, distance: compact ? 3 : 7 },
+      data: spec.nodes.map(({ name, value, color }) => ({ name, value, itemStyle: { color } })),
+      links: spec.links,
+      lineStyle: { color: "gradient", curveness: 0.55, opacity: 0.35 },
+      emphasis: { focus: "adjacency", lineStyle: { opacity: 0.75 } },
+    }],
+  };
+}
+
+function waterfall(spec: AnalysisChartSpec, compact: boolean, tooltip: TooltipComponentOption): ChartOptions {
+  const last = spec.labels.length - 1;
+  let cumulative = 0;
+  const bars = spec.series[0].values.flatMap((value, index) => {
+    if (value === null) return [];
+    const from = index === last ? 0 : cumulative;
+    cumulative = index === last ? value : from + value;
+    const color = index === last ? spec.color : (spec.categoryColors?.[index] ?? (value < 0 ? "#e46a59" : "#25ada0"));
+    return [{ name: spec.labels[index], value: [index, from, cumulative, value], itemStyle: { color } }];
+  });
+  const positions = bars.flatMap(bar => bar.value.slice(1, 3));
+  const min = Math.min(0, ...positions);
+  const max = Math.max(0, ...positions);
+  const padding = (max - min) * (compact ? 0.04 : 0.12) || 1;
+  return {
+    tooltip: { ...tooltip, trigger: "item", formatter: params => {
+      const item = Array.isArray(params) ? params[0] : params;
+      const delta = Array.isArray(item.value) ? item.value[3] : null;
+      return `${item.name}\n${readValue(delta, spec.unit)}`;
+    } },
+    grid: { left: 52, right: 15, top: 24, bottom: 32 },
+    xAxis: categoryAxis(spec.labels, compact),
+    yAxis: { ...valueAxis, min: min < 0 ? min - padding : 0, max: max + padding },
+    series: [{
+      type: "custom", coordinateSystem: "cartesian2d", data: bars, encode: { x: 0, y: [1, 2] }, silent: compact,
+      renderItem: (_, api) => {
+        const index = api.value(0);
+        const start = api.coord([index, api.value(1)]);
+        const end = api.coord([index, api.value(2)]);
+        const next = api.coord([Number(index) + 1, api.value(2)]);
+        const width = Math.min(58, Math.abs(next[0] - end[0]) * 0.58);
+        const height = Math.max(2, Math.abs(start[1] - end[1]));
+        const color = api.visual("color");
+        return {
+          type: "group",
+          children: [{
+            type: "rect", shape: { x: start[0] - width / 2, y: Math.min(start[1], end[1]), width, height, r: 2 },
+            style: { fill: color },
+          }, ...(Number(index) < last - 1 ? [{
+            type: "line" as const, silent: true,
+            shape: { x1: end[0] + width / 2, y1: end[1], x2: next[0] - width / 2, y2: end[1] },
+            style: { stroke: "#8194a1", lineDash: [3, 3] },
+          }] : []),
+          ...(!compact ? [{
+            type: "text" as const, silent: true,
+            x: end[0], y: Math.min(start[1], end[1]) - 6,
+            style: {
+              text: format.format(Number(api.value(3))), fill: ink, fontSize: 10, align: "center" as const, verticalAlign: "bottom" as const,
+            },
+          }] : [])],
+        };
+      },
+    }],
+  };
+}
+
+function calendar(spec: AnalysisChartSpec, compact: boolean, tooltip: TooltipComponentOption): ChartOptions {
+  const values = spec.labels.flatMap((date, index) => {
+    const value = spec.series[0].values[index];
+    return value === null ? [] : [{ name: date, value: [date, value], itemStyle: spec.focus === date
+      ? { borderColor: ink, borderWidth: 2.2 } : undefined }];
+  });
+  const amount = values.map(item => Number(item.value[1]));
+  const min = Math.min(...amount);
+  const max = Math.max(min + 0.0001, ...amount);
+  return {
+    calendar: {
+      range: [spec.labels[0], spec.labels[spec.labels.length - 1]], orient: "vertical", cellSize: ["auto", "auto"],
+      left: compact ? 5 : 10, right: compact ? 5 : 10, top: compact ? 8 : 12, bottom: compact ? 8 : 53,
+      splitLine: { show: false }, yearLabel: { show: false }, monthLabel: { show: false },
+      dayLabel: { show: !compact, position: "end", firstDay: 1, nameMap: ["日", "一", "二", "三", "四", "五", "六"], color: ink, margin: 8 },
+      itemStyle: { color: "#f2f6f7", borderColor: "#fff", borderWidth: 3 },
+    },
+    visualMap: {
+      type: "continuous", show: !compact, dimension: 1, min, max, orient: "horizontal", left: "center", bottom: 5,
+      inRange: { color: emissionColors }, itemWidth: 10, itemHeight: 112,
+      text: [readValue(max, spec.unit), readValue(min, spec.unit)], textStyle: { color: ink, fontSize: 10 },
+    },
+    tooltip: { ...tooltip, trigger: "item", formatter: params => {
+      const item = Array.isArray(params) ? params[0] : params;
+      return Array.isArray(item.value) ? `${item.name}\n${readValue(item.value[1], spec.unit)}` : "";
+    } },
+    series: [{
+      type: "heatmap", coordinateSystem: "calendar", data: values, silent: compact,
+      label: {
+        show: !compact, formatter: params => String(Number(params.name.slice(-2))),
+        color: "#252a37", textBorderColor: "#ffffffb3", textBorderWidth: 2, fontWeight: 700,
+      },
+      itemStyle: { borderWidth: 3, borderColor: "#fff", borderRadius: 5 },
+      emphasis: { itemStyle: { borderColor: ink, borderWidth: 2.2 } },
+    }],
+  };
+}
+
+function boxplot(spec: Extract<AnalysisChartSpec, { kind: "boxplot" }>, compact: boolean, tooltip: TooltipComponentOption): ChartOptions {
+  const [minimum, lower, median, upper, maximum, selected] = spec.series;
+  return {
+    tooltip: { ...tooltip, formatter: params => {
+      const point = Array.isArray(params) ? params[0] : params;
+      const index = point.dataIndex;
+      return [spec.labels[index], ...spec.series.map(item => `${item.name}  ${readValue(item.values[index], item.unit ?? spec.unit)}`)].join("\n");
+    } },
+    grid: { left: 45, right: 15, top: 15, bottom: compact ? 29 : 54 },
+    legend: { show: !compact, bottom: 2, textStyle: legendStyle, selectedMode: false },
+    xAxis: categoryAxis(spec.labels, compact),
+    yAxis: { ...valueAxis, scale: true },
+    series: [{
+      type: "boxplot", name: "各年同月分布", silent: compact, boxWidth: [8, 32],
+      itemStyle: { color: "#8dd9cf", borderColor: "#177f82", borderWidth: 1.5 },
+      data: spec.labels.map((_, index) => [minimum, lower, median, upper, maximum]
+        .map(item => item.values[index] ?? "-")),
+    }, {
+      type: "scatter", name: selected.name, silent: compact, symbol: "diamond", symbolSize: compact ? 6 : 10,
+      itemStyle: { color: selected.color ?? "#d38a38", opacity: 1, borderColor: "#fff", borderWidth: 1 },
+      data: selected.values.map((value, index) => [index, value]),
+    }],
+  };
+}
+
+function rangeBand(spec: Extract<AnalysisChartSpec, { kind: "range-band" }>, compact: boolean, tooltip: TooltipComponentOption): ChartOptions {
+  const [selected, median, lower, upper] = spec.series;
+  const start = spec.labels.findIndex(label => label === spec.focus);
+  const band = "中间 50% 经济体";
+  return {
+    tooltip: { ...tooltip, formatter: params => {
+      const point = Array.isArray(params) ? params[0] : params;
+      const index = point.dataIndex;
+      return [spec.labels[index] + " 年", ...spec.series.map(item => `${item.name}  ${readValue(item.values[index], item.unit ?? spec.unit)}`)].join("\n");
+    } },
+    grid: { left: 45, right: 18, top: 15, bottom: compact ? 28 : 54 },
+    legend: {
+      show: !compact, type: "scroll", data: [selected.name, median.name, band], bottom: 2, textStyle: legendStyle, selectedMode: false,
+    },
+    xAxis: { ...categoryAxis(spec.labels, compact), boundaryGap: false },
+    yAxis: { ...valueAxis, scale: true },
+    series: [
+      {
+        type: "line", name: lower.name, stack: "quartiles", stackStrategy: "all", data: [...lower.values],
+        symbol: "none", lineStyle: { opacity: 0 }, silent: true,
+      },
+      {
+        type: "line", name: band, stack: "quartiles", stackStrategy: "all", symbol: "none", silent: true,
+        data: upper.values.map((value, index) => {
+          const bottom = lower.values[index];
+          return value === null || bottom === null ? null : value - bottom;
+        }),
+        color: "#8ad6cb", areaStyle: { opacity: 0.55 }, lineStyle: { opacity: 0 },
+      },
+      { type: "line", name: median.name, color: median.color, data: [...median.values], symbol: "circle", symbolSize: 5, silent: compact },
+      {
+        type: "line", name: selected.name, color: spec.color, data: [...selected.values], silent: compact,
+        lineStyle: { type: "dashed", width: 2.8 }, symbol: "circle", symbolSize: 7,
+        markLine: start >= 0 && !compact ? {
+          silent: true, symbol: "none", label: { show: false }, lineStyle: { color: "#657686", type: "dotted" },
+          data: [{ xAxis: spec.labels[start] }],
+        } : undefined,
+      },
+    ],
+  };
+}
+
+function cartesian(spec: AnalysisChartSpec, compact: boolean, tooltip: TooltipComponentOption): ChartOptions {
+  const horizontal = spec.kind === "horizontal";
+  const stacked = spec.kind === "stacked-area";
+  const filled = stacked || spec.kind === "area";
+  const line = filled || spec.kind === "line";
+  const multiple = spec.series.length > 1;
+  const zoom = spec.zoom && spec.labels.length > 12 && !compact;
+  const categoryAxis = {
+    type: "category" as const, data: [...spec.labels], inverse: horizontal, boundaryGap: !line,
+    axisTick: { show: false }, axisLine: { lineStyle: { color: gridColor } },
+    axisLabel: { ...axisLabel, fontSize: compact ? 9 : 11, width: horizontal ? (compact ? 54 : 91) : 78, overflow: "truncate" as const },
+  };
+  const series: (BarSeriesOption | LineSeriesOption)[] = spec.series.map((item, index) => {
+    const color = item.color ?? spec.color;
+    if (line) {
+      return {
+        type: "line", name: item.name, data: [...item.values], color, silent: compact,
+        stack: stacked ? "composition" : undefined,
+        lineStyle: { width: stacked ? 1.2 : compact ? 2 : 2.5, type: spec.forecast ? "dashed" : "solid" },
+        areaStyle: filled ? { opacity: stacked ? 0.9 : 0.2 } : undefined,
+        showSymbol: spec.labels.length <= 15, symbolSize: compact ? 4 : 6,
+        markLine: spec.focus && !compact && index === 0 ? {
+          silent: true, symbol: "none", label: { show: false }, lineStyle: { color: "#657686", type: "dashed" },
+          data: [{ xAxis: spec.focus }],
+        } : undefined,
+      };
+    }
+    return {
+      type: "bar", name: item.name, color, silent: compact,
+      data: item.values.map((value, index) => spec.categoryColors?.[index]
+        ? { value, itemStyle: { color: spec.categoryColors[index] } } : value),
+      barMaxWidth: horizontal ? (compact ? 13 : 22) : (compact ? 26 : 48),
+    };
+  });
+  return {
+    tooltip: { ...tooltip, axisPointer: { type: line ? "line" : "shadow" } },
+    legend: { type: "scroll", show: multiple && !compact, bottom: 2, textStyle: { color: ink, fontSize: 11 } },
+    grid: {
+      top: 13, bottom: compact ? 27 : zoom || multiple ? 58 : 35,
+      left: horizontal ? (compact ? 65 : 105) : 49, right: compact ? 12 : 23,
+    },
+    xAxis: horizontal ? valueAxis : categoryAxis,
+    yAxis: horizontal ? categoryAxis : { ...valueAxis, scale: line && !filled },
+    dataZoom: zoom ? periodSlider("x", Math.max(0, spec.labels.length - 60), spec.labels.length - 1)
+      .map(item => multiple ? { ...item, bottom: 29 } : item) : undefined,
+    series,
+  };
+}
+
+export function chartOptions(spec: AnalysisChartSpec, compact: boolean, highlight?: string): ChartOptions {
+  const power = powerPlotOptions(spec, compact, highlight);
+  if (power) return power;
+  const tooltip: TooltipComponentOption = {
+    show: !compact, confine: true, renderMode: "richText", trigger: "axis",
+    textStyle: { color: ink, fontSize: 12 }, valueFormatter: value => readValue(value, spec.unit),
+  };
+  const base = { animation: false, textStyle: { fontFamily: 'Inter, "PingFang SC", "Microsoft YaHei", sans-serif' } };
+  switch (spec.kind) {
+    case "heatmap": return { ...base, ...heatmap(spec, compact, tooltip) };
+    case "map": return { ...base, ...mapOptions(spec, compact, tooltip) };
+    case "bubble": return { ...base, ...bubble(spec, compact, tooltip) };
+    case "treemap": return { ...base, ...treemap(spec, compact, tooltip) };
+    case "rose": return { ...base, ...rose(spec, compact, tooltip) };
+    case "donut": return { ...base, ...donut(spec, compact, tooltip) };
+    case "sankey": return { ...base, ...sankey(spec, compact, tooltip) };
+    case "waterfall": return { ...base, ...waterfall(spec, compact, tooltip) };
+    case "calendar": return { ...base, ...calendar(spec, compact, tooltip) };
+    case "boxplot": return { ...base, ...boxplot(spec, compact, tooltip) };
+    case "range-band": return { ...base, ...rangeBand(spec, compact, tooltip) };
+    default: return { ...base, ...cartesian(spec, compact, tooltip) };
+  }
+}

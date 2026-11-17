@@ -1,12 +1,11 @@
-import { DataAgentError } from "@/lib/data-agent/database.server";
-import { authorizeDataAgent, dataAgentErrorResponse } from "@/lib/data-agent/http.server";
+import { authorizeXiaoyun, dataAgentErrorResponse } from "@/lib/data-agent/http.server";
 import { xiaoyunRequestSchema } from "@/lib/xiaoyun/contracts";
 import { askXiaoyun } from "@/lib/xiaoyun/supervisor.server";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  const unauthorized = authorizeDataAgent(request);
+  const unauthorized = authorizeXiaoyun(request);
   if (unauthorized) return unauthorized;
   if (!request.headers.get("content-type")?.startsWith("application/json")) {
     return Response.json({ error: "请求必须使用 JSON。" }, { status: 415 });
@@ -20,9 +19,6 @@ export async function POST(request: Request) {
   try {
     return Response.json(await askXiaoyun(input.data, request.signal), { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
-    if (!(error instanceof DataAgentError) && !request.signal.aborted) {
-      console.error("Xiaoyun request failed:", error instanceof Error ? error.message : "unknown error");
-    }
     return dataAgentErrorResponse(error);
   }
 }

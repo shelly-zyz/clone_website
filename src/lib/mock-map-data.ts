@@ -21,12 +21,6 @@ import type {
   VoltageClass,
   VoltageMeta,
 } from "@/types/opengridworks";
-import {
-  chinaDataCenters,
-  chinaEnergyAssets,
-  chinaGridLines,
-  chinaSubstations,
-} from "@/lib/china-map-data";
 import countryCenters from "@/lib/country-centers.generated.json";
 
 type CountryCenter = {
@@ -493,7 +487,6 @@ export const energyAssets: EnergyAsset[] = [
   { id: "plant-dunkerque-battery", name: "Dunkerque Battery Hub", technology: "storage", capacityMw: 520, status: "Construction", countryCode: "FR", source: "Demo France", lat: 51.03, lng: 2.37 },
   { id: "plant-dogger-bank", name: "Dogger Bank Offshore", technology: "offshore", capacityMw: 3600, status: "Construction", countryCode: "GB", source: "Demo offshore", lat: 54.8, lng: 1.8 },
   { id: "plant-north-sea-store", name: "North Sea Battery Hub", technology: "storage", capacityMw: 740, status: "Planned", countryCode: "DE", source: "Demo storage", lat: 53.55, lng: 8.6 },
-  ...chinaEnergyAssets,
   { id: "plant-gujarat-solar", name: "Gujarat Solar Park", technology: "solar", capacityMw: 1900, status: "Operating", countryCode: "IN", source: "Demo solar", lat: 23.65, lng: 71.2 },
   { id: "plant-tamil-wind", name: "Tamil Nadu Wind Cluster", technology: "wind", capacityMw: 980, status: "Operating", countryCode: "IN", source: "Demo wind", lat: 9.2, lng: 77.8 },
   { id: "plant-kashiwazaki", name: "Kashiwazaki-Kariwa", technology: "nuclear", capacityMw: 8212, status: "Planned", countryCode: "JP", source: "Demo nuclear", lat: 37.43, lng: 138.6 },
@@ -516,16 +509,13 @@ export const dataCenters: DataCenterAsset[] = [
   { id: "dc-marseille", name: "Marseille IX", kind: "internet-exchange", operator: "PeeringDB", capacityMw: 48, countryCode: "FR", source: "PeeringDB", lat: 43.3, lng: 5.38 },
   { id: "dc-frankfurt", name: "Frankfurt Interconnect", kind: "internet-exchange", operator: "PeeringDB", capacityMw: 85, countryCode: "DE", source: "PeeringDB", lat: 50.11, lng: 8.68 },
   { id: "dc-dublin", name: "Dublin Cloud Ring", kind: "data-center", operator: "DemoCloud", capacityMw: 210, countryCode: "IE", source: "Demo centers", lat: 53.35, lng: -6.26 },
-  ...chinaDataCenters,
   { id: "dc-mumbai", name: "Mumbai IX", kind: "internet-exchange", operator: "PeeringDB", capacityMw: 70, countryCode: "IN", source: "PeeringDB", lat: 19.08, lng: 72.88 },
   { id: "dc-tokyo", name: "Tokyo Bay Compute", kind: "data-center", operator: "DemoCloud", capacityMw: 310, countryCode: "JP", source: "Demo centers", lat: 35.67, lng: 139.78 },
   ...generateDenseDataCenters(),
   ...globalMockInfrastructure.dataCenters,
 ];
 
-export const gridLines: GridLine[] = [
-  ...chinaGridLines,
-];
+export const gridLines: GridLine[] = [];
 
 export const substations: Substation[] = [
   { id: "sub-illinois-500", name: "Illinois River 500", voltageClass: "500", sourceLayer: "hifldSubs", lat: 40.9, lng: -89.1 },
@@ -537,7 +527,6 @@ export const substations: Substation[] = [
   { id: "sub-frankfurt-400", name: "Frankfurt 400", voltageClass: "220", sourceLayer: "rowSubs", lat: 50.08, lng: 8.71 },
   { id: "sub-paris-400", name: "Paris Ring 400", voltageClass: "220", sourceLayer: "rowSubs", lat: 48.86, lng: 2.27 },
   { id: "sub-lyon-225", name: "Lyon 225", voltageClass: "220", sourceLayer: "rowSubs", lat: 45.76, lng: 4.84 },
-  ...chinaSubstations,
   { id: "sub-tokyo-500", name: "Tokyo East 500", voltageClass: "500", sourceLayer: "rowSubs", lat: 35.75, lng: 140.1 },
   { id: "sub-local-69", name: "Peoria 69", voltageClass: "35", sourceLayer: "osmSubs", lat: 40.72, lng: -89.58 },
   { id: "sub-rural-low", name: "Rural Feeder", voltageClass: "low", sourceLayer: "osmSubs", lat: 38.91, lng: -90.18 },

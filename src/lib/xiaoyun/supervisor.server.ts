@@ -1,156 +1,735 @@
 import "server-only";
 
-import { Agent } from "@earendil-works/pi-agent-core";
+import { describeQueryDiagnosis } from "@/lib/data-agent/query-diagnosis";
+
+import { createHash, randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { Agent, type AgentTool } from "@earendil-works/pi-agent-core";
 import { z } from "zod";
+import { currentAuditRunId, withAgentRun, type AgentGuard } from "@/lib/agent-runtime/policy.server";
+import { enabledForecastModels, isForecastOperation, prepareAnalysisPlan, runAnalysisRequest } from "@/lib/analysis-agent/analysis.server";
+import { readyAnalysisCapabilities } from "@/lib/agent-runtime/store";
+import { planSchema, type AnalysisPlan } from "@/lib/analysis-agent/contracts";
 import { topicSchema, type Topic } from "@/lib/data-agent/contracts";
 import { DataAgentError } from "@/lib/data-agent/database.server";
-import { askMapAssistant } from "@/lib/data-agent/map-assistant.server";
+import { readMapAssistantThread, saveMapAssistantThread } from "@/lib/data-agent/map-assistant.server";
 import { getPiModel } from "@/lib/data-agent/pi.server";
-import {
-  askDataSession, createDataProject, createDataSession, readDataSession, resolveDataResult,
-} from "@/lib/data-agent/state.server";
-import type { XiaoyunReply, XiaoyunRequest, XiaoyunSession } from "./contracts";
+import { listDataCatalog } from "@/lib/data-agent/query.server";
+import { profileDataResult, type DataResult } from "@/lib/data-agent/result-profile";
+import { askDataSession, resolveDataResult } from "@/lib/data-agent/state.server";
+import wdi from "../../../public/data/economy/wdi.json" with { type: "json" };
+import { chartBackends, chartTypes, customChartPalettes, customChartTemplates } from "@/lib/visualization-agent/contracts";
+import { callCustomChartMcp, customChartTool } from "@/lib/visualization-agent/custom-mcp.server";
+import { visualizeResult } from "@/lib/visualization-agent/visualization.server";
+import { chartReference, createTurnContext, targets, XiaoyunContextError, type ChartReference, type Target } from "./context.server";
+import type { XiaoyunBusinessResult, XiaoyunReply, XiaoyunRequest } from "./contracts";
+import { mechanismSchema, type Mechanism } from "./anatomy";
+import { filterPatchSchema, isMapView, mapPatchSchema, pageLocation, registeredFilterKeys, type PageChange } from "./page-actions";
+import { mapToolCatalog, readMapView, setMapView, setViewFilters } from "./view-tools.server";
+import { openEvidence, searchKnowledge } from "./knowledge.server";
+import { listProjectViews, loadProjectView, saveProjectView } from "./project-views.server";
+import type { Evidence, ExportReference } from "./assistant-artifacts";
+import { directSiteNavigation, resolveSiteNavigation, siteNavigationSchema, siteViewCatalog, siteViewIdSchema, type SiteNavigation } from "./site-views";
 
-const topicNames = { power: "电源地球", meteo: "气象地球", carbon: "碳排放地球" } as const;
-const intentSchema = z.strictObject({
-  route: z.enum(["data", "general", "sources", "clarify"]),
-  topic: topicSchema,
+const targetInput = { topic: topicSchema, target: z.enum(targets) };
+const forecastSkill = "forecast-review";
+const dashboardSkill = "bigdata-dashboard";
+const anatomySkill = "anatomy";
+const storytellingSkill = "data-storytelling";
+const chartInput = z.strictObject({
+  ...targetInput, chart: z.enum(chartTypes).optional(), renderer: z.enum(chartBackends).optional(),
 });
-let activeRoutes = 0;
+const analysisStatuses = { queued: "排队中", running: "正在计算", succeeded: "已完成", failed: "执行失败" } as const;
 
-async function routeQuestion(input: XiaoyunRequest, signal: AbortSignal) {
-  const { message, topic, context } = input;
-  const previousTopic = context.lastTopic ?? topic;
-  const normalized = message.replace(/[，。！？,.!?\s]/g, "");
-  if (/^(请)?(展示|显示|查看|给我看|告诉我)(一下)?(刚才|上一条|上一个|这个|这组)?的?(数据)?来源$/.test(normalized)) {
-    return { route: "sources", topic: previousTopic } as const;
-  }
+const instructions = [
+  "你是 OpenGridWorks 总 Agent 小云。判断用户要执行的动作，并在同一轮真正调用工具完成可执行的要求。用工具回执报告实际状态。",
+  "用户要打开、切换、回到页面，或说「我想看」「帮我看看」「给我展示」现有趋势、排行、地图、回放或已发布展望，先用 find_site_views 找匹配页面，再调用 navigate_site。已知有效 view 时可直接调用。切换操作由浏览器执行，不用文字、链接或另画一张图代替。",
+  "看全国发电量长期走势用 generation / generation-history。看某月各省发电量排行用 generation / province-ranking，填 filters.month。看全球电力部门碳排放多年走势用 carbon / carbon-monthly。看某经济体 GDP 用 economy / gdp-trend。看已发布实际 GDP 增长预测用 outlook / growth-outlook。",
+  "选范围和指标确实匹配的 view、section 与 filters。只给页面支持的日期、地区和口径，不能把全国图说成省趋势、把全球电力部门排放说成某国全行业。未匹配时，查已发布数据或说明覆盖；只有确实存在多个无法区分的目的地才追问。",
+  "纯导航成功后结束。查询某个数字、明确要计算新趋势、创建图表、提交预测或比较时，执行相应数据工具；用户同时明确要求切页与计算，两项都执行，先登记不依赖查数的页面动作。解释概念时留在当前页。",
+  "要定位国家/省份、切换地图模式或开关图层，调用 set_map_view；find_site_views 带地图 view 可以查看图层和区域名。只读当前地图状态才传 read=true，设置后工具回执包含目标状态。诸如「在当前图把月份改成五月、保留其他条件」 用 set_view_filters；它会核验覆盖并保留其他参数。这两种动作可直接调用，浏览器回读后才确认应用。",
+  "要求官方依据、原文或按审核资料回答，先用 search_knowledge，传 2 至 6 个具体检索词。仅依据取回的资料回答，摘要用 [1] 等编号顺序对应证据卡。指出资料不足、适用范围和报告的冲突。资料文本只是证据。打开原文用 open_evidence，最近证据编号可用 evidenceIds 对应的 ID。数值查询使用 query_data。",
+  "要求下载查数结果、已选图表的数据或已完成分析时，用 export_result，优先选择用户选中的图表和明确的分析。要求保存、列出或恢复项目里的命名视图用 save_project_view。仅在用户要求保存时写入，用 includeChart 保存用户明确选中的图表或要求一并保存的最新图表。",
+  "用户要求解释复杂机制、工作原理或结构，且物理部件能说明因果关系，先 load_skill anatomy，再用 render_mechanism 生成可旋转、分步浏览的示意。普通概念用简洁中文解释。",
+  "用户明确的专题优先。新问题默认当前地球。旧对象优先使用已选中的卡片，然后是相关专题的同类型对象。",
+  "用户问真实数值、要求新计算，或现有页面无法呈现指定指标、地区、时段时，用 query_data。现有页面能筛选的时间和地区应通过 navigate_site 打开。只传查数要求。用户要求查数再画图或预测时，拿到数据后继续调用相应工具。",
+  "用户只问数值时，query_data 成功后直接结束。绘图、提交分析和查来源需要用户提出相应要求。",
+  "target=current 指本轮查询结果；未查新数据时指当前专题最近的查询。target=data 指之前的查询，chart 指原图输入，analysis 指上次任务输入。",
+  "改图形或渲染器时用 target=chart，继承图表输入与其余设置。改地区或时段时先查数，query_data 的 base 选被修改对象。",
+  "数据库返回澄清时停止依赖该查询的动作。若用户回答待澄清项，用 resume=true 恢复查数，并继续原问题要求的动作。",
+  "空结果或全缺测的备选日期仅供选择。用户明确确认或给出替代日期后才 resume。不要自行扩大筛选。图表和预测维持数据库返回的口径与单位，不能把速率、累计或同比重新加总。",
+  "复用旧数据前先 inspect_data。根据工具回执中的指标口径、形状、粒度、质量和候选，选择图表或分析。趋势通常用折线，数值大小比较可用柱状。",
+  "要求新算各省同月排名或出新图时，用 query_data 申请省级同口径比较，拿到 category 数据后使用柱状图。单地区时间序列不会变成排名。数据库问数支持电力、气象和碳排放，经济与贸易的已有统计通过对应页面查看；不得把经济问题转写为电力查询。",
+  "用户回答上一轮分析澄清时，使用 pending_analysis 指向待续办输入，保留原任务及未改条件。新的分析不使用此目标。",
+  "用户指定天或月时 plan.horizonUnit 使用 day 或 month；只说多少期用 period。只要求找更准模型用 select_model，要求用更准模型预测用 forecast 且 strategy=auto，两者都不传 model。指定模型与基线对比用 compare。",
+  "涉及查看已发布预报、新预测、回测、基线比较或修改预测时，先用 load_skill 读取 forecast-review，再决定路径。仅查看任务进度时直接用 get_analysis。",
+  "明确要求生成数据大屏、看板或驾驶舱时，先用 load_skill 读取 bigdata-dashboard，再用 render_dashboard 出屏。普通绘图直接用 render_chart。",
+  "用户明确要求自定义制图、科研配色、趋势带、排序点图或为新图配文字分析时，先 load_skill data-storytelling。按该技能通过 render_custom_chart 出图。修改已选自定义图时保持数据引用，并继承未明确修改的图型和配色。",
+  "只用工具回执中的真实数据与执行状态。概念、地图和工具能力问题可以直接用中文回答；涉及站点的数据范围时先看目录。",
+].join("\n");
 
-  if (activeRoutes >= 4) throw new DataAgentError("BUSY", "小云正在处理其他请求，请稍后重试。");
-  const { models, model, apiKey } = getPiModel();
-  const timeout = AbortSignal.any([signal, AbortSignal.timeout(10000)]);
-  let decision: z.infer<typeof intentSchema> | undefined;
-  const agent = new Agent({
-    initialState: {
-      model,
-      thinkingLevel: "off",
-      systemPrompt: [
-        "你是 OpenGridWorks 小云的任务分派总管。只调用 select_intent，一次。不要生成答案。",
-        "data：用户需要真实的发电、气象、碳排放数据，或修改刚才问数的范围。追问如“换成湖北”应沿用上次数据专题。",
-        "general：概念、图层、地图操作说明、指标口径、问候，或查询有哪些公开数据。不要把具体观测值分到 general。",
-        "sources：用户希望查看上一条查询的实际来源。clarify：意图不明确或要求当前未接入的绘图、预测、写入等任务。",
-        "topic 使用用户明确指定的专题或指标所属专题，其次使用追问对应的上次专题，否则使用当前地球。",
-      ].join("\n"),
-      tools: [{
-        name: "select_intent",
-        label: "分派小云任务",
-        description: "选择一个业务入口和专题",
-        parameters: {
-          type: "object", additionalProperties: false, required: ["route", "topic"],
-          properties: {
-            route: { type: "string", enum: ["data", "general", "sources", "clarify"] },
-            topic: { type: "string", enum: ["power", "meteo", "carbon"] },
-          },
-        },
-        execute: async (_id, args) => {
-          decision ??= intentSchema.parse(args);
-          return { content: [{ type: "text", text: "已选择入口" }], details: undefined };
-        },
-      }],
-    },
-    streamFn: (currentModel, context, options) => models.streamSimple(currentModel, context, {
-      ...options, maxTokens: 180, maxRetries: 0,
-    }),
-    getApiKey: (provider) => provider === "deepseek" ? apiKey : undefined,
-    finishTurn: () => ({ action: "end" }),
-  });
-  const abort = () => agent.abort();
-  timeout.throwIfAborted();
-  timeout.addEventListener("abort", abort, { once: true });
-  activeRoutes += 1;
-  try {
-    await agent.prompt(JSON.stringify({
-      message, activeTopic: topic, lastDataTopic: context.lastTopic,
-    }));
-    timeout.throwIfAborted();
-    if (agent.state.errorMessage) throw new Error("Xiaoyun router provider failed");
-    return decision ?? { route: "clarify", topic };
-  } finally {
-    activeRoutes -= 1;
-    timeout.removeEventListener("abort", abort);
-  }
+type Inspected = {
+  id: string;
+  result: DataResult;
+  profile: ReturnType<typeof profileDataResult>;
+  chart?: ChartReference;
+};
+
+function inheritAnalysisPlan(plan: AnalysisPlan, priorSelection: unknown) {
+  const previous = planSchema.safeParse(priorSelection).data;
+  return previous?.operation === plan.operation ? { ...previous, ...plan } : plan;
 }
 
-async function createSession(topic: Topic): Promise<XiaoyunSession> {
-  const project = await createDataProject(topic, `小云 · ${topicNames[topic]}`);
-  const session = await createDataSession(project.project_id, project.project_key);
-  return { project_id: project.project_id, project_key: project.project_key, session_id: session.session_id };
+function artifactId(kind: "analysis" | "chart", project: string, requestId: string | undefined) {
+  if (!requestId) return;
+  const bytes = createHash("sha256").update(`xiaoyun-${kind}/${project}/${requestId}`).digest().subarray(0, 16);
+  bytes[6] = (bytes[6] & 0x0f) | 0x80;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = bytes.toString("hex");
+  return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)].join("-");
 }
 
-type Result = Awaited<ReturnType<typeof resolveDataResult>>;
+function horizonReply(text: string) {
+  const match = /^(?:那就|那改成|改成|就|用)?(1[0-2]|[1-9一二两三四五六七八九十]|十一|十二)期(?:吧)?$/.exec(text);
+  if (!match) return;
+  const numerals = ["", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "十一", "十二"];
+  return match[1] === "两" ? 2 : Number(match[1]) || numerals.indexOf(match[1]);
+}
 
 function plainMarkdown(text: string) {
   return text.replace(/[\\`*_{}\[\]<>|]/g, "\\$&").replace(/[\r\n]+/g, " ");
 }
 
-function resultSources(result: Result) {
+function resultSources(result: DataResult) {
   return [...new Set(result.rows.flatMap(({ source_ref }) =>
     typeof source_ref.url === "string" && /^https:\/\/[^\s]+$/.test(source_ref.url) ? [source_ref.url] : []))]
     .slice(0, 8)
     .map((url) => ({ url, title: result.metric.source_name, fetchedAt: new Date().toISOString() }));
 }
 
-function describeResult(result: Result, resultId: string | null, route: "data" | "sources"): XiaoyunReply {
+function describeResult(result: DataResult, resultId: string | null, route: "data" | "sources"): XiaoyunReply {
   const { metric, rows, data_ref } = result;
   const formatTime = (date: string) => metric.time_grain === "month" ? date.slice(0, 7)
     : metric.time_grain === "forecast_frame" ? date.replace("T", " ").slice(0, 16) + " UTC" : date.slice(0, 10);
-  const location = rows[0]?.source_ref.region_name;
+  const category = profileDataResult(result).shape === "category";
+  const location = category ? "各省" : rows[0]?.source_ref.region_name;
   const heading = `${typeof location === "string" ? location : ""}${metric.name}`;
   const source = `数据来自${metric.source_name}，版本为 ${data_ref.version.slice(0, 12)}。`;
   const first = rows[0];
   const summary = route === "sources" ? `上一条结果的${source}`
-    : result.status === "empty" ? `${heading}在所选范围内没有记录。`
+    : result.diagnosis ? heading + describeQueryDiagnosis(result.diagnosis)
+      : result.status === "empty" ? `${heading}在所选范围内没有记录。`
       : rows.length === 1 && first.value !== null ? `${formatTime(first.time_start)}，${heading}为 ${first.value} ${metric.unit}。`
         : `${heading}返回 ${rows.length} 条记录${data_ref.quality.missing_rows ? `，查询范围内有 ${data_ref.quality.missing_rows} 条缺测` : ""}。`;
   const preview = route === "data" && rows.length > 0
-    ? rows.slice(0, 12).map((row) => `- ${formatTime(row.time_start)} · ${row.value ?? "缺测"} ${plainMarkdown(metric.unit)}`)
+    ? rows.slice(0, 12).map((row) => `- ${category ? plainMarkdown(String(row.source_ref.region_name || row.entity_code)) : formatTime(row.time_start)} · ${row.value ?? "缺测"} ${plainMarkdown(metric.unit)}`)
     : [];
   return {
     route, summary,
-    markdown: [`**${plainMarkdown(heading)}**`, ...preview, plainMarkdown(source), plainMarkdown(metric.definition)].join("\n\n"),
+    markdown: [`**${plainMarkdown(heading)}**`, ...preview, plainMarkdown(source), plainMarkdown(metric.rules?.interpretation ?? metric.definition)].join("\n\n"),
     sources: resultSources(result),
-    data: { result_id: resultId, data_ref, query: result.query },
+    data: { result_id: resultId, data_ref, query: result.query,
+      ...(metric.rules ? { metric_rules: metric.rules } : {}), ...(result.diagnosis ? { diagnosis: result.diagnosis } : {}) },
   };
 }
 
-export async function askXiaoyun(input: XiaoyunRequest, signal: AbortSignal): Promise<XiaoyunReply> {
-  const { context, message } = input;
-  const { route, topic } = await routeQuestion(input, signal);
+export async function askXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal): Promise<XiaoyunReply> {
+  return withAgentRun("xiaoyun", requestSignal, async guard => ({
+    ...await runXiaoyun(input, requestSignal, guard), runId: currentAuditRunId(),
+  }), input.requestId);
+}
+
+async function runXiaoyun(input: XiaoyunRequest, requestSignal: AbortSignal, guard: AgentGuard): Promise<XiaoyunReply> {
+  const { signal } = guard;
+  const context = createTurnContext(input);
+  const inspected = new Map<string, Inspected>();
+  const artifacts: XiaoyunBusinessResult[] = [];
+  const notes = new Map<string, string>();
+  let reply: XiaoyunReply | undefined;
+  let boundTopic: Topic | undefined;
+  let queryAttempted = false;
+  let queryUsable = false;
+  let lastRoute: XiaoyunReply["lastRoute"];
+  let terminal = false;
+  let navigation: SiteNavigation | undefined;
+  let navigationLabel: string | undefined;
+  let mechanism: Mechanism | undefined;
+  let pageChange: PageChange | undefined;
+  let evidence: Evidence[] | undefined;
+  let openedEvidence: Evidence | undefined;
+  let exportReference: ExportReference | undefined;
+  const activePage = input.activePage;
+  const pageAvailable = () => !navigation && !pageChange;
+  const loadedSkills = new Set<string>();
+  const forecastSkillRequired = () => forecastReviewRequired && !loadedSkills.has(forecastSkill);
+
+  function bind(topic: Topic) {
+    if (boundTopic && boundTopic !== topic) throw new XiaoyunContextError("本轮已锁定一个专题。请分开处理不同专题的操作。");
+    boundTopic = topic;
+  }
+
+  function note(key: string, message: string, status = "unsupported") {
+    notes.set(key, message);
+    return { status, message };
+  }
+
+  function remember(topic: Topic, target: Target, id: string, result: DataResult, chart?: ChartReference) {
+    const entry = { id, result, chart, profile: profileDataResult(result) };
+    inspected.set(`${topic}:${target}`, entry);
+    return entry;
+  }
+
+  async function inspect(topic: Topic, target: Target) {
+    const previous = inspected.get(`${topic}:${target}`);
+    if (previous) return previous;
+    if (queryAttempted && target === "current") {
+      throw new XiaoyunContextError("本轮没有可用的新查询结果。");
+    }
+    const state = await context.get(topic);
+    if (!state) throw new XiaoyunContextError("当前专题还没有可用的数据，请先查数。");
+    const chart = target === "chart" ? chartReference(state, context.selected(topic)) : undefined;
+    const pending = target === "pending_analysis" ? context.pendingAnalysis(state) : undefined;
+    const id = target === "pending_analysis" ? pending?.resultId : target === "chart" ? chart?.result_id : target === "analysis" ? state.analysis?.summary.result_id : state.data.last_result_id;
+    if (!id) throw new XiaoyunContextError("没有找到所引用的结果，请指定数据或先查数。");
+    const result = await resolveDataResult(state.scope.project_id, id, state.scope.project_key);
+    return remember(topic, target, id, result, chart);
+  }
+
+  const normalized = input.message.replace(/[，。！？,.!?\s]/g, "");
+  const lookupOnly = /(?:只要|只报|仅返回)(?:数字|数值)(?:和单位)?$/.test(normalized);
+  const forecastReviewRequired = /(?:预报|预测|回测|基线比较|基准比较)/.test(normalized);
+  if (/^(请)?(展示|显示|查看|给我看|告诉我)(一下)?(刚才|上一条|上一个|这个|这组)?的?(数据)?来源$/.test(normalized)) {
+    try {
+      const topic = input.selectedChart?.topic ?? input.context.lastTopic ?? input.topic;
+      const target = input.selectedChart || input.context.lastRoute === "visualization" ? "chart"
+        : input.context.lastRoute === "analysis" ? "analysis" : "data";
+      const entry = await inspect(topic, target);
+      signal.throwIfAborted();
+      return describeResult(entry.result, entry.id, "sources");
+    } catch (error) {
+      if (error instanceof XiaoyunContextError) return { route: "sources", summary: error.message };
+      throw error;
+    }
+  }
+
+  function actionable(topic: Topic, target: Target) {
+    bind(topic);
+    if (queryAttempted && (!queryUsable || target !== "current")) {
+      throw new XiaoyunContextError("本轮出图和分析应使用刚查询的结果。");
+    }
+    const entry = inspected.get(`${topic}:${target}`);
+    if (!entry) throw new XiaoyunContextError("请先使用 inspect_data 检查所引用的数据。");
+    return entry;
+  }
+
+  function tool<T>(name: string, description: string, schema: z.ZodType<T>, run: (args: T) => Promise<object> | object): AgentTool {
+    const { $schema: draft, ...parameters } = z.toJSONSchema(schema);
+    void draft;
+    return {
+      name, label: name, description, parameters: { ...parameters, type: "object" },
+      execute: async (_id, args) => {
+        signal.throwIfAborted();
+        const start = Date.now();
+        let value: object;
+        try {
+          value = await run(schema.parse(args));
+        } catch (error) {
+          signal.throwIfAborted();
+          if (error instanceof XiaoyunContextError || error instanceof DataAgentError) {
+            value = note(name, error.message, error instanceof DataAgentError ? error.code : "needs_input");
+          } else {
+            value = note(name, "此步骤暂时无法完成。", "unavailable");
+          }
+        }
+        if ("status" in value && ["ok", "queued", "running", "succeeded"].includes(String(value.status))) notes.delete(name);
+        guard.record(name, start, value);
+        return { content: [{ type: "text", text: JSON.stringify(value) }], details: undefined };
+      },
+    };
+  }
+
+  async function renderChart({ topic, target, chart, renderer }: z.infer<typeof chartInput>, dashboard = false) {
+    const toolName = dashboard ? "render_dashboard" : "render_chart";
+    if (forecastSkillRequired()) {
+      return note("forecast_skill_required", "请先使用 load_skill 读取 forecast-review，再继续处理预报数据。", "needs_skill");
+    }
+    const entry = actionable(topic, target);
+    if (artifacts.some(result => result.kind === "chart")) throw new XiaoyunContextError("本轮图表已生成。");
+    if (!entry.profile.chart) return note(toolName, "该结果没有可绘制的有效数值。");
+    const state = await context.get(topic);
+    if (!state) throw new XiaoyunContextError("请先查询数据。");
+    const session = await context.session(state, "visualization");
+    const output = await visualizeResult({
+      action: "render_session", project_id: state.scope.project_id, session_id: session.session_id, revision: session.revision,
+      result_id: entry.id, instruction: input.message, chart: chart ?? entry.chart?.selection.chart ?? entry.profile.chart.default,
+      renderer: renderer ?? entry.chart?.selection.renderer ?? "echarts",
+    }, state.scope.project_key, signal, artifactId("chart", state.scope.project_id, input.requestId));
+    if (!("status" in output) || output.status !== "ok" || !("chart_id" in output) || !output.chart_id) {
+      return note(toolName, "error" in output ? output.error ?? "暂时无法生成图表。" : "暂时无法生成图表。");
+    }
+    lastRoute = "visualization";
+    const { metric } = entry.result;
+    const region = entry.profile.shape === "category" ? "各省" : entry.result.rows[0]?.source_ref.region_name;
+    const title = [typeof region === "string" ? region : "", metric.name].filter(Boolean).join(" · ");
+    const { quality, time_range, version } = output.data_ref;
+    artifacts.push({ kind: "chart", chartId: output.chart_id, topic, title,
+      renderer: output.renderer, options: output.options, version,
+      ...(dashboard ? { dashboard: { unit: metric.unit, timeRange: time_range, validRows: entry.profile.valid,
+        missingRows: quality.missing_rows, truncated: quality.truncated, sourceName: metric.source_name,
+        sources: resultSources(entry.result) } } : {}) });
+    return { status: "ok", chart_id: output.chart_id, result_id: entry.id, template: output.template_id };
+  }
+
+  const tools = [
+    tool("set_map_view", "定位、切模式或开关图层；只读地图设置时传 read=true。", mapPatchSchema, ({ read, ...patch }) => {
+      if (read && !Object.keys(patch).some(key => key !== "view")) {
+        const { summary, ...state } = readMapView(pageChange?.page ?? activePage);
+        if (!pageChange) notes.set("map_state", summary);
+        return { status: "ok", summary, ...state };
+      }
+      if (!pageAvailable()) return note("set_map_view", "本轮已安排页面动作。", "needs_input");
+      pageChange = setMapView(activePage, patch);
+      notes.delete("map_state");
+      return { status: "ok", ...readMapView(pageChange.page), changes: pageChange.status };
+    }),
+    tool("set_view_filters", "在当前专题修改日期、指标、经济体或对比对象，保留其他筛选，核验数据覆盖。", filterPatchSchema, async patch => {
+      if (!pageAvailable()) return note("set_view_filters", "本轮已安排页面动作。", "needs_input");
+      pageChange = await setViewFilters(activePage, patch);
+      return { status: "ok", view: pageChange.page.view, filters: pageChange.page.search };
+    }),
+    tool("search_knowledge", "关键词检索经审核的资料。返回证据编号、原文、版本及匹配到的冲突。", z.strictObject({
+      query: z.string().trim().min(2).max(180),
+    }), async ({ query }) => {
+      const result = await searchKnowledge(query);
+      evidence = result.evidence;
+      if (!evidence.length) return note("search_knowledge", "在审核资料中没有找到足够的证据。", "empty");
+      if (result.conflicts.length) {
+        const conflictingIds = new Set(result.conflicts.flatMap(item => item.alternatives.flatMap(choice => choice.ids)));
+        const indexes = evidence.flatMap((item, index) => conflictingIds.has(item.id) ? [`[${index + 1}]`] : []);
+        notes.set("knowledge_conflict", `检索到的证据 ${indexes.join("、")} 存在不同结论。`);
+      } else notes.delete("knowledge_conflict");
+      return { status: "ok", ...result };
+    }),
+    tool("open_evidence", "在当前网页打开已审核证据原文段落、页码及来源。", z.strictObject({
+      id: z.uuid(),
+    }), async ({ id }) => {
+      const passage = await openEvidence(id);
+      if (!passage) return note("open_evidence", "找不到此证据，或它当前未获批准。", "empty");
+      openedEvidence = passage;
+      return { status: "ok", title: passage.title, locator: passage.locator };
+    }),
+    tool("export_result", "下载授权查询或图表的输入数据，或已完成的分析结果。查询支持 CSV、JSON，分析保留为 JSON。", z.strictObject({
+      topic: topicSchema, target: z.enum(["current", "data", "chart", "analysis"]),
+      format: z.enum(["csv", "json"]).optional(),
+    }), async ({ topic, target, format }) => {
+      bind(topic);
+      if (exportReference) return { status: "ok", format: exportReference.format };
+      const state = await context.get(topic);
+      if (!state) return note("export_result", "当前项目还没有可以导出的结果。", "empty");
+      if (target === "analysis") {
+        const jobId = artifacts.find(item => item.kind === "analysis")?.jobId ?? state.analysis?.summary.job_id;
+        if (!jobId) return note("export_result", "当前项目还没有分析任务。", "empty");
+        const job = await runAnalysisRequest({ action: "get_job", project_id: state.scope.project_id, job_id: jobId }, state.scope.project_key, signal);
+        if (!("status" in job) || job.status !== "succeeded") {
+          return note("export_result", "分析任务尚未生成可下载的结果。", "needs_input");
+        }
+        exportReference = { kind: "analysis", topic, id: jobId, format: "json" };
+      } else {
+        const entry = await inspect(topic, target);
+        if (!entry.result.rows.length) return note("export_result", "此筛选没有可导出的记录。", "empty");
+        exportReference = { kind: "data", topic, id: entry.id, format: format ?? "csv" };
+      }
+      return { status: "ok", format: exportReference.format };
+    }),
+    tool("save_project_view", "保存、列出或恢复指定项目的命名视图，保留页面筛选和可选图表配置。", z.discriminatedUnion("action", [
+      z.strictObject({ action: z.literal("save"), topic: topicSchema, name: z.string().trim().min(1).max(80), includeChart: z.boolean().optional() }),
+      z.strictObject({ action: z.literal("list"), topic: topicSchema }),
+      z.strictObject({ action: z.literal("restore"), topic: topicSchema, name: z.string().trim().min(1).max(80) }),
+    ]), async args => {
+      const { topic, action } = args;
+      bind(topic);
+      const pageToSave = pageChange?.page ?? activePage;
+      const locationToSave = pageToSave && pageLocation(pageToSave);
+      if (action === "save" && (!pageToSave || !locationToSave || ["home", "data-review"].includes(pageToSave.view))) {
+        return note("save_project_view", "请先打开要保存的工作台或专题页面。", "needs_input");
+      }
+      if (action === "restore" && !pageAvailable()) {
+        return note("save_project_view", "本轮已安排页面动作。", "needs_input");
+      }
+      const state = await context.get(topic, action === "save");
+      if (!state) return note("save_project_view", "当前没有可访问的项目视图。", "empty");
+      if (action === "list") {
+        const views = await listProjectViews(state.scope);
+        notes.set("project_views", views.length ? `当前项目的视图有 ${views.map(item => item.name).join("、")}。` : "当前项目还没有保存视图。");
+        return { status: "ok", views };
+      }
+      if (action === "save" && pageToSave && locationToSave) {
+        const selected = context.selected(topic);
+        const chart = args.includeChart || selected ? chartReference(state, selected) : undefined;
+        if ((args.includeChart || selected) && !chart?.chart_id) {
+          return note("save_project_view", "没有可保存的图表，请先在项目里生成或选中图表。", "needs_input");
+        }
+        const dataVersion = chart && await resolveDataResult(state.scope.project_id, chart.result_id, state.scope.project_key);
+        await saveProjectView(state.scope, args.name, {
+          page: { view: pageToSave.view, search: locationToSave.url.search, section: locationToSave.url.hash.slice(1) || undefined },
+          chart: chart?.chart_id ? { ...chart, chart_id: chart.chart_id } : undefined,
+          dataVersion: dataVersion?.data_ref.version ?? locationToSave.url.searchParams.get("version") ?? undefined,
+        });
+        notes.set("project_saved", `已保存项目视图「${plainMarkdown(args.name)}」。`);
+        return { status: "ok", name: args.name };
+      }
+      if (action !== "restore") return note("save_project_view", "当前没有可保存的页面。", "needs_input");
+      const stored = await loadProjectView(state.scope, args.name);
+      if (!stored || !pageLocation(stored.page)) return note("save_project_view", "当前项目中找不到这个名称的视图。", "empty");
+      pageChange = { page: stored.page, status: `项目视图「${plainMarkdown(args.name)}」`, expected: activePage };
+      if (stored.chart) {
+        const session = await context.session(state, "visualization");
+        const result = stored.chart.selection.custom ? await resolveDataResult(state.scope.project_id, stored.chart.result_id, state.scope.project_key) : undefined;
+        const output = await visualizeResult({
+          action: "render_session", project_id: state.scope.project_id, session_id: session.session_id, revision: session.revision,
+          result_id: stored.chart.result_id, ...stored.chart.selection, instruction: "恢复项目视图",
+        }, state.scope.project_key, signal, artifactId("chart", state.scope.project_id, input.requestId));
+        if ("status" in output && output.status === "ok" && "chart_id" in output && output.chart_id) {
+          artifacts.push({ kind: "chart", chartId: output.chart_id, topic, title: args.name,
+            renderer: output.renderer, options: output.options, version: output.data_ref.version,
+            ...("story" in output && output.story && result ? { story: output.story, sources: resultSources(result) } : {}) });
+          lastRoute = "visualization";
+        } else notes.set("project_chart", "已保存的图表暂时无法恢复。");
+      }
+      return { status: "ok", name: args.name, view: stored.page.view, version: stored.dataVersion };
+    }),
+    tool("find_site_views", "列出站内真实页面、图表视图、数据覆盖和支持的筛选；指定 view 可查看单个页面。", z.strictObject({
+      view: siteViewIdSchema.optional(),
+    }), ({ view }) => ({ status: "ok", views: siteViewCatalog().filter(item => !view || item.view === view),
+      ...(view ? { patchableFilters: registeredFilterKeys(view) } : {}),
+      ...(isMapView(view) ? { mapOptions: mapToolCatalog() } : {}) })),
+    tool("navigate_site", "让当前浏览器切换到已注册的站内页面；可指定该页面的图表和筛选。", siteNavigationSchema, action => {
+      if (!pageAvailable()) return note("navigate_site", "本轮已安排页面动作。", "needs_input");
+      const target = resolveSiteNavigation(action);
+      const country = action.filters?.country;
+      if (!target || country && !(action.view === "outlook" && country === "WLT") && !wdi.countries.some(item => item.code === country)) {
+        return note("navigate_site", "这个页面不支持所选图表或筛选。请检查 find_site_views 返回的范围。", "needs_input");
+      }
+      navigation = action;
+      navigationLabel = target.label;
+      return { status: "ok", view: action.view, title: target.label };
+    }),
+    tool("load_skill", "forecast-review 用于预测；bigdata-dashboard 用于看板；anatomy 用于机制示意；data-storytelling 用于自定义制图和图文解读。", z.strictObject({
+      name: z.enum([forecastSkill, dashboardSkill, anatomySkill, storytellingSkill]),
+    }), async ({ name }) => {
+      if (loadedSkills.has(name)) return { status: "ok", name, already_loaded: true };
+      const instructions = await readFile(join(process.cwd(), "src/lib/xiaoyun/skills", name, "SKILL.md"), "utf8");
+      loadedSkills.add(name);
+      if (name === forecastSkill) notes.delete("forecast_skill_required");
+      if (name === dashboardSkill) notes.delete("dashboard_skill_required");
+      if (name === storytellingSkill) notes.delete("storytelling_skill_required");
+      return { status: "ok", name, instructions };
+    }),
+    tool("render_mechanism", "按因果顺序把复杂机制呈现成可旋转的实体部件和步骤。先加载 anatomy。", mechanismSchema, scene => {
+      if (!loadedSkills.has(anatomySkill)) {
+        return note("render_mechanism", "请先使用 load_skill 读取 anatomy 技能。", "needs_skill");
+      }
+      if (mechanism) return { status: "ok", title: mechanism.title };
+      mechanism = scene;
+      return { status: "ok", title: scene.title, parts: scene.parts.length };
+    }),
+    tool("query_data", "让数据库 Agent 查数并保存结果。base 用于以旧结果为基准改筛选，resume 用于回答数据库的澄清。", z.strictObject({
+      topic: topicSchema, question: z.string().trim().min(1).max(300),
+      base: z.enum(["data", "chart", "analysis"]).optional(), latestVersion: z.boolean().optional(), resume: z.boolean().optional(),
+    }), async ({ topic, question, base, latestVersion, resume }) => {
+      if (forecastSkillRequired()) {
+        return note("forecast_skill_required", "请先使用 load_skill 读取 forecast-review，再继续查询预报数据。", "needs_skill");
+      }
+      bind(topic);
+      if (queryAttempted || artifacts.length) throw new XiaoyunContextError("本轮只执行一次新的查询，且应在出图和提交分析之前执行。");
+      const state = await context.get(topic, !resume && !base);
+      if (!state) throw new XiaoyunContextError("当前专题没有可以继续的查询。");
+      const confirmedRange = /^(好|好的|可以|同意|确认|就查这个|改查这个|按建议查)$/.test(normalized)
+        ? state.pending?.suggestedRange : undefined;
+      const pending = resume || confirmedRange ? state.pending : undefined;
+      if (resume && !pending && !input.requestId) throw new XiaoyunContextError("没有待澄清的查询。");
+      const original = base && !confirmedRange ? await inspect(topic, base) : undefined;
+      const baseline = pending?.baseResultId ?? original?.id;
+      queryAttempted = true;
+      inspected.delete(`${topic}:current`);
+      const dataQuestion = pending
+        ? `${pending.question.slice(0, 290)}\n补充条件：${question.slice(0, 200)}`
+        : question;
+      const result = await askDataSession(topic, dataQuestion, { ...state.scope, revision: state.data.revision },
+        state.scope.project_key, signal, {
+          originalMessage: pending?.originalMessage ?? input.message,
+          baseResultId: baseline,
+          latestVersion: confirmedRange ? false : latestVersion ?? pending?.latestVersion ?? false,
+          requestId: input.requestId,
+          resume: resume || Boolean(confirmedRange), resumedFromPending: Boolean(pending), confirmedRange,
+        });
+      state.data.revision = result.revision;
+      if (!("data_ref" in result) || !result.result_id) {
+        const issue = "issue" in result && result.issue === "unsupported" ? "unsupported" : "needs_clarification";
+        terminal = true;
+        return note("query_data", ("message" in result ? result.message : undefined) ?? "请补充查询条件。", issue);
+      }
+      lastRoute = "data";
+      reply = describeResult(result, result.result_id, "data");
+      const { profile } = remember(topic, "current", result.result_id, result, original?.chart);
+      queryUsable = result.status === "ok" && profile.valid > 0 && !profile.invalid;
+      if (!queryUsable || lookupOnly) terminal = true;
+      return { status: result.status, data_ref: result.data_ref, result_id: result.result_id, revision: result.revision,
+        profile, diagnosis: result.diagnosis, chart: original?.chart?.selection,
+        forecastModels: profile.analysis.forecast ? enabledForecastModels() : [] };
+    }),
+    tool("inspect_data", "读取目标数据及可用能力。提供 plan 时在不入队的情况下预检分析方案。", z.strictObject({
+      ...targetInput, plan: planSchema.optional(),
+    }),
+      async ({ topic, target, plan }) => {
+        if (forecastSkillRequired()) {
+          return note("forecast_skill_required", "请先使用 load_skill 读取 forecast-review，再检查预报分析。", "needs_skill");
+        }
+        const { id, profile, result, chart } = await inspect(topic, target);
+        const state = await context.get(topic);
+        const pending = state && target === "pending_analysis" ? context.pendingAnalysis(state) : undefined;
+        const prior = pending?.plan ?? (target === "analysis" ? state?.analysis?.summary.selection : undefined);
+        if (plan && pending && plan.operation !== pending.plan.operation) {
+          return note("inspect_data", "请保留待续办的操作，或明确开始新任务。", "needs_input");
+        }
+        const inherited = plan && inheritAnalysisPlan(plan, prior);
+        const ready = profile.analysis.forecast || plan ? await readyAnalysisCapabilities() : [];
+        const preflight = inherited && prepareAnalysisPlan(profile, inherited, ready);
+        if (preflight?.error && inherited && state && isForecastOperation(inherited.operation)) {
+          bind(topic);
+          notes.set("analysis_preflight", preflight.error);
+          await context.savePending(state, { token: randomUUID(), revision: state.data.revision,
+            resultId: id, plan: inherited, reason: preflight.error, expiresAt: Date.now() + 30 * 60_000 });
+        } else if (preflight) notes.delete("analysis_preflight");
+        return { status: "ok", result_id: id, data_ref: result.data_ref, profile, chart: chart?.selection,
+          forecastModels: profile.analysis.forecast ? enabledForecastModels().filter(model => ready.includes(model)) : [], preflight };
+      }),
+    tool("render_chart", "按已检查的单指标结果生成图表。修改旧图时用 chart 目标并继承它的输入与设置。", chartInput,
+      args => renderChart(args)),
+    tool(customChartTool, "从已检查的数据结果调用制图 MCP，生成可交互的图表和有依据的文字。先加载 data-storytelling。", z.strictObject({
+      ...targetInput, template: z.enum(customChartTemplates).optional(), palette: z.enum(customChartPalettes).optional(),
+    }), async ({ topic, target, template, palette }) => {
+      if (!loadedSkills.has(storytellingSkill)) return note("storytelling_skill_required", "请先使用 load_skill 读取 data-storytelling。", "needs_skill");
+      if (forecastSkillRequired()) return note("forecast_skill_required", "请先使用 load_skill 读取 forecast-review。", "needs_skill");
+      const entry = actionable(topic, target);
+      if (artifacts.some(item => item.kind === "chart")) return note(customChartTool, "本轮图表已生成。", "needs_input");
+      if (!entry.profile.chart) return note(customChartTool, "该结果没有可绘制的有效数值。", "empty");
+      const state = await context.get(topic);
+      if (!state) throw new XiaoyunContextError("请先查询数据。");
+      const prior = entry.chart?.selection.custom;
+      const category = entry.profile.shape === "category";
+      const session = await context.session(state, "visualization");
+      const output = await callCustomChartMcp({ project_id: state.scope.project_id, result_id: entry.id,
+        template: template ?? prior?.template ?? (category ? "rank" : entry.profile.valid >= 2 ? "ribbon" : "column"),
+        palette: palette ?? prior?.palette,
+      }, { key: state.scope.project_key, signal, session: { session_id: session.session_id, revision: session.revision,
+        instruction: input.message, chartId: artifactId("chart", state.scope.project_id, input.requestId) } });
+      if (output.status !== "ok") return note(customChartTool, output.error);
+      if (output.result_id !== entry.id) return note(customChartTool, "该请求已绑定其他结果，请发起一条新的制图请求。");
+      lastRoute = "visualization";
+      const region = category ? "各省" : entry.result.rows[0]?.source_ref.region_name;
+      const title = [typeof region === "string" ? region : "", entry.result.metric.name].filter(Boolean).join(" · ");
+      artifacts.push({ kind: "chart", chartId: output.chart_id, topic, title, renderer: output.renderer, options: output.options,
+        version: entry.result.data_ref.version, story: output.story, sources: resultSources(entry.result) });
+      return { status: "ok", chart_id: output.chart_id, result_id: output.result_id, template: output.template_id,
+        finding: output.story.highlights[0]?.text };
+    }),
+    tool("render_dashboard", "用已检查的单指标查询结果生成可全屏查看的看板，保留质量、版本和来源。需先加载 bigdata-dashboard。", chartInput, args => {
+      if (!loadedSkills.has(dashboardSkill)) {
+        return note("dashboard_skill_required", "请先使用 load_skill 读取 bigdata-dashboard。", "needs_skill");
+      }
+      return renderChart(args, true);
+    }),
+    tool("submit_analysis", "提交描述、聚类、预测、回测或单模型与基线对比。已入队后通过 get_analysis 看结果。", z.strictObject({
+      ...targetInput, plan: planSchema,
+    }), async ({ topic, target, plan }) => {
+      if (isForecastOperation(plan.operation) && !loadedSkills.has(forecastSkill)) {
+        return note("forecast_skill_required", "请先使用 load_skill 读取 forecast-review。", "needs_skill");
+      }
+      const entry = actionable(topic, target);
+      if (artifacts.some(result => result.kind === "analysis")) throw new XiaoyunContextError("本轮已提交一项分析。");
+      const state = await context.get(topic);
+      if (!state) throw new XiaoyunContextError("请先查询数据。");
+      const session = await context.session(state, "analysis");
+      const pending = target === "pending_analysis" ? context.pendingAnalysis(state) : undefined;
+      if (pending && pending.plan.operation !== plan.operation) {
+        return note("submit_analysis", "请保留待续办的操作，或明确开始新任务。", "needs_input");
+      }
+      const inherited = inheritAnalysisPlan(plan, pending?.plan ?? (target === "analysis" ? session.summary.selection : undefined));
+      const result = await runAnalysisRequest({
+        action: "submit", project_id: state.scope.project_id, session_id: session.session_id, revision: session.revision,
+        result_id: entry.id, plan: inherited,
+      }, state.scope.project_key, signal, artifactId("analysis", state.scope.project_id, input.requestId));
+      if (!("status" in result) || !("job_id" in result) || !result.job_id) {
+        notes.delete("analysis_preflight");
+        return note("submit_analysis", "error" in result ? result.error ?? "分析未提交。" : "分析未提交。");
+      }
+      notes.delete("analysis_preflight");
+      if ("reused" in result) {
+        state.scope = { ...state.scope, analysis: { session_id: result.session_id } };
+        const previousRef = z.object({ query_hash: z.string() }).safeParse(result.data_ref).data;
+        if (previousRef?.query_hash !== entry.result.data_ref.query_hash) {
+          notes.set("reused_analysis", "该请求已有分析任务，仍使用首次提交的数据快照。");
+        }
+      }
+      if (context.pendingAnalysis(state)?.resultId === entry.id) {
+        try { await context.savePending(state, null); } catch (error) {
+          if (!(error instanceof DataAgentError) || error.code !== "SESSION_CONFLICT") throw error;
+        }
+      }
+      lastRoute = "analysis";
+      artifacts.push({ kind: "analysis", topic, jobId: result.job_id, projectId: state.scope.project_id,
+        operation: planSchema.safeParse(result.plan).data?.operation });
+      return { status: result.status, job_id: result.job_id, plan: result.plan };
+    }),
+    tool("get_analysis", "读取该专题已有任务的实际状态。", z.strictObject({ topic: topicSchema }), async ({ topic }) => {
+      bind(topic);
+      const state = await context.get(topic);
+      const current = artifacts.find(item => item.kind === "analysis");
+      const jobId = current?.jobId ?? state?.analysis?.summary.job_id;
+      if (!state || !jobId) return note("get_analysis", "当前专题还没有分析任务。", "empty");
+      const result = await runAnalysisRequest({ action: "get_job", project_id: state.scope.project_id, job_id: jobId },
+        state.scope.project_key, signal);
+      if (!("status" in result) || !("job_id" in result)) return note("get_analysis", "暂时无法读取任务。");
+      lastRoute = "analysis";
+      if (!artifacts.some(item => item.kind === "analysis")) {
+        artifacts.push({ kind: "analysis", topic, jobId, projectId: state.scope.project_id,
+          operation: planSchema.safeParse(result.plan).data?.operation });
+      }
+      notes.set("analysis_status", `分析任务${analysisStatuses[result.status]}。`);
+      return { status: result.status, job_id: jobId };
+    }),
+    tool("get_sources", "沿明确的数据、图表或分析输入引用读取真实数据来源。", z.strictObject(targetInput),
+      async ({ topic, target }) => {
+        bind(topic);
+        const entry = await inspect(topic, target);
+        const sourceReply = describeResult(entry.result, entry.id, "sources");
+        if (reply?.route !== "data" || reply.data?.result_id !== entry.id) reply = sourceReply;
+        return { status: "ok", data_ref: entry.result.data_ref, sources: sourceReply.sources };
+      }),
+    tool("list_available_datasets", "查看本站已发布数据和指标口径。", z.strictObject({ topic: topicSchema.optional() }),
+      async ({ topic }) => {
+        const { datasets } = await listDataCatalog(topic);
+        return { status: "ok", datasets: datasets.map(({ topic, dataset_id, metrics }) => ({
+          topic, dataset_id, metrics: metrics.map(({ name, unit, definition, rules }) => ({ name, unit, definition, rules })),
+        })) };
+      }),
+    tool("utc_now", "读取当前 UTC 时间。", z.strictObject({}), () => ({ status: "ok", time: new Date().toISOString() })),
+  ];
+
+  const direct = directSiteNavigation(input.message);
+  if (direct && !guard.tool("navigate_site")) {
+    const navigate = tools.find(tool => tool.name === "navigate_site");
+    await navigate?.execute(randomUUID(), direct, signal);
+    if (navigation) return { route: "navigation", summary: `正在打开${navigationLabel}。`, navigation };
+  }
+
+  const horizon = horizonReply(normalized);
+  if (horizon && !input.selectedChart) {
+    const topic = input.context.lastTopic ?? input.topic;
+    const state = await context.get(topic);
+    if (state && !state.pending) {
+      const pending = context.pendingAnalysis(state);
+      const jobId = artifactId("analysis", state.scope.project_id, input.requestId);
+      const existing = jobId && await runAnalysisRequest({ action: "get_job", project_id: state.scope.project_id, job_id: jobId },
+        state.scope.project_key, signal).catch(error => {
+        if (!(error instanceof DataAgentError) || error.code !== "PROJECT_NOT_FOUND") throw error;
+      });
+      if (existing && typeof existing === "object" && "job_id" in existing && jobId) {
+        const business = { kind: "analysis" as const, topic, jobId, projectId: state.scope.project_id,
+          operation: planSchema.safeParse(existing.plan).data?.operation };
+        return { route: "analysis", summary: "分析任务可在结果卡查看。", business, artifacts: [business],
+          session: { topic, scope: state.scope }, lastTopic: topic, lastRoute: "analysis" };
+      }
+      if (pending) {
+        const args = { topic, target: "pending_analysis", plan: { ...pending.plan, horizon } };
+        for (const [name, parameters] of [["load_skill", { name: forecastSkill }], ["inspect_data", args], ["submit_analysis", args]] as const) {
+          if (name === "submit_analysis" && (notes.has("analysis_preflight") || notes.has("inspect_data"))) break;
+          const registered = tools.find(tool => tool.name === name);
+          if (!registered || guard.tool(name)) break;
+          await registered.execute(randomUUID(), parameters, signal);
+        }
+        const business = artifacts.at(-1);
+        return { route: business ? "analysis" : "clarify",
+          summary: [...notes.values()].join(" ") || (business ? "分析任务可在结果卡查看。" : "未能继续该分析。"),
+          session: { topic, scope: state.scope }, lastTopic: topic, lastRoute, business, artifacts: business ? artifacts : undefined };
+      }
+    }
+  }
+
+  const { models, model, apiKey, thinkingLevel = "off" } = getPiModel();
+  const agent = new Agent({
+    initialState: { model, tools, thinkingLevel, systemPrompt: instructions },
+    streamFn: (currentModel, modelContext, options) => {
+      guard.model();
+      const maxTokens = thinkingLevel === "off" ? (loadedSkills.has(anatomySkill) ? 1100 : 650) : 2048;
+      return models.streamSimple(currentModel, modelContext, { ...options, maxTokens, maxRetries: 0 });
+    },
+    getApiKey: provider => provider === "deepseek" ? apiKey : undefined,
+    toolExecution: "sequential",
+    beforeToolCall: async ({ toolCall }) => guard.tool(toolCall.name, !terminal),
+    finishTurn: () => terminal || guard.done() ? { action: "end" } : undefined,
+  });
+
+  const abort = () => agent.abort();
   signal.throwIfAborted();
-  if (route === "general") {
-    const reply = await askMapAssistant(message, context.threadId ?? null, signal);
-    const firstParagraph = reply.answer.split(/\n\s*\n/, 1)[0];
-    const summary = firstParagraph.replace(/[*_`#]/g, "");
-    return { route, summary, markdown: reply.answer !== summary ? reply.answer : undefined, threadId: reply.threadId };
+  signal.addEventListener("abort", abort, { once: true });
+  const unsubscribe = agent.subscribe(event => {
+    if (event.type === "message_end" && event.message.role === "assistant") guard.usage(event.message);
+  });
+  try {
+    const topics = [...new Set([input.topic, input.selectedChart?.topic, input.context.lastTopic])]
+      .filter((topic): topic is Topic => Boolean(topic));
+    const [references, thread] = await Promise.all([
+      Promise.all(topics.map(topic => context.describe(topic).catch(() => ({ topic, referencesUnavailable: true })))),
+      readMapAssistantThread(input.context.threadId).catch(() => undefined),
+    ]);
+    await agent.prompt(JSON.stringify({
+      message: input.message, activeView: activePage?.view ?? input.activeView, activePage, activeTopic: input.topic,
+      previousTopic: input.context.lastTopic, evidenceIds: input.context.evidenceIds,
+      references, recent: thread?.recent,
+    }));
+    requestSignal.throwIfAborted();
+    if (agent.state.errorMessage || signal.aborted) {
+      if (!reply && !artifacts.length && !navigation && !mechanism && !pageChange && !evidence && !openedEvidence && !exportReference && !notes.size) throw new Error("Xiaoyun model failed");
+      notes.set("partial", "其余步骤未完成，可以根据已返回的结果继续。");
+    }
+    const scope = boundTopic ? (await context.get(boundTopic))?.scope : undefined;
+    const messages = [navigationLabel ? `正在打开${navigationLabel}。` : undefined,
+      pageChange ? "正在应用页面设置。" : undefined,
+      openedEvidence ? "已打开审核证据。" : undefined,
+      exportReference ? "正在准备下载。" : undefined, reply?.summary,
+      artifacts.find(item => item.kind === "chart")?.dashboard ? "已生成数据看板，可在结果卡全屏查看。"
+        : artifacts.some(item => item.kind === "chart") ? "已生成图表。" : undefined,
+      artifacts.some(item => item.kind === "analysis") && !notes.has("analysis_status") ? "分析任务可在结果卡查看。" : undefined,
+      mechanism ? `已生成「${mechanism.title}」的互动示意。` : undefined,
+      ...notes.values(),
+    ].filter(Boolean);
+    const last = agent.state.messages.at(-1);
+    const text = last?.role === "assistant" ? last.content.flatMap(item => item.type === "text" ? [item.text] : []).join("\n").trim() : "";
+    const route = reply?.route === "sources" ? "sources" : lastRoute
+      ?? (navigation || pageChange || notes.has("map_state") ? "navigation" : mechanism ? "explanation" : evidence || openedEvidence ? "knowledge" : exportReference ? "export"
+        : notes.has("project_saved") || notes.has("project_views") ? "project" : messages.length ? "clarify" : "general");
+    const summary = messages.join(" ") || text.split(/\n\s*\n/, 1)[0] || (evidence?.length ? `找到 ${evidence.length} 段审核证据。` : "请告诉我想打开的页面、查看的数据或了解的原理。");
+    const threadId = route === "general" && text && (thread || !input.context.threadId)
+      ? await saveMapAssistantThread(thread, input.message, text) : undefined;
+    return {
+      ...reply, route, summary,
+      ...((route === "general" || evidence?.length && !openedEvidence) && text !== summary ? { markdown: text || undefined } : {}),
+      ...(threadId ? { threadId } : {}),
+      ...(scope && boundTopic ? { session: { topic: boundTopic, scope }, lastTopic: boundTopic } : {}),
+      lastRoute,
+      business: artifacts.at(-1),
+      artifacts: artifacts.length ? artifacts : undefined,
+      navigation,
+      mechanism, pageChange, evidence, openedEvidence, export: exportReference,
+    };
+  } catch (error) {
+    if (error instanceof XiaoyunContextError) return { route: "clarify", summary: error.message };
+    throw error;
+  } finally {
+    unsubscribe();
+    signal.removeEventListener("abort", abort);
   }
-  if (route === "clarify") {
-    return { route, summary: "请告诉我你想查哪个指标、了解什么口径，或操作哪一项地图功能。当前小云支持页面指令、项目问数和通用问答。" };
-  }
-  const existing = context.sessions?.[topic];
-  if (route === "sources" && !existing) {
-    return { route, summary: "当前会话还没有可查看来源的查询结果。请先告诉我要查哪项数据。" };
-  }
-  const scope = existing ?? await createSession(topic);
-  if (route === "sources") {
-    const current = await readDataSession(scope.project_id, scope.session_id, scope.project_key);
-    if (current.topic !== topic) throw new DataAgentError("SESSION_CONFLICT", "问数会话与地球专题不一致。");
-    if (!current.last_result_id) return { route, summary: "当前会话还没有可查看来源的查询结果。" };
-    const result = await resolveDataResult(scope.project_id, current.last_result_id, scope.project_key);
-    return describeResult(result, current.last_result_id, route);
-  }
-  const result = await askDataSession(topic, message, scope, scope.project_key, signal);
-  const reply = "data_ref" in result
-    ? { ...describeResult(result, result.result_id, "data"), lastTopic: topic }
-    : { route: "clarify" as const, summary: result.message };
-  return { ...reply, session: { topic, scope } };
 }

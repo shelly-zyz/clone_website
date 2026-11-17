@@ -1,15 +1,25 @@
 import type { NextConfig } from "next";
 
 const chartRuntime = ["./node_modules/mcp-echarts/fonts/*.otf", "./node_modules/@napi-rs/canvas-*/**/*.node"];
+const researchRuntime = ["./scripts/visualization/render_figure.py", "./src/lib/xiaoyun/skills/*/SKILL.md"];
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
   output: "standalone",
   outputFileTracingRoot: process.cwd(),
+  async headers() {
+    return [{
+      source: "/intro/graced-night-v1.:format(mp4|webp)",
+      headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+    }];
+  },
   serverExternalPackages: ["mcp-echarts"],
   outputFileTracingIncludes: {
+    "/api/weather-replay": ["./public/data/weather-replay/us-southeast-2026-09-26-db39d036.json", "./public/data/weather-replay/gfs-*.json"],
+    "/api/xiaoyun": ["./src/lib/xiaoyun/skills/*/SKILL.md"],
     "/api/visualization": chartRuntime,
-    "/api/mcp/visualization": chartRuntime,
+    "/api/mcp/visualization": [...chartRuntime, ...researchRuntime],
+    "/api/visualization/workspace": researchRuntime,
   },
 };
 

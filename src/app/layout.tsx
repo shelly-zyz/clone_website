@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { XiaoyunSiteAssistant } from "@/components/opengridworks/XiaoyunAssistant";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -16,7 +17,9 @@ export default function RootLayout({
       lang="zh-CN"
       className="h-full antialiased"
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <XiaoyunSiteAssistant>{children}</XiaoyunSiteAssistant>
+      </body>
     </html>
   );
 }

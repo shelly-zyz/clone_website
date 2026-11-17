@@ -1,0 +1,25 @@
+.status {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.ring {
+  width: 32px;
+  height: 32px;
+  border: 2px solid #e2e8f044;
+  border-top-color: #e2e8f0;
+  border-radius: 50%;
+  opacity: 0;
+  animation: reveal 1ms 180ms forwards, spin 780ms linear infinite;
+}
+
+@keyframes reveal { to { opacity: 1; } }
+@keyframes spin { to { transform: rotate(1turn); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ring { animation: reveal 1ms 180ms forwards; }
+}

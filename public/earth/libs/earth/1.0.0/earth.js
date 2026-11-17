@@ -17,10 +17,10 @@
     var MIN_MOVE = 4;                         // slack before a drag operation beings (pixels)
     var MOVE_END_WAIT = 1000;                 // time to wait for a move operation to be considered done (millis)
 
-    var OVERLAY_ALPHA = Math.floor(0.4*255);  // overlay transparency (on scale [0, 255])
+    var OVERLAY_ALPHA = Math.floor(0.31*255);  // overlay transparency (on scale [0, 255])
     var INTENSITY_SCALE_STEP = 10;            // step size of particle intensity color scale
     var MAX_PARTICLE_AGE = 100;               // max number of frames a particle is drawn before regeneration
-    var PARTICLE_LINE_WIDTH = 1.0;            // line width of a drawn particle
+    var PARTICLE_LINE_WIDTH = 1.25;            // line width of a drawn particle
     var PARTICLE_MULTIPLIER = 7;              // particle count scalar (completely arbitrary--this values looks nice)
     var PARTICLE_REDUCTION = 0.75;            // reduce particle count to this much of normal for mobile devices
     var FRAME_RATE = 40;                      // desired milliseconds per frame
@@ -50,7 +50,11 @@
                     case 404: msg = "No Data"; break;
                 }
                 log.error(err);
-                return s.classed("bad", true).text(msg);
+                s.classed("bad", true).text(msg);
+                if (window.parent !== window && document.documentElement.classList.contains("ogw-workspace")) {
+                    window.parent.postMessage("ogw-weather-error", window.location.origin);
+                }
+                return s;
             },
             reset: function() {
                 return s.classed("bad", false).text("");
@@ -193,6 +197,21 @@
         }
 
         var dispatch = _.extend({
+            resize: function(previousView) {
+                if (!globe) return;
+                var orientation = globe.orientation().split(",");
+                var fit = globe.fit(view);
+                var oldFit = globe.fit(previousView);
+                orientation[2] = String(Math.round(globe.projection.scale() * fit / oldFit));
+                dispatch.trigger("moveStart");
+                globe.orientation(orientation.join(","), view);
+                zoom.scale(globe.projection.scale());
+                configuration.save({orientation: globe.orientation()}, {source: "moveEnd"});
+                if (activeLocation.coord) {
+                    activeLocation.point = globe.projection(activeLocation.coord);
+                }
+                dispatch.trigger("moveEnd");
+            },
             globe: function(_) {
                 if (_) {
                     globe = _;
@@ -271,7 +290,9 @@
             log.debug("Download in progress--ignoring nav request.");
             return;
         }
-        var next = gridAgent.value().primaryGrid.navigate(step);
+        var grids = gridAgent.value();
+        if (!grids) return;
+        var next = grids.primaryGrid.navigate(step);
         if (next) {
             configuration.save(µ.dateToConfig(next));
         }
@@ -544,19 +565,25 @@
         return d.promise;
     }
 
+    var workspaceVisible = true;
+    var animationPaused = false;
+
     function animate(globe, field, grids) {
         if (!globe || !field || !grids) return;
 
         var cancel = this.cancel;
         var bounds = globe.bounds(view);
-        // maxIntensity is the velocity at which particle color intensity is maximum
+        var product = grids.primaryGrid;
+        var waveCrests = product.type === "waves";
+        var trailColor = waveCrests ? "224, 251, 255" : product.type === "currents" ? "194, 255, 235" : "247, 251, 254";
+        // maxIntensity controls particle brightness for each product.
         var colorStyles = µ.windIntensityColorScale(INTENSITY_SCALE_STEP, grids.primaryGrid.particles.maxIntensity);
         var buckets = colorStyles.map(function() { return []; });
         var particleCount = Math.round(bounds.width * PARTICLE_MULTIPLIER);
         if (µ.isMobile()) {
             particleCount *= PARTICLE_REDUCTION;
         }
-        var fadeFillStyle = µ.isFF() ? "rgba(0, 0, 0, 0.95)" : "rgba(0, 0, 0, 0.97)";  // FF Mac alpha behaves oddly
+        var fadeFillStyle = waveCrests ? "rgba(0, 0, 0, 0.80)" : "rgba(0, 0, 0, 0.93)";
 
         log.debug("particle count: " + particleCount);
         var particles = [];
@@ -597,7 +624,7 @@
         }
 
         var g = d3.select("#animation").node().getContext("2d");
-        g.lineWidth = PARTICLE_LINE_WIDTH;
+        g.lineCap = "round";
         g.fillStyle = fadeFillStyle;
 
         function draw() {
@@ -611,13 +638,30 @@
             buckets.forEach(function(bucket, i) {
                 if (bucket.length > 0) {
                     g.beginPath();
-                    g.strokeStyle = colorStyles[i];
                     bucket.forEach(function(particle) {
-                        g.moveTo(particle.x, particle.y);
-                        g.lineTo(particle.xt, particle.yt);
+                        if (waveCrests) {
+                            // A crest lies across the projected direction of travel.
+                            var dx = particle.xt - particle.x, dy = particle.yt - particle.y;
+                            var length = Math.sqrt(dx * dx + dy * dy);
+                            if (length > 0.18) {
+                                var half = 1.5 + 2 * i / (buckets.length - 1);
+                                var nx = -dy / length * half, ny = dx / length * half;
+                                g.moveTo(particle.xt - nx, particle.yt - ny);
+                                g.lineTo(particle.xt + nx, particle.yt + ny);
+                            }
+                        }
+                        else {
+                            g.moveTo(particle.x, particle.y);
+                            g.lineTo(particle.xt, particle.yt);
+                        }
                         particle.x = particle.xt;
                         particle.y = particle.yt;
                     });
+                    g.strokeStyle = "rgba(4, 14, 23, .38)";
+                    g.lineWidth = 2.15;
+                    g.stroke();
+                    g.strokeStyle = "rgba(" + trailColor + ", " + (.77 + .22 * i / (buckets.length - 1)) + ")";
+                    g.lineWidth = PARTICLE_LINE_WIDTH;
                     g.stroke();
                 }
             });
@@ -629,8 +673,17 @@
                     field.release();
                     return;
                 }
+                if (!workspaceVisible || animationPaused || document.hidden) {
+                    setTimeout(frame, 250);
+                    return;
+                }
                 evolve();
                 draw();
+                if (window.parent !== window && document.documentElement.classList.contains("ogw-workspace") &&
+                    !document.documentElement.dataset.ogwWeatherRendered) {
+                    document.documentElement.dataset.ogwWeatherRendered = "true";
+                    window.parent.postMessage("ogw-weather-rendered", window.location.origin);
+                }
                 setTimeout(frame, FRAME_RATE);
             }
             catch (e) {
@@ -660,9 +713,10 @@
         if (!field) return;
 
         var ctx = d3.select("#overlay").node().getContext("2d"), grid = (gridAgent.value() || {}).overlayGrid;
+        var colorBar = d3.select("#scale"), c = colorBar.node();
 
         µ.clearCanvas(d3.select("#overlay").node());
-        µ.clearCanvas(d3.select("#scale").node());
+        µ.clearCanvas(c);
         if (overlayType) {
             if (overlayType !== "off") {
                 ctx.putImageData(field.overlay, 0, 0);
@@ -672,8 +726,8 @@
 
         if (grid) {
             // Draw color bar for reference.
-            var colorBar = d3.select("#scale"), scale = grid.scale, bounds = scale.bounds;
-            var c = colorBar.node(), g = c.getContext("2d"), n = c.width - 1;
+            var scale = grid.scale, bounds = scale.bounds;
+            var g = c.getContext("2d"), n = c.width - 1;
             for (var i = 0; i <= n; i++) {
                 var rgb = scale.gradient(µ.spread(i / n, bounds[0], bounds[1]), 1);
                 g.fillStyle = "rgb(" + rgb[0] + "," + rgb[1] + "," + rgb[2] + ")";
@@ -689,6 +743,9 @@
                 var units = createUnitToggle(elementId, grid).value();
                 colorBar.attr("title", µ.formatScalar(value, units) + " " + units.label);
             });
+        }
+        if (document.documentElement.classList.contains("ogw-workspace")) {
+            c.dispatchEvent(new Event("weather-scale-change"));
         }
     }
 
@@ -713,9 +770,21 @@
      * Display the grid's validity date in the menu. Allow toggling between local and UTC time.
      */
     function showDate(grids) {
-        var date = new Date(validityDate(grids)), isLocal = d3.select("#data-date").classed("local");
+        var workspace = document.documentElement.classList.contains("ogw-workspace");
+        var date = workspace && grids ? grids.primaryGrid.date : new Date(validityDate(grids));
+        var isLocal = d3.select("#data-date").classed("local");
         var formatted = isLocal ? µ.toLocalISO(date) : µ.toUTCISO(date);
-        d3.select("#data-date").text(formatted + " " + (isLocal ? "Local" : "UTC"));
+        d3.select("#data-date").text(workspace && !grids ? "" : formatted + " " + (isLocal ? "Local" : "UTC"));
+        if (workspace && grids) {
+            var grid = grids.primaryGrid, wind = grid.type === "wind";
+            d3.select("#data-date")
+                .attr("data-valid-utc", grid.date.toISOString())
+                .attr("data-issue-utc", wind && grid.referenceTime ? grid.referenceTime.toISOString() : null)
+                .attr("data-forecast-hour", wind ? grid.forecastHour : null);
+        }
+        else if (workspace) {
+            d3.select("#data-date").attr("data-valid-utc", null).attr("data-issue-utc", null).attr("data-forecast-hour", null);
+        }
         d3.select("#toggle-zone").text("⇄ " + (isLocal ? "UTC" : "Local"));
     }
 
@@ -925,11 +994,17 @@
             globeAgent.submit(buildGlobe, attr);
         });
 
-        gridAgent.listenTo(configuration, "change", function() {
+        var workspace = document.documentElement.classList.contains("ogw-workspace");
+        var gridLayerKeys = ["date", "hour", "param", "surface", "level"];
+        var defaultGridSelection = {date: "current", hour: "", param: "wind", surface: "surface", level: "level", overlayType: "default"};
+        var lastGridSelection;
+        var restoringDefaultGrid = false;
+        gridAgent.listenTo(configuration, "change", function(model, options) {
+            if (options && options.restoreGrid) return;
             var changed = _.keys(configuration.changedAttributes()), rebuildRequired = false;
 
             // Build a new grid if any layer-related attributes have changed.
-            if (_.intersection(changed, ["date", "hour", "param", "surface", "level"]).length > 0) {
+            if (_.intersection(changed, gridLayerKeys).length > 0) {
                 rebuildRequired = true;
             }
             // Build a new grid if the new overlay type is different from the current one.
@@ -949,12 +1024,37 @@
             if (rebuildRequired) {
                 gridAgent.submit(buildGrids);
             }
+            else if (lastGridSelection && changed.indexOf("overlayType") >= 0) {
+                lastGridSelection.overlayType = overlayType;
+            }
         });
         gridAgent.on("submit", function() {
             showGridDetails(null);
         });
         gridAgent.on("update", function(grids) {
+            lastGridSelection = _.pick(configuration.attributes, gridLayerKeys.concat("overlayType"));
             showGridDetails(grids);
+            if (restoringDefaultGrid) {
+                restoringDefaultGrid = false;
+                report.error("所选时段或图层暂无数据，已显示可用的地表风场。");
+            }
+        });
+        gridAgent.on("reject", function(error) {
+            if (!workspace) return;
+            if (!lastGridSelection) {
+                if (!restoringDefaultGrid && error.status === 404 &&
+                    !_.isEqual(_.pick(configuration.attributes, gridLayerKeys.concat("overlayType")), defaultGridSelection)) {
+                    restoringDefaultGrid = true;
+                    configuration.save(defaultGridSelection);
+                }
+                return;
+            }
+            configuration.save(lastGridSelection, {restoreGrid: true});
+            showGridDetails(gridAgent.value());
+            startInterpolation();
+            report.error(error.status === 404
+                ? "所选时段或图层暂无数据，已保留上一视图。"
+                : "所选气象数据暂不可用，已保留上一视图。");
         });
         d3.select("#toggle-zone").on("click", function() {
             d3.select("#data-date").classed("local", !d3.select("#data-date").classed("local"));
@@ -982,7 +1082,7 @@
             animatorAgent.submit(animate, globeAgent.value(), field, gridAgent.value());
         });
         animatorAgent.listenTo(rendererAgent, "start", stopCurrentAnimation.bind(null, true));
-        animatorAgent.listenTo(gridAgent, "submit", stopCurrentAnimation.bind(null, false));
+        animatorAgent.listenTo(gridAgent, "submit", stopCurrentAnimation.bind(null, true));
         animatorAgent.listenTo(fieldAgent, "submit", stopCurrentAnimation.bind(null, false));
 
         overlayAgent.listenTo(fieldAgent, "update", function() {
@@ -1004,57 +1104,46 @@
         fieldAgent.on("update", updateLocationDetails);
         d3.select("#location-close").on("click", _.partial(clearLocationDetails, true));
 
-        // Modify menu depending on what mode we're in.
-        configuration.on("change:param", function(context, mode) {
-            d3.selectAll(".ocean-mode").classed("invisible", mode !== "ocean");
-            d3.selectAll(".wind-mode").classed("invisible", mode !== "wind");
-            switch (mode) {
-                case "wind":
-                    d3.select("#nav-backward-more").attr("title", "-1 Day");
-                    d3.select("#nav-backward").attr("title", "-3 Hours");
-                    d3.select("#nav-forward").attr("title", "+3 Hours");
-                    d3.select("#nav-forward-more").attr("title", "+1 Day");
-                    break;
-                case "ocean":
-                    d3.select("#nav-backward-more").attr("title", "-1 Month");
-                    d3.select("#nav-backward").attr("title", "-5 Days");
-                    d3.select("#nav-forward").attr("title", "+5 Days");
-                    d3.select("#nav-forward-more").attr("title", "+1 Month");
-                    break;
-            }
-        });
+        function selectAnimation(param, level) {
+            if (configuration.get("param") === param && configuration.get("level") === level) return;
+            // Wind, OSCAR currents, and GFS-Wave have independent archive dates.
+            configuration.save({param: param, surface: "surface", level: level,
+                date: "current", hour: "", overlayType: "default"});
+        }
 
-        // Add handlers for mode buttons.
-        d3.select("#wind-mode-enable").on("click", function() {
-            if (configuration.get("param") !== "wind") {
-                configuration.save({param: "wind", surface: "surface", level: "level", overlayType: "default"});
-            }
+        configuration.on("change", function(model) {
+            var param = model.get("param"), level = model.get("level");
+            var ocean = param === "ocean", wave = ocean && level === "waves";
+            d3.selectAll(".ocean-mode").classed("invisible", !ocean);
+            d3.selectAll(".wind-mode").classed("invisible", ocean);
+            d3.selectAll(".waves-overlay").classed("invisible", !wave);
+            d3.selectAll(".currents-overlay").classed("invisible", wave);
+            d3.select("#wind-mode-enable").classed("highlighted", !ocean);
+            d3.select("#ocean-mode-enable").classed("highlighted", ocean);
+            d3.select("#animate-wind").classed("highlighted", !ocean);
+            d3.select("#animate-currents").classed("highlighted", ocean && !wave);
+            d3.select("#animate-waves").classed("highlighted", wave);
+            var earlier = wave ? "首帧" : ocean ? "后退一个月" : "后退一天";
+            var later = wave ? "末帧" : ocean ? "前进一个月" : "前进一天";
+            d3.select("#nav-backward-more").attr("title", earlier);
+            d3.select("#nav-forward-more").attr("title", later);
+            d3.select("#nav-backward").attr("title", ocean && !wave ? "后退五天" : "后退三小时");
+            d3.select("#nav-forward").attr("title", ocean && !wave ? "前进五天" : "前进三小时");
         });
-        configuration.on("change:param", function(x, param) {
-            d3.select("#wind-mode-enable").classed("highlighted", param === "wind");
+        d3.select("#wind-mode-enable").on("click", function() {
+            if (configuration.get("param") !== "wind") selectAnimation("wind", "level");
         });
         d3.select("#ocean-mode-enable").on("click", function() {
-            if (configuration.get("param") !== "ocean") {
-                // When switching between modes, there may be no associated data for the current date. So we need
-                // find the closest available according to the catalog. This is not necessary if date is "current".
-                // UNDONE: this code is annoying. should be easier to get date for closest ocean product.
-                var ocean = {param: "ocean", surface: "surface", level: "currents", overlayType: "default"};
-                var attr = _.clone(configuration.attributes);
-                if (attr.date === "current") {
-                    configuration.save(ocean);
-                }
-                else {
-                    when.all(products.productsFor(_.extend(attr, ocean))).spread(function(product) {
-                        if (product.date) {
-                            configuration.save(_.extend(ocean, µ.dateToConfig(product.date)));
-                        }
-                    }).otherwise(report.error);
-                }
-                stopCurrentAnimation(true);  // cleanup particle artifacts over continents
-            }
+            if (configuration.get("param") !== "ocean") selectAnimation("ocean", "currents");
         });
-        configuration.on("change:param", function(x, param) {
-            d3.select("#ocean-mode-enable").classed("highlighted", param === "ocean");
+        d3.select("#animate-wind").on("click", function() {
+            if (configuration.get("param") !== "wind") selectAnimation("wind", "level");
+        });
+        d3.select("#animate-currents").on("click", function() { selectAnimation("ocean", "currents"); });
+        d3.select("#animate-waves").on("click", function() { selectAnimation("ocean", "waves"); });
+        d3.select("#option-pause-animation").on("click", function() {
+            animationPaused = !animationPaused;
+            d3.select(this).classed("highlighted", animationPaused).text(animationPaused ? "继续动画" : "暂停动画");
         });
 
         // Add logic to disable buttons that are incompatible with each other.
@@ -1086,9 +1175,6 @@
             bindButtonToConfiguration("#" + id, {param: "wind", surface: parts[0], level: parts[1]});
         });
 
-        // Add handlers for ocean animation types.
-        bindButtonToConfiguration("#animate-currents", {param: "ocean", surface: "surface", level: "currents"});
-
         // Add handlers for all overlay buttons.
         products.overlayTypes.forEach(function(type) {
             bindButtonToConfiguration("#overlay-" + type, {overlayType: type});
@@ -1096,22 +1182,42 @@
         bindButtonToConfiguration("#overlay-wind", {param: "wind", overlayType: "default"});
         bindButtonToConfiguration("#overlay-ocean-off", {overlayType: "off"});
         bindButtonToConfiguration("#overlay-currents", {overlayType: "default"});
+        bindButtonToConfiguration("#overlay-wave-period", {overlayType: "default"});
 
         // Add handlers for all projection buttons.
         globes.keys().forEach(function(p) {
             bindButtonToConfiguration("#" + p, {projection: p, orientation: ""}, ["projection"]);
         });
 
-        // When touch device changes between portrait and landscape, rebuild globe using the new view size.
-        d3.select(window).on("orientationchange", function() {
-            view = µ.view();
-            globeAgent.submit(buildGlobe, configuration.get("projection"));
-        });
+        if (workspace) {
+            window.addEventListener("message", function(event) {
+                if (event.origin !== window.location.origin || event.source !== window.parent) return;
+                if (event.data === "ogw-weather-show") workspaceVisible = true;
+                if (event.data === "ogw-weather-hide") workspaceVisible = false;
+            });
+            // The embedded canvas can change size when a parent panel opens without a device rotation.
+            window.addEventListener("resize", _.debounce(function() {
+                var next = µ.view();
+                if (!next.width || !next.height || (next.width === view.width && next.height === view.height)) return;
+                var previous = view;
+                view = next;
+                d3.selectAll(".fill-screen").attr("width", view.width).attr("height", view.height);
+                inputController.resize(previous);
+            }, 45));
+        } else {
+            d3.select(window).on("orientationchange", function() {
+                view = µ.view();
+                globeAgent.submit(buildGlobe, configuration.get("projection"));
+            });
+        }
     }
 
     function start() {
         // Everything is now set up, so load configuration from the hash fragment and kick off change events.
         configuration.fetch();
+        if (document.documentElement.classList.contains("ogw-workspace") && window.parent !== window) {
+            window.parent.postMessage("ogw-weather-ready", window.location.origin);
+        }
     }
 
     when(true).then(init).then(start).otherwise(report.error);

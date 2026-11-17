@@ -2,10 +2,13 @@
 
 import contextlib
 from datetime import datetime, timedelta
+from importlib import import_module
 from importlib.metadata import version
+from importlib.util import find_spec
 import json
 import math
 import os
+from pathlib import Path
 import statistics
 import sys
 
@@ -43,20 +46,24 @@ def contiguous_tail(observations, grain):
     return tail
 
 
-def predict(model, history, horizon, grain):
+def predict(model, history, horizon, grain, statistical_method=None):
     import numpy as np
 
     values = np.asarray(history, dtype=np.float64)
     if model == "statsforecast":
-        from statsforecast.models import Naive, SeasonalNaive
+        from statsforecast.models import AutoARIMA, AutoETS, Naive, SeasonalNaive
 
         period = 12 if grain == "month" else 7
         seasonal = len(values) >= 2 * period
-        estimator = SeasonalNaive(season_length=period) if seasonal else Naive()
+        estimators = {"AutoETS": AutoETS, "AutoARIMA": AutoARIMA}
+        if statistical_method in estimators:
+            estimator = estimators[statistical_method](season_length=period)
+        else:
+            estimator = SeasonalNaive(season_length=period) if seasonal else Naive()
         forecast = estimator.forecast(y=values, h=horizon)
         return forecast["mean"], None, {
             "name": model, "version": version("statsforecast"),
-            "method": "SeasonalNaive" if seasonal else "Naive", "device": "cpu",
+            "method": type(estimator).__name__, "device": "cpu",
         }
 
     import torch
@@ -91,6 +98,82 @@ def predict(model, history, horizon, grain):
     bands = quantiles[0][0].detach().cpu().numpy()
     return bands[:, 1], bands, {
         "name": model, "version": version("chronos-forecasting"), "checkpoint": checkpoint, "revision": revision, "device": device,
+    }
+
+
+def available_models(requested):
+    """Probe the installed runtime and exact offline snapshot, without loading weights."""
+    ready = ["describe"]
+    for capability, module in (("cluster", "sklearn.cluster"), ("statsforecast", "statsforecast.models")):
+        if capability != "cluster" and capability not in requested:
+            continue
+        try:
+            import_module(module)
+            ready.append(capability)
+        except Exception:
+            continue
+    for model in ("timesfm", "chronos2"):
+        module = "timesfm" if model == "timesfm" else "chronos"
+        if model not in requested or not all(find_spec(name) for name in (module, "torch", "huggingface_hub")):
+            continue
+        try:
+            import torch
+            from huggingface_hub import snapshot_download
+
+            import_module(module)
+
+            if os.environ.get("OGW_ANALYSIS_DEVICE") == "cuda" and not torch.cuda.is_available():
+                continue
+            checkpoint, revision = CHECKPOINTS[model]
+            folder = Path(snapshot_download(checkpoint, revision=revision, local_files_only=True))
+            if (folder / "config.json").is_file() and any(
+                path.is_file() for pattern in ("*.safetensors", "pytorch_model*.bin") for path in folder.glob(pattern)
+            ):
+                ready.append(model)
+        except Exception:
+            continue
+    return ready
+
+
+def choose_model(series, horizon, grain):
+    """Compare cheap candidates on three identical non-overlapping validation windows."""
+    from statsforecast.models import AutoARIMA, AutoETS
+
+    period = 12 if grain == "month" else 7
+    candidates = [("baseline", None), ("AutoETS", AutoETS), ("AutoARIMA", AutoARIMA)]
+    start = len(series) - 3 * horizon
+    if start < max(24, 2 * period):
+        raise InputError("自动选模需要至少 24 期训练数据和 3 个完整的验证窗口。")
+    outcomes = []
+    for name, estimator in candidates:
+        actual, predictions = [], []
+        try:
+            for cutoff in range(start, len(series), horizon):
+                history = [value for _, value in series[:cutoff]]
+                if estimator is None:
+                    forecast, _, _ = predict("statsforecast", history, horizon, grain)
+                else:
+                    import numpy as np
+
+                    forecast = estimator(season_length=period).forecast(y=np.asarray(history, dtype=np.float64), h=horizon)["mean"]
+                if len(forecast) != horizon or not all(math.isfinite(value) for value in forecast):
+                    raise ValueError("Invalid forecast")
+                actual.extend(value for _, value in series[cutoff:cutoff + horizon])
+                predictions.extend(forecast)
+            outcomes.append({"method": name, "status": "ok", **error_metrics(actual, predictions)})
+        except Exception:
+            if estimator is None:
+                raise
+            outcomes.append({"method": name, "status": "unavailable"})
+    baseline = outcomes[0]
+    # Keep the baseline for ties and improvements under 5%.
+    improved = [entry for entry in outcomes[1:] if entry["status"] == "ok" and entry["mae"] < baseline["mae"] * 0.95]
+    winner = min(improved, key=lambda entry: (entry["mae"], entry["rmse"], entry["method"])) if improved else baseline
+    return {
+        "method": "rolling_origin", "selected_method": winner["method"], "selection_metric": "mae",
+        "horizon": horizon, "folds": 3, "min_relative_improvement": 0.05, "version": version("statsforecast"),
+        "baseline_method": "SeasonalNaive", "candidates": outcomes,
+        "cutoffs": [series[cutoff - 1][0].isoformat() for cutoff in range(start, len(series), horizon)],
     }
 
 
@@ -138,12 +221,26 @@ def run(task):
 
     grain, horizon = source["grain"], plan["horizon"]
     series = contiguous_tail(observations, grain)
+    if plan.get("horizonUnit", grain) != grain:
+        raise InputError("预测期数单位必须与输入序列粒度一致。")
+    if operation == "select_model":
+        return base | {"grain": grain, "model_selection": choose_model(series, horizon, grain)}
     testing = operation in ("backtest", "compare")
     history = series[:-horizon] if testing else series
     if len(history) < 8:
         raise InputError("留出窗口后不足 8 条训练观测，请缩短预测步数或扩大时间范围。")
     training_values = [value for _, value in history]
-    predicted, quantiles, identity = predict(plan["model"], training_values, horizon, grain)
+    model_selection = choose_model(series, horizon, grain) if operation == "forecast" and plan.get("strategy") == "auto" else None
+    try:
+        predicted, quantiles, identity = predict(plan["model"], training_values, horizon, grain,
+                                                model_selection["selected_method"] if model_selection else None)
+        if not all(math.isfinite(value) for value in predicted):
+            raise ValueError("Invalid forecast")
+    except Exception:
+        if not model_selection or model_selection["selected_method"] == "baseline":
+            raise
+        model_selection["refit_fallback"] = "SeasonalNaive"
+        predicted, quantiles, identity = predict("statsforecast", training_values, horizon, grain)
     if len(predicted) != horizon:
         raise RuntimeError("The model returned the wrong horizon")
     date = history[-1][0]
@@ -161,21 +258,30 @@ def run(task):
         "training_rows": len(history), "training_start": history[0][0].isoformat(),
         "training_end": history[-1][0].isoformat(),
     }
+    if model_selection:
+        output["model_selection"] = model_selection
     if testing:
         actual = [value for _, value in series[-horizon:]]
         output["evaluation"] = {"method": "chronological_holdout", **error_metrics(actual, predicted)}
         if operation == "compare":
-            if plan["model"] == "statsforecast":
+            period = 12 if grain == "month" else 7
+            if plan["model"] == "statsforecast" or len(training_values) < 2 * period:
                 baseline = [training_values[-1]] * horizon
                 baseline_id = {"name": "persistence", "method": "last_observation", "device": "cpu"}
             else:
-                baseline, _, baseline_id = predict("statsforecast", training_values, horizon, grain)
+                baseline = [training_values[-period + i % period] for i in range(horizon)]
+                baseline_id = {"name": "seasonal_naive", "method": "SeasonalNaive", "version": "reference-1", "device": "cpu"}
             output["baseline"] = {"model": baseline_id, **error_metrics(actual, baseline)}
     return output
 
 
 def main():
     try:
+        if len(sys.argv) > 1 and sys.argv[1] == "--probe":
+            with contextlib.redirect_stdout(sys.stderr):
+                models = available_models(sys.argv[2:])
+            print(json.dumps(models))
+            return
         task = json.load(sys.stdin)
         with contextlib.redirect_stdout(sys.stderr):
             result = run(task)

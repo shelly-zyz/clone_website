@@ -69,11 +69,13 @@ export async function readDataAgent<T>(run: (client: PoolClient) => Promise<T>):
   const client = await connectDataAgent(globalForDataAgent.dataAgentPool);
   let discard: Error | undefined;
   try {
-    await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
-    await client.query("SET LOCAL ROLE green_agent_ro");
-    await client.query("SET LOCAL search_path = pg_catalog");
-    await client.query("SET LOCAL timezone = 'UTC'");
-    await client.query("SET LOCAL statement_timeout = '4s'");
+    await client.query(`
+      BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;
+      SET LOCAL ROLE green_agent_ro;
+      SET LOCAL search_path = pg_catalog;
+      SET LOCAL timezone = 'UTC';
+      SET LOCAL statement_timeout = '4s';
+    `);
     const result = await run(client);
     await client.query("COMMIT");
     return result;

@@ -17,6 +17,11 @@
     <link rel="apple-touch-icon" sizes="120x120" href="/earth/iphone-icon.png"/>
     <link rel="apple-touch-icon" sizes="152x152" href="/earth/ipad-icon.png"/>
     <link rel="stylesheet" type="text/css" href="/earth/styles/styles.css"/>
+    <script>
+        if (new URLSearchParams(location.search).has("workspace")) {
+            document.documentElement.classList.add("ogw-workspace");
+        }
+    </script>
 
     <link rel="alternate" hreflang="x-default" href="http://earth.nullschool.net/"/>
     <link rel="alternate" hreflang="ja" href="http://earth.nullschool.net/jp/"/>
@@ -74,7 +79,8 @@
                 class="text-button" id="nav-forward"> › </span> – <span
                 class="text-button" id="nav-forward-more"> » </span><span
                 class="text-button" id="show-location" title="当前位置">〖◯〗</span><span
-                class="text-button" id="option-show-grid" title="显示或隐藏网格点">网格</span>
+                class="text-button" id="option-show-grid" title="显示或隐藏网格点">网格</span> <span
+                class="text-button" id="option-pause-animation">暂停动画</span>
             </p>
             <p>模式 | <span
                 class="text-button" id="wind-mode-enable">大气</span> – <span
@@ -103,14 +109,17 @@
                 class="text-button" id="overlay-total_cloud_water" title="云水量">云水量</span> – <span
                 class="text-button" id="overlay-mean_sea_level_pressure" title="海平面气压">海平面气压</span>
             </p>
-            <p class="ocean-mode invisible">动画 | <span
-                class="text-button" id="animate-currents" title="海流">海流</span>
+            <p>动画 | <span
+                class="text-button" id="animate-wind">风</span> – <span
+                class="text-button" id="animate-currents">洋流</span> – <span
+                class="text-button" id="animate-waves">波浪</span>
             </p>
             <p class="ocean-mode invisible">覆盖指标 | <span
                 class="text-button" id="overlay-ocean-off">无</span> – <span
-                class="text-button" id="overlay-currents" title="海流">海流</span>
+                class="text-button currents-overlay" id="overlay-currents" title="洋流速度">洋流速度</span><span
+                class="text-button waves-overlay invisible" id="overlay-wave-period" title="主波周期">主波周期</span> <span
+                class="text-button waves-overlay invisible" id="overlay-wave_height" title="有效波高">有效波高</span>
             </p>
-            <p class="ocean-mode invisible"><span style="visibility:hidden">覆盖指标</span> |</p>
             <p>投影 | <span
                 class="proj text-button" id="atlantis" title="亚特兰蒂斯投影">A</span> – <span
                 class="proj text-button" id="azimuthal_equidistant" title="方位等距投影">AE</span> – <span
@@ -130,26 +139,19 @@
         </div>
     </div>
 
-    <script src="//cdnjs.cloudflare.com/ajax/libs/underscore.js/1.6.0/underscore-min.js" charset="utf-8"></script>
-    <script src="//cdnjs.cloudflare.com/ajax/libs/backbone.js/1.1.0/backbone-min.js" charset="utf-8"></script>
-    <script src="//cdnjs.cloudflare.com/ajax/libs/topojson/1.1.0/topojson.min.js" charset="utf-8"></script>
-    <script src="//cdnjs.cloudflare.com/ajax/libs/d3/3.3.10/d3.min.js" charset="utf-8"></script>
+    <script defer src="/earth/libs/underscore.js/1.6.0/underscore.js" charset="utf-8"></script>
+    <script defer src="/earth/libs/backbone.js/1.1.0/backbone.js" charset="utf-8"></script>
+    <script defer src="/earth/libs/topojson/1.1.0/topojson.js" charset="utf-8"></script>
+    <script defer src="/earth/libs/d3/3.3.10/d3.js" charset="utf-8"></script>
 
-<!--
-    <script src="/earth/libs/underscore.js/1.6.0/underscore.js" charset="utf-8"></script>
-    <script src="/earth/libs/backbone.js/1.1.0/backbone.js" charset="utf-8"></script>
-    <script src="/earth/libs/topojson/1.1.0/topojson.js" charset="utf-8"></script>
-    <script src="/earth/libs/d3/3.3.10/d3.js" charset="utf-8"></script>
--->
+    <script defer src="/earth/libs/d3.geo/0.0.0/d3.geo.projection.v0.min.js" charset="utf-8"></script>
+    <script defer src="/earth/libs/d3.geo/0.0.0/d3.geo.polyhedron.v0.min.js" charset="utf-8"></script>
+    <script defer src="/earth/libs/when/2.6.0/when.js" charset="utf-8"></script>
 
-    <script src="/earth/libs/d3.geo/0.0.0/d3.geo.projection.v0.min.js" charset="utf-8"></script>
-    <script src="/earth/libs/d3.geo/0.0.0/d3.geo.polyhedron.v0.min.js" charset="utf-8"></script>
-    <script src="/earth/libs/when/2.6.0/when.js" charset="utf-8"></script>
-
-    <script src="/earth/libs/earth/1.0.0/micro.js" charset="utf-8"></script>
-    <script src="/earth/libs/earth/1.0.0/globes.js" charset="utf-8"></script>
-    <script src="/earth/libs/earth/1.0.0/products.js" charset="utf-8"></script>
-    <script src="/earth/libs/earth/1.0.0/earth.js" charset="utf-8"></script>
+    <script defer src="/earth/libs/earth/1.0.0/micro.js" charset="utf-8"></script>
+    <script defer src="/earth/libs/earth/1.0.0/globes.js" charset="utf-8"></script>
+    <script defer src="/earth/libs/earth/1.0.0/products.js" charset="utf-8"></script>
+    <script defer src="/earth/libs/earth/1.0.0/earth.js" charset="utf-8"></script>
 
 </body>
 </html>

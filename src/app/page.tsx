@@ -1,5 +1,5 @@
-import { MapAppShell } from "@/components/opengridworks/MapAppShell";
+import { IntroLanding } from "@/components/opengridworks/IntroLanding";
 
 export default function Home() {
-  return <MapAppShell />;
+  return <IntroLanding />;
 }

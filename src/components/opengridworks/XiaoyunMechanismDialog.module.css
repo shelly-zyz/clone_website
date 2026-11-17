@@ -1,0 +1,37 @@
+.dialog {
+  color-scheme: light;
+  width: min(740px, calc(100% - 24px));
+  max-height: calc(100svh - 24px);
+  margin: auto;
+  overflow: auto;
+  border: 1px solid #d7e1e9;
+  border-radius: 12px;
+  padding: clamp(14px, 3vw, 25px);
+  background: #fff;
+  color: #142638;
+  box-shadow: 0 22px 85px #13263c38;
+}
+
+.dialog::backdrop { background: #07182cb8; }
+.header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.header h2 { margin: 0; font-size: clamp(1.15rem, 3vw, 1.5rem); font-weight: 650; }
+.header button, .camera button { display: grid; flex: none; width: 34px; height: 34px; place-items: center; border-radius: 5px; background: #edf3f7; cursor: pointer; }
+.header button:hover, .camera button:hover { background: #dceaf1; }
+.introduction { margin: 8px 0 15px; color: #42596c; line-height: 1.55; }
+.viewer { position: relative; overflow: hidden; border: 1px solid #dce6ed; border-radius: 7px; background-color: #eef3f7; }
+.canvas { display: block; width: 100%; height: clamp(185px, 42svh, 370px); cursor: grab; touch-action: none; }
+.canvas:active { cursor: grabbing; }
+.camera { position: absolute; right: 8px; bottom: 8px; display: flex; gap: 3px; border-radius: 6px; background: #fff; padding: 3px; }
+.hint { position: absolute; bottom: 8px; left: 9px; margin: 0; font-size: .75rem; color: #41586b; pointer-events: none; }
+.parts { display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 13px 0; list-style: none; }
+.parts button { border-radius: 5px; padding: 6px 9px; border: 1px solid #d6e1ea; color: #20384b; cursor: pointer; font-size: .86rem; }
+.parts button[aria-current] { border-color: #087f86; color: #fff; background: #087f86; }
+.parts span { margin-right: 3px; font-variant-numeric: tabular-nums; }
+.explanation { border-left: 3px solid #087f86; background: #f2f8f8; padding: 11px 13px; line-height: 1.5; }
+.explanation h3 { margin: 0 0 3px; font-weight: 650; }
+.explanation p { margin: 0; }
+.takeaway { margin: 12px 0 0; color: #42596c; line-height: 1.5; }
+
+@media (max-width: 540px) {
+  .canvas { height: clamp(150px, 55vw, 240px); }
+}

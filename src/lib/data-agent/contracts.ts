@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { regionalWeatherModel, weatherRegionCode } from "../weather-model-forecast";
 
 export const topicSchema = z.enum(["meteo", "power", "carbon"]);
 export type Topic = z.infer<typeof topicSchema>;
@@ -21,23 +22,42 @@ const commonFilters = {
 };
 
 export const dataQuerySchema = z.discriminatedUnion("topic", [
-  z.strictObject({ topic: z.literal("meteo"), ...commonFilters, issue_time: issueTime.optional() }),
+  z.strictObject({ topic: z.literal("meteo"), ...commonFilters, issue_time: issueTime.optional(),
+    model: regionalWeatherModel.optional(), region_code: weatherRegionCode.optional() }),
   z.strictObject({ topic: z.literal("power"), ...commonFilters,
+    province_comparison: z.literal(true).optional(),
     region_code: z.string().regex(/^\d{12}$/).default("000000000000"), product: z.enum(powerProducts).optional() }),
   z.strictObject({ topic: z.literal("carbon"), ...commonFilters }),
-]).refine(({ start_date, end_date }) => !start_date || !end_date || start_date <= end_date, "起始日期必须早于或等于结束日期");
+]).refine(query => query.topic !== "meteo" || Boolean(query.model) === Boolean(query.region_code),
+  "区域气象预报须同时指定模型和地区。").refine(({ start_date, end_date }) => !start_date || !end_date || start_date <= end_date, "起始日期必须早于或等于结束日期").refine(query =>
+  query.topic !== "power" || !query.province_comparison || (query.region_code === "000000000000" && query.start_date?.endsWith("-01") &&
+    query.end_date && query.start_date.slice(0, 7) === query.end_date.slice(0, 7)), "省级比较须指定同一月份，起始日为当月首日且不限定单一地区。");
 
 export type DataQuery = z.infer<typeof dataQuerySchema>;
+export type QueryRange = { start_date: string; end_date: string };
 
 const sessionScope = z.strictObject({ project_id: z.uuid(), session_id: z.uuid(), revision: z.number().int().min(0).max(2147483646) });
 export type SessionScope = z.infer<typeof sessionScope>;
+
+const metricRulesSchema = z.object({
+  id: z.string(),
+  period: z.enum(["daily_rate", "monthly_value", "year_to_date", "monthly_yoy", "year_to_date_yoy"]),
+  aggregation: z.literal("published_values_only"),
+  missing: z.literal("preserve_null"),
+  forecast: z.enum(["same_series", "unsupported"]),
+  lineage: z.string(),
+  interpretation: z.string(),
+});
+export type MetricRules = z.infer<typeof metricRulesSchema>;
 
 export const metricSchema = z.object({
   metric_code: z.string(), name: z.string(), unit: z.string(), time_grain: z.string(),
   data_identity: z.enum(["forecast", "official_statistics", "research_estimate"]),
   source_name: z.string(), definition: z.string(), review_status: z.literal("approved"),
   series_codes: z.array(z.string()).nonempty().optional(),
+  rules: metricRulesSchema.optional(),
 });
+export type PublishedMetric = z.infer<typeof metricSchema>;
 
 export const dataRequestSchema = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("catalog"), topic: topicSchema.optional() }),

@@ -1,0 +1,4 @@
+numpy
+netCDF4
+scitools-iris
+earthkit-data>=1.3,<2

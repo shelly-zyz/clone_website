@@ -42,20 +42,33 @@ const chartRequest = { project_id, result_id, chart: "line" };
 const charts = {};
 await withMcp("/api/mcp/visualization", key, async client => {
   const { tools } = await client.listTools();
-  assert.deepEqual(tools.map(tool => tool.name).sort(), ["build_power_globe_scene", "render_antv", "render_echarts", "render_vchart"]);
+  const names = tools.map(tool => tool.name);
+  for (const name of ["build_power_globe_scene", "render_antv", "render_custom_chart", "render_echarts", "render_vchart", "viz.create_plan"]) {
+    assert.ok(names.includes(name), name);
+  }
   for (const renderer of ["echarts", "vchart", "antv"]) {
     const reply = await client.callTool({ name: `render_${renderer}`, arguments: chartRequest });
     assert.ok(!reply.isError, JSON.stringify(reply));
     assert.deepEqual(reply.structuredContent.data_ref, data.data_ref);
     charts[renderer] = reply.structuredContent;
   }
+  const custom = await client.callTool({ name: "render_custom_chart", arguments: { project_id, result_id, template: "ribbon", palette: "ice" } });
+  assert.ok(!custom.isError, JSON.stringify(custom));
+  assert.deepEqual(custom.structuredContent.data_ref, data.data_ref);
+  assert.deepEqual(custom.structuredContent.options.series[0].data, data.rows.map(row => row.value === null ? null : Number(row.value)));
+  assert.match(custom.structuredContent.story.sections.at(-1).text, /发布/);
+});
+await withMcp("/api/mcp/visualization", "x".repeat(43), async client => {
+  const denied = await client.callTool({ name: "render_custom_chart", arguments: { project_id, result_id, template: "ribbon" } });
+  assert.equal(denied.isError, true);
+  assert.ok(!denied.structuredContent?.options);
 });
 const scene = await post(api.visual, { action: "scene", project_id, renderer: "three", limit: 60 }, key);
 assert.ok(scene.options.count > 0);
 assert.equal(scene.options.positions.length, 3 * scene.options.count);
 const map = await post(api.visual, { action: "scene", project_id, renderer: "maplibre" }, key);
 assert.equal(map.options.style.projection.type, "globe");
-console.log("PASS three chart MCP adapters and two real-source globe configurations");
+console.log("PASS four chart MCP tools, project isolation, and two real-source globe configurations");
 
 const vizSession = await post(api.visual, { action: "create_session", project_id }, key);
 const first = await post(api.visual, { action: "ask_session", ...vizSession, result_id, instruction: "用 ECharts 折线图画出趋势" }, key);

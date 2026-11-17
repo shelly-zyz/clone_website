@@ -89,7 +89,10 @@ async function main() {
   await mkdir(outputDir, { recursive: true });
 
   const wgrib2 = spawnSync("wgrib2", ["-version"], { encoding: "utf8", windowsHide: true });
-  if (wgrib2.error || wgrib2.status !== 0) {
+  const versionOutput = `${wgrib2.stdout ?? ""}\n${wgrib2.stderr ?? ""}`;
+  const wgrib2Available = !wgrib2.error
+    && (wgrib2.status === 0 || /\b\d+\.\d+\.\d+\b/.test(versionOutput));
+  if (!wgrib2Available) {
     await writeFallbackManifest("wgrib2 is not installed or not available; showing the built-in sample weather field.");
     return;
   }

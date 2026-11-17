@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createHash, timingSafeEqual } from "node:crypto";
+import { auditBusiness } from "@/lib/agent-runtime/policy.server";
 import { DataAgentError } from "./database.server";
 
 const loopbackHosts = ["localhost", "127.0.0.1", "[::1]"];
@@ -16,17 +17,41 @@ function matchesRequestHost(origin: string, host: string | null, requestUrl: URL
 }
 
 export function authorizeDataAgent(request: Request, reviewer = false) {
+  const denied = (reason: string) => auditBusiness({ actor: reviewer ? "review" : "business-api", action: "authorize", outcome: "denied", reason });
   const token = (reviewer ? process.env.DATA_AGENT_REVIEW_TOKEN : process.env.DATA_AGENT_TOKEN)?.trim();
   const url = new URL(request.url);
   const origin = request.headers.get("origin");
   if (origin && origin !== url.origin && !matchesRequestHost(origin, request.headers.get("host"), url)) {
+    denied("origin");
     return Response.json({ error: "来源不受信任。" }, { status: 403 });
   }
   if (!reviewer && !token && process.env.NODE_ENV !== "production" && loopbackHosts.includes(url.hostname)) return null;
   const supplied = request.headers.get("authorization");
   const hash = (value: string) => createHash("sha256").update(value).digest();
   if (token && supplied && timingSafeEqual(hash(supplied), hash(`Bearer ${token}`))) return null;
-  return Response.json({ error: "数据库 Agent 需要服务端授权。" }, { status: 401 });
+  denied("credential");
+  return Response.json({ error: "业务接口需要服务端授权。" }, { status: 401 });
+}
+
+// This preview listener is bound to IPv4 loopback and reached through authenticated SSH.
+// The exact origin and Fetch Metadata keep other browser origins outside that trust boundary.
+export function isXiaoyunSshPreviewRequest(request: Request) {
+  const port = process.env.PORT;
+  if (process.env.OGW_XIAOYUN_SSH_PREVIEW !== "true" || process.env.HOSTNAME !== "127.0.0.1"
+    || !port || request.method !== "POST" || request.headers.has("authorization")) return false;
+
+  const host = `127.0.0.1:${port}`;
+  const url = new URL(request.url);
+  return url.protocol === "http:" && url.port === port && loopbackHosts.includes(url.hostname)
+    && request.headers.get("host") === host && request.headers.get("origin") === `http://${host}`
+    && request.headers.get("sec-fetch-site") === "same-origin"
+    && request.headers.get("x-forwarded-host") === host
+    && request.headers.get("x-forwarded-proto") === "http"
+    && request.headers.get("x-forwarded-for") === "127.0.0.1";
+}
+
+export function authorizeXiaoyun(request: Request) {
+  return isXiaoyunSshPreviewRequest(request) ? null : authorizeDataAgent(request);
 }
 
 export function dataAgentErrorResponse(error: unknown) {
