@@ -82,3 +82,10 @@
   .viewport { inset: 105px 10px var(--og-globe-nav-space); }
   .insetLabel { bottom: 125px; width: 64px; font-size: 10px; }
 }
+
+.status button {
+  display: block;
+  margin: 8px auto 0;
+  color: #9ee3e7;
+  text-decoration: underline;
+}

@@ -46,20 +46,17 @@ import type { LucideIcon } from "lucide-react";
 import { CarbonAtlasControls, CarbonTimeline } from "./CarbonAtlasControls";
 import { CarbonSceneSwitcher } from "./CarbonSceneSwitcher";
 import {
-  PowerAnnualPanel, PowerMapHeading, PowerMobileSelection, PowerMonthlyPanel, PowerPeriodSwitcher, PowerViews,
+  PowerAnalysisFilters, PowerAnalysisRail, PowerMapCaption, PowerMapLegend, PowerTimeline, PowerViews,
 } from "./PowerRegionPanel";
 import { useCarbonAtlas } from "@/hooks/use-carbon-atlas";
-import { useReportedGeneration } from "@/hooks/use-reported-generation";
+import { usePowerAnalysis } from "@/hooks/use-power-analysis";
+import powerAnalysisStyles from "./PowerRegionPanel.module.css";
 import { useWorkspaceSelection, type WorkspaceSelection } from "@/hooks/use-workspace-selection";
 import { chinaProvinces, findChinaProvince } from "@/lib/china-provinces";
-import {
-  chinaPowerAnnualFrame, chinaPowerMonthlyDemoFrame, type ProvincePowerFrame,
-} from "@/lib/china-power-statistics";
 import { carbonAtlasCamera, carbonAtlasCenter, observeMapViewport, overviewZoom, type MapOverview } from "@/lib/globe-viewport";
 import {
   analysisContextHref, readGridPoint, readWorkspaceCamera, replaceWorkspaceContext, type WorkspaceContext,
 } from "@/lib/workspace-context";
-import { generationSeries } from "@/lib/topic-analysis/history";
 import { GlobeNavigation } from "@/components/opengridworks/GlobeNavigation";
 import { GlobeLoading } from "@/components/opengridworks/GlobeLoading";
 import { readReplayRegion, replayRegionAt, replayRegionOptions } from "@/lib/weather-replay/regions";
@@ -139,6 +136,7 @@ type BooleanRecord<T extends string> = Record<T, boolean>;
 
 type ProjectMode = Exclude<WorkspaceTopic, "economy">;
 type PowerView = NonNullable<WorkspaceContext["powerView"]>;
+const PowerThematicMap = dynamic(() => import("./PowerThematicMap").then(module => module.PowerThematicMap));
 const PowerStatisticsMap = dynamic(() => import("./PowerStatisticsMap").then(module => module.PowerStatisticsMap));
 const WeatherResourceScene = dynamic(() => import("./WeatherResourceScene").then(module => module.WeatherResourceScene));
 const WeatherComparisonPanel = dynamic(
@@ -311,16 +309,7 @@ const carbonTargets = [
     }),
   ...chinaProvinces.map(province => ({ id: province.code, label: province.name, center: province.center, zoom: 5.25 })),
 ];
-const generationTechnologies = (product: string): TechnologyKey[] => {
-  switch (product) {
-    case "wind-power": return ["wind", "offshore"];
-    case "solar-power": return ["solar"];
-    case "hydro-power": return ["hydro"];
-    case "nuclear-power": return ["nuclear"];
-    case "thermal-power": return ["coal", "gas", "oil", "biomass"];
-    default: return [];
-  }
-};
+
 
 const globeSpinStepDurationMs = 1000;
 const globeSpinSecondsPerCycle = 240;
@@ -5508,7 +5497,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
   const [screenshotRequest, setScreenshotRequest] = useState(0);
   const [cinematic, setCinematic] = useState(false);
   const [cardsOpen, setCardsOpen] = useState(false);
-  const [powerForecast, setPowerForecast] = useState(false);
+  const [powerBin, setPowerBin] = useState<{ key: string; value: number | null } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const generationLoadStartedRef = useRef(false);
@@ -5528,7 +5517,6 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
     setHoverTooltip(null);
     setCardsOpen(false);
     setCinematic(false);
-    setPowerForecast(false);
     setFocusedRegion(regionTargets.find(item => item.id === context.region)?.id ?? defaultRegion.id);
     setActiveRegion(regions.find(item => item.id === context.region) ?? defaultRegion);
     if (topic === "power" || topic === "carbon") setActiveMapTheme(themeForContext(context, topic));
@@ -5560,35 +5548,24 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
   const powerView = context.powerView ?? "facilities";
   const selectedProvince = activeProject === "power" ? findChinaProvince(context.region)?.code : undefined;
   const selectedGrid = activeProject === "carbon" ? readGridPoint(context.grid) : null;
-  const powerProduct = generationSeries.find(item => item.id === context.product)?.id ?? "electricity";
   const statsActive = activeProject === "power" && powerView !== "facilities";
-  const monthlyGeneration = statsActive && powerView === "generation"
-    && (context.powerPeriod === "monthly" || Boolean(context.month || context.version || context.powerDemo || powerProduct !== "electricity"));
-  const monthlyDemo = monthlyGeneration && context.powerDemo === "monthly";
+  const powerAnalysis = usePowerAnalysis(statsActive, context);
+  const powerPresentation = context.powerPresentation;
+  const powerSelection = useMemo(() => selectedProvince ? [selectedProvince,
+    ...new Set((context.powerPeers ?? "").split(",").flatMap(id => {
+      const code = findChinaProvince(id)?.code;
+      return code && code !== selectedProvince ? [code] : [];
+    }))].slice(0, 3) : [], [context.powerPeers, selectedProvince]);
+  const powerPeers = useMemo(() => powerSelection.slice(1), [powerSelection]);
+  const analysisBinKey = [powerPresentation, powerAnalysis.source, powerAnalysis.grain, powerAnalysis.capacity,
+    powerAnalysis.product.id, powerAnalysis.measure, powerAnalysis.frame.encoding].join(":");
+  const currentPowerBin = powerBin?.key === analysisBinKey ? powerBin.value : null;
   const { frames: carbonFrames, frame: carbonFrame, previousFrame: previousCarbonFrame, manifest: carbonManifest,
     scaleMax: carbonScale, sector: carbonSector, date: carbonDate, error: carbonError, pending: carbonLoading, retry: retryCarbon,
   } = useCarbonAtlas(activeProject === "carbon", context);
-  const reported = useReportedGeneration(monthlyGeneration && !monthlyDemo, context.month, powerProduct, context.version);
-  const annualPowerFrame = useMemo(
-    () => statsActive && !monthlyGeneration ? chinaPowerAnnualFrame(powerView, context.year) : undefined,
-    [context.year, monthlyGeneration, powerView, statsActive],
-  );
-  const monthlyPowerFrame = useMemo<ProvincePowerFrame | undefined>(() => monthlyDemo
-    ? chinaPowerMonthlyDemoFrame(context.month ?? reported.month, powerProduct)
-    : monthlyGeneration ? {
-    label: generationSeries.find(item => item.id === powerProduct)?.name ?? "月度发电量",
-    unit: "亿千瓦时",
-    period: reported.month || "月度发布",
-    scaleMax: reported.regional?.scaleMax ?? 0,
-    regions: chinaProvinces.map(({ code }) => ({
-      code,
-      value: reported.regional?.regions.find(row => row.code === code)?.value ?? null,
-    })),
-  } : undefined, [monthlyDemo, context.month, monthlyGeneration, powerProduct, reported.month, reported.regional]);
-  const provinceFrame = annualPowerFrame ?? monthlyPowerFrame;
   const economyActive = activeProject === "economy";
   const weatherGlobeActive = activeProject === "weather" && !resourceScene && weatherScene === "globe";
-  const sharedMapActive = (activeProject === "power" || activeProject === "carbon") && !provinceFrame;
+  const sharedMapActive = (activeProject === "power" || activeProject === "carbon") && !statsActive;
   const stage = economyActive ? "economy" : weatherGlobeActive ? "weather" : sharedMapActive ? "map" : null;
   if (stage && !retainedStages[stage]) setRetainedStages({ ...retainedStages, [stage]: true });
   if (activeProject === "power" && powerView === "facilities" && !powerAssetsRequested) setPowerAssetsRequested(true);
@@ -5627,6 +5604,8 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
     navigate("carbon", { sector, date: next?.date }, true);
   };
 
+  const { capacity: analysisCapacity, demo: analysisDemo, grain: analysisGrain, period: analysisPeriod,
+    source: analysisSource, version: analysisVersion } = powerAnalysis;
   const saveMapCamera = useCallback(() => {
     if (activeProject === "power") {
       replaceWorkspaceContext({
@@ -5634,15 +5613,18 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
         layers: Object.entries(visibleLayers).filter(([, enabled]) => enabled).map(([key]) => key).join(","),
         tech: Object.entries(visibleTechnologies).filter(([, enabled]) => enabled).map(([key]) => key).join(","),
         minMw: activeSizeMin, labels: labelSettings.preset,
-        month: monthlyDemo ? monthlyPowerFrame?.period : monthlyGeneration ? reported.month || undefined : undefined,
-        version: monthlyDemo ? null : monthlyGeneration ? reported.published?.version ?? context.version : undefined,
+        month: statsActive && analysisGrain !== "annual" ? analysisPeriod || undefined : undefined,
+        year: statsActive && analysisGrain === "annual" && analysisPeriod ? Number(analysisPeriod) : undefined,
+        powerSource: statsActive && !analysisCapacity && !analysisDemo ? analysisSource : undefined,
+        version: statsActive && !analysisDemo && analysisSource === "nbs" ? analysisVersion ?? context.version : undefined,
       });
     }
     if (activeProject === "carbon") {
       replaceWorkspaceContext({ camera: encodeCamera(mapCamera), date: carbonDate || null, sector: carbonSector, basemap: activeMapTheme });
     }
   }, [activeProject, activeMapTheme, mapCamera, visibleLayers, visibleTechnologies, activeSizeMin,
-    labelSettings.preset, monthlyDemo, monthlyGeneration, monthlyPowerFrame?.period, reported.month, reported.published, context.version, carbonDate, carbonSector]);
+    labelSettings.preset, statsActive, analysisCapacity, analysisDemo, analysisGrain, analysisPeriod, analysisSource, analysisVersion,
+    context.version, carbonDate, carbonSector]);
 
   const beforeAnalysis = (event: MouseEvent<HTMLElement>) => {
     if (event.target instanceof Element && event.target.closest('a[href^="/visualization"]')) {
@@ -5869,16 +5851,23 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
     }
   }
 
-  const selectPowerProvince = useCallback((id: string, focus: boolean) => {
-    const province = findChinaProvince(id);
-    const camera = focus
-      ? province ? { center: province.center, zoom: 5.25, pitch: 0, bearing: 0 } : powerOverviewCamera()
-      : mapCamera;
-    navigate("power", { region: province?.code ?? "china", camera: focus ? undefined : encodeCamera(camera) }, true);
-    setFocusedRegion("china");
-    setActiveRegion(regions.find(item => item.id === "china") ?? defaultRegion);
-    if (focus) requestFocus(camera.center, camera.zoom, 0, 0, province ? undefined : "china", province?.code);
-  }, [mapCamera, navigate, requestFocus]);
+  const updatePowerAnalysis = useCallback((patch: WorkspaceContext) => {
+    navigate("power", patch, true);
+  }, [navigate]);
+
+  const choosePowerProvince = useCallback((id: string) => {
+    const code = findChinaProvince(id)?.code;
+    if (!code) return;
+    const selected = powerSelection.includes(code);
+    if (!selected && powerSelection.length >= 3) {
+      showToast("最多对比三个省份，请先移除一个。");
+      return;
+    }
+    const next = selected ? powerSelection.filter(item => item !== code) : [...powerSelection, code];
+    setHoverTooltip(null);
+    updatePowerAnalysis({ region: next[0] ?? "china", powerPeers: next.length > 1 ? next.slice(1).join(",") : undefined,
+      camera: encodeCamera(mapCamera) });
+  }, [mapCamera, powerSelection, showToast, updatePowerAnalysis]);
 
   const selectCarbonRegion = (id: string) => {
     const target = carbonTargets.find(item => item.id === id);
@@ -5900,9 +5889,11 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
   const resetPowerStatistics = () => {
     setHoverTooltip(null);
     setActivePanel(null);
+    setPowerBin(null);
     navigate("power", {
       region: "china", year: undefined, month: undefined, version: undefined,
       product: undefined, powerPeriod: undefined, powerDemo: undefined, camera: undefined, projection: "map",
+      powerMeasure: undefined, powerReference: undefined, powerPresentation: undefined, powerPeers: undefined, powerSource: undefined,
     }, true);
     const { center, zoom } = powerOverviewCamera();
     requestFocus(center, zoom, 0, 0, "china");
@@ -5913,7 +5904,6 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
     setSelectedFeature(null);
     setHoverTooltip(null);
     setActivePanel(null);
-    setPowerForecast(false);
     setGenerationPlaying(false);
     setGenerationHeatmapEnabled(false);
     const region = view === "facilities" ? context.region : selectedProvince ?? "china";
@@ -6130,13 +6120,13 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
   const hasFacilityLayers = generationHeatmapEnabled || Object.values(visibleTechnologies).some(Boolean)
     || Object.values(visibleLayers).some(Boolean) || Object.values(visibleCustomLayers).some(Boolean);
   const sidebarSummary = {
-    power: statsActive ? "中国省级电力统计" : `${activeRegion.label} · ${regionStats.totalPlants.toLocaleString()} 个可见项目`,
+    power: statsActive ? "发电、装机与区域变化" : `${activeRegion.label} · ${regionStats.totalPlants.toLocaleString()} 个可见项目`,
     weather: weatherScene === "globe" ? "全球风场、洋流与波浪" : replayViews[weatherScene].title,
     carbon: "GRACED · 全球 0.1° 网格",
     economy: "",
   }[activeProject];
   const className = resourceScene ? "og-app-shell is-resource-scene"
-    : `og-app-shell og-globe-workspace ${cinematic ? "is-cinematic" : ""} ${activeProject === "weather" ? "is-earth-project" : ""} ${economyActive ? "is-economy-project" : ""} ${activeProject === "carbon" ? "is-carbon-project" : ""}${carbonPlanar ? " is-carbon-atlas" : ""}${activeProject === "power" ? " is-power-project" : ""}${statsActive ? " is-power-statistics" : ""}${statsActive && powerForecast ? " is-power-forecast" : ""}`;
+    : `og-app-shell og-globe-workspace ${cinematic ? "is-cinematic" : ""} ${activeProject === "weather" ? "is-earth-project" : ""} ${economyActive ? "is-economy-project" : ""} ${activeProject === "carbon" ? "is-carbon-project" : ""}${carbonPlanar ? " is-carbon-atlas" : ""}${activeProject === "power" ? " is-power-project" : ""}${statsActive ? " is-power-statistics" : ""}`;
   return (
     <main className={className} onClickCapture={beforeAnalysis} data-workspace={activeProject}
       data-power-assets={activeProject === "power" && !statsActive ? powerAssetsStatus : undefined}
@@ -6192,24 +6182,40 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
               initialPoint={readGridPoint(context.replayPoint) ?? undefined} onPointChange={rememberReplayPoint} />
           </div>
         )}
-        {provinceFrame && (
-          <PowerStatisticsMap
-            frame={provinceFrame}
-            selected={selectedProvince}
-            initialCamera={readWorkspaceCamera(context.camera) ?? undefined}
-            focus={focusRequest ? {
-              nonce: focusRequest.nonce,
-              provinceCode: focusRequest.provinceCode,
-              camera: focusRequest.overview === "china" ? undefined : {
-                center: focusRequest.center, zoom: focusRequest.zoom, pitch: 0, bearing: 0,
-              },
-            } : undefined}
-            screenshotRequest={screenshotRequest}
-            onCamera={setMapCamera}
-            onHover={setHoverTooltip}
-            onSelect={id => { if (findChinaProvince(id)) selectPowerProvince(id, false); }}
-            onScreenshotComplete={showToast}
-          />
+        {statsActive && (
+          <>
+            <div className={powerAnalysisStyles.mapArea}>
+              <div className={powerPresentation ? powerAnalysisStyles.retainedMap : powerAnalysisStyles.map3d} aria-hidden={Boolean(powerPresentation)}>
+                <PowerStatisticsMap
+                  frame={powerAnalysis.frame} selected={selectedProvince} peers={powerPeers} suspended={Boolean(powerPresentation)}
+                  initialCamera={readWorkspaceCamera(context.camera) ?? undefined}
+                  focus={focusRequest ? {
+                    nonce: focusRequest.nonce,
+                    provinceCode: focusRequest.provinceCode,
+                    camera: focusRequest.overview === "china" ? undefined : {
+                      center: focusRequest.center, zoom: focusRequest.zoom, pitch: 0, bearing: 0,
+                    },
+                  } : undefined}
+                  screenshotRequest={screenshotRequest}
+                  onCamera={setMapCamera}
+                  onHover={setHoverTooltip}
+                  onSelect={choosePowerProvince}
+                  onOpenThematicMap={() => updatePowerAnalysis({ powerPresentation: "flat" })}
+                  onScreenshotComplete={showToast}
+                />
+              </div>
+              {powerPresentation && <PowerThematicMap frame={powerAnalysis.frame} split={powerAnalysis.split}
+                selection={powerSelection} bin={currentPowerBin} onSelect={choosePowerProvince}
+                screenshotRequest={screenshotRequest} onScreenshotComplete={showToast} />}
+              {!cinematic && <>
+                <PowerMapCaption data={powerAnalysis} presentation={powerPresentation} selection={powerSelection} update={updatePowerAnalysis} />
+                <PowerMapLegend data={powerAnalysis} presentation={powerPresentation} bin={currentPowerBin}
+                  onBin={value => setPowerBin({ key: analysisBinKey, value })} />
+              </>}
+            </div>
+            {!cinematic && <PowerTimeline key={powerView + ":" + powerAnalysis.grain + ":" + powerAnalysis.source + ":" + powerAnalysis.product.id}
+              data={powerAnalysis} update={updatePowerAnalysis} />}
+          </>
         )}
         {retainedStages.map && (
           <div className="og-workspace-map-layer" hidden={!sharedMapActive}>
@@ -6252,7 +6258,6 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
             />
           </div>
         )}
-        {provinceFrame && !cinematic ? <PowerMapHeading frame={provinceFrame} /> : null}
       </div>
       {!economyActive && !resourceScene && (
         <>
@@ -6268,9 +6273,8 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
               {!cinematic && <CarbonTimeline {...carbonTime} />}
             </>
           )}
-          {statsActive && !cinematic && provinceFrame && selectedProvince ? (
-            <PowerMobileSelection frame={provinceFrame} region={selectedProvince} />
-          ) : null}
+          {statsActive && !cinematic && <PowerAnalysisRail data={powerAnalysis} selection={powerSelection}
+            update={updatePowerAnalysis} onChoose={choosePowerProvince} />}
           {activeProject === "power" && !statsActive ? (
             <MobilePowerShortcuts
               activeCleanEnergy={activeCleanEnergy}
@@ -6301,32 +6305,9 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
               />
             ) : undefined}
           >
-            {statsActive && powerView === "generation" ? (
-              <PowerPeriodSwitcher monthly={monthlyGeneration} onChange={monthly => {
-                if (monthly === monthlyGeneration) return;
-                navigate("power", monthly ? { powerPeriod: "monthly" }
-                  : { powerPeriod: undefined, month: undefined, version: undefined, product: undefined, powerDemo: undefined }, true);
-              }} />
-            ) : null}
-            {annualPowerFrame ? <PowerAnnualPanel frame={annualPowerFrame} region={selectedProvince ?? ""}
-              onRegionChange={id => selectPowerProvince(id, true)} onRankSelect={id => selectPowerProvince(id, false)}
-              onYearChange={year => navigate("power", { year }, true)} /> : null}
-            {monthlyPowerFrame ? <PowerMonthlyPanel frame={monthlyPowerFrame} data={reported} region={selectedProvince ?? ""}
-              category={powerProduct} onRegionChange={id => selectPowerProvince(id, true)}
-              onDemoChange={enabled => {
-                setPowerForecast(false);
-                navigate("power", { powerDemo: enabled ? "monthly" : undefined, version: undefined }, true);
-              }}
-              onMonthChange={month => navigate("power", { month }, true)}
-              onCategory={product => {
-                const next = powerProduct === product ? "electricity" : product;
-                setVisibleTechnologies(switchList(hiddenTechnologyState(), generationTechnologies(next).join(",")));
-                navigate("power", { product: next, month: context.month ?? (reported.month || undefined) }, true);
-              }} /> : null}
-            {statsActive ? <button className="og-workspace-action og-secondary-entry" type="button"
-              aria-pressed={powerForecast} disabled={monthlyDemo} onClick={() => setPowerForecast(value => !value)}>
-              <Activity size={16} /> {powerForecast ? "返回电力统计" : "查看电力预测"} <ArrowUpRight size={14} />
-            </button> : null}
+            {statsActive && <PowerAnalysisFilters data={powerAnalysis} selection={powerSelection} presentation={powerPresentation}
+              update={updatePowerAnalysis} onChoose={choosePowerProvince}
+              onClear={() => updatePowerAnalysis({ region: "china", powerPeers: undefined })} />}
             {activeProject === "power" && powerView === "facilities" ? (
               <>
               {!hasFacilityLayers && (

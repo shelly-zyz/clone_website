@@ -1,3 +1,4 @@
+import type { PowerMeasure } from "./power-analysis";
 import { resolveWorkspaceTopic, workspaceHref, type WorkspaceTopic } from "./globe-topics";
 import { readReplayRegion, type ReplayRegionId } from "./weather-replay/regions";
 import { replayViews, type WeatherScene } from "./weather-replay/views";
@@ -25,7 +26,12 @@ export type WorkspaceContext = {
   replayPoint?: string;
   replayRegion?: ReplayRegionId;
   powerView?: "generation" | "facilities" | "capacity";
-  powerPeriod?: "monthly";
+  powerPeriod?: "monthly" | "ytd";
+  powerSource?: "ember" | "yearbook" | "nbs";
+  powerMeasure?: PowerMeasure;
+  powerReference?: string;
+  powerPresentation?: "flat" | "split";
+  powerPeers?: string;
   powerDemo?: "monthly";
   basemap?: string;
   layers?: string;
@@ -66,6 +72,11 @@ export function readWorkspaceContext(search: URLSearchParams): WorkspaceContext 
   const replayFrame = search.get("replayFrame");
   const powerView = search.get("powerView");
   const version = search.get("version");
+  const powerPeriod = search.get("powerPeriod");
+  const powerSource = search.get("powerSource");
+  const powerMeasure = search.get("powerMeasure");
+  const powerReference = search.get("powerReference");
+  const powerPresentation = search.get("powerPresentation");
   const minMw = Number(search.get("minMw"));
   const grid = readGridPoint(search.get("grid"));
   const camera = readWorkspaceCamera(search.get("camera"));
@@ -93,7 +104,12 @@ export function readWorkspaceContext(search: URLSearchParams): WorkspaceContext 
     replayPoint: readGridPoint(search.get("replayPoint"))?.join(","),
     replayRegion: readReplayRegion(search.get("replayRegion")),
     powerView: powerView === "generation" || powerView === "capacity" || powerView === "facilities" ? powerView : undefined,
-    powerPeriod: search.get("powerPeriod") === "monthly" ? "monthly" : undefined,
+    powerPeriod: powerPeriod === "monthly" || powerPeriod === "ytd" ? powerPeriod : undefined,
+    powerSource: powerSource === "ember" || powerSource === "yearbook" || powerSource === "nbs" ? powerSource : undefined,
+    powerMeasure: powerMeasure === "growth" || powerMeasure === "change" || powerMeasure === "clean" || powerMeasure === "windsolar" ? powerMeasure : undefined,
+    powerReference: powerReference && /^\d{4}(?:-(0[1-9]|1[0-2]))?$/.test(powerReference) ? powerReference : undefined,
+    powerPresentation: powerPresentation === "flat" || powerPresentation === "split" ? powerPresentation : undefined,
+    powerPeers: readList(search.get("powerPeers")),
     powerDemo: powerView === "generation" && search.get("powerDemo") === "monthly" ? "monthly" : undefined,
     basemap: readId(search.get("basemap")),
     layers: readList(search.get("layers")),

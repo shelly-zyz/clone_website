@@ -3613,8 +3613,7 @@
   --og-stage-top: calc(var(--og-switcher-top) + 52px);
 }
 
-.og-globe-workspace.is-earth-project:has(.og-weather-replay-stage),
-.og-globe-workspace.is-power-statistics:not(.is-power-forecast) {
+.og-globe-workspace.is-earth-project:has(.og-weather-replay-stage) {
   --og-stage-right: var(--og-gutter);
 }
 
@@ -3711,7 +3710,30 @@
 }
 
 .is-power-statistics .og-globe-stage { background: transparent; }
-.is-power-statistics:not(.is-power-forecast) .og-forecast-region { display: none; }
+.is-power-statistics .og-forecast-region { display: none; }
+.is-power-statistics .og-scale { display: none; }
+.og-globe-workspace.is-power-statistics:not(.is-cinematic) {
+  --og-power-rail: clamp(238px, 23vw, 330px);
+  --og-stage-right: calc(var(--og-power-rail) + 2 * var(--og-gutter));
+}
+@media (min-width: 901px) {
+  .og-globe-workspace.is-power-statistics:not(.is-cinematic) .og-assistant-mount {
+    right: calc(var(--og-stage-right) - 24px);
+    --og-assistant-bottom: 181px;
+  }
+}
+@media (max-width: 900px) {
+  .og-globe-workspace.is-power-statistics:not(.is-cinematic) {
+    --og-stage-right: var(--og-gutter);
+    --og-assistant-bottom: 174px;
+  }
+  .og-globe-workspace.is-power-statistics .og-info-button {
+    inset: calc(var(--og-workspace-top) + 5px) auto auto calc(50% - 13px);
+  }
+  .og-globe-workspace.is-power-statistics:has(> [data-power-analysis-dock="open"]) {
+    --og-mobile-dock: var(--og-dock-size);
+  }
+}
 .og-globe-workspace .og-beta-badge { display: none; }
 .is-resource-scene { background: #091419; }
 
@@ -3727,7 +3749,7 @@
     --og-switcher-top: var(--og-rail-top);
   }
 
-  .og-globe-workspace:not(.is-cinematic, .is-power-statistics:not(.is-power-forecast), :has(.og-weather-replay-stage)):has(> .og-forecast-region[data-dock="open"]),
+  .og-globe-workspace:not(.is-cinematic, .is-power-statistics, :has(.og-weather-replay-stage)):has(> .og-forecast-region[data-dock="open"]),
   .og-globe-workspace.is-economy-project:has(.og-economy-profile-region[data-dock="open"], .og-workspace-sidebar[data-open="true"]),
   .og-globe-workspace:not(.is-cinematic):has(> .og-workspace-sidebar[data-open="true"]) {
     --og-mobile-dock: var(--og-dock-size);

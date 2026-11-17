@@ -13,6 +13,9 @@ type Scene = ReturnType<typeof createPowerStatisticsScene>;
 type Props = Parameters<typeof createPowerStatisticsScene>[2] & {
   frame: ProvincePowerFrame;
   selected?: string;
+  peers?: readonly string[];
+  suspended?: boolean;
+  onOpenThematicMap?: () => void;
   initialCamera?: MapCameraState;
   focus?: { nonce: number; camera?: MapCameraState; provinceCode?: string };
   screenshotRequest: number;
@@ -47,7 +50,7 @@ export function PowerStatisticsMap(props: Props) {
           onSelect: code => latest.current.onSelect(code),
         });
         scene.current = map;
-        map.update(current.frame, current.selected);
+        map.update(current.frame, current.selected, current.peers);
         if (current.focus && current.focus.nonce !== initialFocus.current) {
           map.focus(current.focus.camera, false, current.focus.provinceCode);
         } else {
@@ -66,7 +69,7 @@ export function PowerStatisticsMap(props: Props) {
     };
   }, []);
 
-  useEffect(() => { scene.current?.update(props.frame, props.selected); }, [props.frame, props.selected]);
+  useEffect(() => { scene.current?.update(props.frame, props.selected, props.peers); }, [props.frame, props.selected, props.peers]);
 
   const focusNonce = props.focus?.nonce;
   useEffect(() => {
@@ -77,21 +80,24 @@ export function PowerStatisticsMap(props: Props) {
   }, [focusNonce]);
 
   useEffect(() => {
-    if (!scene.current || props.screenshotRequest === lastScreenshot.current) return;
+    if (props.screenshotRequest === lastScreenshot.current) return;
+    if (props.suspended) { lastScreenshot.current = props.screenshotRequest; return; }
+    if (!scene.current) return;
     lastScreenshot.current = props.screenshotRequest;
     const link = document.createElement("a");
     link.href = scene.current.screenshot();
     link.download = "opengridworks-power-map.png";
     link.click();
     latest.current.onScreenshotComplete("已导出透明背景的电力统计地图 PNG。");
-  }, [props.screenshotRequest, status]);
+  }, [props.screenshotRequest, props.suspended, status]);
 
   return (
     <section className={styles.viewport} aria-label="中国省级电力统计三维地图" data-map-ready={status === "ready"}>
       <canvas ref={canvas} className={styles.canvas} aria-hidden="true" />
       {props.frame.demo && <p className={styles.demoNotice} role="status">{powerDemoNotice}</p>}
       {status === "loading" && <GlobeLoading label="正在加载中国省级电力地图" />}
-      {status === "error" && <p className={styles.status} role="status">当前浏览器无法绘制三维地图，可在筛选栏查看统计。</p>}
+      {status === "error" && <p className={styles.status} role="status">当前浏览器无法绘制三维地图。
+        {props.onOpenThematicMap && <button type="button" onClick={props.onOpenThematicMap}>打开二维专题地图</button>}</p>}
       {status === "ready" && (
         <>
           <div className={styles.controls} role="group" aria-label="电力地图缩放">

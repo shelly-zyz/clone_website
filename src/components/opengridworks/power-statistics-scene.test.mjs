@@ -103,6 +103,8 @@ after(() => {
 });
 
 const { chinaPowerMonthlyDemoFrame, powerDemoNotice } = await import("@/lib/china-power-statistics");
+const { cumulativePowerSeries, comparisonScatter, nationalPowerCode, powerBin, powerGrowth, powerProductAmount, readEmberSeries,
+  readPowerMeasure } = await import("@/lib/power-analysis");
 const { carbonAtlasCamera, carbonAtlasCenter, overviewZoom } = await import("@/lib/globe-viewport");
 const { readWorkspaceContext, workspaceContextHref } = await import("@/lib/workspace-context");
 
@@ -220,20 +222,30 @@ test("scene：全屏测量左右覆盖与舞台安全区，不重复扣除已缩
   } finally { nested.scene.dispose(); }
 });
 
-test("scene：数据柱高变化仍在自动 fit 范围；清除 focus 回全国", () => {
+test("scene：增长分色不移动相机，选中的两省有独立轮廓，清除 focus 回全国", () => {
   const { scene } = setup();
   try {
-    scene.focus(undefined, false, "110000000000");
+    const beijing = "110000000000";
+    const xinjiang = "650000000000";
+    scene.focus(undefined, false, beijing);
     const before = snapshot(scene).zoom;
-    scene.update({ ...frame, regions: frame.regions.map(region => ({ ...region, value: region.code === "110000000000" ? 100 : 1 })) }, "110000000000");
-    assert.ok(snapshot(scene).zoom < before);
-    const column = state.renderer.scene.children[0].children.find(object => object.geometry?.type === "CylinderGeometry" && object.userData.code === "110000000000");
-    column.updateMatrixWorld();
-    const camera = snapshot(scene);
-    const point = new Vector3(0, 0, 1).applyMatrix4(column.matrixWorld).project(camera);
-    assert.ok(Math.abs(point.x) < 1 && Math.abs(point.y) < 1);
+    scene.update({
+      ...frame,
+      encoding: "diverging",
+      regions: frame.regions.map(region => ({
+        ...region, value: region.code === beijing ? 100 : region.code === xinjiang ? -100 : null,
+      })),
+    }, beijing, [xinjiang]);
+    assert.equal(snapshot(scene).zoom, before);
+    const group = state.renderer.scene.children[0];
+    assert.ok(group.children.every(object => object.geometry?.type !== "CylinderGeometry"));
+    const fills = [beijing, xinjiang].map(code => group.children.find(node => node.userData.code === code).material[0].color.getHexString());
+    assert.notEqual(fills[0], fills[1]);
+    const highlighted = group.children.filter(object => object.isLineSegments && object.renderOrder === 2);
+    assert.equal(highlighted.length, 2);
+    assert.notEqual(highlighted[0].material.color.getHexString(), highlighted[1].material.color.getHexString());
     scene.focus(undefined, false);
-    for (const code of ["650000000000", "540000000000", "150000000000", "460000000000", "110000000000"]) assertProvinceVisible(scene, code);
+    for (const code of [xinjiang, "540000000000", "150000000000", "460000000000", beijing]) assertProvinceVisible(scene, code);
   } finally { scene.dispose(); }
 });
 
@@ -312,4 +324,31 @@ test("组件：初始显式相机优先；没有相机时 selected fit；加载�
     }
     cleanups.forEach(cleanup => { if (typeof cleanup === "function") cleanup(); });
   }
+});
+
+test("Ember 档案：全国与 31 省分开读取，月度累计不跨缺失月份", () => {
+  const path = new URL("public/data/china-power/ember-monthly.json", root);
+  const archive = JSON.parse(readFileSync(path, "utf8"));
+  const months = readEmberSeries(archive);
+  const code = "110000000000";
+  const latest = Object.keys(months).at(-1);
+  assert.equal(Object.keys(months[latest]).length, 32);
+  assert.notEqual(months[latest][nationalPowerCode].total, null);
+  assert.ok(months[latest][code].mix.solar >= 0);
+  const full = cumulativePowerSeries(months);
+  assert.ok(Math.abs(full["2026-03"][code].total
+    - ["2026-01", "2026-02", "2026-03"].reduce((sum, key) => sum + months[key][code].total, 0)) < .00001);
+  const partial = { ...months, "2026-02": { ...months["2026-02"], [code]: { total: null } } };
+  assert.equal(cumulativePowerSeries(partial)["2026-03"][code], undefined);
+});
+
+test("可比指标：同比与双期使用各自基准；零基数与缺值不计算", () => {
+  assert.equal(readPowerMeasure("growth", { total: 120 }, { total: 100 }, { total: 80 }), 20);
+  assert.equal(readPowerMeasure("change", { total: 120 }, { total: 100 }, { total: 80 }), 40);
+  assert.equal(powerGrowth(5, 0), null);
+  assert.equal(powerProductAmount({ total: 8, mix: { wind: 0 } }, "wind-power"), 0);
+  assert.equal(powerProductAmount({ total: 8 }, "wind-power"), null);
+  assert.deepEqual([powerBin(-40, 40, true), powerBin(0, 40, true), powerBin(40, 40, true), powerBin(null, 40, true)], [0, 2, 4, -1]);
+  assert.equal(comparisonScatter("2022").length, 31);
+  assert.deepEqual(comparisonScatter("2023"), []);
 });

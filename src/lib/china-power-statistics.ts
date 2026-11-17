@@ -7,7 +7,8 @@ export type ProvincePowerFrame = {
   unit: string;
   period: string;
   scaleMax: number;
-  regions: readonly { code: string; value: number | null }[];
+  regions: readonly { code: string; value: number | null; detail?: string }[];
+  encoding?: "sequential" | "diverging";
   demo?: true;
   total?: number;
 };

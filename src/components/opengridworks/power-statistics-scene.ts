@@ -1,10 +1,11 @@
 import {
-  AmbientLight, Box2, Box3, CanvasTexture, Color, CylinderGeometry, DirectionalLight, Float32BufferAttribute, LineBasicMaterial,
-  Mesh, MeshStandardMaterial, MOUSE, OrthographicCamera, Raycaster, Scene, Sprite, SpriteMaterial, SRGBColorSpace, TOUCH,
+  Box2, Box3, CanvasTexture, Color, LineBasicMaterial,
+  Mesh, MOUSE, OrthographicCamera, Raycaster, Scene, Sprite, SpriteMaterial, SRGBColorSpace, TOUCH,
   Vector2, Vector3, WebGLRenderer, LineSegments, type BufferGeometry, type Material,
 } from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { powerAmount, powerDemoNotice, powerMapColors, powerMapNoData, provincePowerRatio, type ProvincePowerFrame } from "@/lib/china-power-statistics";
+import { powerDemoNotice, powerMapNoData, type ProvincePowerFrame } from "@/lib/china-power-statistics";
+import { formatPowerNumber, powerLegendColors, powerMagnitude, powerSelectionColors } from "@/lib/power-analysis";
 import type { MapCameraState } from "@/types/opengridworks";
 import {
   buildPowerGeography, fitPowerMapBounds, powerDetailLines, powerProjection, projectPowerPoint,
@@ -12,9 +13,8 @@ import {
 } from "./power-statistics-geometry";
 
 const cameraOffset = new Vector3(0, -11, 24);
-const maximumHeight = 3.15;
 const pixelsPerUnit = 512 / (Math.PI * 2 * powerProjection.scale());
-const palette = powerMapColors.map(color => new Color(color));
+const palettes = [false, true].map(signed => powerLegendColors(signed).map(color => new Color(color)));
 const noData = new Color(powerMapNoData);
 
 type View = { center: Vector3; zoom: number };
@@ -24,22 +24,11 @@ type Callbacks = {
   onSelect: (code: string) => void;
 };
 
-function scaleColor(ratio: number) {
-  const stop = ratio * (palette.length - 1);
+function scaleColor(value: number, max: number, signed: boolean) {
+  const palette = palettes[Number(signed)];
+  const stop = powerMagnitude(value, max, signed) * (palette.length - 1);
   const left = Math.min(palette.length - 2, Math.floor(stop));
   return palette[left].clone().lerp(palette[left + 1], stop - left);
-}
-
-function buildColumn() {
-  const geometry = new CylinderGeometry(.009, .127, 1, 6, 1);
-  const colors = new Float32Array(geometry.attributes.position.count * 3);
-  for (let index = 0; index < geometry.attributes.position.count; index++) {
-    colors.fill(geometry.attributes.position.getY(index) > 0 ? 1 : .66, index * 3, index * 3 + 3);
-  }
-  geometry.setAttribute("color", new Float32BufferAttribute(colors, 3));
-  geometry.rotateX(Math.PI / 2);
-  geometry.translate(0, 0, .5);
-  return geometry;
 }
 
 function makeLabel(text: string) {
@@ -111,13 +100,7 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
   const insetCenter = insetBounds.getCenter(new Vector2());
   insetCamera.position.set(insetCenter.x, insetCenter.y, 5);
   insetScene.add(inset);
-  scene.add(main, new AmbientLight("#e1f2ff", 1.65));
-  const key = new DirectionalLight("#e9f6ff", 2.1);
-  key.position.set(-8, -6, 12);
-  scene.add(key);
-  const fillLight = new DirectionalLight("#b8d6ff", .8);
-  fillLight.position.set(7, -7, 8);
-  scene.add(fillLight);
+  scene.add(main);
 
   const camera = new OrthographicCamera(-1, 1, 1, -1, .1, 100);
   camera.up.set(0, 0, 1);
@@ -132,18 +115,11 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
   controls.zoomSpeed = .85;
   controls.update();
 
-  const columnGeometry = buildColumn();
-  const highlighted = new LineBasicMaterial({ color: "#e1f3ff" });
+  const highlights = powerSelectionColors.map(color => new LineBasicMaterial({ color }));
   const originalBoundary = provinces[0].lines.material;
-  const parts = provinces.map(province => {
-    const column = new Mesh(columnGeometry, new MeshStandardMaterial({ vertexColors: true, roughness: .63 }));
-    column.userData.code = province.code;
-    column.position.copy(province.anchor);
-    main.add(column);
-    return { ...province, column, value: null as number | null };
-  });
+  const parts = provinces.map(province => ({ ...province, value: null as number | null, detail: undefined as string | undefined }));
   const byCode = new Map(parts.map(part => [part.code, part]));
-  const targets = parts.flatMap(part => [part.mesh, part.column]);
+  const targets = parts.map(part => part.mesh);
   const labels: ReturnType<typeof makeLabel>[] = [];
   const boundaries = new Map<string, LineSegments>();
   const requested = new Set<string>();
@@ -161,13 +137,7 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
   function fittedView(provinceCode = "national") {
     const selected = byCode.get(provinceCode);
     const fitBounds = new Box3();
-    for (const part of selected ? [selected] : parts) {
-      fitBounds.union(part.fitBounds);
-      if (part.column.visible) {
-        part.column.updateMatrixWorld();
-        fitBounds.union(new Box3().setFromObject(part.column));
-      }
-    }
+    for (const part of selected ? [selected] : parts) fitBounds.union(part.fitBounds);
     return fitPowerMapBounds(fitBounds, { width, height, padding: measureFitPadding(canvas) }, camera.quaternion);
   }
 
@@ -310,8 +280,9 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
       x: event.clientX,
       y: event.clientY,
       title: `${part.name} · ${frame.label}`,
-      subtitle: `${frame.period} · ${part.value == null ? "暂无数据" : `${powerAmount.format(part.value)} ${frame.unit}`}`,
-      color: part.value == null ? powerMapNoData : "#" + part.column.material.color.getHexString(),
+      subtitle: [frame.period, part.value == null ? "暂无数据" : formatPowerNumber(part.value, frame.unit, frame.encoding === "diverging"),
+        part.detail].filter(Boolean).join(" · "),
+      color: part.value == null ? powerMapNoData : "#" + part.fill.color.getHexString(),
     } : null);
   }
   function pointerUp(event: PointerEvent) {
@@ -369,32 +340,36 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
         zoom: Math.min(controls.maxZoom, Math.max(controls.minZoom, camera.zoom * factor)),
       });
     },
-    update(next: ProvincePowerFrame, selected?: string) {
+    update(next: ProvincePowerFrame, selected?: string, peers: readonly string[] = []) {
       frame = next;
       hideHover();
       clearLabels();
-      const values = new Map(next.regions.map(({ code, value }) => [code, value]));
+      const selection = [selected, ...peers].filter(Boolean);
+      const signed = next.encoding === "diverging";
+      const values = new Map(next.regions.map(row => [row.code, row]));
       for (const part of parts) {
-        const value = values.get(part.code) ?? null;
-        const ratio = provincePowerRatio(value ?? 0, next.scaleMax);
-        const base = value == null ? noData : scaleColor(ratio);
+        const row = values.get(part.code);
+        const value = row?.value ?? null;
+        const index = selection.indexOf(part.code);
+        const base = value == null ? noData : scaleColor(value, next.scaleMax, signed);
         part.value = value;
-        part.fill.color.copy(base);
-        part.side.color.copy(base).multiplyScalar(.47);
-        part.lines.material = part.code === selected ? highlighted : originalBoundary;
-        part.column.material.color.copy(base);
-        part.column.visible = value != null && value > 0;
-        part.column.scale.set(1, 1, Math.max(.16, ratio * maximumHeight));
+        part.detail = row?.detail;
+        part.fill.color.copy(base).multiplyScalar(selection.length && index < 0 ? .74 : 1);
+        part.side.color.copy(part.fill.color).multiplyScalar(.43);
+        part.lines.material = highlights[index] ?? originalBoundary;
+        part.lines.renderOrder = index < 0 ? 0 : 2;
       }
 
-      const ranked = parts.filter(part => part.column.visible).sort((a, b) => b.value! - a.value!).slice(0, 3);
-      const active = selected ? byCode.get(selected) : undefined;
-      const annotated = active ? [active, ...ranked.filter(part => part !== active)] : ranked;
+      const ranked = parts.filter(part => part.value != null).sort((a, b) => Math.abs(b.value!) - Math.abs(a.value!)).slice(0, 3);
+      const annotated = selection.length ? selection.flatMap(code => {
+        const part = code ? byCode.get(code) : undefined;
+        return part ? [part] : [];
+      }) : ranked;
       for (const part of annotated) {
         const name = part.name.replace(/(?:壮族|回族|维吾尔)?自治区$|特别行政区$|[省市]$/u, "");
-        const label = makeLabel(`${name} ${part.value == null ? "暂无数据" : powerAmount.format(part.value)}`);
+        const label = makeLabel(name + " " + formatPowerNumber(part.value, next.unit === "%" ? "%" : "", signed));
         label.sprite.position.copy(part.anchor);
-        label.sprite.position.z += (part.column.visible ? part.column.scale.z : 0) + .15;
+        label.sprite.position.z += .15;
         labels.push(label);
         scene.add(label.sprite);
       }
@@ -431,8 +406,8 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
       canvas.removeEventListener("pointerup", pointerUp);
       canvas.removeEventListener("pointerleave", hideHover);
       clearLabels();
-      const geometries = new Set<BufferGeometry>([columnGeometry]);
-      const materials = new Set<Material>([highlighted, originalBoundary]);
+      const geometries = new Set<BufferGeometry>();
+      const materials = new Set<Material>([...highlights, originalBoundary]);
       for (const root of [scene, insetScene]) root.traverse(object => {
         if (object instanceof Mesh || object instanceof LineSegments) {
           geometries.add(object.geometry);
