@@ -47,6 +47,7 @@ import {
   PowerAnalysisFilters, PowerAnalysisRail, PowerMapCaption, PowerMapLegend, PowerTimeline, PowerViews,
 } from "./PowerRegionPanel";
 import { useCarbonAtlas } from "@/hooks/use-carbon-atlas";
+import { powerDefaultPalette } from "@/lib/power-analysis";
 import { usePowerAnalysis } from "@/hooks/use-power-analysis";
 import powerAnalysisStyles from "./PowerRegionPanel.module.css";
 import { useWorkspaceSelection, type WorkspaceSelection } from "@/hooks/use-workspace-selection";
@@ -4910,7 +4911,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
   const statsActive = activeProject === "power" && powerView !== "facilities";
   const powerAnalysis = usePowerAnalysis(statsActive, context);
   const powerPresentation = context.powerPresentation;
-  const powerPalette = context.powerPalette ?? "plasma";
+  const powerPalette = context.powerPalette ?? powerDefaultPalette;
   const powerSelection = useMemo(() => selectedProvince ? [selectedProvince,
     ...new Set((context.powerPeers ?? "").split(",").flatMap(id => {
       const code = findChinaProvince(id)?.code;

@@ -13,10 +13,10 @@ export type ChinaPowerGeography = {
   }[];
 };
 
-export const powerMapDepth = .56;
-export const powerMapRelief = .75;
-export const powerSelectionLift = .14;
-export const powerPlatformBottom = -.56;
+export const powerMapDepth = .44;
+export const powerMapRelief = .60;
+export const powerSelectionLift = .12;
+export const powerPlatformBottom = -.46;
 
 export function powerProvinceHeight(value: number | null, maximum: number) {
   const ratio = value == null || maximum <= 0 ? 0 : Math.min(1, Math.abs(value) / maximum);
@@ -79,7 +79,7 @@ function topRim(polygons: Vector2[][][]) {
   }
   const geometry = new BufferGeometry().setAttribute("position", new Float32BufferAttribute(positions, 3));
   return new LineSegments(geometry, new LineBasicMaterial({
-    color: "#d0bedd", transparent: true, opacity: .15, depthWrite: false,
+    color: "#b5e3f4", transparent: true, opacity: .34, depthWrite: false,
   }));
 }
 
@@ -132,9 +132,9 @@ export function buildPowerGeography(geo: ChinaPowerGeography) {
     return [{ code, mesh, edge, fill, side, fitBounds, name: properties.name, anchor: new Vector3(x, y, powerMapDepth) }];
   });
   const platform = new Mesh(
-    new ExtrudeGeometry(platformShapes, { depth: .33, bevelEnabled: false, curveSegments: 1 }),
-    [new MeshLambertMaterial({ color: "#162442" }), new MeshLambertMaterial({
-      color: "#26395c", emissive: "#14122e", emissiveIntensity: .45,
+    new ExtrudeGeometry(platformShapes, { depth: .25, bevelEnabled: false, curveSegments: 1 }),
+    [new MeshLambertMaterial({ color: "#1a334b" }), new MeshLambertMaterial({
+      color: "#284961", emissive: "#18314a", emissiveIntensity: .55,
     })],
   );
   platform.position.z = powerPlatformBottom;

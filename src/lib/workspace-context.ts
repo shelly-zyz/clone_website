@@ -78,6 +78,7 @@ export function readWorkspaceContext(search: URLSearchParams): WorkspaceContext 
   const powerMeasure = search.get("powerMeasure");
   const powerReference = search.get("powerReference");
   const powerPresentation = search.get("powerPresentation");
+  const powerPalette = search.get("powerPalette");
   const minMw = Number(search.get("minMw"));
   const grid = readGridPoint(search.get("grid"));
   const camera = readWorkspaceCamera(search.get("camera"));
@@ -109,7 +110,7 @@ export function readWorkspaceContext(search: URLSearchParams): WorkspaceContext 
     powerSource: powerSource === "ember" || powerSource === "yearbook" || powerSource === "nbs" ? powerSource : undefined,
     powerMeasure: powerMeasure === "growth" || powerMeasure === "change" || powerMeasure === "clean" || powerMeasure === "windsolar" ? powerMeasure : undefined,
     powerReference: powerReference && /^\d{4}(?:-(0[1-9]|1[0-2]))?$/.test(powerReference) ? powerReference : undefined,
-    powerPalette: search.get("powerPalette") === "turbo" ? "turbo" : undefined,
+    powerPalette: powerPalette === "plasma" || powerPalette === "turbo" ? powerPalette : undefined,
     powerPresentation: powerPresentation === "flat" || powerPresentation === "split" ? powerPresentation : undefined,
     powerPeers: readList(search.get("powerPeers")),
     powerDemo: powerView === "generation" && search.get("powerDemo") === "monthly" ? "monthly" : undefined,

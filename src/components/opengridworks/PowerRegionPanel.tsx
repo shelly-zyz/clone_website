@@ -7,7 +7,7 @@ import { chinaProvinces } from "@/lib/china-provinces";
 import { powerDemoNotice } from "@/lib/china-power-statistics";
 import {
   comparisonScatter, emberMethod, formatPowerNumber as number, nationalPowerCode, powerDifference, powerFuels,
-  powerLegendColors, powerRampColor, powerMeasureLabels, powerPeriodLabel, powerProductAmount, powerRegionName, powerSelectionColors,
+  powerDefaultPalette, powerLegendColors, powerRampColor, powerMeasureLabels, powerPeriodLabel, powerProductAmount, powerRegionName, powerSelectionColors,
   powerSeriesKeys, readPowerMeasure, type PowerGrain, type PowerMeasure, type PowerObservation, type PowerPalette,
 } from "@/lib/power-analysis";
 import { generationSeries } from "@/lib/topic-analysis/history";
@@ -92,8 +92,9 @@ export function PowerAnalysisFilters({ data, selection, presentation, palette, u
       </div>
     </div>
     {data.frame.encoding !== "diverging" && <WorkspaceFilterSelect label="地图配色" value={palette}
-      options={[{ value: "plasma", label: "Plasma · 紫红熔岩" }, { value: "turbo", label: "Turbo · 彩虹热力" }]}
-      onChange={value => update({ powerPalette: value === "turbo" ? "turbo" : undefined })} />}
+      options={[{ value: powerDefaultPalette, label: "明亮气象光谱" },
+        { value: "plasma", label: "Plasma · 紫红熔岩" }, { value: "turbo", label: "Turbo · 彩虹热力" }]}
+      onChange={value => update({ powerPalette: value === "plasma" || value === "turbo" ? value : undefined })} />}
     {(data.measure === "change" || presentation) && data.referenceOptions.length > 0 &&
       <WorkspaceFilterSelect label="基准期" value={data.reference} options={data.referenceOptions.toReversed()
         .map(value => ({ value, label: powerPeriodLabel(value, data.grain) }))}

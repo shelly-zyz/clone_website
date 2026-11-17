@@ -5,7 +5,7 @@ import {
 } from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { powerDemoNotice, powerMapNoData, type ProvincePowerFrame } from "@/lib/china-power-statistics";
-import { formatPowerNumber, powerMagnitude, powerRampColor, type PowerPalette } from "@/lib/power-analysis";
+import { formatPowerNumber, powerDefaultPalette, powerMagnitude, powerRampColor, type PowerPalette } from "@/lib/power-analysis";
 import type { MapCameraState } from "@/types/opengridworks";
 import {
   buildPowerGeography, fitPowerMapBounds, powerMapDepth, powerMapRelief, powerPlatformBottom, powerProjection,
@@ -45,8 +45,8 @@ function floorLight(width: number, height: number, center: Vector2) {
           float distance = length(offset);
           float falloff = 1.0 - smoothstep(0.16, 1.0, distance);
           float shadow = 1.0 - smoothstep(0.15, 0.67, distance);
-          vec3 color = mix(vec3(0.055, 0.036, 0.13), vec3(0.006, 0.006, 0.021), shadow);
-          gl_FragColor = vec4(color, falloff * 0.58);
+          vec3 color = mix(vec3(0.035, 0.083, 0.142), vec3(0.022, 0.05, 0.093), shadow);
+          gl_FragColor = vec4(color, falloff * 0.42);
           #include <colorspace_fragment>
         }`,
     }),
@@ -70,12 +70,17 @@ function makeLabel(text: string, selected: boolean) {
   canvas.width = Math.ceil(ctx.measureText(text).width) + 24;
   canvas.height = 36;
   ctx.font = font;
-  ctx.fillStyle = selected ? "#212339" : "#111526";
+  ctx.fillStyle = selected ? "#162f48ed" : "#0b1b30e8";
   ctx.beginPath();
   ctx.roundRect(0, 0, canvas.width, canvas.height, 7);
   ctx.fill();
+  ctx.strokeStyle = selected ? "#b5e3f4a0" : "#b5e3f450";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(.5, .5, canvas.width - 1, canvas.height - 1, 6);
+  ctx.stroke();
   ctx.textBaseline = "middle";
-  ctx.fillStyle = "#f4f3fe";
+  ctx.fillStyle = "#eff9fe";
   ctx.fillText(text, 12, 19);
   const map = new CanvasTexture(canvas);
   map.colorSpace = SRGBColorSpace;
@@ -131,9 +136,9 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
   const midpoint = bounds.getCenter(new Vector2());
   const extent = bounds.getSize(new Vector2());
   scene.add(main, platform, floorLight(extent.x, extent.y, midpoint));
-  scene.add(new HemisphereLight("#fff4fa", "#443362", 1.55));
-  const key = new DirectionalLight("#fff0df", 1.6);
-  key.position.set(midpoint.x - 8, midpoint.y - 6, 18);
+  scene.add(new HemisphereLight("#f5fcff", "#8fb1c6", 1.82));
+  const key = new DirectionalLight("#fff8ee", 1.84);
+  key.position.set(midpoint.x - 10, midpoint.y + 4, 19);
   key.target.position.set(midpoint.x, midpoint.y, 0);
   key.castShadow = true;
   key.shadow.mapSize.set(1024, 1024);
@@ -141,13 +146,13 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
   Object.assign(key.shadow.camera, { left: -span, right: span, bottom: -span, top: span, near: .1, far: 46 });
   key.shadow.normalBias = .012;
   key.shadow.bias = -.0002;
-  key.shadow.intensity = .43;
+  key.shadow.intensity = .28;
   key.shadow.radius = 2;
   key.shadow.autoUpdate = false;
   key.shadow.needsUpdate = true;
   scene.add(key, key.target);
-  const fill = new DirectionalLight("#b2b9ff", .45);
-  fill.position.set(12, 8, 7);
+  const fill = new DirectionalLight("#d3ebff", .65);
+  fill.position.set(9, -10, 8);
   scene.add(fill);
 
   const camera = new OrthographicCamera(-1, 1, 1, -1, .1, 100);
@@ -180,6 +185,7 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
   let animation = 0;
   let drawRequest = 0;
   let frame: ProvincePowerFrame | undefined;
+  let hovered: typeof parts[number] | undefined;
   let selection: string[] = [];
   let transitionStart: number | null = null;
   let automaticFocus: string | null = "national";
@@ -203,14 +209,32 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
     if (!drawRequest) drawRequest = requestAnimationFrame(draw);
   }
 
+  function updateHighlight(part: typeof parts[number]) {
+    const isSelected = selection.includes(part.code);
+    const isHovered = part === hovered;
+    part.fill.emissive.copy(part.fill.color).multiplyScalar(isHovered ? .24 : .09);
+    part.edge.material.opacity = isHovered ? .78 : isSelected ? .62 : .34;
+    part.edge.material.color.set(isHovered ? "#e1faff" : "#b5e3f4");
+  }
+
+  function highlightProvince(part?: typeof parts[number]) {
+    if (hovered === part) return;
+    const previous = hovered;
+    hovered = part;
+    if (previous) updateHighlight(previous);
+    if (hovered) updateHighlight(hovered);
+    queueRender();
+  }
+
   function updateRelief(elapsed: number) {
     const fraction = Math.min(1, Math.max(0, elapsed / transitionDuration));
     const progress = 1 - (1 - fraction) ** 3;
     for (const part of parts) {
       if (part.fromHeight !== part.toHeight || part.fromLift !== part.toLift) key.shadow.needsUpdate = true;
       part.fill.color.lerpColors(part.fromColor, part.toColor, progress);
-      part.side.color.copy(part.fill.color).multiplyScalar(.34);
-      part.side.emissive.copy(part.fill.color).multiplyScalar(part.toLift ? .12 : .055);
+      part.side.color.copy(part.fill.color).multiplyScalar(.58);
+      part.side.emissive.copy(part.fill.color).multiplyScalar(.085);
+      updateHighlight(part);
       part.mesh.scale.z = MathUtils.lerp(part.fromHeight, part.toHeight, progress);
       part.mesh.position.z = MathUtils.lerp(part.fromLift, part.toLift, progress);
     }
@@ -328,6 +352,7 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
   };
   function pointerMove(event: PointerEvent) {
     const part = event.buttons ? undefined : locate(event);
+    highlightProvince(part);
     canvas.classList.toggle("is-over-province", Boolean(part));
     callbacks.onHover(part && frame ? {
       x: event.clientX,
@@ -346,7 +371,11 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
     if (part) callbacks.onSelect(part.code);
     if (event.pointerType === "touch" && part) pointerMove(event);
   }
-  const hideHover = () => callbacks.onHover(null);
+  const hideHover = () => {
+    highlightProvince();
+    canvas.classList.toggle("is-over-province", false);
+    callbacks.onHover(null);
+  };
   const cameraChanged = () => {
     if (interacting) automaticFocus = null;
     queueRender();
@@ -402,7 +431,7 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
         zoom: Math.min(controls.maxZoom, Math.max(controls.minZoom, camera.zoom * factor)),
       });
     },
-    update(next: ProvincePowerFrame, selected?: string, peers: readonly string[] = [], palette: PowerPalette = "plasma") {
+    update(next: ProvincePowerFrame, selected?: string, peers: readonly string[] = [], palette: PowerPalette = powerDefaultPalette) {
       const previousFrame = frame;
       const previousSelection = selection;
       frame = next;
@@ -424,8 +453,6 @@ export function createPowerStatisticsScene(canvas: HTMLCanvasElement, geo: China
         part.toHeight = powerProvinceHeight(value, next.scaleMax) / powerMapDepth;
         part.fromLift = part.mesh.position.z;
         part.toLift = isSelected ? powerSelectionLift : 0;
-        part.edge.material.opacity = isSelected ? .68 : .16;
-        part.edge.material.color.set(isSelected ? "#f9eaff" : "#c4a8ce");
       }
       if (!previousFrame || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
         updateRelief(transitionDuration);

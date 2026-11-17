@@ -179,29 +179,46 @@ export function powerHistoricalExtent(history: PowerSeries, product: string, com
   return { growthLimit, changeLimit };
 }
 
-export type PowerPalette = "plasma" | "turbo";
+export const powerDefaultPalette = "spectrum";
+export type PowerPalette = typeof powerDefaultPalette | "plasma" | "turbo";
+const spectrumStops: readonly (readonly [offset: number, rgb: readonly number[]])[] = [
+  [0, [54, 215, 242]],
+  [.225, [57, 140, 246]],
+  [.375, [36, 201, 170]],
+  [.525, [120, 217, 108]],
+  [.675, [245, 230, 91]],
+  [.825, [255, 163, 77]],
+  [1, [241, 94, 112]],
+];
 const divergingStops = [[52, 148, 228], [68, 87, 164], [88, 87, 103], [192, 70, 102], [255, 181, 65]];
 export const powerSelectionColors = ["#f5f9ff", "#abc4e5", "#9f9bd6"];
 
-export function powerRampColor(ratio: number, diverging: boolean, palette: PowerPalette = "plasma") {
-  if (!diverging) {
-    return palette === "turbo" ? interpolateTurbo(ratio) : interpolatePlasma(.12 + ratio * .86);
-  }
-  const position = ratio * (divergingStops.length - 1);
-  const index = Math.min(divergingStops.length - 2, Math.floor(position));
-  const blend = position - index;
-  const channels = divergingStops[index].map((channel, i) =>
-    Math.round(channel + (divergingStops[index + 1][i] - channel) * blend));
+function mixPowerColors(lower: readonly number[], upper: readonly number[], blend: number) {
+  const channels = lower.map((channel, index) => Math.round(channel + (upper[index] - channel) * blend));
   return "rgb(" + channels.join(", ") + ")";
 }
 
-export const powerLegendColors = (diverging: boolean, palette: PowerPalette = "plasma") =>
+export function powerRampColor(ratio: number, diverging: boolean, palette: PowerPalette = powerDefaultPalette) {
+  if (diverging) {
+    const position = ratio * (divergingStops.length - 1);
+    const index = Math.min(divergingStops.length - 2, Math.floor(position));
+    return mixPowerColors(divergingStops[index], divergingStops[index + 1], position - index);
+  }
+  if (palette === "turbo") return interpolateTurbo(ratio);
+  if (palette === "plasma") return interpolatePlasma(.12 + ratio * .86);
+  const index = Math.max(1, spectrumStops.findIndex(([offset]) => ratio <= offset));
+  const [low, lowerColor] = spectrumStops[index - 1];
+  const [high, upperColor] = spectrumStops[index];
+  return mixPowerColors(lowerColor, upperColor, (ratio - low) / (high - low));
+}
+
+export const powerLegendColors = (diverging: boolean, palette: PowerPalette = powerDefaultPalette) =>
   Array.from({ length: 5 }, (_, index) => powerRampColor((index + .5) / 5, diverging, palette));
 export const powerMagnitude = (value: number | null, max: number, diverging: boolean) =>
   value == null || max <= 0 ? (diverging ? .5 : 0) : Math.max(0, Math.min(1, diverging ? (value / max + 1) / 2 : value / max));
 export const powerBin = (value: number | null, max: number, diverging: boolean) =>
   value == null ? -1 : Math.min(4, Math.floor(powerMagnitude(value, max, diverging) * 5));
-export const powerClassColor = (value: number | null, max: number, diverging: boolean, palette: PowerPalette = "plasma") => {
+export const powerClassColor = (value: number | null, max: number, diverging: boolean, palette: PowerPalette = powerDefaultPalette) => {
   const index = powerBin(value, max, diverging);
   return index < 0 ? powerMapNoData : powerRampColor((index + .5) / 5, diverging, palette);
 };

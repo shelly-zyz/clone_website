@@ -46,7 +46,7 @@ class Canvas {
 }
 function rect(left, top, right, bottom) { return { left, top, right, bottom, width: right - left, height: bottom - top }; }
 function textCanvas() {
-  return { getContext: () => ({ measureText: text => ({ width: text.length * 12 }), beginPath() {}, roundRect() {}, fill() {}, fillText() {} }) };
+  return { getContext: () => ({ measureText: text => ({ width: text.length * 12 }), beginPath() {}, roundRect() {}, fill() {}, stroke() {}, fillText() {} }) };
 }
 state.Renderer = Renderer;
 state.Controls = Controls;
