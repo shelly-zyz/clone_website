@@ -1,0 +1,102 @@
+{
+ "source": "AWS Terrain Tiles (Mapzen terrarium: SRTM, GMTED2010, ETOPO1)",
+ "encoding": "metres = R * 256 + G - 11000",
+ "items": [
+  {
+   "id": "gfs-china",
+   "file": "gfs-china.png",
+   "bounds": {
+    "west": 104.2,
+    "east": 130.04,
+    "south": 14.7,
+    "north": 36.3
+   },
+   "width": 720,
+   "height": 667
+  },
+  {
+   "id": "gfs-north-america",
+   "file": "gfs-north-america.png",
+   "bounds": {
+    "west": -114.4,
+    "east": -74.88,
+    "south": 23.82,
+    "north": 51.18
+   },
+   "width": 720,
+   "height": 628
+  },
+  {
+   "id": "gfs-south-america",
+   "file": "gfs-south-america.png",
+   "bounds": {
+    "west": -87.6,
+    "east": -43.52,
+    "south": -21.84,
+    "north": 9.84
+   },
+   "width": 720,
+   "height": 520
+  },
+  {
+   "id": "gfs-europe",
+   "file": "gfs-europe.png",
+   "bounds": {
+    "west": -24.6,
+    "east": 19.48,
+    "south": 37.04,
+    "north": 62.96
+   },
+   "width": 720,
+   "height": 659
+  },
+  {
+   "id": "gfs-asia",
+   "file": "gfs-asia.png",
+   "bounds": {
+    "west": 70.2,
+    "east": 103.64,
+    "south": 3.6,
+    "north": 32.4
+   },
+   "width": 720,
+   "height": 652
+  },
+  {
+   "id": "gfs-africa",
+   "file": "gfs-africa.png",
+   "bounds": {
+    "west": -0.4,
+    "east": 39.12,
+    "south": -19.06,
+    "north": 14.06
+   },
+   "width": 720,
+   "height": 604
+  },
+  {
+   "id": "gfs-oceania",
+   "file": "gfs-oceania.png",
+   "bounds": {
+    "west": 133.2,
+    "east": 159.04,
+    "south": -42.18,
+    "north": -14.82
+   },
+   "width": 598,
+   "height": 720
+  },
+  {
+   "id": "us-southeast-2026-09-26",
+   "file": "us-southeast-2026-09-26.png",
+   "bounds": {
+    "west": -86.4,
+    "east": -62.08,
+    "south": 20.36,
+    "north": 37.64
+   },
+   "width": 720,
+   "height": 585
+  }
+ ]
+}

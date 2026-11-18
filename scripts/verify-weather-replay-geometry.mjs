@@ -21,9 +21,9 @@ const { prepareReplayArea } = await import(geo);
 const data = moduleUrl(source('src/app/visualization/weather-replay/replay-data.ts'));
 const { accumulateRain, accumulationStart, areaStats, cellAreas, contourSegments, maxContinuousAccumulation, stackFrameIndices, trackHotspots } = await import(data);
 const palette = moduleUrl(source('src/app/visualization/weather-replay/replay-palette.ts'));
-const { replayTexture } = await import(palette);
-const { paintReplay } = await import(moduleUrl(source('src/app/visualization/weather-replay/replay-canvas.ts'),
-  { './replay-data': data, './replay-palette': palette }));
+const { accumulationLevels, bandIndex, bandPalette, radarScale, replayLegend, scaleColor, scaleLookup, volumeScale } = await import(palette);
+const field = moduleUrl(source('src/app/visualization/weather-replay/replay-field.ts'));
+const { blurField, isolines, joinSegments, localMaxima, upsample } = await import(field);
 const geography = JSON.parse(source('public/data/weather-replay/regions.geojson'));
 const fixture = {
   bounds: { west: -80, east: -64, south: 23, north: 35 }, cols: 81, rows: 61, coastline: [],
@@ -61,118 +61,57 @@ assert.equal(prepareReplayArea(tiny(0.5,0.5,1,1),'usa',custom).ocean,false,'inla
 assert(archive.mapBounds.west < replay.bounds.west, 'the basemap extends landward');
 assert.deepEqual(archive.bounds, replay.bounds, 'the data retain their geographic extent');
 
-const gradient = () => ({ addColorStop() {} });
-// Cached scene layers draw through offscreen canvases; forward them to the active recording.
-let activeContext;
-function recorder() {
-  const surfaces = [];
-  const fills = new Set();
-  const rasters = [];
-  const drops = [];
-  const labels = [];
-  let path = [];
-  const ctx = new Proxy({
-    beginPath(){path=[];}, moveTo(...p){path.push(['M',...p]);}, lineTo(...p){path.push(['L',...p]);},
-    closePath(){}, arc(){},
-    fill(){
-      fills.add(this.fillStyle);
-      if (typeof this.fillStyle === 'string' && this.fillStyle.startsWith('rgb(')) surfaces.push(this.fillStyle);
-    },
-    stroke(){ if (this.strokeStyle === "rgba(139, 201, 245, .63)") drops.push(...path); },
-    createLinearGradient: gradient, createRadialGradient: gradient,
-    fillText(label){ labels.push(label); },
-    drawImage(image){ rasters.push(image); },
-  }, {get(target,key){return key in target ? target[key] : () => {}; }});
-  ctx.fillStyle = '';
-  activeContext = ctx;
-  return { surfaces, fills, rasters, drops, labels, canvas:{clientWidth:1060,clientHeight:500,width:1060,height:500,getContext:()=>ctx} };
+// Continuous fields: interpolation never fills a missing observation.
+const grid = upsample([0, 4, 8, 12, null, 4, 8, 12, 0, 4, 8, 12], 4, 3, 4);
+assert.equal(grid.width, 13);
+assert.equal(grid.height, 9);
+assert.equal(grid.data[12], 12, 'source samples are preserved');
+assert(Math.abs(grid.data[4 * 13 + 8] - 8) < 1e-6);
+assert(Number.isNaN(grid.data[0]) && Number.isNaN(grid.data[4 * 13]), 'squares touching a missing cell stay missing');
+assert(Number.isNaN(grid.data[1 * 13 + 1]), 'interpolation does not bridge a gap');
+const smooth = upsample([0, 0, 0, 0, 9, 0, 0, 0, 0], 3, 3, 4);
+assert(smooth.data.every(value => value >= 0), 'rates are clamped at zero after cubic overshoot');
+assert(Math.abs(smooth.data[4 * 9 + 4] - 9) < 1e-6, 'peak sample is kept');
+assert(blurField(grid, 1).data.some(Number.isNaN), 'blur keeps missing samples missing');
+const ramp = { data: Float32Array.from([0, 1, 2, 0, 1, 2, 0, 1, 2]), width: 3, height: 3, factor: 1 };
+const contour = isolines(ramp, 1.5);
+assert.equal(contour.length, 2, 'one isoline segment per crossed square');
+assert(contour.every(([x1, , x2]) => x1 === 1.5 && x2 === 1.5), 'isoline crosses at the interpolated level');
+assert.equal(joinSegments(contour).length, 1, 'segments join into one polyline');
+assert.equal(isolines({ ...ramp, data: Float32Array.from([0, 1, NaN, 0, 1, 2, 0, 1, 2]) }, 1.5).length, 1, 'isolines skip squares with missing corners');
+const peakData = new Float32Array(49);
+peakData[1 * 7 + 1] = 5;
+peakData[5 * 7 + 5] = 7;
+const peaks = localMaxima({ data: peakData, width: 7, height: 7, factor: 1 }, 1, 2);
+assert.deepEqual(peaks.map(peak => peak.value), [7, 5], 'separate rain maxima are found strongest first');
+
+// Colour scales and legends.
+const levels = accumulationLevels(390);
+assert.equal(levels[0], 1);
+assert(levels.at(-1) >= 390, 'the top band covers the case maximum');
+assert.equal(bandPalette(levels).length, levels.length);
+assert.equal(bandIndex(levels, .5), -1, 'totals below the first isohyet stay unfilled');
+assert.equal(bandIndex(levels, 30), levels.findLastIndex(level => level <= 30));
+assert(accumulationLevels(12).length >= 8, 'small totals still get enough bands');
+assert.deepEqual(scaleColor(radarScale, 0), radarScale[0][1]);
+assert.deepEqual([...scaleLookup(volumeScale).slice(-4)], [...volumeScale.at(-1)[1], 255]);
+for (const view of ['weather', 'time', 'rain', 'accumulation']) {
+  const legend = replayLegend(view, 105, 390);
+  assert(legend.colors.length >= 6, view + ' legend has a full scale');
 }
+assert.equal(replayLegend('accumulation', 105, 390).kind, 'classes', 'isohyets use discrete classes');
+assert.equal(replayLegend('weather', 105, 390).kind, 'ramp');
+assert.notDeepEqual(replayLegend('weather', 105, 390).colors, replayLegend('time', 105, 390).colors, 'views use distinct palettes');
+const frames = stackFrameIndices(replay, Math.min(8, replay.rain.length - 1));
+assert(frames.includes(Math.min(8, replay.rain.length - 1)) && frames.length <= 5, 'the selected instant always has a slice');
 
-globalThis.window = {devicePixelRatio:1};
-globalThis.document = {
-  createElement() {
-    const canvas = { width: 0, height: 0 };
-    canvas.getContext = () => new Proxy({
-      createImageData: (width, height) => ({ data: new Uint8ClampedArray(width * height * 4) }),
-      putImageData: image => { canvas.pixels = image.data; },
-      createLinearGradient: gradient, createRadialGradient: gradient,
-    }, {
-      get(target, key) {
-        if (key in target) return target[key];
-        const value = activeContext?.[key];
-        return typeof value === 'function' ? value.bind(activeContext) : value;
-      },
-      set(target, key, value) { if (activeContext) activeContext[key] = value; return true; },
-    });
-    return canvas;
-  },
-};
-
-const texture = replayTexture([null, 0, 5, 60], 2, 2, "rain").pixels;
-assert.equal(texture[3], 0, 'null is transparent');
-assert.equal(texture[7], 0, 'no rain is transparent');
-assert.equal(texture[11], 255, 'weak rain is opaque');
-assert.equal(texture[15], 255, 'strong rain is opaque');
-assert.deepEqual([...texture.slice(8, 11)], [237, 151, 78], '5 mm/h uses the original ochre');
-assert.deepEqual([...replayTexture([20], 1, 1, "rain", 20).pixels], [97, 13, 20, 255], 'regional color limit matches the legend');
-assert.equal(replayTexture([null, 289], 2, 1, "infrared").pixels[3], 0);
-const cover = replayTexture([null, 0, 65, 100], 2, 2, "cloudCover").pixels;
-assert.equal(cover[3], 0, 'missing cloud cover is transparent');
-assert.equal(cover[7], 0, 'clear sky is transparent');
-assert(cover[11] > 0 && cover[15] > cover[11], 'more cloud cover increases the layer opacity');
-const index = Math.min(8, replay.rain.length - 1);
-const common = { index, area: archive, clouds:true, precipitation:true, previous:index, progress:1, rotation:.42 };
-const overlay = recorder();
-paintReplay(overlay.canvas, replay, { ...common, view: 'weather', sectionRow: 5 });
-assert(overlay.rasters.length > 0, 'ground rain and the cutaway cloud layer are drawn');
-assert(overlay.drops.length > 0);
-assert(overlay.labels.includes('A') && overlay.labels.includes('B'), 'cutaway endpoints are labelled');
-
-const stack = recorder();
-paintReplay(stack.canvas, replay, { ...common, view: 'time' });
-const frames = stackFrameIndices(replay, index);
-assert.equal(stack.rasters.length, frames.length, 'each plane uses a rain-rate raster');
-assert.equal(stack.surfaces.length, 0, 'time layers have no opaque grid-cell faces');
-assert(stack.labels.includes('时间 UTC'));
-assert(frames.includes(index) && frames.length <= 5);
-assert(stack.labels.includes(replay.rain[index].time.slice(11, 16)), 'active slice has a timestamp');
-
-const accumulated = recorder();
-const totals = accumulateRain(replay)[index];
-paintReplay(accumulated.canvas, replay, { ...common, view: 'accumulation', totals, accumulationLimit: 150, levels: [5, 25, 50] });
-assert.equal(accumulated.rasters.length, 1, 'accumulation uses one geographic raster');
-for (const recording of [overlay, stack, accumulated, renderRain(1, 0, 'rain')]) {
-  assert(!recording.fills.has('#f5f3ef') && !recording.fills.has('#c9c6c0'), 'geography has no solid baseplate');
+// Baked relief and place labels cover every regional case.
+const relief = JSON.parse(source('public/data/weather-replay/relief/manifest.json'));
+for (const item of [...JSON.parse(regionalCatalog).map(({ bounds }) => bounds), fixture.bounds]) {
+  assert(relief.items.some(({ bounds }) => bounds.west <= item.west && bounds.east >= item.east && bounds.south <= item.south && bounds.north >= item.north),
+    'relief raster covers the replay bounds');
 }
-function renderRain(rate, phase, view, precipitation = true) {
-  const recording = recorder();
-  // Only one wet grid cell. Weak and strong rain share the same trajectories
-  // for overlapping particles, with extra particles at the higher rate.
-  const sample = tiny(-80, 23, -64, 35);
-  sample.rain[0].values = [0, 0, rate, null];
-  paintReplay(recording.canvas, sample, {
-    area: archive, view, rotation: 0.42, index: 0, previous: 0, progress: 1,
-    phase, clouds: false, precipitation,
-  });
-  return recording;
-}
-
-for (const view of ['weather']) {
-  const light = renderRain(1, 0, view);
-  const heavy = renderRain(64, 0, view);
-  assert(light.labels.some(label => label.endsWith('°W')) && light.labels.some(label => label.endsWith('°N')));
-  assert.equal(light.drops.length, 4, 'weak rate produces two drops');
-  assert(heavy.drops.length > light.drops.length, 'heavy rate increases drop density');
-  assert.deepEqual(heavy.drops.slice(0, light.drops.length), light.drops, 'intensity does not affect drop height or length');
-  for (let i = 0; i < heavy.drops.length; i += 2) {
-    assert.equal(heavy.drops[i][1], heavy.drops[i + 1][1], 'vertical drop');
-  }
-  const next = renderRain(64, 0.05, view);
-  assert(heavy.drops.some((point, i) => point[0] === 'M' && next.drops[i][2] > point[2]), 'rain falls');
-  assert.equal(renderRain(0, 0, view).drops.length, 0, 'dry and missing cells stay dry');
-}
-assert.equal(renderRain(64, 0, 'rain').drops.length, 0, 'hotspot map has no particles');
-assert.equal(renderRain(64, 0, 'weather', false).drops.length, 0, 'cloud view honors precipitation toggle');
+assert(JSON.parse(source('public/data/weather-replay/places.json')).places.length > 100);
 
 const series = {
   ...tiny(110, 20, 110.2, 20.2), metadata: {stepMinutes: 180},
@@ -220,4 +159,4 @@ for (const item of JSON.parse(regionalCatalog)) {
   const wet = rain[0].values.findIndex((amount, i) => amount != null && rain[1].values[i] != null);
   assert(Math.abs(accumulateRain(sample)[1][wet] - (rain[0].values[wet] + rain[1].values[wet]) * 1.5) < 1e-9);
 }
-console.log('PASS: geography, regional coverage, four replay views, tracking, contours, and integration');
+console.log('PASS: geography, regional coverage, continuous fields, palettes, tracking, contours, and integration');
