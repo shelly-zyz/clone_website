@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useAnalysisJob, type LoadAnalysis } from "@/hooks/use-analysis-job";
 import type { ForecastOverview, ForecastOverviewTopic } from "@/lib/globe-forecast";
 import type { XiaoyunAnalysisArtifact } from "@/lib/xiaoyun/contracts";
+import { createPortal } from "react-dom";
+import { ControlGroup } from "./GlobeLayout";
 import { ForecastSeries, ForecastSidebar, formatForecastDate } from "./ForecastSidebar";
 import styles from "./ForecastSidebar.module.css";
 
@@ -45,7 +47,8 @@ function ForecastTask({ task, loadAnalysis }: { task: XiaoyunAnalysisArtifact; l
   );
 }
 
-export function WorkspaceForecast({ topic, loadOverview, task, loadAnalysis, onRun, pending, notice, ready }: {
+export function WorkspaceForecast({ topic, loadOverview, task, loadAnalysis, onRun, pending, notice, ready, controls }: {
+  controls: HTMLElement;
   topic: Exclude<ForecastOverviewTopic, "weather">;
   loadOverview: LoadForecastOverview;
   task?: XiaoyunAnalysisArtifact;
@@ -103,10 +106,12 @@ export function WorkspaceForecast({ topic, loadOverview, task, loadAnalysis, onR
           <p className={styles.muted}>
             训练窗口 {formatForecastDate(training.start, grain)} 至 {formatForecastDate(training.end, grain)}
           </p>
-          <button className={styles.action} type="button" disabled={pending || !ready} onClick={run}>
-            {pending ? "正在提交预测…" : `${historicalWindow ? "历史外推" : "预测"} ${horizon}`}
-          </button>
-          {!ready && <p className={styles.muted}>小云连接后可提交预测。</p>}
+          {createPortal(<ControlGroup title={topic === "power" ? "电力预测" : "碳排放预测"}>
+            <button className={styles.action} type="button" disabled={pending || !ready} onClick={run}>
+              {pending ? "正在提交预测…" : `${historicalWindow ? "历史外推" : "预测"} ${horizon}`}
+            </button>
+            {!ready && <p className={styles.muted}>小云连接后可提交预测。</p>}
+          </ControlGroup>, controls)}
         </> : (
           <p className={styles.muted}>末尾连续观测 {overview.continuous ?? 0} 期。预测需要至少 8 期连续观测。</p>
         )}

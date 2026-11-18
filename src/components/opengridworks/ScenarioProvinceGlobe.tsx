@@ -3,6 +3,8 @@
 import maplibregl, { type ExpressionSpecification, type GeoJSONSource, type Map, type MapMouseEvent } from "maplibre-gl";
 import type { FeatureCollection, Point } from "geojson";
 import { useEffect, useRef, useState } from "react";
+import { observeMapViewport } from "@/lib/globe-viewport";
+import { GlobeMapAttribution } from "./GlobeMapAttribution";
 import styles from "./WeatherResourceScene.module.css";
 
 type ProvinceMarker = { id: string; iso: string; coordinates: [number, number]; value: number };
@@ -28,6 +30,7 @@ export function ScenarioProvinceGlobe({ regions, selected, onSelect }: {
     try {
       view = new maplibregl.Map({
         container: element, center, zoom, maxZoom: 6, dragRotate: false,
+        attributionControl: false, trackResize: false,
         style: {
           version: 8,
           projection: { type: "globe" },
@@ -63,7 +66,12 @@ export function ScenarioProvinceGlobe({ regions, selected, onSelect }: {
       if (candidate) click.current(candidate.id);
     };
     view.on("click", pick);
-    return () => { view.remove(); map.current = null; };
+    const stopObserving = observeMapViewport(view);
+    return () => {
+      stopObserving();
+      view.remove();
+      map.current = null;
+    };
   }, []);
 
   useEffect(() => {
@@ -93,8 +101,9 @@ export function ScenarioProvinceGlobe({ regions, selected, onSelect }: {
   }, [ready, selected]);
 
   return (
-    <div className={styles.globe} aria-label="省级风光资源地球">
+    <div className={styles.globe} aria-label="省级风光资源地球" data-map-ready={ready}>
       <div ref={container} />
+      {ready && <GlobeMapAttribution map={map} />}
       {unavailable ? <p role="status">地球不可用，可使用地区列表查看数据。</p> : null}
     </div>
   );

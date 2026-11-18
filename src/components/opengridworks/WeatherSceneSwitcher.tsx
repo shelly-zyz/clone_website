@@ -3,10 +3,11 @@
 import { replayViewOrder, replayViews, type WeatherScene } from "@/lib/weather-replay/views";
 import styles from "./PageSwitcher.module.css";
 
-const scenes = ["globe", ...replayViewOrder] as const;
-const title = (scene: WeatherScene) => scene === "globe" ? "气象地球" : replayViews[scene].title;
+const scenes = ["globe", ...replayViewOrder, "resources"] as const;
+type Scene = WeatherScene | "resources";
+const title = (scene: Scene) => scene === "globe" ? "气象地球" : scene === "resources" ? "风光资源情景" : replayViews[scene].title;
 
-export function WeatherSceneSwitcher({ scene, onChange }: { scene: WeatherScene; onChange: (scene: WeatherScene) => void }) {
+export function WeatherSceneSwitcher({ scene, onChange }: { scene: Scene; onChange: (scene: Scene) => void }) {
   const index = scenes.indexOf(scene);
   const previous = scenes[(index + scenes.length - 1) % scenes.length];
   const next = scenes[(index + 1) % scenes.length];

@@ -17,7 +17,6 @@ import maplibregl, {
 } from "maplibre-gl";
 import type { Feature, FeatureCollection, LineString, Point } from "geojson";
 import {
-  Activity,
   Camera,
   ArrowUpRight,
   Check,
@@ -62,6 +61,7 @@ import { readReplayRegion, replayRegionAt, replayRegionOptions } from "@/lib/wea
 import { replayViews, type WeatherScene } from "@/lib/weather-replay/views";
 import { WeatherSceneSwitcher } from "./WeatherSceneSwitcher";
 import { loadWeatherReplayData } from "@/app/visualization/weather-replay/replay-loader";
+import { ControlGroup, GlobeAnalysis, GlobeControls, GlobeLayout } from "./GlobeLayout";
 import { WeatherGlobeLegend, WeatherSidebarFilters } from "@/components/opengridworks/WeatherSidebarFilters";
 import { WorkspaceFilterSelect, WorkspaceSidebar } from "@/components/opengridworks/WorkspaceSidebar";
 import { XiaoyunAssistant } from "@/components/opengridworks/XiaoyunAssistant";
@@ -2654,7 +2654,6 @@ function MapViewport({
     }
 
     mapRef.current = map;
-    map.addControl(new maplibregl.NavigationControl({ showCompass: true, showZoom: true }), "bottom-right");
 
     const stopObservingViewport = observeMapViewport(map);
 
@@ -3403,9 +3402,21 @@ function MapViewport({
     return () => window.clearInterval(timer);
   }, [cinematic, ready]);
 
+  const [navigationHost, setNavigationHost] = useState<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || !navigationHost) return;
+    const control = new maplibregl.NavigationControl({ showCompass: true, showZoom: true });
+    navigationHost.append(control.onAdd(map));
+    return () => control.onRemove();
+  }, [navigationHost, ready]);
+
   return (
     <div className="og-map-viewport" aria-label={activeProject === "carbon" ? "交互式碳排放地球" : "交互式电源项目地图"} data-map-ready={ready}>
       <div ref={mapContainerRef} className="og-maplibre-container" />
+      {active && <GlobeControls><ControlGroup title="地图视角">
+        <div className="og-map-navigation" ref={setNavigationHost} />
+      </ControlGroup></GlobeControls>}
       {!ready && !mapUnavailable && <GlobeLoading label={activeProject === "carbon" ? "正在加载碳排放地球" : "正在加载电力地球"} />}
       {mapUnavailable ? <p className="og-map-unavailable" role="status">当前浏览器无法绘制地图，仍可使用专题分析。</p> : null}
       <canvas
@@ -4700,7 +4711,7 @@ function CardsDrawer({
   }, [energyAssets]);
 
   return (
-    <aside className={`og-cards-drawer ${open ? "is-open" : ""}`} aria-label="卡片面板" aria-hidden={!open}>
+    <section className={`og-cards-drawer ${open ? "is-open" : ""}`} aria-label="卡片面板" aria-hidden={!open}>
       <header>
         <strong>地图卡片</strong>
         <button type="button" aria-label="关闭卡片面板" onClick={onClose}>
@@ -4715,7 +4726,7 @@ function CardsDrawer({
           </button>
         ))}
       </div>
-    </aside>
+    </section>
   );
 }
 
@@ -5283,59 +5294,58 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
     carbon: "GRACED · 全球 0.1° 网格",
     economy: "",
   }[activeProject];
-  const className = resourceScene ? "og-app-shell is-resource-scene"
-    : `og-app-shell og-globe-workspace ${cinematic ? "is-cinematic" : ""} ${activeProject === "weather" ? "is-earth-project" : ""} ${economyActive ? "is-economy-project" : ""} ${activeProject === "carbon" ? "is-carbon-project" : ""}${carbonTrade ? " is-carbon-trade" : ""}${activeProject === "power" ? " is-power-project" : ""}${statsActive ? " is-power-statistics" : ""}`;
+  const navigation = <GlobeNavigation activeTopic={activeProject} onTopicChange={switchProject} onTopicIntent={preloadTopic} />;
+  const weatherScenes = <WeatherSceneSwitcher scene={resourceScene ? "resources" : weatherScene}
+    onChange={scene => {
+      if (scene === "resources") navigate("weather", { scene });
+      else navigate("weather", { scene: undefined, replay: scene === "globe" ? undefined : scene });
+    }} />;
+  const carbonScenes = <CarbonSceneSwitcher projection={carbonTrade ? "map" : "globe"} onChange={setCarbonProjection} />;
+  const className = `og-app-shell og-globe-workspace ${cinematic ? "is-cinematic" : ""} ${activeProject === "weather" ? "is-earth-project" : ""} ${economyActive ? "is-economy-project" : ""} ${activeProject === "carbon" ? "is-carbon-project" : ""}${carbonTrade ? " is-carbon-trade" : ""}${activeProject === "power" ? " is-power-project" : ""}${statsActive ? " is-power-statistics" : ""}`;
   return (
-    <main className={className} onClickCapture={beforeAnalysis} data-workspace={activeProject}
+    <GlobeLayout className={className} onClickCapture={beforeAnalysis} data-workspace={activeProject}
       data-power-assets={activeProject === "power" && !statsActive ? powerAssetsStatus : undefined}
       data-carbon-data-ready={activeProject === "carbon" && !carbonTrade ? Boolean(carbonFrame) : undefined}>
       {!resourceScene && <div className="og-starfield" aria-hidden="true" />}
-      <GlobeNavigation activeTopic={activeProject} onTopicChange={switchProject} onTopicIntent={preloadTopic} />
       {resourceScene && (
-        <WeatherResourceScene context={context}
+        <WeatherResourceScene context={context} navigation={navigation} scenes={weatherScenes}
           onChange={update => navigate("weather", update, true)}
-          onBack={() => navigate("weather", { scene: undefined })} />
+          onBack={() => navigate("weather", { scene: undefined, replay: undefined })} />
       )}
       {retainedStages.economy && (
         <div className="og-retained-economy" hidden={!economyActive}>
           <EconomyWorkspace active={economyActive}
             basemap={economyMapThemes.find(({ key }) => key === economyMapTheme) ?? defaultMapTheme}
             onBasemapError={fallbackEconomyBasemap}
-            initialContext={context}
+            initialContext={context} navigation={navigation}
+            mapControls={!economyActive ? null : (
+              <ControlGroup title="底图">
+                <div className="og-layer-cards" aria-label="经济地球底图控制">
+                  <BasemapButton theme={economyMapTheme} expanded={activePanel === "mapType"} onClick={() => togglePanel("mapType")} />
+                </div>
+                {activePanel === "mapType" && (
+                  <MapTypePanel themes={economyMapThemes} activeMapTheme={economyMapTheme}
+                    onTheme={theme => {
+                      setEconomyMapTheme(theme);
+                      replaceWorkspaceContext({ basemap: theme });
+                      setActivePanel(null);
+                    }}
+                    onClose={() => setActivePanel(null)}
+                  />
+                )}
+              </ControlGroup>
+            )}
           />
-          <div className="og-layer-cards" aria-label="经济地球底图控制">
-            <BasemapButton theme={economyMapTheme} expanded={activePanel === "mapType"} onClick={() => togglePanel("mapType")} />
-          </div>
-          {economyActive && activePanel === "mapType" && (
-            <MapTypePanel themes={economyMapThemes} activeMapTheme={economyMapTheme}
-              onTheme={theme => {
-                setEconomyMapTheme(theme);
-                replaceWorkspaceContext({ basemap: theme });
-                setActivePanel(null);
-              }}
-              onClose={() => setActivePanel(null)}
-            />
-          )}
         </div>
       )}
-      {carbonTrade && <CarbonTradeWorkspace selection={{ country: context.country, year: context.year, direction: context.tradeDirection }}
+      {carbonTrade && <CarbonTradeWorkspace navigation={navigation} scenes={carbonScenes}
+        selection={{ country: context.country, year: context.year, direction: context.tradeDirection }}
         onChange={changeCarbonTrade} />}
-      {activeProject === "carbon" && <CarbonSceneSwitcher projection={carbonTrade ? "map" : "globe"} onChange={setCarbonProjection} />}
       <div className="og-globe-stage" hidden={economyActive || resourceScene || carbonTrade}>
         {retainedStages.weather && (
           <div className="og-weather-original og-weather-globe-stage" hidden={!weatherGlobeActive}>
             <EarthProjectViewport active={weatherGlobeActive} hash={activeProject === "weather" ? context.weather : undefined} onLoad={weatherReady} onLocation={setWeatherPoint} />
             {weatherGlobeActive && <WeatherGlobeLegend frameDocument={weatherDocument} />}
-            {weatherGlobeActive && weatherPoint && replayCandidate && (
-              <button type="button" className="og-weather-replay-entry" onClick={() => navigate("weather", {
-                replay: "weather", replayRegion: replayCandidate.value,
-                replayPoint: weatherPoint.map(value => value.toFixed(4)).join(","),
-                replayFrame: (context.replayRegion ?? "archive") === replayCandidate.value ? context.replayFrame : undefined,
-              })}>
-                <span>{replayCandidate.label}</span><strong>查看历史区域回放 <ArrowUpRight size={14} /></strong>
-              </button>
-            )}
-            {weatherGlobeActive && !cinematic && <WeatherComparisonPanel />}
           </div>
         )}
         {activeProject === "weather" && !resourceScene && weatherScene !== "globe" && (
@@ -5363,6 +5373,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
                   onCamera={setMapCamera}
                   onHover={setHoverTooltip}
                   onSelect={choosePowerProvince}
+                  renderControls={children => <GlobeControls>{children}</GlobeControls>}
                   onOpenThematicMap={() => updatePowerAnalysis({ powerPresentation: "flat" })}
                   onScreenshotComplete={showToast}
                 />
@@ -5370,14 +5381,9 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
               {powerPresentation && <PowerThematicMap frame={powerAnalysis.frame} split={powerAnalysis.split}
                 selection={powerSelection} bin={currentPowerBin} palette={powerPalette} onSelect={choosePowerProvince}
                 screenshotRequest={screenshotRequest} onScreenshotComplete={showToast} />}
-              {!cinematic && <>
-                <PowerMapCaption data={powerAnalysis} presentation={powerPresentation} selection={powerSelection} update={updatePowerAnalysis} />
-                <PowerMapLegend data={powerAnalysis} presentation={powerPresentation} bin={currentPowerBin} palette={powerPalette}
-                  onBin={value => setPowerBin({ key: analysisBinKey, value })} />
-              </>}
+              {!powerPresentation && <PowerMapLegend data={powerAnalysis} presentation={powerPresentation} bin={currentPowerBin} palette={powerPalette}
+                onBin={value => setPowerBin({ key: analysisBinKey, value })} />}
             </div>
-            {!cinematic && <PowerTimeline key={powerView + ":" + powerAnalysis.grain + ":" + powerAnalysis.source + ":" + powerAnalysis.product.id}
-              data={powerAnalysis} update={updatePowerAnalysis} />}
           </div>
         )}
         {retainedStages.map && (
@@ -5421,31 +5427,15 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
       </div>
       {!economyActive && !resourceScene && !carbonTrade && (
         <>
-          {activeProject === "power" && !cinematic && (
-            <PowerViews view={powerView} onView={selectPowerView} />
-          )}
-          {activeProject === "weather" && (
-            <WeatherSceneSwitcher scene={weatherScene} onChange={replay => navigate("weather", { replay: replay === "globe" ? undefined : replay })} />
-          )}
-          {activeProject === "carbon" && !cinematic && <CarbonTimeline {...carbonTime} />}
-          {statsActive && !cinematic && <PowerAnalysisRail data={powerAnalysis} selection={powerSelection}
-            update={updatePowerAnalysis} onChoose={choosePowerProvince} />}
-          {activeProject === "power" && !statsActive ? (
-            <MobilePowerShortcuts
-              activeCleanEnergy={activeCleanEnergy}
-              activeGas={activeGas}
-              activePlanned={activePlanned}
-              onCleanEnergy={applyCleanEnergyPreset}
-              onGas={() => {
-                setVisibleTechnologies((state) => ({ ...state, gas: !state.gas }));
-                setVisibleLayers((state) => ({ ...state, gasPipelines: !state.gasPipelines }));
-              }}
-              onPlanned={() => toggleLayer("plannedUpgrades")}
-            />
-          ) : null}
+          {weatherGlobeActive && <WeatherComparisonPanel />}
+          {statsActive && <GlobeAnalysis><PowerAnalysisRail data={powerAnalysis} selection={powerSelection}
+            update={updatePowerAnalysis} onChoose={choosePowerProvince} /></GlobeAnalysis>}
           <WorkspaceSidebar
             topic={activeProject}
             summary={sidebarSummary}
+            navigation={navigation}
+            scenes={activeProject === "power" ? <PowerViews view={powerView} onView={selectPowerView} />
+              : activeProject === "weather" ? weatherScenes : carbonScenes}
             onSearch={activeProject === "power" && powerView === "facilities" ? () => togglePanel("search") : undefined}
             leadingFilter={activeProject === "power" && powerView === "facilities" ? (
               <WorkspaceFilterSelect
@@ -5459,9 +5449,46 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
               />
             ) : undefined}
           >
+            {activePanel === "search" && activeProject === "power" && !statsActive ? (
+              <SearchPanel
+                assets={powerData}
+                query={searchQuery}
+                onQuery={setSearchQuery}
+                onSelect={(feature) => {
+                  selectFeature(feature);
+                  setActivePanel(null);
+                }}
+                onClose={() => setActivePanel(null)}
+              />
+            ) : null}
             {statsActive && <PowerAnalysisFilters data={powerAnalysis} selection={powerSelection} presentation={powerPresentation} palette={powerPalette}
               update={updatePowerAnalysis} onChoose={choosePowerProvince}
               onClear={() => updatePowerAnalysis({ region: "china", powerPeers: undefined })} />}
+            {statsActive && <>
+              {powerPresentation && <ControlGroup title="地图分级筛选">
+                <div className="og-inline-map-legend">
+                  <PowerMapLegend data={powerAnalysis} presentation={powerPresentation} bin={currentPowerBin} palette={powerPalette}
+                    onBin={value => setPowerBin({ key: analysisBinKey, value })} />
+                </div>
+              </ControlGroup>}
+              <PowerMapCaption data={powerAnalysis} presentation={powerPresentation} selection={powerSelection} update={updatePowerAnalysis} />
+              <PowerTimeline key={powerView + ":" + powerAnalysis.grain + ":" + powerAnalysis.source + ":" + powerAnalysis.product.id}
+                data={powerAnalysis} update={updatePowerAnalysis} />
+            </>}
+            {activeProject === "carbon" && <CarbonTimeline {...carbonTime} />}
+            {activeProject === "power" && !statsActive ? (
+              <MobilePowerShortcuts
+                activeCleanEnergy={activeCleanEnergy}
+                activeGas={activeGas}
+                activePlanned={activePlanned}
+                onCleanEnergy={applyCleanEnergyPreset}
+                onGas={() => {
+                  setVisibleTechnologies((state) => ({ ...state, gas: !state.gas }));
+                  setVisibleLayers((state) => ({ ...state, gasPipelines: !state.gasPipelines }));
+                }}
+                onPlanned={() => toggleLayer("plannedUpgrades")}
+              />
+            ) : null}
             {activeProject === "power" && powerView === "facilities" ? (
               <>
               {!hasFacilityLayers && (
@@ -5507,10 +5534,15 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
                 onRegion={selectCarbonRegion} onSector={onCarbonSector} onShare={shareMap} onRetry={retryCarbon} />
             ) : activeProject === "weather" ? (
               <>
-                <button className="og-workspace-action og-secondary-entry" type="button"
-                  onClick={() => navigate("weather", { scene: "resources" })}>
-                  <Activity size={16} /> 风光资源情景 <ArrowUpRight size={14} />
-                </button>
+                {weatherGlobeActive && weatherPoint && replayCandidate && (
+                  <button type="button" className="og-weather-replay-entry" onClick={() => navigate("weather", {
+                    replay: "weather", replayRegion: replayCandidate.value,
+                    replayPoint: weatherPoint.map(value => value.toFixed(4)).join(","),
+                    replayFrame: (context.replayRegion ?? "archive") === replayCandidate.value ? context.replayFrame : undefined,
+                  })}>
+                    <span>{replayCandidate.label}</span><strong>查看历史区域回放 <ArrowUpRight size={14} /></strong>
+                  </button>
+                )}
                 {weatherScene === "globe" ? <WeatherSidebarFilters frameDocument={weatherDocument} /> : (
                   <>
                     <WorkspaceFilterSelect label="回放区域" value={context.replayRegion ?? "archive"}
@@ -5522,133 +5554,99 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
                 )}
               </>
             ) : null}
+            {activeProject !== "weather" && !statsActive && <div className="og-forecast-controls" />}
+            {activeProject !== "weather" && <ControlGroup title="地图工具" open={cinematic || undefined}>
+              {cinematic && <button className="og-workspace-action" type="button" onClick={() => setCinematic(false)}>退出沉浸视图</button>}
+                <TopToolbar
+                  activeProject={activeProject}
+                  powerStatistics={statsActive}
+                  activePanel={activePanel}
+                  cinematic={cinematic}
+                  onOpenPanel={togglePanel}
+                  onReset={statsActive ? resetPowerStatistics : activeProject === "carbon" ? resetCarbon : resetAll}
+                  onCinematic={() => setCinematic((state) => !state)}
+                  onShare={shareMap}
+                  onScreenshot={() => setScreenshotRequest((request) => request + 1)}
+                  onCards={() => setCardsOpen((state) => !state)}
+                />
+              {activePanel === "labels" ? (
+                <LabelSettingsPanel settings={labelSettings} onChange={setLabelSettings} onClose={() => setActivePanel(null)} />
+              ) : null}
+              {activePanel === "globe" ? (
+                <GlobeControlsPanel
+                  visibleSourceLayers={visibleSourceLayers}
+                  onToggleSourceLayer={toggleSourceLayer}
+                  onToggleAll={setAllSourceLayers}
+                  onFlyToRegion={flyToRegion}
+                  onClose={() => setActivePanel(null)}
+                />
+              ) : null}
+              {activePanel === "presets" && activeProject === "power" ? (
+                <PresetViewsPanel
+                  onApplyCleanEnergy={applyCleanEnergyPreset}
+                  onApplyPlanned={applyPlannedPreset}
+                  onReset={resetAll}
+                  onClose={() => setActivePanel(null)}
+                />
+              ) : null}
+              {activePanel === "layers" && activeProject === "power" ? (
+                <LayersPanel
+                  visibleLayers={visibleLayers}
+                  onToggleLayer={toggleLayer}
+                  onLocked={(label) => showToast(`${label} 在当前演示版本中暂未开放。`)}
+                  onClose={() => setActivePanel(null)}
+                />
+              ) : null}
+              {activePanel === "customLayers" && activeProject === "power" ? (
+                <CustomLayersPanel
+                  visibleCustomLayers={visibleCustomLayers}
+                  onToggleCustomLayer={toggleCustomLayer}
+                  onClose={() => setActivePanel(null)}
+                />
+              ) : null}
+              {activePanel === "mapType" ? (
+                <MapTypePanel
+                  activeMapTheme={activeMapTheme}
+                  onTheme={(theme) => {
+                    setActiveMapTheme(theme);
+                    replaceWorkspaceContext({ basemap: theme });
+                    showToast(`已选择${mapThemes.find((item) => item.key === theme)?.label ?? "底图"}主题。`);
+                  }}
+                  onClose={() => setActivePanel(null)}
+                />
+              ) : null}
+              {activePanel === "sources" ? (
+                <SourcesPanel onClose={() => setActivePanel(null)} />
+              ) : null}
+              {!statsActive ? (
+                <LayerCards
+                  activePanel={activePanel}
+                  activeMapTheme={activeMapTheme}
+                  onOpenPanel={togglePanel}
+                />
+              ) : null}
+              {!statsActive ? (
+                <MiniMap
+                  selectedFeature={selectedFeature}
+                  camera={mapCamera}
+                  onMove={(center) => requestFocus(center, mapCamera.zoom, mapCamera.pitch, mapCamera.bearing)}
+                />
+              ) : null}
+              {activeProject === "power" && cardsOpen && (
+                <CardsDrawer energyAssets={powerData.energyAssets} open={cardsOpen} onClose={() => setCardsOpen(false)} onSelect={selectFeature} />
+              )}
+            </ControlGroup>}
           </WorkspaceSidebar>
-          {activeProject !== "weather" ? (
-            <TopToolbar
-              activeProject={activeProject}
-              powerStatistics={statsActive}
-              activePanel={activePanel}
-              cinematic={cinematic}
-              onOpenPanel={togglePanel}
-              onReset={statsActive ? resetPowerStatistics : activeProject === "carbon" ? resetCarbon : resetAll}
-              onCinematic={() => setCinematic((state) => !state)}
-              onShare={shareMap}
-              onScreenshot={() => setScreenshotRequest((request) => request + 1)}
-              onCards={() => setCardsOpen((state) => !state)}
-            />
-          ) : null}
-          {activePanel === "labels" ? (
-            <LabelSettingsPanel settings={labelSettings} onChange={setLabelSettings} onClose={() => setActivePanel(null)} />
-          ) : null}
-          {activePanel === "globe" ? (
-            <GlobeControlsPanel
-              visibleSourceLayers={visibleSourceLayers}
-              onToggleSourceLayer={toggleSourceLayer}
-              onToggleAll={setAllSourceLayers}
-              onFlyToRegion={flyToRegion}
-              onClose={() => setActivePanel(null)}
-            />
-          ) : null}
-          {activePanel === "presets" && activeProject === "power" ? (
-            <PresetViewsPanel
-              onApplyCleanEnergy={applyCleanEnergyPreset}
-              onApplyPlanned={applyPlannedPreset}
-              onReset={resetAll}
-              onClose={() => setActivePanel(null)}
-            />
-          ) : null}
-          {activePanel === "search" && activeProject === "power" ? (
-            <SearchPanel
-              assets={powerData}
-              query={searchQuery}
-              onQuery={setSearchQuery}
-              onSelect={(feature) => {
-                selectFeature(feature);
-                setActivePanel(null);
-              }}
-              onClose={() => setActivePanel(null)}
-            />
-          ) : null}
-          {activePanel === "layers" && activeProject === "power" ? (
-            <LayersPanel
-              visibleLayers={visibleLayers}
-              onToggleLayer={toggleLayer}
-              onLocked={(label) => showToast(`${label} 在当前演示版本中暂未开放。`)}
-              onClose={() => setActivePanel(null)}
-            />
-          ) : null}
-          {activePanel === "customLayers" && activeProject === "power" ? (
-            <CustomLayersPanel
-              visibleCustomLayers={visibleCustomLayers}
-              onToggleCustomLayer={toggleCustomLayer}
-              onClose={() => setActivePanel(null)}
-            />
-          ) : null}
-          {activePanel === "mapType" ? (
-            <MapTypePanel
-              activeMapTheme={activeMapTheme}
-              onTheme={(theme) => {
-                setActiveMapTheme(theme);
-                replaceWorkspaceContext({ basemap: theme });
-                showToast(`已选择${mapThemes.find((item) => item.key === theme)?.label ?? "底图"}主题。`);
-              }}
-              onClose={() => setActivePanel(null)}
-            />
-          ) : null}
-          {activePanel === "sources" ? (
-            <SourcesPanel onClose={() => setActivePanel(null)} />
-          ) : null}
+          <GlobeAnalysis selection={activeProject === "carbon" ? context.grid : selectedFeature?.id}>
           <FeaturePopup feature={displayedFeature} onClose={closeFeature}
             analysisHref={displayedFeature?.kind === "carbon" && comparableCarbon ? carbonCompareHref : undefined} />
-          {activeProject !== "weather" && !statsActive ? (
-            <LayerCards
-              activePanel={activePanel}
-              activeMapTheme={activeMapTheme}
-              onOpenPanel={togglePanel}
-            />
-          ) : null}
-          {activeProject !== "weather" && !statsActive ? (
-            <MiniMap
-              selectedFeature={selectedFeature}
-              camera={mapCamera}
-              onMove={(center) => requestFocus(center, mapCamera.zoom, mapCamera.pitch, mapCamera.bearing)}
-            />
-          ) : null}
-          {activeProject === "power" ? (
-            <>
-              <CardsDrawer energyAssets={powerData.energyAssets} open={cardsOpen} onClose={() => setCardsOpen(false)} onSelect={selectFeature} />
-            </>
-          ) : null}
+          </GlobeAnalysis>
           <HoverBubble tooltip={hoverTooltip} />
           <Toast message={toast} />
-          {cinematic ? (
-            <div className="og-cinematic-banner">
-              <strong>沉浸视图</strong>
-              <button type="button" onClick={() => setCinematic(false)}>退出</button>
-            </div>
-          ) : null}
-          {activeProject === "power" ? (
-            <div className="og-scale">
-              <span>20mi</span>
-              <span>50km</span>
-            </div>
-          ) : null}
-          <span className="og-beta-badge">测试版</span>
-          <button
-            className={`og-info-button ${activePanel === "sources" ? "is-active" : ""}`}
-            type="button"
-            aria-label="切换数据来源"
-            aria-pressed={activePanel === "sources"}
-            onClick={() => setActivePanel(activePanel === "sources" ? null : "sources")}
-          >
-            <Info size={18} />
-          </button>
         </>
       )}
-      {!resourceScene && (
-        <XiaoyunAssistant topic={activeProject === "weather" ? "meteo" : activeProject === "economy" ? undefined : activeProject}
-          captureView={saveMapCamera} forecastSidebar={!carbonTrade} />
-      )}
-    </main>
+      <XiaoyunAssistant topic={activeProject === "weather" ? "meteo" : activeProject === "economy" ? undefined : activeProject}
+        captureView={saveMapCamera} forecastSidebar={!carbonTrade && !statsActive} />
+    </GlobeLayout>
   );
 }

@@ -131,6 +131,8 @@ export function WeatherSidebarFilters({ frameDocument }: { frameDocument: Docume
       {menu.location ? <section className="og-weather-sample" aria-label="气象选点详情">
         <strong>{menu.location}</strong>
         <p>{menu.windValue}{menu.overlayValue ? " · " + menu.overlayValue : ""}</p>
+        {menu.windValue && <button type="button" onClick={() => select("location-wind-units")}>切换风速单位</button>}
+        {menu.overlayValue && <button type="button" onClick={() => select("location-value-units")}>切换覆盖值单位</button>}
         <button type="button" onClick={() => select("location-close")}>清除选点</button>
       </section> : null}
     </div>

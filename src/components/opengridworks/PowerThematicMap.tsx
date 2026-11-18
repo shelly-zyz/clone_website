@@ -6,6 +6,7 @@ import { useWorkspaceResource } from "@/hooks/use-workspace-resource";
 import type { ProvincePowerFrame } from "@/lib/china-power-statistics";
 import { formatPowerNumber, powerBin, powerClassColor, powerSelectionColors, type PowerPalette } from "@/lib/power-analysis";
 import type { ChinaPowerGeography } from "./power-statistics-geometry";
+import { GlobeControls } from "./GlobeLayout";
 import styles from "./PowerRegionPanel.module.css";
 
 const width = 940;
@@ -138,11 +139,11 @@ export function PowerThematicMap({ frame, split, selection, bin, palette, onSele
           <path d={"M" + (splitX - 3) + ",293l-6,7 6,7M" + (splitX + 3) + ",293l6,7 -6,7"} fill="none" stroke="#dcecf3" strokeWidth="2" />
         </g>}
       </svg>
-      {split && <div className={styles.wipe}>
+      {split && <GlobeControls><div className={styles.wipe}>
         <label htmlFor={clipId + "-slider"}>{split.a.period}<span>拖动对照</span>{split.b.period}</label>
         <input id={clipId + "-slider"} aria-label="双期地图分割位置" type="range" min="6" max="94" value={divider}
           onChange={event => setDivider(Number(event.currentTarget.value))} />
-      </div>}
+      </div></GlobeControls>}
     </div>
   );
 }

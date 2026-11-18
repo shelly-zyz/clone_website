@@ -6,6 +6,8 @@ import {
   economyName, tradePartners, tradeSources, type Footprint, type TradeCatalog, type TradeDirection, type TradeFlow,
 } from "@/lib/carbon-trade";
 import { CarbonTradeChord } from "./CarbonTradeChord";
+import type { ReactNode } from "react";
+import { GlobeAnalysis } from "./GlobeLayout";
 import { WorkspaceFilterSelect, WorkspaceSidebar } from "./WorkspaceSidebar";
 import styles from "./CarbonTradeWorkspace.module.css";
 
@@ -61,8 +63,8 @@ function FootprintBars({ point }: { point: Footprint }) {
   const delta = consumption - production;
   return <>
     <dl className={styles.footprintLabels}>
-      <div><dt>生产侧</dt><dd>{measure.format(production)}</dd></div>
-      <div><dt>消费侧</dt><dd>{measure.format(consumption)}</dd></div>
+      <div><dt>生产侧</dt><dd data-globe-value>{measure.format(production)}</dd></div>
+      <div><dt>消费侧</dt><dd data-globe-value>{measure.format(consumption)}</dd></div>
     </dl>
     <svg viewBox="0 0 300 19" className={styles.bars} aria-hidden="true">
       <rect x="0" y="3" width="300" height="12" fill="#26334b" rx="6" />
@@ -105,7 +107,8 @@ function FootprintTrend({ series, year, onYear }: { series: Footprint[]; year: n
   </>;
 }
 
-export function CarbonTradeWorkspace({ selection, onChange }: {
+export function CarbonTradeWorkspace({ selection, onChange, navigation, scenes }: {
+  navigation: ReactNode; scenes: ReactNode;
   selection: TradeSelection;
   onChange: (patch: TradeSelection) => void;
 }) {
@@ -168,89 +171,19 @@ export function CarbonTradeWorkspace({ selection, onChange }: {
 
   const error = catalogResult?.error ?? frame?.error;
   return <>
-    <WorkspaceSidebar topic="carbon" summary="OECD · 双边贸易隐含碳">
+    <WorkspaceSidebar topic="carbon" navigation={navigation} scenes={scenes} summary="OECD · 双边贸易隐含碳">
       <div className={styles.filters}>
         <WorkspaceFilterSelect label="锁定经济体" value={selected}
           options={[{ value: "W", label: "全球" }, ...economies.map(value => ({ value, label: economyName(value) }))]}
           onChange={choose} />
-        <details className={styles.sources}>
-          <summary>口径与数据来源</summary>
-          <p>弧段按大洲分组，圆环保留 OECD 的「世界其他地区」余额。贸易连线方向为出口方至进口方，宽度对应隐含温室气体排放量。</p>
-          <p>贸易使用全部产品和活动的总额，排除本地交易和全球汇总行。单位为百万吨二氧化碳当量（Mt CO₂e）。</p>
-          <a href={tradeSources.trade} target="_blank" rel="noreferrer">OECD 双边贸易表 <ArrowUpRight size={13} /></a>
-          <a href={tradeSources.footprint} target="_blank" rel="noreferrer">OECD 碳足迹主指标 <ArrowUpRight size={13} /></a>
-        </details>
-      </div>
-    </WorkspaceSidebar>
-    <section className={styles.workspace} aria-label="全球隐含碳贸易分析" data-trade-year={frame?.data ? year : undefined}>
-      <div className={styles.scene}>
-        <header className={styles.title}>
-          <div>
-            <h2>全球隐含碳贸易网络</h2>
-            <p>Global Embodied Carbon Trade Network</p>
-          </div>
-          {year && <span className={styles.year}>{year}</span>}
-        </header>
-        <div className={styles.chart}>
-          {error ? <div className={styles.message} role="status"><p>{error}</p>
-            <button type="button" onClick={() => { setPlaying(false); setAttempt(value => value + 1); }}>重新加载</button>
-          </div> : frame?.data ? (
-            <CarbonTradeChord flows={flows} maximum={max} selected={selected}
-              focus={selected === "W" ? hover : selected} peer={highlightedPartner}
-              onFocus={setHover} onChoose={choose} />
-          ) : <p className={styles.message} role="status">正在读取 {year ?? "OECD"} 贸易数据…</p>}
-        </div>
-        <div className={styles.legend}>
-          {selected === "W" ? <span>经济体弧段按大洲着色 · 连线按流量加权</span> : <>
-            <span><i className={styles.incoming} /> 流入</span>
-            <span><i className={styles.outgoing} /> 流出</span>
-            <button type="button" onClick={() => choose("W")}>返回全球</button>
-          </>}
-        </div>
-      </div>
-
-      <aside className={styles.rail} aria-label="碳数据分析">
-        <header className={styles.railHeader}>
-          <div><span>{selected === "W" && hover ? "悬停预览" : "选中对象"}</span><h3>{economyName(shownEconomy)}</h3></div>
-          <span>{year ?? "—"}</span>
-        </header>
-        <section>
-          <h4>生产与消费碳足迹 <small>Mt CO₂e</small></h4>
-          {point ? <FootprintBars point={point} /> : <p className={styles.empty}>暂无足迹数据</p>}
-        </section>
-        <section aria-busy={Boolean(year && !frame)}>
-          <h4>{shownEconomy === "W" ? "主要贸易流" : "主要贸易伙伴"} <small>前 5 · Mt CO₂e</small></h4>
-          {selected !== "W" && <div className={styles.directions} role="group" aria-label="隐含碳流向">
+        {selected !== "W" && <div className={styles.directions} role="group" aria-label="隐含碳流向">
             {directions.map(({ value, label }) => (
               <button key={value} type="button" aria-pressed={direction === value}
                 onClick={() => { setHighlight(undefined); onChange({ direction: value }); }}>{label}</button>
             ))}
           </div>}
-          <ol className={styles.ranking}>
-            {shownEconomy === "W" ? globalPairs.map(([from, to, mt]) => (
-              <li key={from + to}><button type="button" onClick={() => choose(from, to)}>
-                <span>{economyName(from)} → {economyName(to)}</span><strong>{measure.format(mt)}</strong>
-              </button></li>
-            )) : partners.map(({ code, amount }) => (
-              <li key={code}><button type="button" aria-pressed={selected !== "W" && highlightedPartner === code && partner === code}
-                onClick={() => selected === "W" ? choose(code) : setHighlight(partner === code ? undefined : { selection: highlightKey, code })}>
-                <span>{economyName(code)}</span><strong>{measure.format(amount)}</strong>
-              </button></li>
-            ))}
-          </ol>
-          {frame?.data && (shownEconomy === "W" ? !globalPairs.length : !partners.length) &&
-            <p className={styles.empty}>该流向暂无贸易记录</p>}
-        </section>
-        <section>
-          <h4>历史变化趋势 <small>Mt CO₂e</small></h4>
-          {series.length && year ? <FootprintTrend key={shownEconomy} series={series} year={year}
-            onYear={next => step(years.indexOf(next))} /> : <p className={styles.empty}>暂无趋势数据</p>}
-        </section>
-        {catalog && <a className={styles.credit} href={tradeSources.trade} target="_blank" rel="noreferrer"
-          title={"原始文件 SHA-256 " + catalog.revision}>OECD GHGFP · {catalog.edition} 版 <ArrowUpRight size={12} /></a>}
-      </aside>
-
-      <section className={styles.timeline} aria-label="隐含碳贸易年度回放">
+        {selected !== "W" && <button className="og-workspace-action" type="button" onClick={() => choose("W")}>返回全球</button>}
+        <section className={styles.timeline} aria-label="隐含碳贸易年度回放">
         <button type="button" aria-label="上一年" disabled={index < 1} onClick={() => step(index - 1)}><ChevronLeft size={17} /></button>
         <button type="button" aria-label={playing ? "暂停年度播放" : "播放年度变化"} aria-pressed={playing}
           disabled={years.length < 2 || Boolean(error)} onClick={() => {
@@ -269,6 +202,70 @@ export function CarbonTradeWorkspace({ selection, onChange }: {
         <button type="button" aria-label="下一年" disabled={index < 0 || index >= years.length - 1}
           onClick={() => step(index + 1)}><ChevronRight size={17} /></button>
       </section>
+        {error && <button className="og-workspace-action" type="button"
+          onClick={() => { setPlaying(false); setAttempt(value => value + 1); }}>重新加载</button>}
+        <details className={styles.sources}>
+          <summary>口径与数据来源</summary>
+          <p>弧段按大洲分组，圆环保留 OECD 的「世界其他地区」余额。贸易连线方向为出口方至进口方，宽度对应隐含温室气体排放量。</p>
+          <p>贸易使用全部产品和活动的总额，排除本地交易和全球汇总行。单位为百万吨二氧化碳当量（Mt CO₂e）。</p>
+          <a href={tradeSources.trade} target="_blank" rel="noreferrer">OECD 双边贸易表 <ArrowUpRight size={13} /></a>
+          <a href={tradeSources.footprint} target="_blank" rel="noreferrer">OECD 碳足迹主指标 <ArrowUpRight size={13} /></a>
+        </details>
+      </div>
+    </WorkspaceSidebar>
+    <section className={`og-globe-stage ${styles.workspace}`} aria-label="全球隐含碳贸易分析" data-trade-year={frame?.data ? year : undefined}>
+      <div className={styles.scene}>
+        <div className={styles.chart}>
+          {error ? <p className={styles.message} role="status">{error}</p> : frame?.data ? (
+            <CarbonTradeChord flows={flows} maximum={max} selected={selected}
+              focus={selected === "W" ? hover : selected} peer={highlightedPartner}
+              onFocus={setHover} onChoose={choose} />
+          ) : <p className={styles.message} role="status">正在读取 {year ?? "OECD"} 贸易数据…</p>}
+        </div>
+        <div className={styles.legend}>
+          {selected === "W" ? <span>经济体弧段按大洲着色 · 连线按流量加权</span> : <>
+            <span><i className={styles.incoming} /> 流入</span>
+            <span><i className={styles.outgoing} /> 流出</span>
+          </>}
+        </div>
+      </div>
+
     </section>
+    <GlobeAnalysis>
+      <section className={styles.rail} aria-label="碳数据分析">
+        <header className={styles.railHeader}>
+          <div><span>{selected === "W" && hover ? "悬停预览" : "选中对象"}</span><h2>{economyName(shownEconomy)}</h2></div>
+          <span>{year ?? "—"}</span>
+        </header>
+        <section>
+          <h3>生产与消费碳足迹 <small>Mt CO₂e</small></h3>
+          {point ? <FootprintBars point={point} /> : <p className={styles.empty}>暂无足迹数据</p>}
+        </section>
+        <section aria-busy={Boolean(year && !frame)}>
+          <h3>{shownEconomy === "W" ? "主要贸易流" : "主要贸易伙伴"} <small>前 5 · Mt CO₂e</small></h3>
+          <ol className={styles.ranking}>
+            {shownEconomy === "W" ? globalPairs.map(([from, to, mt]) => (
+              <li key={from + to}><button type="button" onClick={() => choose(from, to)}>
+                <span>{economyName(from)} → {economyName(to)}</span><strong>{measure.format(mt)}</strong>
+              </button></li>
+            )) : partners.map(({ code, amount }) => (
+              <li key={code}><button type="button" aria-pressed={selected !== "W" && highlightedPartner === code && partner === code}
+                onClick={() => selected === "W" ? choose(code) : setHighlight(partner === code ? undefined : { selection: highlightKey, code })}>
+                <span>{economyName(code)}</span><strong>{measure.format(amount)}</strong>
+              </button></li>
+            ))}
+          </ol>
+          {frame?.data && (shownEconomy === "W" ? !globalPairs.length : !partners.length) &&
+            <p className={styles.empty}>该流向暂无贸易记录</p>}
+        </section>
+        <section>
+          <h3>历史变化趋势 <small>Mt CO₂e</small></h3>
+          {series.length && year ? <FootprintTrend key={shownEconomy} series={series} year={year}
+            onYear={next => step(years.indexOf(next))} /> : <p className={styles.empty}>暂无趋势数据</p>}
+        </section>
+        {catalog && <a className={styles.credit} href={tradeSources.trade} target="_blank" rel="noreferrer"
+          title={"原始文件 SHA-256 " + catalog.revision}>OECD GHGFP · {catalog.edition} 版 <ArrowUpRight size={12} /></a>}
+      </section>
+    </GlobeAnalysis>
   </>;
 }

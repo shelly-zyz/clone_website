@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpRight, ChartNoAxesCombined, Search, X } from "lucide-react";
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { ArrowUpRight, Search } from "lucide-react";
+import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { analysisContextHref, readWorkspaceContext, rememberWorkspace, replaceWorkspaceContext, type WorkspaceContext } from "@/lib/workspace-context";
 import type { MapTheme } from "@/types/opengridworks";
 import { EconomyGlobe } from "./EconomyGlobe";
 import { ForecastHeading, ForecastSeries } from "./ForecastSidebar";
 import { ScenarioPeriods, ScenarioRanking } from "./ScenarioScene";
+import { GlobeAnalysis, useRevealGlobeAnalysis } from "./GlobeLayout";
 import { WorkspaceFilterSelect, WorkspaceSidebar } from "./WorkspaceSidebar";
 import {
   economyMetrics, formatEconomyAmount, formatGrowth, rankEconomies,
@@ -104,44 +105,11 @@ function CountrySearch({ countries, onSelect }: { countries: EconomyCountry[]; o
   );
 }
 
-function ProfilePanel({ open, onOpen, onClose, trigger, title, children }: {
-  open: boolean | undefined; onOpen: () => void; onClose: () => void; trigger: RefObject<HTMLButtonElement | null>;
-  title: string; children: ReactNode;
-}) {
-  const id = useId();
-  const closeButton = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (open) closeButton.current?.focus({ preventScroll: true });
-  }, [open]);
-
-  function close() {
-    onClose();
-    requestAnimationFrame(() => trigger.current?.focus());
-  }
-
-  return (
-    <div className="og-economy-profile-region" data-dock={open == null ? "auto" : open ? "open" : "closed"}>
-      <button ref={trigger} type="button" className={styles.profileTrigger} aria-controls={id} aria-expanded={open === true} onClick={onOpen}>
-        <ChartNoAxesCombined size={16} aria-hidden="true" /> {title}
-      </button>
-      <aside id={id} className={styles.profile} aria-label={title}
-        onKeyDown={event => { if (event.key === "Escape" && open !== false) close(); }}>
-        <button ref={closeButton} type="button" className={styles.close} aria-label={`关闭${title}`} onClick={close}>
-          <X size={19} aria-hidden="true" />
-        </button>
-        {children}
-      </aside>
-    </div>
-  );
-}
-
 function EconomyProfile({
-  country, year, metric, snapshot, ranking, onMetric, onCountry, onYear,
+  country, year, metric, snapshot, ranking, onCountry,
 }: {
   country?: EconomyCountry; year: number; metric: EconomyMetric; snapshot?: EconomySnapshot | null;
-  ranking: EconomyRank[]; onMetric: (metric: EconomyMetric) => void; onCountry: (code: string) => void;
-  onYear: (year: number) => void;
+  ranking: EconomyRank[]; onCountry: (code: string) => void;
 }) {
   const spec = economyMetrics[metric];
   const years = snapshot?.years ?? [];
@@ -171,10 +139,10 @@ function EconomyProfile({
         {country && (
           <section className={styles.profileIndicators} aria-label="经济指标">
             {(Object.keys(economyMetrics) as EconomyMetric[]).map(item => (
-              <button key={item} type="button" aria-pressed={metric === item} onClick={() => onMetric(item)}>
+              <div key={item} data-active={metric === item}>
                 <span>{economyMetrics[item].label}</span>
                 <strong>{formatEconomyAmount(country.values[economyMetrics[item].code][index] ?? null, item)}</strong>
-              </button>
+              </div>
             ))}
           </section>
         )}
@@ -195,7 +163,7 @@ function EconomyProfile({
                 <tbody>
                   {years.map((item, position) => (
                     <tr key={item} data-active={item === year}>
-                      <th scope="row"><button type="button" aria-pressed={item === year} onClick={() => onYear(item)}>{item}</button></th>
+                      <th scope="row">{item}</th>
                       <td>{formatEconomyAmount(history[position] ?? null, metric)}</td>
                     </tr>
                   ))}
@@ -216,8 +184,9 @@ function EconomyProfile({
   );
 }
 
-export function EconomyWorkspace({ active, basemap, onBasemapError, initialContext }: {
+export function EconomyWorkspace({ active, basemap, onBasemapError, initialContext, navigation, mapControls }: {
   active: boolean; basemap: MapTheme; onBasemapError: () => void; initialContext?: WorkspaceContext;
+  navigation: ReactNode; mapControls: ReactNode;
 }) {
   const { data: snapshot, retry: retrySnapshot } = useSnapshot<EconomySnapshot>(wdiPath);
   const { data: outlook, retry: retryOutlook } = useSnapshot<EconomicOutlook>(gepPath);
@@ -228,8 +197,6 @@ export function EconomyWorkspace({ active, basemap, onBasemapError, initialConte
   const [metric, setMetric] = useState<EconomyMetric>(initialContext?.metric ?? "gdp");
   const [outlookActive, setOutlookActive] = useState(initialContext?.scene === "outlook");
   const [targetInput, setTargetInput] = useState(initialContext?.targetYear);
-  const [profileOpen, setProfileOpen] = useState<boolean>();
-  const profileTrigger = useRef<HTMLButtonElement>(null);
   const viewId = useId();
   const [wasActive, setWasActive] = useState(active);
 
@@ -284,10 +251,11 @@ export function EconomyWorkspace({ active, basemap, onBasemapError, initialConte
     setCamera(undefined);
     replaceWorkspaceContext({ country: id || null, camera: null });
   }, [countryCode]);
+  const revealAnalysis = useRevealGlobeAnalysis();
   const pickCountry = useCallback((id: string) => {
     chooseCountry(id);
-    if (window.matchMedia("(max-width: 900px)").matches) setProfileOpen(true);
-  }, [chooseCountry]);
+    revealAnalysis?.();
+  }, [chooseCountry, revealAnalysis]);
 
   const chooseMetric = (value: EconomyMetric) => {
     setMetric(value);
@@ -345,7 +313,18 @@ export function EconomyWorkspace({ active, basemap, onBasemapError, initialConte
 
   return (
     <>
-      <nav className={switcherStyles.bar} aria-label="经济地球视图" onKeyDown={event => {
+      <div id={viewId} className="og-globe-stage" data-economy-data-ready={Boolean(snapshot && outlook)}
+        data-view={outlookActive ? "outlook" : "history"}>
+        {globe}
+        {outlookActive ? <VerticalColorLegend label="实际 GDP 增速"
+          stops={[[0, "#f56d52"], [.375, "#598f89"], [.625, "#37ce77"], [1, "#d4f54b"]]}
+          ticks={["≥10%", "≤−6%"]} note="缺测 · 深灰" />
+          : <VerticalColorLegend label={economyMetrics[metric].label}
+            unit="现价美元" stops={[[0, "#653019"], [.5, "#d46a25"], [1, "#ffad32"]]}
+            ticks={["≥ " + formatEconomyAmount(max, metric), "≤ " + formatEconomyAmount(min, metric)]}
+            note="对数色阶 · 深灰为缺测" />}
+      </div>
+      {active && <WorkspaceSidebar topic="economy" navigation={navigation} scenes={<nav className={switcherStyles.bar} aria-label="经济地球视图" onKeyDown={event => {
         if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Home" && event.key !== "End") return;
         event.preventDefault();
         const next = event.key === "Home" ? "history" : event.key === "End" ? "outlook" : outlookActive ? "history" : "outlook";
@@ -358,19 +337,7 @@ export function EconomyWorkspace({ active, basemap, onBasemapError, initialConte
             {label}
           </button>
         ))}
-      </nav>
-      <div id={viewId} className="og-globe-stage" data-economy-data-ready={Boolean(snapshot && outlook)}
-        data-view={outlookActive ? "outlook" : "history"}>
-        {globe}
-        {outlookActive ? <VerticalColorLegend label="实际 GDP 增速"
-          stops={[[0, "#f56d52"], [.375, "#598f89"], [.625, "#37ce77"], [1, "#d4f54b"]]}
-          ticks={["≥10%", "≤−6%"]} note="缺测 · 深灰" />
-          : <VerticalColorLegend className={styles.historyLegend} label={economyMetrics[metric].label}
-            unit="现价美元" stops={[[0, "#653019"], [.5, "#d46a25"], [1, "#ffad32"]]}
-            ticks={["≥ " + formatEconomyAmount(max, metric), "≤ " + formatEconomyAmount(min, metric)]}
-            note="对数色阶 · 深灰为缺测" />}
-      </div>
-      <WorkspaceSidebar topic="economy" summary={outlookActive ? "世界银行 GEP · 实际 GDP 增速预测" : "世界银行 WDI · 全球经济指标"}>
+      </nav>} summary={outlookActive ? "世界银行 GEP · 实际 GDP 增速预测" : "世界银行 WDI · 全球经济指标"}>
         <section className={styles.filters} aria-label={outlookActive ? "增长展望筛选" : "经济数据筛选"}>
           {snapshot && <CountrySearch countries={snapshot.countries} onSelect={chooseCountry} />}
           <WorkspaceFilterSelect label="国家或地区" options={countryOptions} value={country} onChange={chooseCountry} />
@@ -387,45 +354,42 @@ export function EconomyWorkspace({ active, basemap, onBasemapError, initialConte
               <WorkspaceFilterSelect label="经济指标" value={metric} options={metricOptions}
                 onChange={value => { if (value === "gdp" || value === "perCapita" || value === "exports") chooseMetric(value); }} />
               <WorkspaceFilterSelect label="统计年份" options={yearOptions} value={String(year)} onChange={value => chooseYear(Number(value))} />
-
             </>
           )}
           <SnapshotStatus data={snapshot} label="经济指标" retry={retrySnapshot} />
         </section>
-      </WorkspaceSidebar>
-      <ProfilePanel trigger={profileTrigger} open={profileOpen} title={outlookActive ? "经济展望" : selected ? "经济体档案" : "全球概览"}
-        onOpen={() => setProfileOpen(true)} onClose={() => setProfileOpen(false)}>
-        {outlookActive ? (
-          <>
-            <ForecastHeading topic="economy" />
-            <ScenarioRanking title={selected?.label ?? "全球实际 GDP 增速"}
-              subtitle={outlook ? `世界银行 GEP · ${outlook.edition} 版` : "世界银行全球经济展望"}
-              label={selected ? `${targetYear} 年实际 GDP 增速预测` : `${targetYear} 年预测`}
-              value={selectedGrowth === null ? "暂无" : formatGrowth(selectedGrowth)}
-              rows={forecastRows} selected={country} onSelect={chooseCountry} formatValue={formatGrowth}>
-              <div className={styles.outlookLinks}>
-                <Link href={statisticsHref} prefetch={false}>增长路径与同版对比 <ArrowUpRight size={14} aria-hidden="true" /></Link>
-                {outlook && <a href={outlook.sourceUrl} target="_blank" rel="noreferrer">数据来源 <ArrowUpRight size={12} aria-hidden="true" /></a>}
-              </div>
-              <SnapshotStatus data={outlook} label="增长展望" retry={retryOutlook} />
-              {forecastRanking.length > 0 && <p className={styles.note}>显示 {forecastRanking.length} 个有值经济体中的前 {top.length} 位 · 正负值按原值展示</p>}
-              {predictedSeries.some(item => item.value !== null) && (
-                <ForecastSeries chart="economy" points={predictedSeries} unit="%" grain="year" label="同版 GDP 增速预测"
-                  comparison={globalComparison} />
-              )}
-            </ScenarioRanking>
-          </>
-        ) : (
-          <EconomyProfile country={selected} year={year} metric={metric} snapshot={snapshot} ranking={ranking}
-            onCountry={chooseCountry} onMetric={chooseMetric} onYear={chooseYear} />
-        )}
-      </ProfilePanel>
-      {outlookActive && outlook && (
-        <div className={styles.viewFooter}>
-          <ScenarioPeriods periods={outlook.years.map(value => ({ id: String(value), label: String(value) }))}
-            selected={String(targetYear)} onSelect={chooseTarget} />
+        {outlookActive && outlook && <ScenarioPeriods periods={outlook.years.map(value => ({ id: String(value), label: String(value) }))}
+          selected={String(targetYear)} onSelect={chooseTarget} />}
+        {!outlookActive && mapControls}
+      </WorkspaceSidebar>}
+      {active && <GlobeAnalysis>
+        <div className={styles.profileContent}>
+          {outlookActive ? (
+            <>
+              <ForecastHeading topic="economy" />
+              <ScenarioRanking title={selected?.label ?? "全球实际 GDP 增速"}
+                subtitle={outlook ? `世界银行 GEP · ${outlook.edition} 版` : "世界银行全球经济展望"}
+                label={selected ? `${targetYear} 年实际 GDP 增速预测` : `${targetYear} 年预测`}
+                value={selectedGrowth === null ? "暂无" : formatGrowth(selectedGrowth)}
+                rows={forecastRows} selected={country} onSelect={chooseCountry} formatValue={formatGrowth}>
+                <div className={styles.outlookLinks}>
+                  <Link href={statisticsHref} prefetch={false}>增长路径与同版对比 <ArrowUpRight size={14} aria-hidden="true" /></Link>
+                  {outlook && <a href={outlook.sourceUrl} target="_blank" rel="noreferrer">数据来源 <ArrowUpRight size={12} aria-hidden="true" /></a>}
+                </div>
+                <SnapshotStatus data={outlook} label="增长展望" retry={retryOutlook} />
+                {forecastRanking.length > 0 && <p className={styles.note}>显示 {forecastRanking.length} 个有值经济体中的前 {top.length} 位 · 正负值按原值展示</p>}
+                {predictedSeries.some(item => item.value !== null) && (
+                  <ForecastSeries chart="economy" points={predictedSeries} unit="%" grain="year" label="同版 GDP 增速预测"
+                    comparison={globalComparison} />
+                )}
+              </ScenarioRanking>
+            </>
+          ) : (
+            <EconomyProfile country={selected} year={year} metric={metric} snapshot={snapshot} ranking={ranking}
+              onCountry={chooseCountry} />
+          )}
         </div>
-      )}
+      </GlobeAnalysis>}
     </>
   );
 }

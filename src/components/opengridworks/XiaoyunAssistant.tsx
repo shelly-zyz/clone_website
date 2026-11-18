@@ -687,16 +687,19 @@ function XiaoyunRuntime({ workspace, children }: { workspace: Workspace | null; 
 
   const sidebarTopic = workspace?.forecastSidebar === false ? undefined : workspaceTopic;
   const visibleBusiness = business.filter(result => !isWorkspaceForecast(result) || result.topic !== sidebarTopic);
-  const workspaceElement = workspace?.slot.parentElement;
+  const workspaceElement = workspace?.slot.closest(".og-globe-workspace");
+  const forecastPanel = workspaceElement?.querySelector<HTMLElement>(".og-analysis-content");
+  const forecastControls = workspaceElement?.querySelector<HTMLElement>(".og-forecast-controls");
   return (
     <ChartRequest value={ready ? runCustomChart : null}>
       {children}
       <div ref={container} className="[&>.og-assistant-mount]:pointer-events-none [&>.og-assistant-mount]:fixed [&>.og-assistant-mount]:inset-0 [&>.og-assistant-mount]:z-30" />
-      {workspaceElement && sidebarTopic && sidebarTopic !== "meteo" && createPortal(<WorkspaceForecast key={sidebarTopic}
+      {forecastPanel && forecastControls && sidebarTopic && sidebarTopic !== "meteo" && createPortal(<WorkspaceForecast key={sidebarTopic}
         topic={sidebarTopic}
         loadOverview={loadForecastOverview} loadAnalysis={loadAnalysis} task={forecasts[sidebarTopic]}
         ready={ready} pending={pendingForecast !== undefined} onRun={runForecast}
-        notice={forecastNotice?.topic === sidebarTopic ? forecastNotice.message : undefined} />, workspaceElement)}
+        notice={forecastNotice?.topic === sidebarTopic ? forecastNotice.message : undefined}
+        controls={forecastControls} />, forecastPanel)}
       <XiaoyunEvidence items={evidence} active={activeEvidence} onOpen={setActiveEvidence}
         onClose={() => setActiveEvidence(undefined)} onDismiss={() => setEvidence([])} />
       {mechanism && <button type="button"

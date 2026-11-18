@@ -20,9 +20,3 @@
 .ticks { display: flex; flex-direction: column; justify-content: space-between; font-variant-numeric: tabular-nums; }
 
 .weatherGlobe[data-ready="false"] { visibility: hidden; }
-@media (min-width: 901px) {
-  .weatherGlobe {
-    top: calc(var(--og-stage-top) + 10px);
-    left: calc(var(--og-stage-left) + 10px);
-  }
-}

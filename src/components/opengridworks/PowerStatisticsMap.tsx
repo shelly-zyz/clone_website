@@ -17,6 +17,7 @@ type Props = Parameters<typeof createPowerStatisticsScene>[2] & {
   peers?: readonly string[];
   palette?: PowerPalette;
   suspended?: boolean;
+  renderControls?: (children: React.ReactNode) => React.ReactNode;
   onOpenThematicMap?: () => void;
   initialCamera?: MapCameraState;
   focus?: { nonce: number; camera?: MapCameraState; provinceCode?: string };
@@ -99,14 +100,17 @@ export function PowerStatisticsMap(props: Props) {
       {props.frame.demo && <p className={styles.demoNotice} role="status">{powerDemoNotice}</p>}
       {status === "loading" && <GlobeLoading label="正在加载中国省级电力地图" />}
       {status === "error" && <p className={styles.status} role="status">当前浏览器无法绘制三维地图。
-        {props.onOpenThematicMap && <button type="button" onClick={props.onOpenThematicMap}>打开二维专题地图</button>}</p>}
+        </p>}
+      {status === "error" && props.onOpenThematicMap && props.renderControls?.(
+        <button type="button" className="og-workspace-action" onClick={props.onOpenThematicMap}>打开二维专题地图</button>
+      )}
       {status === "ready" && (
         <>
-          <div className={styles.controls} role="group" aria-label="三维地图控制">
+          {!props.suspended && props.renderControls?.(<div className={styles.controls} role="group" aria-label="三维地图控制">
             <button type="button" aria-label="放大地图" onClick={() => scene.current?.zoom(1.25)}><Plus size={17} /></button>
             <button type="button" aria-label="缩小地图" onClick={() => scene.current?.zoom(.8)}><Minus size={17} /></button>
             <button type="button" aria-label="恢复全国视角" title="恢复全国视角" onClick={() => scene.current?.focus(undefined)}><RotateCcw size={14} /></button>
-          </div>
+          </div>)}
           <span className={styles.insetLabel}>南海诸岛</span>
         </>
       )}
