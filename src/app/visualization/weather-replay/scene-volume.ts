@@ -170,7 +170,8 @@ export async function createVolumeScene({ overlay, gl, invalidate, reducedMotion
   controls.maxPolarAngle = 1.42;
   controls.screenSpacePanning = false;
   controls.addEventListener("change", invalidate);
-  let framedAspect = 0;
+  let framed = "";
+  let fit = { aspect: 1.2, scale: 1 };
   let userMoved = false;
   controls.addEventListener("start", () => { userMoved = true; });
 
@@ -251,7 +252,7 @@ export async function createVolumeScene({ overlay, gl, invalidate, reducedMotion
 
   function placeCamera(view = defaultView) {
     const reach = Math.max(projection.width, projection.depth) * worldSpan;
-    const distance = view.distance * reach / 2.4 * aspectFit(camera.aspect);
+    const distance = view.distance * reach / 2.4 * aspectFit(fit.aspect) * fit.scale;
     controls.target.set(0, .02, 0);
     camera.position.set(
       Math.sin(view.azimuth) * Math.sin(view.polar) * distance,
@@ -451,7 +452,7 @@ export async function createVolumeScene({ overlay, gl, invalidate, reducedMotion
     if (area.hasData) {
       context.font = "10px system-ui, sans-serif";
       context.textAlign = "left";
-      haloText(context, `高度为示意 · 大气垂直放大约 ${Math.round(exaggeration)} 倍，地形约 ${Math.round(exaggeration * terrainScale)} 倍`, 14, size.height - 16, "rgba(226,236,244,.8)", "rgba(8,16,26,.7)", 3);
+      haloText(context, `高度为示意 · 大气垂直放大约 ${Math.round(exaggeration)} 倍，地形约 ${Math.round(exaggeration * terrainScale)} 倍`, state.insets.left + 14, size.height - Math.max(16, state.insets.bottom - 40), "rgba(226,236,244,.8)", "rgba(8,16,26,.7)", 3);
     }
     if (state.selectedCell !== undefined && area.hasData) {
       const [lon, lat] = gridCoordinate(replay, state.selectedCell % replay.cols, Math.floor(state.selectedCell / replay.cols));
@@ -515,9 +516,15 @@ export async function createVolumeScene({ overlay, gl, invalidate, reducedMotion
     render(now, size) {
       if (!input) return false;
       camera.aspect = size.width / size.height;
+      // Centre the scene in the area left free by the floating panels.
+      const { insets } = input.state;
+      const freeHeight = Math.max(120, size.height - insets.top - insets.bottom);
+      fit = { aspect: Math.max(120, size.width - insets.left - insets.right) / freeHeight, scale: size.height / freeHeight };
+      camera.setViewOffset(size.width, size.height, (insets.right - insets.left) / 2, (insets.bottom - insets.top) / 2, size.width, size.height);
       camera.updateProjectionMatrix();
-      if (!userMoved && Math.abs(framedAspect - camera.aspect) > .02) {
-        framedAspect = camera.aspect;
+      const fitKey = fit.aspect.toFixed(2) + "|" + fit.scale.toFixed(2);
+      if (!userMoved && framed !== fitKey) {
+        framed = fitKey;
         placeCamera();
       }
       const moving = controls.update();

@@ -61,7 +61,7 @@ const levelColor = { 1: "#5b8cff", 2: "#ffd84a", 3: "#ff4d8d" } as const;
 const levelName = { 1: "一般", 2: "较强", 3: "强" } as const;
 
 export async function createHotspotScene({ overlay, invalidate }: RendererContext): Promise<ViewRenderer> {
-  const camera = createPlanCamera(overlay, invalidate, { left: 120, right: 40, top: 64, bottom: 54 });
+  const camera = createPlanCamera(overlay, invalidate, { left: 120, right: 16, top: 8, bottom: 30 });
   let input: SceneInput | undefined;
   let relief: Relief | null = null;
   let places: Place[] = [];
@@ -112,9 +112,8 @@ export async function createHotspotScene({ overlay, invalidate }: RendererContex
       const { replay, area, state } = input;
       const compact = width < 640;
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
-      context.fillStyle = "#1b1e21";
-      context.fillRect(0, 0, width, height);
-      camera.layout(area.mapBounds, width, height);
+      context.clearRect(0, 0, width, height);
+      camera.layout(area.mapBounds, width, height, state.insets);
       const point = (lon: number, lat: number) => camera.point(lon, lat);
 
       const key = area.id + "|" + replay.id + "|" + (relief ? "r" : "-");

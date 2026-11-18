@@ -35,7 +35,8 @@ export async function createStackScene({ overlay, gl, invalidate }: RendererCont
   controls.maxDistance = 22;
   controls.maxPolarAngle = 1.5;
   controls.addEventListener("change", invalidate);
-  let framedAspect = 0;
+  let framed = "";
+  let fit = { aspect: 1.2, scale: 1 };
   let userMoved = false;
   controls.addEventListener("start", () => { userMoved = true; });
 
@@ -53,7 +54,7 @@ export async function createStackScene({ overlay, gl, invalidate }: RendererCont
   fill.position.set(3, 1.5, 2.5);
   scene.add(key, fill, new AmbientLight(0xffffff, 1.45));
 
-  const floor = new Mesh(new PlaneGeometry(14, 14), new ShadowMaterial({ opacity: .12 }));
+  const floor = new Mesh(new PlaneGeometry(14, 14), new ShadowMaterial({ opacity: .4 }));
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = baseY - .02;
   floor.receiveShadow = true;
@@ -95,7 +96,7 @@ export async function createStackScene({ overlay, gl, invalidate }: RendererCont
   };
 
   function placeCamera(view = defaultView) {
-    const distance = view.distance * aspectFit(camera.aspect);
+    const distance = view.distance * aspectFit(fit.aspect) * fit.scale;
     controls.target.set(0, stackHeight * .38, 0);
     camera.position.set(
       Math.sin(view.azimuth) * Math.sin(view.polar) * distance,
@@ -314,21 +315,21 @@ export async function createStackScene({ overlay, gl, invalidate }: RendererCont
       const time = replay.rain[slab.frame].time;
       const peak = regionalPeak(replay.rain[slab.frame].values, area.cells);
       context.font = (active ? "700 13px" : "600 11px") + " system-ui, sans-serif";
-      haloText(context, (sameDay ? "" : time.slice(5, 10) + " ") + utcClock(time) + " UTC", x + 8, y - 7, active ? "#1d3fa8" : "#3a4652", "rgba(255,255,255,.9)", 3);
+      haloText(context, (sameDay ? "" : time.slice(5, 10) + " ") + utcClock(time) + " UTC", x + 8, y - 7, active ? "#9cc0ff" : "#c7d1da", "rgba(8,14,22,.85)", 3);
       context.font = (active ? "600 11px" : "10px") + " system-ui, sans-serif";
-      haloText(context, peak == null ? "缺测" : `峰值 ${peak.toFixed(1)} mm/h`, x + 8, y + 8, active ? "#6a3fc0" : "#66727e", "rgba(255,255,255,.9)", 3);
+      haloText(context, peak == null ? "缺测" : `峰值 ${peak.toFixed(1)} mm/h`, x + 8, y + 8, active ? "#cdb2ff" : "#8e9ba6", "rgba(8,14,22,.85)", 3);
     }
     const [hx, hy] = screen(new Vector3(w + .2, stackHeight + .17, d));
     context.font = "600 11px system-ui, sans-serif";
     context.textAlign = "center";
-    haloText(context, "时间 UTC", hx, hy - 6, "#4a3a8c", "rgba(255,255,255,.9)", 3);
+    haloText(context, "时间 UTC", hx, hy - 6, "#c4b3ff", "rgba(8,14,22,.85)", 3);
     if (baseInfo) {
       const [bx, by] = screen(new Vector3(-w, baseY, d));
       context.textAlign = "left";
       context.font = "600 11px system-ui, sans-serif";
-      haloText(context, "底座 · 切片窗口累计降水起伏", bx, by + 18, "#2f3a46", "rgba(255,255,255,.9)", 3);
+      haloText(context, "底座 · 切片窗口累计降水起伏", bx, by + 18, "#cdd6de", "rgba(8,14,22,.85)", 3);
       context.font = "700 11px system-ui, sans-serif";
-      haloText(context, `最大累计 ${baseInfo.peak.toFixed(1)} mm`, bx, by + 34, "#7a1f6a", "rgba(255,255,255,.92)", 3);
+      haloText(context, `最大累计 ${baseInfo.peak.toFixed(1)} mm`, bx, by + 34, "#f3a8de", "rgba(8,14,22,.85)", 3);
     }
     if (state.selectedCell !== undefined && area.hasData) {
       const active = slabs.find(slab => slab.frame === state.index);
@@ -336,7 +337,7 @@ export async function createStackScene({ overlay, gl, invalidate }: RendererCont
         const [lon, lat] = gridCoordinate(replay, state.selectedCell % replay.cols, Math.floor(state.selectedCell / replay.cols));
         const [lx, lz] = toLocal(lon, lat);
         const [x, y] = screen(new Vector3(lx, active.group.position.y + thickness / 2, lz));
-        context.strokeStyle = "#111";
+        context.strokeStyle = "#fff";
         context.lineWidth = 1.6;
         context.beginPath();
         context.arc(x, y, 5.5, 0, Math.PI * 2);
@@ -375,9 +376,15 @@ export async function createStackScene({ overlay, gl, invalidate }: RendererCont
         renderer.shadowMap.type = PCFShadowMap;
       }
       camera.aspect = size.width / size.height;
+      // Centre the scene in the area left free by the floating panels.
+      const { insets } = input.state;
+      const freeHeight = Math.max(120, size.height - insets.top - insets.bottom);
+      fit = { aspect: Math.max(120, size.width - insets.left - insets.right) / freeHeight, scale: size.height / freeHeight };
+      camera.setViewOffset(size.width, size.height, (insets.right - insets.left) / 2, (insets.bottom - insets.top) / 2, size.width, size.height);
       camera.updateProjectionMatrix();
-      if (!userMoved && Math.abs(framedAspect - camera.aspect) > .02) {
-        framedAspect = camera.aspect;
+      const fitKey = fit.aspect.toFixed(2) + "|" + fit.scale.toFixed(2);
+      if (!userMoved && framed !== fitKey) {
+        framed = fitKey;
         placeCamera();
       }
       let moving = controls.update();

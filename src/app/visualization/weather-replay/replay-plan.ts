@@ -1,7 +1,9 @@
 import type { ReplayBounds } from "@/lib/weather-replay/model";
 
 /** Equirectangular map view with cos(latitude) aspect, wheel zoom around the cursor and drag panning. */
-export function createPlanCamera(target: HTMLElement, invalidate: () => void, padding: { left: number; right: number; top: number; bottom: number }) {
+export type Insets = { left: number; right: number; top: number; bottom: number };
+
+export function createPlanCamera(target: HTMLElement, invalidate: () => void, margin: Insets) {
   let zoom = 1;
   let pan: [number, number] = [0, 0];
   let bounds: ReplayBounds = { west: 0, east: 1, south: 0, north: 1 };
@@ -11,14 +13,17 @@ export function createPlanCamera(target: HTMLElement, invalidate: () => void, pa
   const pointers = new Map<number, [number, number]>();
   let pinch = 0;
 
-  function layout(next: ReplayBounds, w: number, h: number) {
+  /** `insets` are the screen areas covered by floating panels; `margin` adds room for labels and the legend. */
+  function layout(next: ReplayBounds, w: number, h: number, insets: Insets) {
     bounds = next;
     width = w;
     height = h;
     aspect = Math.cos((bounds.north + bounds.south) * Math.PI / 360);
     const spanX = (bounds.east - bounds.west) * aspect, spanY = bounds.north - bounds.south;
     const compact = w < 640;
-    const pad = compact ? { left: 12, right: 12, top: 56, bottom: 24 } : padding;
+    const pad = compact ? { left: 12, right: 12, top: 56, bottom: 24 } : {
+      left: insets.left + margin.left, right: insets.right + margin.right, top: insets.top + margin.top, bottom: insets.bottom + margin.bottom,
+    };
     const fit = Math.min((w - pad.left - pad.right) / spanX, (h - pad.top - pad.bottom) / spanY);
     scale = fit * zoom;
     center = [pad.left + (w - pad.left - pad.right) / 2, pad.top + (h - pad.top - pad.bottom) / 2];

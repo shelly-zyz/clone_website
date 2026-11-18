@@ -5,6 +5,8 @@ import type { ReplayArea } from "./replay-geography";
 import type { Hotspot } from "./replay-data";
 
 export type ViewState = {
+  /** Screen areas covered by floating panels, in CSS pixels. */
+  insets: { left: number; right: number; top: number; bottom: number };
   view: ReplayView;
   index: number;
   clouds: boolean;

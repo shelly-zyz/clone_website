@@ -46,60 +46,130 @@ export function CarbonTradeChord({ flows, maximum, selected, focus, peer, onFocu
   const peers = new Set(flows.flatMap(([from, to]) => from === selected ? [to] : to === selected ? [from] : []));
 
   useEffect(() => {
-    const context = canvasRef.current?.getContext("2d");
-    if (!context) return;
-    context.setTransform(2, 0, 0, 2, 0, 0);
-    context.clearRect(0, 0, 600, 600);
-    context.globalCompositeOperation = "lighter";
-    const draw = (flow: TradeFlow, highlighted: boolean) => {
-      const [from, to, mt] = flow;
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext("2d");
+    if (!canvas || !context) return;
+    type Ribbon = { from: number[]; c1: number[]; c2: number[]; to: number[]; weight: number; color: string; end: string; lit: boolean };
+    const ribbons: Ribbon[] = [];
+    for (const [from, to, mt] of flows.slice().reverse()) {
       const source = nodes.get(from);
       const target = nodes.get(to);
-      if (!source || !target) return;
-      const [x1, y1] = point(source.angle + step * 0.13, inner);
-      const [x2, y2] = point(target.angle - step * 0.13, inner);
+      if (!source || !target) continue;
       const distance = Math.abs(Math.sin((source.angle - target.angle) / 2));
       const pull = Math.max(36, inner * (0.88 - distance * 0.76));
-      const [a, b] = point(source.angle, pull);
-      const [c, d] = point(target.angle, pull);
-      const weight = Math.sqrt(mt / Math.max(1, maximum));
-      const color = active && to === active ? "#63d8ff" : active && from === active ? "#bf96ff" : source.color;
-      if (highlighted) {
-        const gradient = context.createLinearGradient(x1, y1, x2, y2);
+      const lit = !active || ((from === active || to === active) && (!peer || from === peer || to === peer));
+      ribbons.push({
+        from: [...point(source.angle + step * 0.13, inner)], c1: [...point(source.angle, pull)],
+        c2: [...point(target.angle, pull)], to: [...point(target.angle - step * 0.13, inner)],
+        weight: Math.sqrt(mt / Math.max(1, maximum)), lit,
+        color: active && to === active ? "#63d8ff" : active && from === active ? "#bf96ff" : source.color,
+        end: active ? (to === active ? "#63d8ff" : from === active ? "#bf96ff" : target.color) : target.color,
+      });
+    }
+    const bezier = ({ from, c1, c2, to }: Ribbon, t: number) => {
+      const u = 1 - t;
+      return [0, 1].map(k => u * u * u * from[k] + 3 * u * u * t * c1[k] + 3 * u * t * t * c2[k] + t * t * t * to[k]);
+    };
+    // Static ribbons are painted once; the animation only composites them and moves particles.
+    const layer = document.createElement("canvas");
+    layer.width = layer.height = 1200;
+    const paint = layer.getContext("2d");
+    if (!paint) return;
+    paint.setTransform(2, 0, 0, 2, 0, 0);
+    paint.globalCompositeOperation = "lighter";
+    for (const ribbon of ribbons) {
+      const { from, c1, c2, to, weight, color, end, lit } = ribbon;
+      if (lit) {
+        const gradient = paint.createLinearGradient(from[0], from[1], to[0], to[1]);
         gradient.addColorStop(0, color);
         gradient.addColorStop(0.45, color);
-        gradient.addColorStop(1, active ? color : target.color);
-        context.strokeStyle = gradient;
-      } else {
-        context.strokeStyle = source.color;
-      }
-      context.globalAlpha = highlighted ? active ? 0.34 + weight * 0.56 : 0.12 + weight * 0.44 : 0.034;
-      context.lineWidth = 0.34 + weight * (active ? 3.5 : 2.65);
-      context.beginPath();
-      context.moveTo(x1, y1);
-      context.bezierCurveTo(a, b, c, d, x2, y2);
-      context.stroke();
-      if (active && highlighted) {
-        const angle = Math.atan2(y2 - d, x2 - c);
+        gradient.addColorStop(1, end);
+        paint.strokeStyle = gradient;
+      } else paint.strokeStyle = color;
+      paint.globalAlpha = lit ? active ? 0.3 + weight * 0.5 : 0.1 + weight * 0.4 : 0.03;
+      paint.lineWidth = 0.34 + weight * (active ? 3.5 : 2.65);
+      paint.beginPath();
+      paint.moveTo(from[0], from[1]);
+      paint.bezierCurveTo(c1[0], c1[1], c2[0], c2[1], to[0], to[1]);
+      paint.stroke();
+      if (active && lit) {
+        const angle = Math.atan2(to[1] - c2[1], to[0] - c2[0]);
         const head = 2.7 + weight * 3.8;
-        context.fillStyle = color;
-        context.beginPath();
-        context.moveTo(x2, y2);
-        context.lineTo(x2 - head * Math.cos(angle - 0.53), y2 - head * Math.sin(angle - 0.53));
-        context.lineTo(x2 - head * Math.cos(angle + 0.53), y2 - head * Math.sin(angle + 0.53));
-        context.fill();
+        paint.fillStyle = end;
+        paint.beginPath();
+        paint.moveTo(to[0], to[1]);
+        paint.lineTo(to[0] - head * Math.cos(angle - 0.53), to[1] - head * Math.sin(angle - 0.53));
+        paint.lineTo(to[0] - head * Math.cos(angle + 0.53), to[1] - head * Math.sin(angle + 0.53));
+        paint.fill();
+      }
+    }
+    // Particles travel exporter → importer on the strongest lit flows; count and size follow volume.
+    const movers = ribbons.filter(ribbon => ribbon.lit).sort((a, b) => b.weight - a.weight).slice(0, active ? 60 : 140)
+      .flatMap(ribbon => Array.from({ length: 1 + Math.round(ribbon.weight * 3) }, (_, i) => ({
+        ribbon, phase: (i * 0.37 + ribbon.weight * 5.3) % 1, speed: 0.12 + 0.1 * (1 - ribbon.weight),
+      })));
+    const glow = document.createElement("canvas");
+    glow.width = glow.height = 32;
+    const sprite = glow.getContext("2d");
+    if (sprite) {
+      const halo = sprite.createRadialGradient(16, 16, 0, 16, 16, 16);
+      halo.addColorStop(0, "rgba(255,255,255,1)");
+      halo.addColorStop(0.25, "rgba(220,240,255,.75)");
+      halo.addColorStop(1, "rgba(160,200,255,0)");
+      sprite.fillStyle = halo;
+      sprite.fillRect(0, 0, 32, 32);
+    }
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const started = performance.now();
+    let frame = 0;
+    const draw = (now: number) => {
+      const elapsed = (now - started) / 1000;
+      const reveal = reduced ? 1 : Math.min(1, elapsed / 0.8);
+      context.setTransform(1, 0, 0, 1, 0, 0);
+      context.clearRect(0, 0, 1200, 1200);
+      context.globalCompositeOperation = "source-over";
+      context.globalAlpha = 1 - (1 - reveal) ** 3;
+      context.drawImage(layer, 0, 0);
+      if (!reduced) {
+        context.setTransform(2, 0, 0, 2, 0, 0);
+        context.globalCompositeOperation = "lighter";
+        for (const { ribbon, phase, speed } of movers) {
+          const t = (phase + elapsed * speed) % 1;
+          const [x, y] = bezier(ribbon, t);
+          const size = 3 + ribbon.weight * 7;
+          context.globalAlpha = reveal * Math.sin(Math.PI * t) * (0.45 + ribbon.weight * 0.55);
+          context.drawImage(glow, x - size / 2, y - size / 2, size, size);
+        }
+        frame = requestAnimationFrame(draw);
       }
     };
-    for (const flow of flows.slice().reverse()) {
-      const [from, to] = flow;
-      const highlighted = !active || ((from === active || to === active) && (!peer || from === peer || to === peer));
-      draw(flow, highlighted);
-    }
+    frame = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(frame);
   }, [active, flows, maximum, peer]);
 
   return <div className={styles.diagram} aria-label="隐含碳贸易弦图">
     <canvas ref={canvasRef} width={1200} height={1200} aria-hidden="true" />
     <svg viewBox="0 0 600 600" aria-label="经济体圆环" onPointerLeave={() => onFocus("")}>
+      <defs>
+        <radialGradient id="carbon-core">
+          <stop offset="0" stopColor="#5bb8ff" stopOpacity=".22" />
+          <stop offset=".55" stopColor="#3a6bd6" stopOpacity=".08" />
+          <stop offset="1" stopColor="#3a6bd6" stopOpacity="0" />
+        </radialGradient>
+        <linearGradient id="carbon-orbit" x1="0" x2="1">
+          <stop offset="0" stopColor="#9be365" stopOpacity="0" />
+          <stop offset=".5" stopColor="#9be365" stopOpacity=".9" />
+          <stop offset="1" stopColor="#63d8ff" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <circle cx={center} cy={center} r={inner} fill="url(#carbon-core)" className={styles.core} aria-hidden="true" />
+      <g className={styles.orbit} aria-hidden="true">
+        <circle cx={center} cy={center} r={ring + 22} fill="none" stroke="#7fa6d8" strokeOpacity=".16" strokeDasharray="1 7" />
+        <path d={arc(-0.9, 0.35, ring + 22)} fill="none" stroke="url(#carbon-orbit)" strokeWidth="1.6" strokeLinecap="round" />
+      </g>
+      <g className={styles.orbitReverse} aria-hidden="true">
+        <path d={arc(2.2, 3.1, inner - 30)} fill="none" stroke="#63d8ff" strokeOpacity=".35" strokeWidth="1" strokeLinecap="round" />
+      </g>
       {groups.map(({ label, color, start, end }) => {
         const [x, y] = point((start + end) / 2, 273);
         return <g key={label} aria-hidden="true">

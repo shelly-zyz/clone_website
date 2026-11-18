@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { geoEquirectangular, geoPath, type GeoPermissibleObjects } from "d3-geo";
 import { ChevronDown, Pause, Play } from "lucide-react";
 import { scaleColor } from "@/app/visualization/weather-replay/replay-palette";
+import { ForecastHeading, ForecastSeries } from "./ForecastSidebar";
 import { VerticalColorLegend } from "./VerticalColorLegend";
 import styles from "./WeatherComparison.module.css";
 
@@ -57,6 +58,23 @@ function makeRaster(field: PackedField, source: FieldSource, metric: Metric, col
   return canvas;
 }
 
+/** Area-weighted global mean; rows run from 90°N to 90°S. */
+function globalMean(field: PackedField, source: FieldSource, cols: number, rows: number) {
+  const input = Uint8Array.from(atob(field[source]), char => char.charCodeAt(0));
+  const encoded = new DataView(input.buffer);
+  let sum = 0, weights = 0;
+  for (let y = 0; y < rows; y++) {
+    const weight = Math.cos((90 - y * 180 / (rows - 1)) * Math.PI / 180);
+    for (let x = 0; x < cols; x++) {
+      const raw = encoded.getInt16(2 * (cols * y + x), true);
+      if (raw === -32768) continue;
+      sum += raw * field.quantum * weight;
+      weights += weight;
+    }
+  }
+  return weights ? sum / weights : null;
+}
+
 function drawMap(canvas: HTMLCanvasElement, raster: HTMLCanvasElement, land: GeoPermissibleObjects | undefined) {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
@@ -92,6 +110,11 @@ export function WeatherComparisonPanel() {
   const panelId = useId();
   const panel = useRef<HTMLElement>(null);
   const frame = archive?.frames[index];
+  // GFS forecast of the global mean 2 m temperature, checked against ERA5 at each valid time.
+  const trend = useMemo(() => archive && {
+    forecast: archive.frames.map(({ time, fields: values }) => ({ date: time, value: globalMean(values.t2m, "forecast", archive.cols, archive.rows) })),
+    analysis: archive.frames.map(({ time, fields: values }) => ({ date: time, value: globalMean(values.t2m, "analysis", archive.cols, archive.rows) })),
+  }, [archive]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -142,20 +165,25 @@ export function WeatherComparisonPanel() {
 
   return (
     <aside ref={panel} className={styles.comparison} aria-label="空间对照" data-expanded={expanded}>
-      <header className={styles.header}>
-        <div>
-          <h2>空间对照</h2>
-          <p>ERA5 再分析与 GFS 历史预报</p>
-        </div>
+      <ForecastHeading topic="weather">
         <button type="button" className={styles.toggle} aria-expanded={expanded} aria-controls={panelId}
-          aria-label={expanded ? "收起空间对照" : "展开空间对照"}
+          aria-label={expanded ? "收起气象预报" : "展开气象预报"}
           onClick={() => setExpanded(!expanded)}>
           <ChevronDown size={18} aria-hidden="true" />
         </button>
-      </header>
+      </ForecastHeading>
       <div className={styles.body} id={panelId}>
         {archive && rendered && !error ? (
           <>
+            {trend && (
+              <section className={styles.forecast} aria-label="GFS 全球预报">
+                <h3>全球 2 米气温预报</h3>
+                <p>NOAA GFS · 起报 {timeText(archive.run)} · 面积加权均值</p>
+                <ForecastSeries chart="weather" points={trend.forecast} unit="°C" grain="hour" label="GFS 预报"
+                  comparison={{ primaryLabel: "GFS 预报", label: "ERA5 再分析", points: trend.analysis }} />
+              </section>
+            )}
+            <h3 className={styles.sectionTitle}>空间对照 <small>ERA5 再分析与 GFS 历史预报</small></h3>
             <div className={styles.timestamps}>
               <p>有效时刻 <time dateTime={rendered.frame.time}>{timeText(rendered.frame.time)}</time></p>
               <p>GFS 起报 <time dateTime={archive.run}>{timeText(archive.run)}</time></p>

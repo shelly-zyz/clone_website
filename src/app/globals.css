@@ -3763,3 +3763,10 @@
     --og-voice-idle-status: none;
   }
 }
+
+/* Weather replay immersive mode: only the visualization stays on screen. */
+.og-app-shell:has([data-replay-immersive="true"]) :is(.og-workspace-sidebar, .og-workspace-mobile-header, .og-workspace-scrim,
+  .og-globe-navigation, .og-forecast-region, .og-info-button, .og-beta-badge, .og-assistant-mount, .og-replay-toolbar,
+  nav[aria-label="气象可视化样式"]) {
+  display: none !important;
+}

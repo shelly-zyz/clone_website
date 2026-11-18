@@ -38,7 +38,7 @@ function paintBands(replay: WeatherReplay, totals: Grid, levels: readonly number
 const format = (value: number) => Number(value.toPrecision(3)).toString();
 
 export async function createIsohyetScene({ overlay, invalidate }: RendererContext): Promise<ViewRenderer> {
-  const camera = createPlanCamera(overlay, invalidate, { left: 128, right: 48, top: 60, bottom: 60 });
+  const camera = createPlanCamera(overlay, invalidate, { left: 120, right: 16, top: 8, bottom: 30 });
   let input: SceneInput | undefined;
   let relief: Relief | null = null;
   let places: Place[] = [];
@@ -72,22 +72,18 @@ export async function createIsohyetScene({ overlay, invalidate }: RendererContex
       const { replay, area, state } = input;
       const compact = width < 640;
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
-      const paper = context.createLinearGradient(0, 0, 0, height);
-      paper.addColorStop(0, "#f7f6f2");
-      paper.addColorStop(1, "#ecebe6");
-      context.fillStyle = paper;
-      context.fillRect(0, 0, width, height);
-      camera.layout(area.mapBounds, width, height);
+      context.clearRect(0, 0, width, height);
+      camera.layout(area.mapBounds, width, height, state.insets);
       const point = (lon: number, lat: number) => camera.point(lon, lat);
 
       const key = area.id + "|" + replay.id + "|" + (relief ? "r" : "-");
       if (basemap?.key !== key) {
         const aspect = Math.cos((area.mapBounds.north + area.mapBounds.south) * Math.PI / 360) * (area.mapBounds.east - area.mapBounds.west) / (area.mapBounds.north - area.mapBounds.south);
         const w = 1400;
-        basemap = { key, image: paintBasemap(w, Math.round(w / aspect), area.mapBounds, "paper", area.mapPolygons, relief, 8) };
+        basemap = { key, image: paintBasemap(w, Math.round(w / aspect), area.mapBounds, "night", area.mapPolygons, relief, 8) };
       }
       context.save();
-      context.shadowColor = "rgba(40, 44, 52, .18)";
+      context.shadowColor = "rgba(0, 0, 0, .45)";
       context.shadowBlur = 18;
       context.shadowOffsetY = 6;
       context.imageSmoothingEnabled = true;
@@ -142,18 +138,18 @@ export async function createIsohyetScene({ overlay, invalidate }: RendererContex
 
       context.save();
       clipToBounds(context, camera, area.mapBounds);
-      context.strokeStyle = "rgba(70, 76, 84, .42)";
+      context.strokeStyle = "rgba(205, 214, 224, .26)";
       context.lineWidth = .6;
       traceRings(context, provinces, point, false);
       context.stroke();
-      context.strokeStyle = "rgba(48, 56, 66, .78)";
-      context.lineWidth = 1;
+      context.strokeStyle = "rgba(226, 232, 238, .62)";
+      context.lineWidth = .9;
       for (const polygon of area.mapPolygons) {
         traceRings(context, polygon, point, true);
         context.stroke();
       }
       context.restore();
-      paintFrame(context, camera, replay.bounds, "rgba(40,46,54,.55)", "rgba(44,50,58,.85)", compact);
+      paintFrame(context, camera, replay.bounds, "rgba(220,228,236,.32)", "rgba(206,214,222,.8)", compact);
 
       if (bands) {
         // Rain maxima: strongest centre in red, secondary centres in dark ink.
@@ -163,7 +159,7 @@ export async function createIsohyetScene({ overlay, invalidate }: RendererContex
         maxima.forEach(({ x, y, raw }, i) => {
           const [px, py] = fieldPoint(x, y);
           const strongest = i === 0;
-          context.strokeStyle = strongest ? "#b3122b" : "#1f2730";
+          context.strokeStyle = strongest ? "#e0324a" : "#1f2730";
           context.fillStyle = "#fff";
           context.lineWidth = strongest ? 2 : 1.4;
           context.beginPath();
@@ -177,7 +173,7 @@ export async function createIsohyetScene({ overlay, invalidate }: RendererContex
           context.font = (strongest ? "700 13px" : "600 11px") + " system-ui, sans-serif";
           context.textAlign = "left";
           context.textBaseline = "middle";
-          haloText(context, raw.toFixed(1) + (strongest ? " mm" : ""), px + 9, py - 1, strongest ? "#a40f26" : "#1f2730", "rgba(255,255,255,.95)", 4);
+          haloText(context, raw.toFixed(1) + (strongest ? " mm" : ""), px + 9, py - 1, strongest ? "#ff7a8a" : "#f2f5f7", "rgba(8,12,18,.88)", 4);
           labels.push([px, py, 36]);
         });
       }
@@ -186,14 +182,14 @@ export async function createIsohyetScene({ overlay, invalidate }: RendererContex
       context.textAlign = "center";
       context.textBaseline = "top";
       for (const place of choosePlaces(places, area.mapBounds, point, compact ? 10 : 26, compact ? 30 : 42, labels)) {
-        context.fillStyle = "#2a3038";
+        context.fillStyle = "#e6ebef";
         context.fillRect(place.x - 1.5, place.y - 1.5, 3, 3);
-        haloText(context, place.name, place.x, place.y + 3, "#20262d", "rgba(255,255,255,.88)", 3);
+        haloText(context, place.name, place.x, place.y + 3, "#dfe5ea", "rgba(8,12,18,.85)", 3);
       }
 
       if (state.selectedCell !== undefined && area.hasData) {
         const [x, y] = point(...gridCoordinate(replay, state.selectedCell % replay.cols, Math.floor(state.selectedCell / replay.cols)));
-        context.strokeStyle = "#111";
+        context.strokeStyle = "#fff";
         context.lineWidth = 1.5;
         context.beginPath();
         context.arc(x, y, 7, 0, Math.PI * 2);
@@ -208,13 +204,15 @@ export async function createIsohyetScene({ overlay, invalidate }: RendererContex
         context.font = "600 11px system-ui, sans-serif";
         context.textAlign = "left";
         context.textBaseline = "middle";
+        const [x0, y1] = point(replay.bounds.west, replay.bounds.south);
         const boxWidth = context.measureText(text).width + 16;
-        context.fillStyle = "rgba(255,255,255,.9)";
+        const bx = compact ? 12 : x0, by = compact ? height - 34 : y1 + 26;
+        context.fillStyle = "rgba(10,17,26,.72)";
         context.beginPath();
-        context.roundRect(12, height - 34, boxWidth, 22, 5);
+        context.roundRect(bx, by, boxWidth, 22, 5);
         context.fill();
-        context.fillStyle = "#2a323c";
-        context.fillText(text, 20, height - 23);
+        context.fillStyle = "#dfe7ee";
+        context.fillText(text, bx + 8, by + 11);
       }
       return false;
     },

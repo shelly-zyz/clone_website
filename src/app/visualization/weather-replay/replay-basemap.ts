@@ -73,7 +73,7 @@ export function elevationAt(relief: Relief, lon: number, lat: number) {
   return (data[i] * (1 - u) + data[i + 1] * u) * (1 - v) + (data[i + width] * (1 - u) + data[i + width + 1] * u) * v;
 }
 
-export type BasemapStyle = "terrain" | "dark" | "paper" | "slab";
+export type BasemapStyle = "terrain" | "dark" | "night" | "paper" | "slab";
 
 type Palette = { land: (h: number) => [number, number, number]; ocean: (depth: number) => [number, number, number]; shade: [number, number]; seaShade: number };
 const mix = (a: readonly number[], b: readonly number[], t: number): [number, number, number] =>
@@ -98,6 +98,11 @@ const palettes: Record<BasemapStyle, Palette> = {
     land: h => ramp([[0, [58, 62, 64]], [1500, [66, 68, 70]], [5000, [80, 80, 80]]], h),
     ocean: d => ramp([[0, [34, 38, 42]], [3000, [27, 30, 34]]], d),
     shade: [.62, 1.3], seaShade: .12,
+  },
+  night: {
+    land: h => ramp([[0, [52, 61, 72]], [1500, [60, 68, 78]], [5000, [78, 84, 92]]], h),
+    ocean: d => ramp([[0, [26, 36, 48]], [3000, [20, 29, 40]]], d),
+    shade: [.66, 1.28], seaShade: .1,
   },
   paper: {
     land: h => ramp([[0, [238, 236, 230]], [2000, [228, 224, 216]], [6000, [220, 216, 208]]], h),

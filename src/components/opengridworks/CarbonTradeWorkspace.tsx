@@ -6,6 +6,7 @@ import {
   economyName, tradePartners, tradeSources, type Footprint, type TradeCatalog, type TradeDirection, type TradeFlow,
 } from "@/lib/carbon-trade";
 import { CarbonTradeChord } from "./CarbonTradeChord";
+import { ForecastVisualization } from "./ForecastVisualization";
 import { WorkspaceFilterSelect, WorkspaceSidebar } from "./WorkspaceSidebar";
 import styles from "./CarbonTradeWorkspace.module.css";
 
@@ -64,45 +65,24 @@ function FootprintBars({ point }: { point: Footprint }) {
       <div><dt>生产侧</dt><dd>{measure.format(production)}</dd></div>
       <div><dt>消费侧</dt><dd>{measure.format(consumption)}</dd></div>
     </dl>
-    <svg viewBox="0 0 300 19" className={styles.bars} aria-hidden="true">
-      <rect x="0" y="3" width="300" height="12" fill="#26334b" rx="6" />
-      <rect x={149 - 145 * production / max} y="3" width={145 * production / max} height="12" rx="6" fill="#65d9f9" />
-      <rect x="151" y="3" width={145 * consumption / max} height="12" rx="6" fill="#ae9afb" />
-      <path d="M150 0 V19" stroke="#e4f2ff" opacity=".6" />
-    </svg>
-    <p className={styles.delta}>消费 − 生产 <strong>{delta > 0 ? "+" : ""}{measure.format(delta)} Mt CO₂e</strong></p>
+    <div className={styles.split} aria-hidden="true">
+      <span className={styles.production} ref={node => node?.style.setProperty("--share", String(production / max))} />
+      <span className={styles.consumption} ref={node => node?.style.setProperty("--share", String(consumption / max))} />
+    </div>
+    <p className={styles.delta}>消费 − 生产 <strong data-sign={delta > 0 ? "up" : "down"}>{delta > 0 ? "+" : ""}{measure.format(delta)}</strong></p>
   </>;
 }
 
+/** Same chart language as the forecast panels: production as the primary series, consumption as the comparison. */
 function FootprintTrend({ series, year, onYear }: { series: Footprint[]; year: number; onYear: (year: number) => void }) {
-  const [hovered, setHovered] = useState<number>();
-  const active = series.find(point => point[0] === hovered) ?? series.find(point => point[0] === year);
-  const low = Math.min(...series.flatMap(([, p, c]) => [p, c]));
-  const high = Math.max(...series.flatMap(([, p, c]) => [p, c]));
-  const x = (index: number) => 10 + index * 280 / Math.max(1, series.length - 1);
-  const y = (value: number) => 97 - (value - low) * 82 / Math.max(0.001, high - low);
-  const index = series.findIndex(point => point[0] === active?.[0]);
-  return <>
-    <svg viewBox="0 0 300 107" className={styles.trend} aria-label="生产和消费历史趋势"
-      onPointerLeave={() => setHovered(undefined)}>
-      {[15, 42, 69, 97].map(tick => <path key={tick} d={`M 10 ${tick} H 290`} stroke="#314058" strokeDasharray="3 4" />)}
-      {([1, 2] as const).map((column, i) => (
-        <polyline key={column} points={series.map((point, idx) => `${x(idx)},${y(point[column])}`).join(" ")}
-          fill="none" stroke={i === 0 ? "#65d9f9" : "#ae9afb"} strokeWidth="2" vectorEffect="non-scaling-stroke" />
-      ))}
-      {active && <>
-        <path d={`M ${x(index)} 12 V 100`} stroke="#cde1f2" opacity=".52" />
-        <circle cx={x(index)} cy={y(active[1])} r="3.1" fill="#65d9f9" />
-        <circle cx={x(index)} cy={y(active[2])} r="3.1" fill="#ae9afb" />
-      </>}
-      {series.map(([period], idx) => <rect key={period} x={x(idx) - 5} y="0" width="11" height="107"
-        fill="transparent" onPointerEnter={() => setHovered(period)} onClick={() => onYear(period)} />)}
-    </svg>
-    <div className={styles.trendCaption}><span>{series[0][0]}</span><span>{series.at(-1)?.[0]}</span></div>
-    <p className={styles.trendValues}>{active && <>
-      <strong>{active[0]}</strong><span>生产 {measure.format(active[1])}</span><span>消费 {measure.format(active[2])}</span>
-    </>}</p>
-  </>;
+  const sample = (column: 1 | 2) => series.map((row, index) => ({
+    date: row[0] + "-01-01", position: series.length > 1 ? index / (series.length - 1) : .5, value: row[column],
+    dateLabel: row[0] + " 年", tickLabel: String(row[0]),
+  }));
+  return <ForecastVisualization topic="carbon" observed label="生产侧碳足迹" unit="Mt CO₂e"
+    formatValue={value => measure.format(value) + " Mt"} samples={sample(1)}
+    comparison={{ primaryLabel: "生产侧", label: "消费侧", samples: sample(2) }}
+    selectedDate={year + "-01-01"} onSampleSelect={index => onYear(series[index][0])} />;
 }
 
 export function CarbonTradeWorkspace({ selection, onChange }: {
@@ -173,6 +153,47 @@ export function CarbonTradeWorkspace({ selection, onChange }: {
         <WorkspaceFilterSelect label="锁定经济体" value={selected}
           options={[{ value: "W", label: "全球" }, ...economies.map(value => ({ value, label: economyName(value) }))]}
           onChange={choose} />
+        <div className={styles.rail} aria-label="碳贸易分析">
+          <header className={styles.railHeader}>
+            <div><span>{selected === "W" && hover ? "悬停预览" : "选中对象"}</span><h3>{economyName(shownEconomy)}</h3></div>
+            <span>{year ?? "—"}</span>
+          </header>
+          <section>
+            <h4>生产与消费碳足迹 <small>Mt CO₂e</small></h4>
+            {point ? <FootprintBars point={point} /> : <p className={styles.empty}>暂无足迹数据</p>}
+          </section>
+          <section aria-busy={Boolean(year && !frame)}>
+            <h4>{shownEconomy === "W" ? "主要贸易流" : "主要贸易伙伴"} <small>前 5 · Mt CO₂e</small></h4>
+            {selected !== "W" && <div className={styles.directions} role="group" aria-label="隐含碳流向">
+              {directions.map(({ value, label }) => (
+                <button key={value} type="button" aria-pressed={direction === value}
+                  onClick={() => { setHighlight(undefined); onChange({ direction: value }); }}>{label}</button>
+              ))}
+            </div>}
+            <ol className={styles.ranking}>
+              {shownEconomy === "W" ? globalPairs.map(([from, to, mt]) => (
+                <li key={from + to} ref={node => node?.style.setProperty("--share", String(mt / Math.max(1, globalPairs[0][2])))}>
+                  <button type="button" onClick={() => choose(from, to)}>
+                    <span>{economyName(from)} → {economyName(to)}</span><strong>{measure.format(mt)}</strong>
+                  </button></li>
+              )) : partners.map(({ code, amount }, rank) => (
+                <li key={code} data-rank={rank + 1} ref={node => node?.style.setProperty("--share", String(amount / Math.max(1, partners[0].amount)))}><button type="button" aria-pressed={selected !== "W" && highlightedPartner === code && partner === code}
+                  onClick={() => selected === "W" ? choose(code) : setHighlight(partner === code ? undefined : { selection: highlightKey, code })}>
+                  <span>{economyName(code)}</span><strong>{measure.format(amount)}</strong>
+                </button></li>
+              ))}
+            </ol>
+            {frame?.data && (shownEconomy === "W" ? !globalPairs.length : !partners.length) &&
+              <p className={styles.empty}>该流向暂无贸易记录</p>}
+          </section>
+          <section>
+            <h4>历史变化趋势 <small>Mt CO₂e</small></h4>
+            {series.length && year ? <FootprintTrend key={shownEconomy} series={series} year={year}
+              onYear={next => step(years.indexOf(next))} /> : <p className={styles.empty}>暂无趋势数据</p>}
+          </section>
+          {catalog && <a className={styles.credit} href={tradeSources.trade} target="_blank" rel="noreferrer"
+            title={"原始文件 SHA-256 " + catalog.revision}>OECD GHGFP · {catalog.edition} 版 <ArrowUpRight size={12} /></a>}
+        </div>
         <details className={styles.sources}>
           <summary>口径与数据来源</summary>
           <p>弧段按大洲分组，圆环保留 OECD 的「世界其他地区」余额。贸易连线方向为出口方至进口方，宽度对应隐含温室气体排放量。</p>
@@ -209,46 +230,6 @@ export function CarbonTradeWorkspace({ selection, onChange }: {
         </div>
       </div>
 
-      <aside className={styles.rail} aria-label="碳数据分析">
-        <header className={styles.railHeader}>
-          <div><span>{selected === "W" && hover ? "悬停预览" : "选中对象"}</span><h3>{economyName(shownEconomy)}</h3></div>
-          <span>{year ?? "—"}</span>
-        </header>
-        <section>
-          <h4>生产与消费碳足迹 <small>Mt CO₂e</small></h4>
-          {point ? <FootprintBars point={point} /> : <p className={styles.empty}>暂无足迹数据</p>}
-        </section>
-        <section aria-busy={Boolean(year && !frame)}>
-          <h4>{shownEconomy === "W" ? "主要贸易流" : "主要贸易伙伴"} <small>前 5 · Mt CO₂e</small></h4>
-          {selected !== "W" && <div className={styles.directions} role="group" aria-label="隐含碳流向">
-            {directions.map(({ value, label }) => (
-              <button key={value} type="button" aria-pressed={direction === value}
-                onClick={() => { setHighlight(undefined); onChange({ direction: value }); }}>{label}</button>
-            ))}
-          </div>}
-          <ol className={styles.ranking}>
-            {shownEconomy === "W" ? globalPairs.map(([from, to, mt]) => (
-              <li key={from + to}><button type="button" onClick={() => choose(from, to)}>
-                <span>{economyName(from)} → {economyName(to)}</span><strong>{measure.format(mt)}</strong>
-              </button></li>
-            )) : partners.map(({ code, amount }) => (
-              <li key={code}><button type="button" aria-pressed={selected !== "W" && highlightedPartner === code && partner === code}
-                onClick={() => selected === "W" ? choose(code) : setHighlight(partner === code ? undefined : { selection: highlightKey, code })}>
-                <span>{economyName(code)}</span><strong>{measure.format(amount)}</strong>
-              </button></li>
-            ))}
-          </ol>
-          {frame?.data && (shownEconomy === "W" ? !globalPairs.length : !partners.length) &&
-            <p className={styles.empty}>该流向暂无贸易记录</p>}
-        </section>
-        <section>
-          <h4>历史变化趋势 <small>Mt CO₂e</small></h4>
-          {series.length && year ? <FootprintTrend key={shownEconomy} series={series} year={year}
-            onYear={next => step(years.indexOf(next))} /> : <p className={styles.empty}>暂无趋势数据</p>}
-        </section>
-        {catalog && <a className={styles.credit} href={tradeSources.trade} target="_blank" rel="noreferrer"
-          title={"原始文件 SHA-256 " + catalog.revision}>OECD GHGFP · {catalog.edition} 版 <ArrowUpRight size={12} /></a>}
-      </aside>
 
       <section className={styles.timeline} aria-label="隐含碳贸易年度回放">
         <button type="button" aria-label="上一年" disabled={index < 1} onClick={() => step(index - 1)}><ChevronLeft size={17} /></button>

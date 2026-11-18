@@ -5,6 +5,7 @@ import { ChevronDown } from "lucide-react";
 import type { ReplayView } from "@/lib/weather-replay/views";
 import type { ReplayFrame, WeatherReplay } from "@/lib/weather-replay/model";
 import { ForecastVisualization } from "@/components/opengridworks/ForecastVisualization";
+import { ForecastHeading, ForecastSeries } from "@/components/opengridworks/ForecastSidebar";
 import { gridCoordinate } from "./replay-geography";
 import { areaStats, displacement, utcStamp, type Grid, type Hotspot } from "./replay-data";
 import styles from "./player.module.css";
@@ -73,6 +74,23 @@ function Profile({ name, unit, data, min = 0, max, column, cloud = false }: {
         </>
       ) : <p className={styles.readingsSource}>剖线缺测</p>}
     </figure>
+  );
+}
+
+/** Regional forecast summary: area-weighted mean rain rate through the run, as on the other globes' forecast panels. */
+function RegionalForecast({ replay, weights, frame }: { replay: WeatherReplay; weights: readonly number[]; frame: number }) {
+  const forecast = replay.metadata;
+  const points = useMemo(() => replay.rain.map(item => ({ date: item.time, value: areaStats(item.values, weights).mean })), [replay, weights]);
+  const lead = forecast ? Math.round((Date.parse(replay.rain[frame].time) - Date.parse(forecast.run)) / 3_600_000) : null;
+  return (
+    <section className={styles.forecastBlock} aria-label="区域预报">
+      <h3>{forecast ? `${forecast.product} 区域降水预报` : "卫星降水估计"}</h3>
+      <p className={styles.readingsContext}>
+        {forecast ? `起报 ${utcStamp(forecast.run)} UTC · 当前时效 +${lead} 小时 · 面积加权均值` : "PARDIG-NRT · 面积加权均值"}
+      </p>
+      <ForecastSeries chart="weather" points={points} observed={!forecast} unit="mm/h" grain="hour"
+        label={forecast ? "区域平均降水率预报" : "区域平均降水率"} />
+    </section>
   );
 }
 
@@ -225,6 +243,8 @@ export function ReplayReadings({
         <span>{headings[view]}</span><span>{summary} <ChevronDown size={14} aria-hidden="true" /></span>
       </button>
       <div id={panelId} className={styles.readingsBody} data-open={open}>
+        <ForecastHeading topic="weather" />
+        <RegionalForecast replay={replay} weights={weights} frame={frame} />
         <h3>{headings[view]}</h3>
         {details()}
         {coordinates && <p className={styles.readingsContext}>选点 {coordinates[1].toFixed(2)}°，{coordinates[0].toFixed(2)}°</p>}

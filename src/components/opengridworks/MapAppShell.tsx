@@ -4823,6 +4823,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
 
   const { topic: activeProject, context, navigate } = useWorkspaceSelection({ topic: initialProject, context: initialContext }, changeProject);
   const weatherScene: WeatherScene = context.replay ?? "globe";
+  const [replayControlsSlot, setReplayControlsSlot] = useState<HTMLDivElement | null>(null);
   const carbonTrade = activeProject === "carbon" && context.projection === "map";
   const changeCarbonTrade = useCallback((patch: { year?: number; country?: string; direction?: WorkspaceContext["tradeDirection"] }) => {
     const { direction, ...values } = patch;
@@ -5340,7 +5341,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
         )}
         {activeProject === "weather" && !resourceScene && weatherScene !== "globe" && (
           <div className="og-weather-replay-stage og-weather-field-stage">
-            <WeatherReplayPlayer query="" scene={weatherScene}
+            <WeatherReplayPlayer query="" scene={weatherScene} controlsSlot={replayControlsSlot}
               region={context.replayRegion} initialFrame={context.replayFrame} onFrameChange={rememberReplayFrame}
               initialPoint={readGridPoint(context.replayPoint) ?? undefined} onPointChange={rememberReplayPoint} />
           </div>
@@ -5518,6 +5519,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
                         replayRegion: readReplayRegion(value), replayFrame: undefined, replayPoint: undefined,
                       })} />
                     <p className="og-weather-sidebar-status">{replayViews[weatherScene].description}</p>
+                    <div ref={setReplayControlsSlot} className="og-replay-controls-slot" />
                   </>
                 )}
               </>
@@ -5647,7 +5649,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
       )}
       {!resourceScene && (
         <XiaoyunAssistant topic={activeProject === "weather" ? "meteo" : activeProject === "economy" ? undefined : activeProject}
-          captureView={saveMapCamera} forecastSidebar={!carbonTrade} />
+          captureView={saveMapCamera} />
       )}
     </main>
   );
