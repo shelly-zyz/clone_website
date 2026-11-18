@@ -8,7 +8,7 @@ import {
   globeBoundaryLayers, globeContinentLabels, globeCountryLabels, globeGeographySources,
   globeGlyphs, globeProvinceLabels, globeSky,
 } from "@/lib/globe-geography";
-import { observeMapViewport, overviewZoom } from "@/lib/globe-viewport";
+import { observeMapViewport, overviewZoom, startGlobeRotation } from "@/lib/globe-viewport";
 import { applyRasterBasemap } from "@/lib/raster-basemap";
 import { readWorkspaceCamera, replaceWorkspaceContext } from "@/lib/workspace-context";
 import type { MapTheme } from "@/types/opengridworks";
@@ -161,6 +161,12 @@ export function EconomyGlobe({ active, basemap, onBasemapError, values, metric, 
   useEffect(() => {
     if (!active) map.current?.stop();
   }, [active]);
+
+  useEffect(() => {
+    const view = map.current;
+    if (!view || !active || status !== "ready") return;
+    return startGlobeRotation(view);
+  }, [active, status]);
 
   useEffect(() => {
     const view = map.current;

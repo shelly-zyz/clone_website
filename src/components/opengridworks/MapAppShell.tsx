@@ -52,7 +52,7 @@ import { usePowerAnalysis } from "@/hooks/use-power-analysis";
 import powerAnalysisStyles from "./PowerRegionPanel.module.css";
 import { useWorkspaceSelection, type WorkspaceSelection } from "@/hooks/use-workspace-selection";
 import { chinaProvinces, findChinaProvince } from "@/lib/china-provinces";
-import { observeMapViewport, overviewZoom, type MapOverview } from "@/lib/globe-viewport";
+import { observeMapViewport, overviewZoom, startGlobeRotation, type MapOverview } from "@/lib/globe-viewport";
 import {
   analysisContextHref, readGridPoint, readWorkspaceCamera, replaceWorkspaceContext, type WorkspaceContext,
 } from "@/lib/workspace-context";
@@ -2856,6 +2856,12 @@ function MapViewport({
   useEffect(() => {
     if (!active) mapRef.current?.stop();
   }, [active]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || !active || !["power", "carbon"].includes(activeProject)) return;
+    return startGlobeRotation(map);
+  }, [active, activeProject, ready]);
 
   useEffect(() => {
     const map = mapRef.current;

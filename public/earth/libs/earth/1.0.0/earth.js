@@ -110,7 +110,52 @@
      * for normal clicks. Spurious moves emit no events.
      */
     function buildInputController() {
-        var globe, op = null;
+        var globe, op = null, autoRotation = null, autoRotationResume = null;
+
+        function canAutoRotate() {
+            var reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+            return !!globe && workspaceVisible && !document.hidden && !reducedMotion;
+        }
+
+        function stopAutoRotation() {
+            if (autoRotation) clearInterval(autoRotation);
+            if (autoRotationResume) clearTimeout(autoRotationResume);
+            autoRotation = autoRotationResume = null;
+        }
+
+        function startAutoRotation() {
+            stopAutoRotation();
+            if (!canAutoRotate()) return;
+            var previous = Date.now(), lastReprojection = previous;
+            autoRotation = setInterval(function() {
+                if (!canAutoRotate()) {
+                    stopAutoRotation();
+                    return;
+                }
+                var now = Date.now(), elapsed = Math.min(100, now - previous);
+                previous = now;
+                var orientation = globe.orientation().split(",");
+                orientation[0] = String(+orientation[0] + elapsed * 0.001);
+                globe.orientation(orientation.join(","), view);
+                if (now - lastReprojection >= 1500) {
+                    lastReprojection = now;
+                    dispatch.trigger("moveEnd", {autoRotation: true});
+                } else {
+                    dispatch.trigger("rotate");
+                }
+            }, 50);
+        }
+
+        function resumeAutoRotation() {
+            if (autoRotation) clearInterval(autoRotation);
+            if (autoRotationResume) clearTimeout(autoRotationResume);
+            autoRotation = null;
+            if (!canAutoRotate()) return;
+            autoRotationResume = setTimeout(function() {
+                autoRotationResume = null;
+                startAutoRotation();
+            }, 2200);
+        }
 
         /**
          * @returns {Object} an object to represent the state for one move operation.
@@ -126,6 +171,7 @@
 
         var zoom = d3.behavior.zoom()
             .on("zoomstart", function() {
+                stopAutoRotation();
                 op = op || newOp(d3.mouse(this), zoom.scale());  // a new operation begins
             })
             .on("zoom", function() {
@@ -151,6 +197,7 @@
             })
             .on("zoomend", function() {
                 op.manipulator.end();
+                resumeAutoRotation();
                 if (op.type === "click") {
                     dispatch.trigger("click", op.startMouse, globe.projection.invert(op.startMouse) || []);
                 }
@@ -212,15 +259,29 @@
                 }
                 dispatch.trigger("moveEnd");
             },
+            autoRotate: function(enabled) {
+                if (enabled) resumeAutoRotation();
+                else stopAutoRotation();
+                return this;
+            },
             globe: function(_) {
                 if (_) {
                     globe = _;
                     zoom.scaleExtent(globe.scaleExtent());
                     reorient();
+                    resumeAutoRotation();
                 }
                 return _ ? this : globe;
             }
         }, Backbone.Events);
+        dispatch.on("moveStart", stopAutoRotation);
+        dispatch.on("moveEnd", function(options) {
+            if (!options || !options.autoRotation) resumeAutoRotation();
+        });
+        d3.select(document).on("visibilitychange.ogw-auto-rotation", function() {
+            if (document.hidden) stopAutoRotation();
+            else resumeAutoRotation();
+        });
         return dispatch.listenTo(configuration, "change:orientation", reorient);
     }
 
@@ -363,6 +424,9 @@
                 },
                 move: function() {
                     doDraw_throttled();
+                },
+                rotate: function() {
+                    d3.selectAll("path").attr("d", path);
                 },
                 moveEnd: function() {
                     coastline.datum(mesh.coastHi);
@@ -1222,8 +1286,14 @@
         if (workspace) {
             window.addEventListener("message", function(event) {
                 if (event.origin !== window.location.origin || event.source !== window.parent) return;
-                if (event.data === "ogw-weather-show") workspaceVisible = true;
-                if (event.data === "ogw-weather-hide") workspaceVisible = false;
+                if (event.data === "ogw-weather-show") {
+                    workspaceVisible = true;
+                    inputController.autoRotate(true);
+                }
+                if (event.data === "ogw-weather-hide") {
+                    workspaceVisible = false;
+                    inputController.autoRotate(false);
+                }
             });
             // The embedded canvas can change size when a parent panel opens without a device rotation.
             window.addEventListener("resize", _.debounce(function() {

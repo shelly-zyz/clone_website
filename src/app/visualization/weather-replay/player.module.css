@@ -264,7 +264,7 @@
 .embedded .readings {
   right: 16px;
   top: 71px;
-  bottom: max(calc(var(--og-globe-nav-space, 70px) + 26px), var(--og-assistant-clearance, 0px));
+  max-height: calc(100svh - 71px - max(calc(var(--og-globe-nav-space, 70px) + 26px), var(--og-assistant-clearance, 0px)));
   width: clamp(225px, 20vw, 285px);
   background: transparent;
   border: 0;
@@ -363,8 +363,8 @@
   .layers label { min-height: 24px; }
 }
 
-/* All four topic views share the workspace's dark space backdrop. */
-.stage[data-view] { background: transparent; color: #e5edf5; }
+/* Embedded replay scenes keep the same deep UI backdrop as the standalone player. */
+.stage[data-view] { background: #09141d; color: #e5edf5; }
 .canvas canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .canvas canvas[data-layer="overlay"] { touch-action: none; }
 .canvas canvas[hidden] { display: none; }

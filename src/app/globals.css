@@ -3663,7 +3663,7 @@
     position: absolute;
     top: 72px;
     right: 16px;
-    bottom: max(calc(var(--og-globe-nav-space) + 32px), var(--og-assistant-clearance));
+    max-height: calc(100svh - 72px - max(calc(var(--og-globe-nav-space) + 32px), var(--og-assistant-clearance)));
     width: clamp(235px, 21vw, 324px);
     margin: 0;
   }

@@ -3,6 +3,7 @@
 import maplibregl, { type ExpressionSpecification, type GeoJSONSource, type Map, type MapMouseEvent } from "maplibre-gl";
 import type { FeatureCollection, Point } from "geojson";
 import { useEffect, useRef, useState } from "react";
+import { startGlobeRotation } from "@/lib/globe-viewport";
 import styles from "./WeatherResourceScene.module.css";
 
 type ProvinceMarker = { id: string; iso: string; coordinates: [number, number]; value: number };
@@ -91,6 +92,12 @@ export function ScenarioProvinceGlobe({ regions, selected, onSelect }: {
     const province = selected === "china" ? null : markers.current.find(item => item.id === selected);
     if (province) view.easeTo({ center: province.coordinates, duration: 310 });
   }, [ready, selected]);
+
+  useEffect(() => {
+    const view = map.current;
+    if (!ready || !view) return;
+    return startGlobeRotation(view);
+  }, [ready]);
 
   return (
     <div className={styles.globe} aria-label="省级风光资源地球">

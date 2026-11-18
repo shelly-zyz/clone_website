@@ -3,7 +3,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  margin-bottom: clamp(60px, 9svh, 88px);
+  margin-bottom: 0;
   color: #edf0f2;
   background: var(--og-panel-fill, rgb(10 17 26 / 64%));
   border-radius: 8px;

@@ -50,3 +50,56 @@ export function observeMapViewport(map: Map, isAtlas = () => false) {
   observer.observe(container);
   return () => observer.disconnect();
 }
+
+const globeRotationDegrees = 90;
+const globeRotationDuration = 90_000;
+const globeRotationResumeDelay = 2_800;
+
+/** Slowly turn a globe and resume a moment after the user finishes navigating it. */
+export function startGlobeRotation(map: Map) {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return () => {};
+
+  const container = map.getContainer();
+  let rotationTimer: number | undefined;
+  let resumeTimer: number | undefined;
+  let running = true;
+
+  const rotate = () => {
+    if (!running || !map.isStyleLoaded()) return;
+    const { lng, lat } = map.getCenter();
+    map.easeTo({
+      center: [lng + globeRotationDegrees, lat],
+      duration: globeRotationDuration,
+      easing: progress => progress,
+    });
+    rotationTimer = window.setTimeout(rotate, globeRotationDuration + 160);
+  };
+
+  const pause = () => {
+    if (!running) return;
+    if (rotationTimer !== undefined) window.clearTimeout(rotationTimer);
+    if (resumeTimer !== undefined) window.clearTimeout(resumeTimer);
+    map.stop();
+    resumeTimer = window.setTimeout(() => {
+      resumeTimer = undefined;
+      rotate();
+    }, globeRotationResumeDelay);
+  };
+
+  container.addEventListener("pointerdown", pause, { passive: true });
+  container.addEventListener("wheel", pause, { passive: true });
+  container.addEventListener("keydown", pause);
+  if (map.isStyleLoaded()) rotationTimer = window.setTimeout(rotate, 650);
+  else map.once("load", rotate);
+
+  return () => {
+    running = false;
+    if (rotationTimer !== undefined) window.clearTimeout(rotationTimer);
+    if (resumeTimer !== undefined) window.clearTimeout(resumeTimer);
+    map.off("load", rotate);
+    container.removeEventListener("pointerdown", pause);
+    container.removeEventListener("wheel", pause);
+    container.removeEventListener("keydown", pause);
+    map.stop();
+  };
+}

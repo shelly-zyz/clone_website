@@ -129,7 +129,7 @@
   z-index: 45;
   top: var(--og-rail-top);
   right: var(--og-gutter);
-  bottom: max(calc(var(--og-globe-nav-space) + 6px), var(--og-assistant-clearance));
+  max-height: calc(100svh - var(--og-rail-top) - max(calc(var(--og-globe-nav-space) + 6px), var(--og-assistant-clearance)));
   width: var(--og-forecast-width);
   overflow: auto;
   overscroll-behavior: contain;
@@ -262,6 +262,7 @@
     inset: auto var(--og-gutter) var(--og-globe-nav-space);
     width: auto;
     height: var(--og-mobile-dock);
+    max-height: none;
     padding: 10px 12px;
   }
 

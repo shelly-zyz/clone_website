@@ -169,12 +169,12 @@
   z-index: 42;
   top: var(--og-rail-top);
   right: var(--og-gutter);
-  bottom: max(calc(var(--og-globe-nav-space) + 8px), var(--og-assistant-clearance));
   width: var(--og-power-rail);
+  max-height: calc(100svh - var(--og-rail-top) - max(calc(var(--og-globe-nav-space) + 8px), var(--og-assistant-clearance)));
   font-variant-numeric: tabular-nums;
 }
 .rail {
-  height: 100%;
+  max-height: inherit;
   overflow: auto;
   scrollbar-width: thin;
   display: flex;
@@ -280,7 +280,7 @@
   .legendBody { height: 61px; }
   .thematicMap { inset: 28px 1px 45px; }
   .wipe { width: min(245px, 80%); }
-  .railRegion { inset: auto var(--og-gutter) var(--og-globe-nav-space); width: auto; pointer-events: none; }
+  .railRegion { inset: auto var(--og-gutter) var(--og-globe-nav-space); width: auto; max-height: none; pointer-events: none; }
   .railRegion[data-power-analysis-dock="open"] { height: var(--og-dock-size); pointer-events: auto; }
   .mobileRail {
     display: flex;
@@ -299,6 +299,6 @@
   }
   .railRegion:not([data-power-analysis-dock="open"]) .rail { display: none; }
   :global(.og-app-shell:has(.og-workspace-sidebar[data-open="true"])) .railRegion { visibility: hidden; }
-  .rail { border-radius: 8px; }
+  .rail { height: 100%; max-height: none; border-radius: 8px; }
   .rail .kpis strong { font-size: 18px; }
 }
