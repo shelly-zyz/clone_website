@@ -60,46 +60,101 @@ export function startGlobeRotation(map: Map) {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return () => {};
 
   const container = map.getContainer();
+  const heldInteractions = new Set<string>();
   let rotationTimer: number | undefined;
   let resumeTimer: number | undefined;
   let running = true;
+  let paused = false;
 
-  const rotate = () => {
-    if (!running || !map.isStyleLoaded()) return;
-    const { lng, lat } = map.getCenter();
-    map.easeTo({
-      center: [lng + globeRotationDegrees, lat],
-      duration: globeRotationDuration,
-      easing: progress => progress,
-    });
-    rotationTimer = window.setTimeout(rotate, globeRotationDuration + 160);
+  const clearTimers = () => {
+    if (rotationTimer !== undefined) window.clearTimeout(rotationTimer);
+    if (resumeTimer !== undefined) window.clearTimeout(resumeTimer);
+    rotationTimer = resumeTimer = undefined;
+  };
+
+  const scheduleRotation = (delay: number) => {
+    if (!running || paused || heldInteractions.size > 0) return;
+    if (rotationTimer !== undefined) window.clearTimeout(rotationTimer);
+    rotationTimer = window.setTimeout(() => {
+      rotationTimer = undefined;
+      rotate();
+    }, delay);
   };
 
   const pause = () => {
-    if (!running) return;
-    if (rotationTimer !== undefined) window.clearTimeout(rotationTimer);
-    if (resumeTimer !== undefined) window.clearTimeout(resumeTimer);
-    map.stop();
+    paused = true;
+    clearTimers();
+  };
+
+  const resume = () => {
+    if (!running || heldInteractions.size > 0) return;
+    paused = false;
+    clearTimers();
     resumeTimer = window.setTimeout(() => {
       resumeTimer = undefined;
       rotate();
     }, globeRotationResumeDelay);
   };
 
-  container.addEventListener("pointerdown", pause, { passive: true });
-  container.addEventListener("wheel", pause, { passive: true });
-  container.addEventListener("keydown", pause);
-  if (map.isStyleLoaded()) rotationTimer = window.setTimeout(rotate, 650);
-  else map.once("load", rotate);
+  const rotate = () => {
+    if (!running || paused || heldInteractions.size > 0 || !map.isStyleLoaded()) return;
+    const { lng, lat } = map.getCenter();
+    map.easeTo({
+      center: [lng + globeRotationDegrees, lat],
+      duration: globeRotationDuration,
+      easing: progress => progress,
+    }, { globeAutoRotation: true });
+  };
+
+  const beginInteraction = (kind: string) => {
+    heldInteractions.add(kind);
+    pause();
+  };
+
+  const endInteraction = (kind: string) => {
+    heldInteractions.delete(kind);
+    resume();
+  };
+
+  const handleMoveStart = (event: { globeAutoRotation?: boolean }) => {
+    if (!event.globeAutoRotation) pause();
+  };
+
+  const handleMoveEnd = (event: { globeAutoRotation?: boolean }) => {
+    if (event.globeAutoRotation) scheduleRotation(180);
+    else resume();
+  };
+
+  const handlePointerDown = () => beginInteraction("pointer");
+  const handlePointerEnd = () => endInteraction("pointer");
+  const handleKeyDown = () => beginInteraction("keyboard");
+  const handleKeyUp = () => endInteraction("keyboard");
+  const handleWheel = () => {
+    pause();
+    resume();
+  };
+
+  container.addEventListener("pointerdown", handlePointerDown, { passive: true });
+  container.addEventListener("wheel", handleWheel, { passive: true });
+  container.addEventListener("keydown", handleKeyDown);
+  document.addEventListener("pointerup", handlePointerEnd, { passive: true });
+  document.addEventListener("pointercancel", handlePointerEnd, { passive: true });
+  document.addEventListener("keyup", handleKeyUp);
+  map.on("movestart", handleMoveStart);
+  map.on("moveend", handleMoveEnd);
+  if (map.isStyleLoaded()) scheduleRotation(650);
+  else map.once("load", () => scheduleRotation(650));
 
   return () => {
     running = false;
-    if (rotationTimer !== undefined) window.clearTimeout(rotationTimer);
-    if (resumeTimer !== undefined) window.clearTimeout(resumeTimer);
-    map.off("load", rotate);
-    container.removeEventListener("pointerdown", pause);
-    container.removeEventListener("wheel", pause);
-    container.removeEventListener("keydown", pause);
-    map.stop();
+    clearTimers();
+    container.removeEventListener("pointerdown", handlePointerDown);
+    container.removeEventListener("wheel", handleWheel);
+    container.removeEventListener("keydown", handleKeyDown);
+    document.removeEventListener("pointerup", handlePointerEnd);
+    document.removeEventListener("pointercancel", handlePointerEnd);
+    document.removeEventListener("keyup", handleKeyUp);
+    map.off("movestart", handleMoveStart);
+    map.off("moveend", handleMoveEnd);
   };
 }

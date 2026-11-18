@@ -159,7 +159,11 @@ export function EconomyGlobe({ active, basemap, onBasemapError, values, metric, 
   }, []);
 
   useEffect(() => {
-    if (!active) map.current?.stop();
+    if (active) return;
+    const view = map.current;
+    if (!view) return;
+    const stopTimer = window.setTimeout(() => view.stop(), 0);
+    return () => window.clearTimeout(stopTimer);
   }, [active]);
 
   useEffect(() => {

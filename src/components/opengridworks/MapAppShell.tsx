@@ -2854,7 +2854,11 @@ function MapViewport({
   }, []);
 
   useEffect(() => {
-    if (!active) mapRef.current?.stop();
+    if (active) return;
+    const map = mapRef.current;
+    if (!map) return;
+    const stopTimer = window.setTimeout(() => map.stop(), 0);
+    return () => window.clearTimeout(stopTimer);
   }, [active]);
 
   useEffect(() => {
