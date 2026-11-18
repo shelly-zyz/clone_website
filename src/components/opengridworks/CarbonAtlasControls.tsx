@@ -60,18 +60,13 @@ export function CarbonTimeline({ frames, date, playing, onDate, onPlay }: Carbon
   );
 }
 
-export function CarbonMapLegend({ frame, planar, scaleMax }: {
-  frame: CarbonManifestFrame | null;
-  planar: boolean;
-  scaleMax: number;
-}) {
-  const colors = planar ? ["#3f9f82", "#a7c869", "#f4dc52", "#f27c47", "#fff0cf"]
-    : ["#19786d", "#23e6d5", "#e9ff72", "#ff892e", "#fff5cc"];
-  const maximum = frame ? planar ? scaleMax : carbonFrameColorMax(frame) : null;
+export function CarbonMapLegend({ frame }: { frame: CarbonManifestFrame | null }) {
+  const colors = ["#19786d", "#23e6d5", "#e9ff72", "#ff892e", "#fff5cc"];
+  const maximum = frame ? carbonFrameColorMax(frame) : null;
   return <VerticalColorLegend label="碳排放速率" unit="kgC/h" className={styles.mapLegend}
     stops={colors.map((color, index) => [index / (colors.length - 1), color])}
     ticks={[maximum == null ? "—" : amount.format(maximum), "0"]}
-    note={planar ? "部门共用对数色阶" : "当日网格对数色阶"} />;
+    note="当日网格对数色阶" />;
 }
 
 export function CarbonAtlasControls({

@@ -1,3 +1,4 @@
+import type { TradeDirection } from "./carbon-trade";
 import type { PowerMeasure, PowerPalette } from "./power-analysis";
 import { resolveWorkspaceTopic, workspaceHref, type WorkspaceTopic } from "./globe-topics";
 import { readReplayRegion, type ReplayRegionId } from "./weather-replay/regions";
@@ -19,6 +20,7 @@ export type WorkspaceContext = {
   version?: string;
   technology?: "wind" | "solar";
   sector?: string;
+  tradeDirection?: TradeDirection;
   projection?: "globe" | "map";
   weather?: string;
   replay?: Exclude<WeatherScene, "globe">;
@@ -67,6 +69,7 @@ export function readWorkspaceContext(search: URLSearchParams): WorkspaceContext 
   const scene = search.get("scene");
   const month = search.get("month");
   const technology = search.get("technology");
+  const tradeDirection = search.get("tradeDirection");
   const projection = search.get("projection");
   const weather = search.get("weather");
   const replay = search.get("replay");
@@ -99,6 +102,7 @@ export function readWorkspaceContext(search: URLSearchParams): WorkspaceContext 
     version: version && /^[a-f0-9]{64}$/.test(version) ? version : undefined,
     technology: technology === "wind" || technology === "solar" ? technology : undefined,
     sector: readId(search.get("sector")),
+    tradeDirection: tradeDirection === "out" || tradeDirection === "in" ? tradeDirection : undefined,
     projection: projection === "globe" || projection === "map" ? projection : undefined,
     weather: weather && /^[A-Za-z0-9_,./:@=+%-]{1,180}$/.test(weather) ? weather : undefined,
     replay: replay && Object.hasOwn(replayViews, replay) ? replay as keyof typeof replayViews : undefined,

@@ -28,7 +28,7 @@
 .indicator button { color: var(--carbon-accent); text-decoration: underline; }
 .mapLegend[class] { --color-legend-height: 82px; }
 @media (min-width: 901px) {
-  :global(.is-carbon-project:not(.is-carbon-atlas, .is-cinematic)) .mapLegend[class] {
+  :global(.is-carbon-project:not(.is-carbon-trade, .is-cinematic)) .mapLegend[class] {
     top: calc(var(--og-stage-top) + 10px);
     left: calc(var(--og-stage-left) + 10px);
   }

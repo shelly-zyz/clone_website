@@ -8,6 +8,7 @@ import { localDatabaseTunnel } from "./local-database-tunnel.mjs";
 const configDirectory = join(homedir(), ".config", "opengridworks");
 const allowedVariables = new Set([
   "DATABASE_URL",
+  "CARBON_TRADE_DATABASE_URL",
   "DATA_AGENT_DATABASE_URL",
   "DATA_AGENT_INGEST_DATABASE_URL",
   "DATA_AGENT_REVIEW_DATABASE_URL",
@@ -22,7 +23,7 @@ const allowedVariables = new Set([
   "WEATHER_REPLAY_S3_SECRET_KEY",
 ]);
 
-for (const fileName of ["map-database.env", "data-agent-database.env", "xiaoyun-providers.env", "weather-replay.env"]) {
+for (const fileName of ["map-database.env", "carbon-trade-database.env", "data-agent-database.env", "xiaoyun-providers.env", "weather-replay.env"]) {
   const filePath = join(configDirectory, fileName);
   let metadata;
   try {

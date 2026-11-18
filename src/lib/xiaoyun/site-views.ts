@@ -88,7 +88,8 @@ const pages = {
   "globe-weather": { title: "气象地球", href: workspaceHref("weather"), aliases: ["气象地球", "气象地图"],
     filters: { replay: replayViewOrder.map(view => `${view}（${replayViews[view].title}）`).join(" / ") } },
   "globe-carbon": { title: "碳排放地球", href: workspaceHref("carbon"), aliases: ["碳排放地球", "碳地球", "碳排放地图"],
-    filters: { projection: "globe / map", date: "YYYY-MM-DD，观察日" } },
+    filters: { projection: "globe（三维地球）/ map（全球碳流图谱）", date: "YYYY-MM-DD，三维地球观察日",
+      year: "1995–2022，全球碳流图谱年份", country: "全球碳流图谱经济体 ISO3 代码" } },
   "globe-economy": { title: "经济地球", href: workspaceHref("economy"), aliases: ["经济地球", "经济地图", "经济体档案"],
     filters: { country: "经济体 ISO3 代码", scene: "outlook（经济地球的增长展望）" } },
 } satisfies Record<typeof pageIds[number] | typeof globeIds[number], View>;
@@ -139,6 +140,7 @@ export function resolveSiteNavigation(action: SiteNavigation) {
     || view === "renewables" && (year < 2021 || year > 2060)
     || (view === "economy" || view === "trade") && (year < 2015 || year > 2024))) return;
   if (startYear && (startYear < 2015 || startYear > 2024) || targetYear && (targetYear < 2026 || targetYear > 2028)) return;
+  if (view === "globe-carbon" && (filters.country || year) && (projection !== "map" || year && (year < 1995 || year > 2022))) return;
   if (view === "globe-power" && (region || projection) && powerView !== "generation" && powerView !== "capacity") return;
   if (region && (view === "weather" && !["global", "north", "south"].includes(region)
     || view === "weather-replay" && !Object.hasOwn(replayRegions, region)
@@ -168,6 +170,7 @@ export function directSiteNavigation(message: string): SiteNavigation | undefine
   const name = message.trim().replace(/[。！!\s]/g, "")
     .replace(/^(?:小云[,，]?)?(?:请)?(?:帮我|给我)?(?:切换到|切到|跳转到|跳到|前往|返回|回到|回|进入|打开|查看|去|看看|我想看|想看)/i, "")
     .replace(/(?:吧|一下)$/g, "");
+  if (name === "全球碳流图谱" || name === "全球隐含碳贸易网络") return { view: "globe-carbon", filters: { projection: "map" } };
   const view = siteViewIdSchema.options.find(id => views.get(id)?.aliases?.some(alias => alias.replace(/\s/g, "").toLowerCase() === name.toLowerCase()));
   return view ? { view } : undefined;
 }

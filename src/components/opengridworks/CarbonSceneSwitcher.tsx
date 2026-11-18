@@ -4,7 +4,7 @@ import styles from "./PageSwitcher.module.css";
 
 const scenes = [
   { projection: "globe", title: "碳排放地球" },
-  { projection: "map", title: "二维排放地图" },
+  { projection: "map", title: "全球碳流图谱" },
 ] as const;
 
 type Projection = typeof scenes[number]["projection"];

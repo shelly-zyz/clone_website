@@ -3442,7 +3442,6 @@
   background: radial-gradient(circle at center, transparent 48%, #02061755);
 }
 
-.is-carbon-atlas .og-map-vignette { display: none; }
 
 .og-globe-workspace .og-layer-cards {
   inset: auto auto calc(var(--og-globe-nav-space) + var(--og-stage-footer) + var(--og-mobile-dock) + 9px)
@@ -3696,11 +3695,11 @@
 
 /* Globe topics share one full-viewport stage, so every globe opens centered at the same size. */
 @media (min-width: 901px) {
-  .og-globe-workspace:not(.is-cinematic, .is-power-statistics, .is-carbon-atlas) .og-globe-stage:not(:has([data-outlook="true"])),
+  .og-globe-workspace:not(.is-cinematic, .is-power-statistics, .is-carbon-trade) .og-globe-stage:not(:has([data-outlook="true"])),
   .is-earth-project .og-weather-globe-stage .og-earth-project {
     inset: 0;
   }
-  .og-globe-workspace:not(.is-cinematic, .is-power-statistics, .is-carbon-atlas) .og-globe-stage .maplibregl-ctrl-bottom-right {
+  .og-globe-workspace:not(.is-cinematic, .is-power-statistics, .is-carbon-trade) .og-globe-stage .maplibregl-ctrl-bottom-right {
     right: var(--og-stage-right);
     bottom: calc(var(--og-globe-nav-space) + var(--og-stage-footer) + var(--og-mobile-dock));
   }
@@ -3749,4 +3748,18 @@
 
 @media (max-width: 900px) {
   .og-weather-replay-entry { bottom: auto; top: clamp(252px, 44svh, 440px); }
+}
+
+.og-globe-workspace.is-carbon-trade {
+  --og-assistant-bottom: 34px;
+  --og-space-glow: 25 53 91;
+  --og-space-haze: 42 99 153;
+}
+
+@media (max-width: 900px) {
+  .og-globe-workspace.is-carbon-trade { --og-assistant-bottom: 49px; }
+  .is-carbon-trade .og-assistant-mount {
+    --og-voice-idle-size: 44px;
+    --og-voice-idle-status: none;
+  }
 }

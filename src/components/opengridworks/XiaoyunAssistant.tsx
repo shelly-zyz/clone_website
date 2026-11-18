@@ -68,6 +68,7 @@ function loadContext(): XiaoyunContext {
 type Workspace = {
   slot: HTMLDivElement;
   topic?: Topic;
+  forecastSidebar?: boolean;
   captureView: () => void;
 };
 
@@ -79,16 +80,16 @@ export function useXiaoyunChartRequest() {
   return useContext(ChartRequest);
 }
 
-export function XiaoyunAssistant({ topic, captureView }: Pick<Workspace, "topic" | "captureView">) {
+export function XiaoyunAssistant({ topic, captureView, forecastSidebar = true }: Omit<Workspace, "slot">) {
   const register = useContext(WorkspaceRegistration);
   const slot = useRef<HTMLDivElement>(null);
   const capture = useRef(captureView);
   useLayoutEffect(() => { capture.current = captureView; }, [captureView]);
   useLayoutEffect(() => {
     if (!slot.current) return;
-    register({ slot: slot.current, topic, captureView: () => capture.current() });
+    register({ slot: slot.current, topic, forecastSidebar, captureView: () => capture.current() });
     return () => register(null);
-  }, [register, topic]);
+  }, [forecastSidebar, register, topic]);
   return <div ref={slot} />;
 }
 
@@ -557,7 +558,7 @@ function XiaoyunRuntime({ workspace, children }: { workspace: Workspace | null; 
               }
             }
             const studioChart = studio ? results.find(result => result.kind === "chart") : undefined;
-            const floatingResults = results.filter(result => result !== studioChart && (!isWorkspaceForecast(result) || result.topic !== page.current.workspace?.topic));
+            const floatingResults = results.filter(result => result !== studioChart && (!isWorkspaceForecast(result) || page.current.workspace?.forecastSidebar === false || result.topic !== page.current.workspace?.topic));
             if (floatingResults.length) setBusiness(current => {
               const next = current.filter(item => !floatingResults.some(result => result.topic === item.topic && (
                 result.kind === "analysis" && item.kind === "analysis" && result.jobId === item.jobId
@@ -684,17 +685,18 @@ function XiaoyunRuntime({ workspace, children }: { workspace: Workspace | null; 
     };
   }, []);
 
-  const visibleBusiness = business.filter(result => !isWorkspaceForecast(result) || result.topic !== workspaceTopic);
+  const sidebarTopic = workspace?.forecastSidebar === false ? undefined : workspaceTopic;
+  const visibleBusiness = business.filter(result => !isWorkspaceForecast(result) || result.topic !== sidebarTopic);
   const workspaceElement = workspace?.slot.parentElement;
   return (
     <ChartRequest value={ready ? runCustomChart : null}>
       {children}
       <div ref={container} className="[&>.og-assistant-mount]:pointer-events-none [&>.og-assistant-mount]:fixed [&>.og-assistant-mount]:inset-0 [&>.og-assistant-mount]:z-30" />
-      {workspaceElement && workspaceTopic && workspaceTopic !== "meteo" && createPortal(<WorkspaceForecast key={workspaceTopic}
-        topic={workspaceTopic}
-        loadOverview={loadForecastOverview} loadAnalysis={loadAnalysis} task={forecasts[workspaceTopic]}
+      {workspaceElement && sidebarTopic && sidebarTopic !== "meteo" && createPortal(<WorkspaceForecast key={sidebarTopic}
+        topic={sidebarTopic}
+        loadOverview={loadForecastOverview} loadAnalysis={loadAnalysis} task={forecasts[sidebarTopic]}
         ready={ready} pending={pendingForecast !== undefined} onRun={runForecast}
-        notice={forecastNotice?.topic === workspaceTopic ? forecastNotice.message : undefined} />, workspaceElement)}
+        notice={forecastNotice?.topic === sidebarTopic ? forecastNotice.message : undefined} />, workspaceElement)}
       <XiaoyunEvidence items={evidence} active={activeEvidence} onOpen={setActiveEvidence}
         onClose={() => setActiveEvidence(undefined)} onDismiss={() => setEvidence([])} />
       {mechanism && <button type="button"
