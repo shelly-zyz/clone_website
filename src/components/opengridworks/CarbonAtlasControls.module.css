@@ -27,6 +27,12 @@
 .indicator strong { color: #e8f7eb; font-size: clamp(22px, 2.4vw, 31px); font-weight: 650; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .indicator button { color: var(--carbon-accent); text-decoration: underline; }
 .mapLegend[class] { --color-legend-height: 82px; }
+@media (min-width: 901px) {
+  :global(.is-carbon-project:not(.is-carbon-trade, .is-cinematic)) .mapLegend[class] {
+    top: calc(var(--og-stage-top) + 10px);
+    left: calc(var(--og-stage-left) + 10px);
+  }
+}
 .note { margin-top: 5px; color: #9eb2bf; font-size: 11px; }
 .source { display: inline-flex; align-items: center; gap: 4px; margin-top: 7px; color: var(--carbon-accent); font-size: 11px; overflow-wrap: anywhere; }
 .source svg { flex: none; }
@@ -46,7 +52,14 @@
 }
 
 .timeline {
+  position: absolute;
+  z-index: 5;
+  left: var(--og-stage-left);
+  right: var(--og-stage-right);
+  bottom: calc(var(--og-globe-nav-space) + var(--og-mobile-dock) + 4px);
+  width: min(360px, calc(100% - var(--og-stage-left) - var(--og-stage-right)));
   min-height: 43px;
+  margin-inline: auto;
   display: grid;
   grid-template-columns: auto auto minmax(0, 1fr) auto;
   align-items: center;
@@ -54,6 +67,7 @@
   padding: 3px 5px;
   border-radius: 8px;
   background: #13202bd9;
+  transition: left 240ms ease, right 240ms ease, bottom 240ms ease, width 240ms ease;
 }
 
 :is(.tools, .timeline, .search) :is(button, a):hover:not(:disabled) { background: #a3c5ce29; }

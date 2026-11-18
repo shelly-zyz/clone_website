@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { geoEquirectangular, geoPath, type GeoPermissibleObjects } from "d3-geo";
-import { Pause, Play } from "lucide-react";
+import { ChevronDown, Pause, Play } from "lucide-react";
 import { scaleColor } from "@/app/visualization/weather-replay/replay-palette";
 import { VerticalColorLegend } from "./VerticalColorLegend";
-import { ControlGroup, GlobeAnalysis, GlobeControls } from "./GlobeLayout";
 import styles from "./WeatherComparison.module.css";
 
 const fields = {
@@ -88,7 +87,10 @@ export function WeatherComparisonPanel() {
   const [revision, setRevision] = useState(0);
   const [index, setIndex] = useState(defaultFrame);
   const [playing, setPlaying] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [rendered, setRendered] = useState<{ frame: Frame; maps: Maps }>();
+  const panelId = useId();
+  const panel = useRef<HTMLElement>(null);
   const frame = archive?.frames[index];
 
   useEffect(() => {
@@ -134,22 +136,30 @@ export function WeatherComparisonPanel() {
     return () => window.clearTimeout(id);
   }, [archive, error, index, playing]);
 
+  useEffect(() => {
+    if (expanded) panel.current?.scrollIntoView({ block: "start" });
+  }, [expanded]);
+
   return (
-    <GlobeAnalysis><section className={styles.comparison} aria-label="空间对照">
+    <aside ref={panel} className={styles.comparison} aria-label="空间对照" data-expanded={expanded}>
       <header className={styles.header}>
         <div>
           <h2>空间对照</h2>
           <p>ERA5 再分析与 GFS 历史预报</p>
         </div>
+        <button type="button" className={styles.toggle} aria-expanded={expanded} aria-controls={panelId}
+          aria-label={expanded ? "收起空间对照" : "展开空间对照"}
+          onClick={() => setExpanded(!expanded)}>
+          <ChevronDown size={18} aria-hidden="true" />
+        </button>
       </header>
-      <div className={styles.body}>
+      <div className={styles.body} id={panelId}>
         {archive && rendered && !error ? (
           <>
             <div className={styles.timestamps}>
               <p>有效时刻 <time dateTime={rendered.frame.time}>{timeText(rendered.frame.time)}</time></p>
               <p>GFS 起报 <time dateTime={archive.run}>{timeText(archive.run)}</time></p>
             </div>
-            <GlobeControls><ControlGroup title="空间对照回放">
             <div className={styles.timeline}>
               <button type="button" aria-label={playing ? "暂停对照时刻" : "播放对照时刻"} onClick={() => {
                 if (!playing && index === archive.frames.length - 1) setIndex(0);
@@ -158,7 +168,7 @@ export function WeatherComparisonPanel() {
               <input type="range" aria-label="对照有效时刻" aria-valuetext={timeText(archive.frames[index].time)}
                 min={0} max={archive.frames.length - 1} value={index}
                 onChange={event => { setPlaying(false); setIndex(Number(event.target.value)); }} />
-            </div></ControlGroup></GlobeControls>
+            </div>
             <div className={styles.columns}><span>ERA5 再分析</span><span>GFS 预报</span></div>
             {metrics.map(key => {
               const meta = fields[key];
@@ -186,6 +196,6 @@ export function WeatherComparisonPanel() {
           </div>
         )}
       </div>
-    </section></GlobeAnalysis>
+    </aside>
   );
 }

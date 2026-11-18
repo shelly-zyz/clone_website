@@ -1,11 +1,30 @@
+:global(.og-globe-workspace.is-economy-project):has(.viewport[data-outlook="true"]) {
+  --og-stage-footer: 55px;
+}
+
+.viewFooter {
+  position: absolute;
+  z-index: 44;
+  left: var(--og-stage-left);
+  right: var(--og-stage-right);
+  bottom: calc(var(--og-globe-nav-space) + var(--og-mobile-dock) + 6px);
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
 .viewport {
   position: absolute;
   inset: 0;
   overflow: hidden;
 }
 
-.viewport > .map { position: absolute; inset: 0; }
+.map { position: absolute; inset: 0; }
 .map[data-ready="false"] { visibility: hidden; }
+
+:global(.is-economy-project):has(.viewport[data-outlook="true"]) :is(:global(.og-layer-cards), :global(.og-maptype-panel)) {
+  display: none;
+}
 
 .mapError {
   position: absolute;
@@ -53,6 +72,13 @@
   line-height: 1.45;
 }
 
+@media (min-width: 901px) {
+  .historyLegend[class] {
+    top: calc(var(--og-stage-top) + 10px);
+    left: calc(var(--og-stage-left) + 10px);
+  }
+}
+
 .searchField {
   display: flex;
   align-items: center;
@@ -96,7 +122,31 @@
 .searchResults small { color: #a3b0ad; font-size: 10px; }
 .searchResults button:hover { background: #22312f; }
 
-.profileContent { display: grid; gap: var(--og-panel-gap); }
+.profile {
+  --scene-accent: #d4fa45;
+  --profile-accent: var(--scene-accent);
+  position: absolute;
+  z-index: 45;
+  top: var(--og-rail-top);
+  right: var(--og-gutter);
+  bottom: max(calc(var(--og-globe-nav-space) + 6px), var(--og-assistant-clearance));
+  width: var(--og-forecast-width);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #526366 transparent;
+  padding: clamp(12px, 1.25vw, 19px);
+  border: 0;
+  color: #f4f7f5;
+  background: var(--og-panel-fill, rgb(10 17 26 / 64%));
+  color-scheme: dark;
+  box-shadow: none;
+  border-radius: 0;
+  animation: profile-reveal 200ms ease both;
+}
+
+.profile > section > div:first-child { padding-right: 38px; }
+.profile > header { padding-inline: 0 36px; }
 
 .profileIndicators {
   display: grid;
@@ -104,7 +154,7 @@
   padding-bottom: 8px;
 }
 
-.profileIndicators > div {
+.profileIndicators button {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -113,21 +163,21 @@
   padding: 5px 8px;
   border: 0;
   color: #ccd9d8;
-  background: var(--og-panel-card);
-  border-radius: var(--og-card-radius);
+  background: #171d21;
   text-align: left;
   transition: color 160ms ease, background-color 160ms ease;
 }
 
-.profileIndicators > div[data-active="true"] { background: var(--og-panel-selected); }
-.profileIndicators span { font-size: var(--og-type-label); }
-.profileIndicators strong { color: var(--og-panel-text); font: var(--og-font-data); text-align: right; }
+.profileIndicators button[aria-pressed="true"] { background: #21322a; color: #edffc2; }
+.profileIndicators button:hover { color: #fff; background: #2b332f; }
+.profileIndicators span { font-size: 11px; line-height: 1.3; }
+.profileIndicators strong { color: var(--profile-accent); font-size: 13px; font-weight: 570; white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 .profileSection {
   display: grid;
   padding-block: 12px 7px;
   gap: 3px;
-  border-top: 1px solid var(--og-panel-divider);
+  border-top: 1px solid #2a3a40;
 }
 
 .sectionHeading {
@@ -141,10 +191,11 @@
 .sectionHeading span, .note, .status { color: #a9b9ba; font-size: 11px; line-height: 1.45; }
 
 .history table { width: 100%; border-collapse: collapse; }
-.history th, .history td { border-bottom: 1px solid var(--og-panel-divider); padding: 5px; font-size: 11px; }
+.history th, .history td { border-bottom: 1px solid #2b373c; padding: 5px; font-size: 11px; }
 .history th { text-align: left; font-weight: 500; }
 .history td { text-align: right; font-variant-numeric: tabular-nums; }
-.history tr[data-active="true"] { color: var(--og-panel-text); background: var(--og-panel-selected); }
+.history button { width: 100%; min-height: 27px; text-align: left; }
+.history tr[data-active="true"] { color: var(--profile-accent); background: #293334; }
 .history summary { width: fit-content; min-height: 29px; padding-top: 7px; color: #c9d6d1; font-size: 12px; cursor: pointer; }
 
 .profileLinks {
@@ -168,11 +219,59 @@
 .profileSource { margin-top: 5px; color: #a9bfbc; font-size: 10px; }
 .profileLinks a:hover, .profileSource:hover, .outlookLinks a:hover { text-decoration: underline; color: #fff; }
 
-.textButton { min-height: 32px; margin-left: 5px; color: var(--og-panel-text); text-decoration: underline; }
+.textButton { min-height: 32px; margin-left: 5px; color: #d4fa45; text-decoration: underline; }
+
+.profileTrigger, .close {
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding-inline: 9px;
+  border-radius: 6px;
+  color: #dce4e1;
+  background: #17201f;
+  font-size: 13px;
+}
+
+.profileTrigger { display: none; position: absolute; z-index: 47; top: var(--og-rail-top); right: var(--og-gutter); }
+.close { display: flex; position: absolute; top: 9px; right: 12px; width: 36px; }
+:global(.og-economy-profile-region[data-dock="closed"]) .profileTrigger { display: inline-flex; }
+:global(.og-economy-profile-region[data-dock="closed"]) .profile { display: none; }
 
 .outlookLinks {
   display: flex;
   flex-wrap: wrap;
   gap: 2px 11px;
   padding-top: 5px;
+}
+
+.profile :is(a, button):focus-visible, .profileTrigger:focus-visible {
+  outline: 2px solid #d4fa45;
+  outline-offset: -2px;
+}
+
+@keyframes profile-reveal {
+  from { opacity: 0.6; transform: translateX(5px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@media (max-width: 900px) {
+  .profileTrigger { display: inline-flex; min-height: 42px; top: var(--og-workspace-top); }
+  :global(.og-economy-profile-region[data-dock="open"]) .profileTrigger { visibility: hidden; }
+  .profile {
+    inset: auto var(--og-gutter) var(--og-globe-nav-space);
+    width: auto;
+    height: var(--og-mobile-dock);
+    padding: 10px 12px;
+  }
+
+  :global(.og-economy-profile-region:not([data-dock="open"])) .profile { display: none; }
+  .profileIndicators button, .searchResults button { min-height: 44px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .viewport, .profile, .profile * {
+    animation: none;
+    transition: none;
+  }
 }

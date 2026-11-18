@@ -1,7 +1,8 @@
 "use client";
 
+import { Activity, PanelRightClose, X } from "lucide-react";
 import Image from "next/image";
-import type { ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import type { ForecastPoint } from "@/lib/globe-forecast";
 import type { WorkspaceTopic } from "@/lib/globe-topics";
 import { ForecastVisualization, type ForecastSample } from "./ForecastVisualization";
@@ -34,11 +35,36 @@ export function ForecastHeading({ topic, title, imageSrc, children }: {
 }
 
 export function ForecastSidebar({ topic, children }: { topic: WorkspaceTopic; children: ReactNode }) {
+  const [open, setOpen] = useState<boolean>();
+  const trigger = useRef<HTMLButtonElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  const panelId = useId();
+  const title = headings[topic];
+  function close() {
+    setOpen(false);
+    requestAnimationFrame(() => trigger.current?.focus());
+  }
   return (
-    <section className={styles.region} data-topic={topic} aria-label={headings[topic]}>
-      <ForecastHeading topic={topic} />
-      <div className={styles.content}>{children}</div>
-    </section>
+    <div className={`og-forecast-region ${styles.region}`} data-topic={topic} data-dock={open == null ? "auto" : open ? "open" : "closed"} onKeyDown={(event) => {
+      if (event.key === "Escape" && open !== false) close();
+    }}>
+      <button ref={trigger} type="button" className={styles.trigger} aria-expanded={open === true} aria-controls={panelId}
+        onClick={() => {
+          setOpen(true);
+          requestAnimationFrame(() => closeButton.current?.focus());
+        }}>
+        <Activity size={16} aria-hidden="true" /> {title}
+      </button>
+      <aside id={panelId} className={styles.panel} aria-label={title}>
+        <ForecastHeading topic={topic}>
+          <button ref={closeButton} type="button" className={styles.close} aria-label="关闭预测侧栏" onClick={close}>
+            <PanelRightClose className={styles.desktopClose} size={18} aria-hidden="true" />
+            <X className={styles.mobileClose} size={19} aria-hidden="true" />
+          </button>
+        </ForecastHeading>
+        <div className={styles.content}>{children}</div>
+      </aside>
+    </div>
   );
 }
 

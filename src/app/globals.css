@@ -3182,7 +3182,40 @@
   font-weight: 750;
 }
 
+.og-cinematic-banner {
+  position: absolute;
+  z-index: 55;
+  top: 16px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 34px;
+  padding: 0 12px;
+  color: #e2e8f0;
+  background: rgba(8, 12, 24, 0.86);
+  border: 1px solid rgba(0, 229, 255, 0.34);
+  border-radius: 999px;
+  transform: translateX(-50%);
+  font-size: 12px;
+}
 
+.og-cinematic-banner button {
+  color: #67e8f9;
+  font-weight: 800;
+}
+
+.og-app-shell.is-cinematic .og-globe-navigation,
+.og-app-shell.is-cinematic .og-workspace-sidebar,
+.og-app-shell.is-cinematic .og-forecast-region,
+.og-app-shell.is-cinematic .og-workspace-mobile-header,
+.og-app-shell.is-cinematic .og-workspace-scrim,
+.og-app-shell.is-cinematic .og-top-toolbar,
+.og-app-shell.is-cinematic .og-layer-cards,
+.og-app-shell.is-cinematic .og-feature-popup {
+  visibility: hidden;
+  pointer-events: none;
+}
 
 .og-minimap.has-selection {
   border-color: rgba(129, 140, 248, 0.65);
@@ -3273,8 +3306,21 @@
 .og-popup-analysis:hover { text-decoration: underline; }
 
 .og-globe-workspace {
+  --og-gutter: clamp(10px, 1.15vw, 16px);
+  --og-workspace-top: var(--og-page-header-top);
+  --og-rail-top: var(--og-page-switcher-top);
+  --og-stage-left: calc(var(--og-sidebar-width) + 2 * var(--og-gutter));
+  --og-stage-right: var(--og-gutter);
+  --og-stage-top: var(--og-page-switcher-bottom);
+  --og-stage-footer: 6px;
+  --og-mobile-dock: 0px;
+  --og-assistant-bottom: 112px;
+  --og-assistant-clearance: calc(var(--og-assistant-bottom) + 106px);
+  --og-dock-size: min(33svh, 286px);
   --og-space-glow: 32 55 81;
   --og-space-haze: 70 99 151;
+  --og-panel-fill: linear-gradient(155deg, rgb(33 47 62 / 46%), rgb(9 16 27 / 54%) 75%);
+  --og-stage-transition: 240ms ease;
   background:
     radial-gradient(ellipse at 51% 48%, rgb(var(--og-space-glow) / 45%), transparent 70%),
     radial-gradient(ellipse at 78% 15%, rgb(var(--og-space-haze) / 15%), transparent 52%),
@@ -3313,6 +3359,261 @@
   background-position: 13px 24px, 67px 41px, 21px 98px, 123px 106px;
 }
 
+.og-globe-workspace:where(:has(> .og-forecast-region:not([data-dock="closed"])),
+  .is-economy-project:has(.og-economy-profile-region:not([data-dock="closed"]))) {
+  --og-stage-right: calc(var(--og-forecast-width) + 2 * var(--og-gutter));
+}
+
+.og-globe-workspace:is(.is-earth-project, .is-economy-project) {
+  --og-rail-top: var(--og-workspace-top);
+}
+
+@media (min-width: 901px) {
+  .og-globe-workspace {
+    --og-page-switcher-gutter: max(var(--og-stage-left), var(--og-stage-right));
+  }
+}
+
+.og-globe-workspace.is-earth-project:has(.og-weather-replay-stage) {
+  --og-stage-right: var(--og-gutter);
+}
+
+.og-globe-workspace.is-carbon-project {
+  --og-stage-footer: 53px;
+}
+
+.og-globe-workspace.is-cinematic {
+  --og-stage-left: 0px;
+  --og-stage-right: 0px;
+  --og-stage-top: 0px;
+  --og-stage-footer: 0px;
+  --og-globe-nav-space: 0px;
+  --og-mobile-dock: 0px;
+}
+
+.og-globe-stage {
+  position: absolute;
+  inset: var(--og-stage-top) var(--og-stage-right)
+    calc(var(--og-globe-nav-space) + var(--og-stage-footer) + var(--og-mobile-dock)) var(--og-stage-left);
+  overflow: hidden;
+  transition: inset var(--og-stage-transition);
+}
+
+/* Scene changes reserve their chrome immediately; only the panel opening and resizing animate. */
+.og-globe-workspace:is(.is-carbon-project, .is-earth-project) .og-globe-stage {
+  transition-property: left, right, bottom;
+}
+
+.og-globe-workspace .og-workspace-sidebar {
+  inset: var(--og-workspace-top) auto var(--og-gutter) var(--og-gutter);
+}
+
+.og-globe-workspace :is(
+  .og-workspace-sidebar,
+  .og-forecast-region > aside,
+  .og-weather-globe-stage > aside,
+  .og-economy-profile-region > aside,
+  [data-power-analysis-dock] > aside
+) {
+  background: var(--og-panel-fill);
+  border: 0;
+  border-radius: 14px;
+  box-shadow: none;
+}
+
+/* Center the topic bar on the viewport and only shift it right when the sidebar would cover it. */
+.og-globe-workspace .og-globe-navigation {
+  --og-globe-nav-width: min(420px, calc(100% - var(--og-stage-left) - var(--og-gutter)));
+  left: max(var(--og-stage-left), calc(50% - var(--og-globe-nav-width) / 2));
+  width: var(--og-globe-nav-width);
+  transform: none;
+}
+
+.og-globe-workspace .maplibregl-ctrl-bottom-right { right: 0; bottom: 0; }
+
+.og-globe-workspace .og-assistant-mount {
+  position: absolute;
+  z-index: 56;
+  inset: 0;
+  pointer-events: none;
+  transform: translateY(calc(112px - var(--og-assistant-bottom)));
+}
+.og-globe-workspace .og-map-vignette {
+  background: radial-gradient(circle at center, transparent 48%, #02061755);
+}
+
+
+.og-globe-workspace .og-layer-cards {
+  inset: auto auto calc(var(--og-globe-nav-space) + var(--og-stage-footer) + var(--og-mobile-dock) + 9px)
+    calc(var(--og-stage-left) + 8px);
+}
+
+.og-globe-workspace .og-layer-card { width: 54px; height: 54px; }
+.og-globe-workspace .og-minimap {
+  right: calc(var(--og-stage-right) + 47px);
+  bottom: calc(var(--og-globe-nav-space) + var(--og-stage-footer) + 9px);
+  width: 68px;
+  height: 68px;
+}
+
+.og-globe-workspace .og-feature-popup {
+  top: var(--og-stage-top);
+  right: calc(var(--og-stage-right) + 8px);
+  left: auto;
+  bottom: auto;
+  width: min(290px, calc(100% - var(--og-stage-left) - var(--og-stage-right) - 16px));
+  max-height: calc(100% - var(--og-stage-top) - var(--og-globe-nav-space) - var(--og-stage-footer) - var(--og-mobile-dock));
+  overflow: auto;
+  transform: none;
+}
+.og-globe-workspace .og-feature-popup::before { display: none; }
+.og-globe-workspace .og-maptype-panel {
+  right: var(--og-stage-right);
+  bottom: calc(var(--og-globe-nav-space) + var(--og-stage-footer) + var(--og-mobile-dock) + 66px);
+  width: min(650px, calc(100% - var(--og-stage-left) - var(--og-stage-right)));
+}
+
+.is-power-statistics .og-globe-stage { background: transparent; }
+.is-power-statistics .og-forecast-region { display: none; }
+.is-power-statistics .og-scale { display: none; }
+.is-power-statistics :is(.og-workspace-action, .og-workspace-visualization-link, .og-icon-button,
+  .og-globe-navigation button, .og-floating-panel, .og-hover-bubble) {
+  border: 0;
+}
+.is-power-statistics .og-globe-navigation button { padding-bottom: 8px; }
+.is-power-statistics .og-globe-navigation {
+  --og-globe-icon-slot: 38px;
+  --og-globe-nav-width: min(318px, calc(100% - 2 * var(--og-gutter)));
+}
+.is-power-statistics .og-globe-navigation button { background: #0b1320; }
+.is-power-statistics .og-globe-navigation button:is(:hover, [aria-pressed="true"]) {
+  background: color-mix(in srgb, var(--topic-color) 10%, #0b1320);
+}
+.is-power-statistics .og-assistant-mount {
+  --og-voice-idle-size: 48px;
+  --og-voice-idle-status: none;
+}
+.is-power-statistics .og-info-button.is-active { box-shadow: none; }
+
+.og-globe-workspace.is-power-statistics:not(.is-cinematic) {
+  --og-power-rail: clamp(208px, 17vw, 270px);
+  --og-globe-nav-space: calc(76px + env(safe-area-inset-bottom, 0px));
+  --og-stage-right: calc(var(--og-power-rail) + 2 * var(--og-gutter));
+}
+@media (min-width: 901px) {
+  .og-globe-workspace.is-power-statistics:not(.is-cinematic) {
+    --og-sidebar-width: clamp(188px, 14.7vw, 231px);
+    --og-assistant-bottom: 32px;
+  }
+  .og-globe-workspace.is-power-statistics:has(> [data-power-rail-collapsed="true"]):not(.is-cinematic) {
+    --og-stage-right: calc(46px + var(--og-gutter));
+  }
+  .og-globe-workspace.is-power-statistics:not(.is-cinematic) .og-assistant-mount {
+    right: 35px;
+  }
+}
+@media (max-width: 900px) {
+  .og-globe-workspace.is-power-statistics:not(.is-cinematic) {
+    --og-stage-right: var(--og-gutter);
+    --og-assistant-bottom: 151px;
+  }
+  .og-globe-workspace.is-power-statistics .og-info-button {
+    inset: calc(var(--og-workspace-top) + 5px) auto auto calc(50% - 13px);
+  }
+  .og-globe-workspace.is-power-statistics:has(> [data-power-analysis-dock="open"]) {
+    --og-mobile-dock: var(--og-dock-size);
+  }
+}
+.og-globe-workspace .og-beta-badge { display: none; }
+.is-resource-scene { background: #091419; }
+
+@media (max-width: 900px) {
+  .og-globe-workspace {
+    --og-stage-left: var(--og-gutter);
+    --og-stage-right: var(--og-gutter);
+  }
+
+  .og-globe-workspace:is(.is-earth-project, .is-economy-project) {
+    --og-rail-top: var(--og-page-switcher-top);
+  }
+
+  .og-globe-workspace:not(.is-cinematic, .is-power-statistics, :has(.og-weather-replay-stage)):has(> .og-forecast-region[data-dock="open"]),
+  .og-globe-workspace.is-economy-project:has(.og-economy-profile-region[data-dock="open"], .og-workspace-sidebar[data-open="true"]),
+  .og-globe-workspace:not(.is-cinematic):has(> .og-workspace-sidebar[data-open="true"]) {
+    --og-mobile-dock: var(--og-dock-size);
+  }
+
+  .og-globe-workspace .og-workspace-sidebar {
+    inset: auto var(--og-gutter) var(--og-globe-nav-space);
+    width: auto;
+    height: var(--og-mobile-dock);
+    padding: 10px 12px;
+  }
+
+  .og-globe-workspace .og-workspace-sidebar[data-open="true"] {
+    animation: og-reveal-bottom-dock var(--og-stage-transition);
+  }
+  .og-globe-workspace .og-workspace-scrim { display: none; }
+  .og-globe-workspace:has(> .og-workspace-sidebar[data-open="true"]) > .og-forecast-region,
+  .og-globe-workspace.is-economy-project:has(.og-workspace-sidebar[data-open="true"]) .og-economy-profile-region {
+    visibility: hidden;
+  }
+
+  .og-globe-workspace .og-workspace-mobile-header { top: var(--og-workspace-top); left: var(--og-gutter); }
+  .og-globe-workspace .og-workspace-close { top: 8px; right: 9px; border-radius: 5px; }
+  .og-globe-workspace .og-workspace-heading { padding-right: 42px; }
+  .og-globe-workspace .og-feature-popup { width: min(250px, 74vw); }
+  .og-globe-workspace .og-scale { display: none; }
+  .og-globe-workspace .og-info-button {
+    left: calc(var(--og-stage-left) + 70px);
+    right: auto;
+    bottom: calc(var(--og-globe-nav-space) + var(--og-stage-footer) + var(--og-mobile-dock) + 10px);
+  }
+  .og-globe-workspace .og-layer-cards { z-index: 22; }
+  .og-globe-workspace .maplibregl-ctrl-bottom-right { top: 0; bottom: auto; }
+  .og-globe-workspace .maplibregl-ctrl-bottom-right .maplibregl-ctrl { margin-top: 8px; }
+  .og-globe-workspace .og-assistant-mount {
+    transform: translateY(calc(112px - var(--og-assistant-bottom) - var(--og-mobile-dock) - var(--og-stage-footer)));
+    transition: transform var(--og-stage-transition);
+  }
+}
+
+@media (max-height: 520px) {
+  .og-globe-workspace {
+    --og-globe-nav-space: calc(68px + env(safe-area-inset-bottom, 0px));
+    --og-dock-size: min(24svh, 190px);
+    --og-assistant-bottom: 68px;
+  }
+  .og-globe-workspace.is-cinematic { --og-globe-nav-space: 0px; }
+  .og-globe-navigation { --og-globe-icon-slot: 30px; }
+  .og-globe-stage .maplibregl-ctrl-group { display: flex; }
+  .og-globe-stage .maplibregl-ctrl-group button + button { border-top: 0; border-left: 1px solid #ffffff20; }
+}
+
+.og-globe-workspace :is(.og-forecast-region, .og-economy-profile-region)[data-dock="open"] > aside {
+  animation: og-reveal-side-dock var(--og-stage-transition);
+}
+
+@media (max-width: 900px) {
+  .og-globe-workspace :is(.og-forecast-region, .og-economy-profile-region)[data-dock="open"] > aside {
+    animation-name: og-reveal-bottom-dock;
+  }
+}
+
+@keyframes og-reveal-side-dock {
+  from { clip-path: inset(0 0 0 100%); }
+  to { clip-path: inset(0); }
+}
+
+@keyframes og-reveal-bottom-dock {
+  from { clip-path: inset(100% 0 0); }
+  to { clip-path: inset(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .og-globe-workspace { --og-stage-transition: 0s; }
+}
+
 .og-weather-sample {
   border: 1px solid #74b9c644;
   border-radius: 8px;
@@ -3324,6 +3625,92 @@
   font-size: 12px;
 }
 .og-weather-sample button { color: #9eebe5; text-align: left; }
+
+/* Weather workspace controls float over the globe or volume instead of dividing the canvas. */
+.is-earth-project {
+  --og-weather-control-fill: rgb(255 255 255 / 10%);
+  --og-weather-control-hover: rgb(255 255 255 / 17%);
+}
+.is-earth-project .og-workspace-action,
+.is-earth-project .og-filter-select select,
+.is-earth-project .og-weather-sidebar-nav button {
+  border: 0;
+  border-radius: 0;
+  background: var(--og-weather-control-fill);
+  color: #fff;
+}
+.is-earth-project .og-workspace-action:hover,
+.is-earth-project .og-filter-select select:hover,
+.is-earth-project .og-weather-sidebar-nav button:hover { background: var(--og-weather-control-hover); }
+.is-earth-project .og-weather-sidebar-nav button[aria-pressed="true"] {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.is-earth-project .og-weather-sidebar-filters { border: 0; }
+.is-earth-project .og-weather-field-stage { inset: 0; border: 0; border-radius: 0; }
+.is-earth-project > .og-globe-stage:has(.og-weather-field-stage) { inset: 0; }
+.og-weather-globe-stage { position: absolute; inset: 0; }
+@media (min-width: 901px) {
+  .is-earth-project > .og-globe-stage:has(.og-weather-field-stage, .og-weather-globe-stage:not([hidden])) {
+    top: 0;
+    inset-inline: 0;
+  }
+  .is-earth-project .og-weather-globe-stage .og-earth-project {
+    position: absolute;
+    inset: 0 0 var(--og-globe-nav-space);
+  }
+  .is-earth-project .og-weather-globe-stage > aside {
+    position: absolute;
+    top: 72px;
+    right: 16px;
+    bottom: max(calc(var(--og-globe-nav-space) + 32px), var(--og-assistant-clearance));
+    width: clamp(235px, 21vw, 324px);
+    margin: 0;
+  }
+}
+
+@media (max-width: 900px) {
+  .og-weather-globe-stage {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    padding-bottom: 90px;
+  }
+  .og-weather-globe-stage .og-earth-project {
+    position: relative;
+    flex: 0 0 clamp(290px, 49svh, 490px);
+  }
+  .is-earth-project:has(.og-weather-field-stage) .og-info-button {
+    inset: var(--og-workspace-top) var(--og-gutter) auto auto;
+  }
+  .is-earth-project:has(.og-weather-field-stage) .og-assistant-mount {
+    position: fixed;
+    inset: 0;
+    transform: translateY(-122px);
+    pointer-events: none;
+  }
+}
+
+/* Globe topics share one full-viewport stage, so every globe opens centered at the same size. */
+@media (min-width: 901px) {
+  .og-globe-workspace:not(.is-cinematic, .is-power-statistics, .is-carbon-trade) .og-globe-stage:not(:has([data-outlook="true"])),
+  .is-earth-project .og-weather-globe-stage .og-earth-project {
+    inset: 0;
+  }
+  .og-globe-workspace:not(.is-cinematic, .is-power-statistics, .is-carbon-trade) .og-globe-stage .maplibregl-ctrl-bottom-right {
+    right: var(--og-stage-right);
+    bottom: calc(var(--og-globe-nav-space) + var(--og-stage-footer) + var(--og-mobile-dock));
+  }
+}
+
+/* Immersive replay keeps only the scene, its header and the timeline. */
+.og-app-shell:has([data-immersive="true"]) { --og-globe-nav-space: 0px; }
+.og-app-shell:has([data-immersive="true"]) :is(.og-workspace-sidebar, .og-workspace-mobile-header, .og-globe-navigation,
+  .og-assistant-mount, .og-info-button, .og-top-toolbar) {
+  display: none;
+}
 
 @keyframes og-globe-enter {
   from { opacity: 0; transform: scale(.94); }
@@ -3339,4 +3726,40 @@
   .og-weather-globe-stage .og-earth-project,
   .og-workspace-map-layer,
   .og-retained-economy .og-globe-stage { animation: none; }
+}
+
+.og-weather-replay-entry {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  bottom: calc(var(--og-globe-nav-space, 70px) + 24px);
+  transform: translateX(-50%);
+  display: grid;
+  gap: 3px;
+  padding: 9px 14px;
+  border-radius: 9px;
+  background: #142733ed;
+  color: #e1f2f6;
+  text-align: left;
+  font-size: 12px;
+}
+.og-weather-replay-entry strong { display: flex; align-items: center; gap: 6px; color: #a9f1f4; }
+.og-weather-replay-entry:hover { background: #225060; }
+
+@media (max-width: 900px) {
+  .og-weather-replay-entry { bottom: auto; top: clamp(252px, 44svh, 440px); }
+}
+
+.og-globe-workspace.is-carbon-trade {
+  --og-assistant-bottom: 34px;
+  --og-space-glow: 25 53 91;
+  --og-space-haze: 42 99 153;
+}
+
+@media (max-width: 900px) {
+  .og-globe-workspace.is-carbon-trade { --og-assistant-bottom: 49px; }
+  .is-carbon-trade .og-assistant-mount {
+    --og-voice-idle-size: 44px;
+    --og-voice-idle-status: none;
+  }
 }

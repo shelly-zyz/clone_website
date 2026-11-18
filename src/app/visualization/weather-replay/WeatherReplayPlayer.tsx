@@ -1,16 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { Compass, Maximize2, Minimize2, Minus, Pause, Play, Plus, Rotate3D, Scan } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { GlobeLoading } from "@/components/opengridworks/GlobeLoading";
-import { ControlGroup, GlobeAnalysis, GlobeControls, GlobeLayout } from "@/components/opengridworks/GlobeLayout";
-import { XiaoyunAssistant } from "@/components/opengridworks/XiaoyunAssistant";
-import { GlobeNavigation } from "@/components/opengridworks/GlobeNavigation";
-import { WorkspaceFilterSelect, WorkspaceSidebar } from "@/components/opengridworks/WorkspaceSidebar";
+import { WorkspaceFilterSelect } from "@/components/opengridworks/WorkspaceSidebar";
 import type { WeatherReplay } from "@/lib/weather-replay/model";
 import { readReplayRegion, regionalReplay, replayRegionOptions, type ReplayRegionId } from "@/lib/weather-replay/regions";
-import { ReturnToGlobe } from "../ReturnToGlobe";
 import { updateAnalysisQuery, useAnalysisQuery } from "../useAnalysisLocation";
 import { replayViewOrder, replayViews, type ReplayView } from "@/lib/weather-replay/views";
 import { createReplayScene } from "./replay-canvas";
@@ -19,7 +14,6 @@ import { accumulateRain, accumulationStart, areaStats, cellAreas, maxContinuousA
 import { gridCoordinate, prepareReplayArea, regionalPeak, type ReplayGeography } from "./replay-geography";
 import { loadWeatherReplayData } from "./replay-loader";
 import { replayLegend } from "./replay-palette";
-import switcherStyles from "@/components/opengridworks/PageSwitcher.module.css";
 import styles from "./player.module.css";
 
 type ReplayRequest = { query: string; replay: WeatherReplay; geography: ReplayGeography; localArchive: boolean } | { query: string; error: string };
@@ -56,48 +50,36 @@ export function WeatherReplayPlayer({ query, scene, region, initialFrame, initia
     return () => { current = false; };
   }, [attempt, caseQuery, requestKey, useGlobalGeography]);
 
-  const player = (
-    <section className={styles.embedded} aria-label="区域气象回放">
+  return (
+    <section className={embedded ? styles.embedded : styles.standalone} aria-label="区域气象回放">
+      {!embedded && (
+        <div className={styles.standaloneHeading}>
+          <h1>区域气象回放</h1>
+          <WorkspaceFilterSelect label="回放区域" value={regionId} options={replayRegionOptions}
+            onChange={value => updateAnalysisQuery({ region: readReplayRegion(value) })} />
+        </div>
+      )}
       {current && "replay" in current ? (
         <ReplayControls key={requestKey} replay={current.replay} geography={current.geography} region={regionId} view={view}
-          initialFrame={initialFrame} initialPoint={initialPoint} onPointChange={onPointChange} localArchive={current.localArchive} onFrameChange={onFrameChange} />
+          initialFrame={initialFrame} initialPoint={initialPoint} onPointChange={onPointChange} localArchive={current.localArchive} onFrameChange={onFrameChange} onViewChange={embedded ? undefined : setSelectedView} />
       ) : current ? (
         <div className={styles.loadState}>
           <p role="alert">{current.error}</p>
-          <GlobeControls><button className="og-workspace-action" type="button"
-            onClick={() => { setResponse(undefined); setAttempt(value => value + 1); }}>重试</button></GlobeControls>
+          <button className={styles.button} onClick={() => { setResponse(undefined); setAttempt(value => value + 1); }}>重试</button>
         </div>
-      ) : <GlobeLoading label="正在加载区域天气回放" />}
+      ) : embedded ? <GlobeLoading label="正在加载区域天气回放" />
+        : <p className={styles.loadState} role="status">正在加载区域边界、云图和降水帧…</p>}
     </section>
-  );
-  if (embedded) return player;
-  return (
-    <GlobeLayout className="og-app-shell og-globe-workspace is-earth-project" data-workspace="weather">
-      <WorkspaceSidebar topic="weather" summary="区域气象回放" navigation={<GlobeNavigation activeTopic="weather" />}
-        scenes={<nav className={switcherStyles.bar} aria-label="回放视图">
-          {replayViewOrder.map(item => (
-            <button key={item} type="button" aria-pressed={view === item} onClick={() => setSelectedView(item)}>
-              {replayViews[item].title}
-            </button>
-          ))}
-        </nav>}>
-        <WorkspaceFilterSelect label="回放区域" value={regionId} options={replayRegionOptions}
-          onChange={value => updateAnalysisQuery({ region: readReplayRegion(value) })} />
-        <Link className="og-workspace-action" href="/visualization/weather">返回气象专题分析</Link>
-        <div className="og-workspace-action"><ReturnToGlobe topic="weather" /></div>
-      </WorkspaceSidebar>
-      <div className="og-globe-stage">{player}</div>
-      <XiaoyunAssistant topic="meteo" captureView={() => undefined} forecastSidebar={false} />
-    </GlobeLayout>
   );
 }
 
-function ReplayControls({ replay, geography, region, view, initialFrame, localArchive, initialPoint, onPointChange, onFrameChange }: {
+function ReplayControls({ replay, geography, region, view, onViewChange, initialFrame, localArchive, initialPoint, onPointChange, onFrameChange }: {
   replay: WeatherReplay;
   geography: ReplayGeography;
   region: ReplayRegionId;
   view: ReplayView;
   localArchive: boolean;
+  onViewChange?: (view: ReplayView) => void;
   initialFrame?: number;
   initialPoint?: [number, number];
   onPointChange?: (point: [number, number]) => void;
@@ -277,35 +259,40 @@ function ReplayControls({ replay, geography, region, view, initialFrame, localAr
 
   return (
     <>
-      <GlobeControls>
-      <ControlGroup title="回放视角">
-          <header className={styles.header}>
-            <div className={styles.heading}>
-              <h2>{replayViews[view].title}</h2>
-              <p>{area.label}{area.hasData && " · " + timestamp.slice(0, 10)}</p>
-            </div>
-            <div className={styles.cameraControls} role="group" aria-label="地图视角">
-              {!planView && <button className={styles.button} type="button" title="旋转视角" aria-label="旋转视角" onClick={() => renderer.current?.rotate(Math.PI / 3)}>
-                <Rotate3D size={16} aria-hidden="true" />
-              </button>}
-              <button className={styles.button} type="button" title="缩小" aria-label="缩小" onClick={() => renderer.current?.zoom(1 / 1.2)}>
-                <Minus size={15} aria-hidden="true" />
-              </button>
-              <button className={styles.button} type="button" title="放大" aria-label="放大" onClick={() => renderer.current?.zoom(1.2)}>
-                <Plus size={15} aria-hidden="true" />
-              </button>
-              <button className={styles.button} type="button" title="重置视角" aria-label="重置视角" onClick={() => renderer.current?.reset()}>
-                <Scan size={15} aria-hidden="true" />
-              </button>
-              <button className={styles.button} type="button" aria-pressed={immersive}
-                title={immersive ? "退出沉浸" : "沉浸全屏"} aria-label={immersive ? "退出沉浸" : "沉浸全屏"} onClick={toggleImmersive}>
-                {immersive ? <Minimize2 size={15} aria-hidden="true" /> : <Maximize2 size={15} aria-hidden="true" />}
-              </button>
-            </div>
-          </header>
-      </ControlGroup>
-      </GlobeControls>
-      <div className={styles.scene} data-globe-fullscreen={immersive}>
+      <header className={styles.header}>
+        <div className={styles.heading}>
+          <h2>{replayViews[view].title}</h2>
+          <p>{area.label}{area.hasData && " · " + timestamp.slice(0, 10)}</p>
+        </div>
+        <div className={styles.cameraControls} role="group" aria-label="地图视角">
+          {!planView && <button className={styles.button} type="button" title="旋转视角" aria-label="旋转视角" onClick={() => renderer.current?.rotate(Math.PI / 3)}>
+            <Rotate3D size={16} aria-hidden="true" />
+          </button>}
+          <button className={styles.button} type="button" title="缩小" aria-label="缩小" onClick={() => renderer.current?.zoom(1 / 1.2)}>
+            <Minus size={15} aria-hidden="true" />
+          </button>
+          <button className={styles.button} type="button" title="放大" aria-label="放大" onClick={() => renderer.current?.zoom(1.2)}>
+            <Plus size={15} aria-hidden="true" />
+          </button>
+          <button className={styles.button} type="button" title="重置视角" aria-label="重置视角" onClick={() => renderer.current?.reset()}>
+            <Scan size={15} aria-hidden="true" />
+          </button>
+          <button className={styles.button} type="button" aria-pressed={immersive}
+            title={immersive ? "退出沉浸" : "沉浸全屏"} aria-label={immersive ? "退出沉浸" : "沉浸全屏"} onClick={toggleImmersive}>
+            {immersive ? <Minimize2 size={15} aria-hidden="true" /> : <Maximize2 size={15} aria-hidden="true" />}
+          </button>
+        </div>
+      </header>
+      {onViewChange && (
+        <div role="group" aria-label="回放视图" className={styles.standaloneViews}>
+          {replayViewOrder.map(item => (
+            <button key={item} type="button" className={styles.button} aria-pressed={view === item} onClick={() => onViewChange(item)}>
+              {replayViews[item].title}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className={styles.scene} data-immersive={immersive}>
         <div className={styles.stage} data-view={view}>
           <div ref={canvas} role="img" aria-label={area.label + " · " + replayViews[view].description} className={styles.canvas} />
           {area.hasData && (
@@ -320,8 +307,7 @@ function ReplayControls({ replay, geography, region, view, initialFrame, localAr
           {drawingFailed ? (
             <div className={styles.emptyNotice} role="alert">
               当前浏览器无法绘制回放场景。
-              <GlobeControls><button className="og-workspace-action" type="button"
-                onClick={() => { setDrawingFailed(false); setRenderAttempt(value => value + 1); }}>重新绘制</button></GlobeControls>
+              <button className={styles.button} onClick={() => { setDrawingFailed(false); setRenderAttempt(value => value + 1); }}>重新绘制</button>
             </div>
           ) : missing ? <p role="status" className={styles.emptyNotice}>{missing}</p> : null}
           {area.hasData && (
@@ -354,74 +340,70 @@ function ReplayControls({ replay, geography, region, view, initialFrame, localAr
             </div>
           )}
         </div>
-        {area.hasData && <GlobeAnalysis><ReplayReadings replay={replay} view={view} frame={index} cell={selectedCell}
+        {area.hasData && <ReplayReadings replay={replay} view={view} frame={index} cell={selectedCell}
           peaks={peaks} totals={accumulated} accumulationStart={start} accumulationStats={accumulationStats}
           levels={levels} weights={weights} limit={legendMax} sectionRow={sectionRow} slices={slices}
           satellite={clouds ? satellite : undefined} spots={spots} track={track} trackId={trackId ?? activeSpot?.id}
-          threshold={hotspotThreshold} onTrack={setTrackId} onFrame={selectFrame} /></GlobeAnalysis>}
+          threshold={hotspotThreshold} onTrack={setTrackId} onFrame={selectFrame} />}
 
       </div>
       {area.hasData && (
-        <GlobeControls>
-        <ControlGroup title="回放与图层" open>
-          <div className={styles.controls}>
-            {view === "weather" && (
-              <div className={styles.layers} role="group" aria-label="云雨结构图层">
-                <label><input type="checkbox" checked={clouds} onChange={event => setClouds(event.target.checked)} /> 云体示意</label>
-                <label><input type="checkbox" checked={precipitation} onChange={event => setPrecipitation(event.target.checked)} /> 下落动画</label>
-                <label><input type="checkbox" checked={section} onChange={event => setSection(event.target.checked)} /> 垂直剖面</label>
-                <label>云体不透明度 <input type="range" min={10} max={100} value={cloudOpacity} disabled={!clouds}
-                  aria-valuetext={cloudOpacity + "%"} onChange={event => setCloudOpacity(Number(event.target.value))} /></label>
-                {sectionRow !== undefined && <label>剖线纬度 <input type="range" min={0} max={replay.rows - 1} value={sectionRow}
-                  aria-valuetext={(south + sectionRow / (replay.rows - 1) * (north - south)).toFixed(2) + "°"}
-                  onChange={event => setTransect(Number(event.target.value))} /></label>}
-              </div>
-            )}
-            {view === "accumulation" && <div className={styles.layers}>
-              <label>累计时段 <select aria-label="累计时段" value={windowHours} onChange={event => {
-                const hours = Number(event.target.value);
-                setWindowHours(hours);
-                if (accumulationStart(replay, index, hours) === undefined) {
-                  const next = replay.rain.findIndex((_, frame) => frame >= index && accumulationStart(replay, frame, hours) !== undefined);
-                  selectFrame(next >= 0 ? next : replay.rain.findLastIndex((_, frame) => accumulationStart(replay, frame, hours) !== undefined));
-                }
-              }}>
-                <option value={0}>档案起点至当前</option>
-                {availableWindows.map(hours => <option key={hours} value={hours}>过去 {hours} 小时</option>)}
-              </select></label>
-              {start !== undefined && <span>{utcStamp(replay.rain[start].time)} → {utcStamp(timestamp)} UTC</span>}
-            </div>}
-            <div className="flex items-center gap-3 sm:gap-5">
-              <button className={styles.playButton} type="button" onClick={togglePlay} disabled={final === 0}>
-                {playing ? <Pause size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}
-                {playing ? "暂停" : "播放"}
-              </button>
-              <label className="grid min-w-0 flex-1 gap-1 text-sm font-medium tabular-nums">
-                <span className={styles.timelineTimes}>
-                  <span>{utcClock(replay.rain[0].time)}</span>
-                  <strong>{utcClock(timestamp)} UTC</strong>
-                  <span>{utcClock(replay.rain[final].time)}</span>
-                </span>
-                <input type="range" min={0} max={final} value={index} aria-label="回放时间"
-                  aria-valuetext={utcClock(timestamp) + " UTC"} className={styles.timelineInput}
-                  onChange={event => selectFrame(Number(event.target.value))} />
-              </label>
+        <div className={styles.controls}>
+          {view === "weather" && (
+            <div className={styles.layers} role="group" aria-label="云雨结构图层">
+              <label><input type="checkbox" checked={clouds} onChange={event => setClouds(event.target.checked)} /> 云体示意</label>
+              <label><input type="checkbox" checked={precipitation} onChange={event => setPrecipitation(event.target.checked)} /> 下落动画</label>
+              <label><input type="checkbox" checked={section} onChange={event => setSection(event.target.checked)} /> 垂直剖面</label>
+              <label>云体不透明度 <input type="range" min={10} max={100} value={cloudOpacity} disabled={!clouds}
+                aria-valuetext={cloudOpacity + "%"} onChange={event => setCloudOpacity(Number(event.target.value))} /></label>
+              {sectionRow !== undefined && <label>剖线纬度 <input type="range" min={0} max={replay.rows - 1} value={sectionRow}
+                aria-valuetext={(south + sectionRow / (replay.rows - 1) * (north - south)).toFixed(2) + "°"}
+                onChange={event => setTransect(Number(event.target.value))} /></label>}
             </div>
-            <p className={styles.sources}>
-              {!forecast && view === "weather" && clouds && satellite && (
-                <a href="https://developers.google.cn/weathernext/guides/satweave">SatWeave · {utcClock(satellite.time)} UTC</a>
-              )}
-              {view === "weather" && clouds && (!satellite || regionalPeak(satellite.values, area.cells) === null) && <span>当前区域云场缺测</span>}
-              {forecast ? (
-                <><a href={replay.rain[index].url}>{forecast.product} · 历史模式预报</a><span>起报 {forecast.run.slice(0, 10)} {utcClock(forecast.run)} UTC · {forecast.resolution}°</span></>
-              ) : <a href="https://developers.google.cn/weathernext/guides/pardig">PARDIG-NRT · {utcClock(timestamp)} UTC</a>}
-              <span>{localArchive ? "内置历史档案" : "历史回放"}</span>
-              <a href="https://registry.opendata.aws/terrain-tiles/">地形 · AWS Terrain Tiles</a>
-              <a href="https://www.naturalearthdata.com/">地名 · Natural Earth</a>
-            </p>
+          )}
+          {view === "accumulation" && <div className={styles.layers}>
+            <label>累计时段 <select value={windowHours} onChange={event => {
+              const hours = Number(event.target.value);
+              setWindowHours(hours);
+              if (accumulationStart(replay, index, hours) === undefined) {
+                const next = replay.rain.findIndex((_, frame) => frame >= index && accumulationStart(replay, frame, hours) !== undefined);
+                selectFrame(next >= 0 ? next : replay.rain.findLastIndex((_, frame) => accumulationStart(replay, frame, hours) !== undefined));
+              }
+            }}>
+              <option value={0}>档案起点至当前</option>
+              {availableWindows.map(hours => <option key={hours} value={hours}>过去 {hours} 小时</option>)}
+            </select></label>
+            {start !== undefined && <span>{utcStamp(replay.rain[start].time)} → {utcStamp(timestamp)} UTC</span>}
+          </div>}
+          <div className="flex items-center gap-3 sm:gap-5">
+            <button className={styles.playButton} type="button" onClick={togglePlay} disabled={final === 0}>
+              {playing ? <Pause size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}
+              {playing ? "暂停" : "播放"}
+            </button>
+            <label className="grid min-w-0 flex-1 gap-1 text-sm font-medium tabular-nums">
+              <span className={styles.timelineTimes}>
+                <span>{utcClock(replay.rain[0].time)}</span>
+                <strong>{utcClock(timestamp)} UTC</strong>
+                <span>{utcClock(replay.rain[final].time)}</span>
+              </span>
+              <input type="range" min={0} max={final} value={index} aria-label="回放时间"
+                aria-valuetext={utcClock(timestamp) + " UTC"} className={styles.timelineInput}
+                onChange={event => selectFrame(Number(event.target.value))} />
+            </label>
           </div>
-        </ControlGroup>
-        </GlobeControls>
+          <p className={styles.sources}>
+            {!forecast && view === "weather" && clouds && satellite && (
+              <a href="https://developers.google.cn/weathernext/guides/satweave">SatWeave · {utcClock(satellite.time)} UTC</a>
+            )}
+            {view === "weather" && clouds && (!satellite || regionalPeak(satellite.values, area.cells) === null) && <span>当前区域云场缺测</span>}
+            {forecast ? (
+              <><a href={replay.rain[index].url}>{forecast.product} · 历史模式预报</a><span>起报 {forecast.run.slice(0, 10)} {utcClock(forecast.run)} UTC · {forecast.resolution}°</span></>
+            ) : <a href="https://developers.google.cn/weathernext/guides/pardig">PARDIG-NRT · {utcClock(timestamp)} UTC</a>}
+            <span>{localArchive ? "内置历史档案" : "历史回放"}</span>
+            <a href="https://registry.opendata.aws/terrain-tiles/">地形 · AWS Terrain Tiles</a>
+            <a href="https://www.naturalearthdata.com/">地名 · Natural Earth</a>
+          </p>
+        </div>
       )}
     </>
   );

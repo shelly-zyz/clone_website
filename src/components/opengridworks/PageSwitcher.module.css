@@ -45,34 +45,3 @@
     padding-inline: 2px;
   }
 }
-
-:global(.og-workspace-sidebar) .bar {
-  position: static;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  width: 100%;
-  max-width: none;
-  min-height: 0;
-  padding: 3px;
-  border-radius: var(--og-card-radius);
-  overflow: visible;
-  background: var(--og-panel-card);
-  backdrop-filter: none;
-}
-
-:global(.og-workspace-sidebar) .bar > :is(button, a) {
-  flex: 1 1 40%;
-  min-width: 0;
-  min-height: 30px;
-  padding: 4px;
-  font-size: var(--og-type-label);
-  white-space: normal;
-  text-align: center;
-  line-height: 1.25;
-}
-
-:global(.og-workspace-sidebar) .bar > :is([aria-pressed="true"], [aria-current="page"]) {
-  background: var(--og-panel-selected);
-  color: #fff;
-}

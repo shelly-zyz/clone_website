@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { XiaoyunSiteAssistant } from "@/components/opengridworks/XiaoyunAssistant";
 import "./globals.css";
-import "./globe-workspace.css";
 
 export const metadata: Metadata = {
   title: "OpenGridWorks",

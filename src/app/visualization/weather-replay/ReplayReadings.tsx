@@ -1,12 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
+import { useId, useMemo, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import type { ReplayView } from "@/lib/weather-replay/views";
 import type { ReplayFrame, WeatherReplay } from "@/lib/weather-replay/model";
 import { ForecastVisualization } from "@/components/opengridworks/ForecastVisualization";
 import { gridCoordinate } from "./replay-geography";
 import { areaStats, displacement, utcStamp, type Grid, type Hotspot } from "./replay-data";
-import { ControlGroup, GlobeControls } from "@/components/opengridworks/GlobeLayout";
 import styles from "./player.module.css";
 
 const number = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 1 });
@@ -103,6 +103,8 @@ export function ReplayReadings({
   replay, view, frame, cell, peaks, totals, accumulationStart, accumulationStats, levels, weights, limit,
   sectionRow, slices, satellite, spots, track, trackId, threshold, onTrack, onFrame,
 }: Props) {
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
   const time = replay.rain[frame].time;
   const rain = replay.rain[frame].values;
   const points = cell === undefined ? peaks : replay.rain.map(item => item.values[cell]);
@@ -121,7 +123,8 @@ export function ReplayReadings({
     return totals.slice(0, frame - accumulationStart + 1).map(grid => cell === undefined ? areaStats(grid, weights).mean : grid[cell]);
   }, [accumulationStart, cell, frame, totals, weights]);
   const currentTime = utcStamp(time) + " UTC";
-
+  const summary = view === "rain" ? spot ? value(spot.peak, "mm/h") : `${spots.length} 个热点`
+    : view === "accumulation" ? value(windowPoints.at(-1), "mm") : view === "weather" ? currentTime : value(points[frame], "mm/h");
 
   function details() {
     if (view === "weather") {
@@ -155,11 +158,11 @@ export function ReplayReadings({
         <>
           <p className={styles.readingsContext}>切片高度按 UTC 时间间隔排列。亮色切片为当前帧。</p>
           <ReadingChart replay={replay} points={points} frame={frame} label={cell === undefined ? "区域峰值降水率" : "选点降水率"} unit="mm/h" ceiling={limit} onFrame={onFrame} />
-          <GlobeControls><ControlGroup title="时间切片"><div className={styles.sliceList}>
+          <div className={styles.sliceList} role="group" aria-label="时间切片">
             {slices.map(index => <button type="button" key={index} aria-pressed={index === frame} onClick={() => onFrame(index)}>
               <span>{utcStamp(replay.rain[index].time)} UTC</span><strong>{value(peaks[index], "mm/h")}</strong>
             </button>)}
-          </div></ControlGroup></GlobeControls>
+          </div>
         </>
       );
     }
@@ -169,12 +172,12 @@ export function ReplayReadings({
       return (
         <>
           <p className={styles.readingsContext}>以 ≥{threshold} mm/h 的相连格点识别热点。按区域重叠和中心位移关联相邻帧。</p>
-          {spots.length ? <GlobeControls><label className={styles.readingsSelect}>当前帧热点
+          {spots.length ? <label className={styles.readingsSelect}>当前帧热点
             <select value={spot?.id ?? ""} onChange={event => onTrack(Number(event.target.value))}>
               {!spot && <option value="" disabled>选中热点不在当前帧</option>}
               {spots.map(item => <option key={item.id} value={item.id}>热点 {item.id} · {value(item.peak, "mm/h")}</option>)}
             </select>
-          </label></GlobeControls> : <p className={styles.readingsSource}>当前帧无达到阈值的热点</p>}
+          </label> : <p className={styles.readingsSource}>当前帧无达到阈值的热点</p>}
           <dl className={styles.readingsValues}>
             {spot && <><div><dt>热点峰值</dt><dd>{value(spot.peak, "mm/h")}</dd></div>
               <div><dt>当前覆盖面积</dt><dd>{value(spot.area, "km²")}</dd></div></>}
@@ -217,11 +220,16 @@ export function ReplayReadings({
   }
 
   return (
-    <section className={styles.readingsBody} aria-label={headings[view]}>
-        <h2>{headings[view]}</h2>
+    <aside className={styles.readings} aria-label={headings[view]}>
+      <button className={styles.readingsToggle} type="button" aria-expanded={open} aria-controls={panelId} onClick={() => setOpen(!open)}>
+        <span>{headings[view]}</span><span>{summary} <ChevronDown size={14} aria-hidden="true" /></span>
+      </button>
+      <div id={panelId} className={styles.readingsBody} data-open={open}>
+        <h3>{headings[view]}</h3>
         {details()}
         {coordinates && <p className={styles.readingsContext}>选点 {coordinates[1].toFixed(2)}°，{coordinates[0].toFixed(2)}°</p>}
         <p className={styles.readingsSource}>{replay.metadata ? "NOAA GFS · 历史模式预报" : "PARDIG-NRT · 卫星降水估计"}</p>
-    </section>
+      </div>
+    </aside>
   );
 }

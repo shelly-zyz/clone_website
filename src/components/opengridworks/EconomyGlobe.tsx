@@ -13,7 +13,6 @@ import { applyRasterBasemap } from "@/lib/raster-basemap";
 import { readWorkspaceCamera, replaceWorkspaceContext } from "@/lib/workspace-context";
 import type { MapTheme } from "@/types/opengridworks";
 import { economyMetrics, formatGrowth, type EconomyCountry, type EconomyMetric, type EconomyValue } from "./economy-data";
-import { GlobeMapAttribution } from "./GlobeMapAttribution";
 import styles from "./EconomyWorkspace.module.css";
 
 const globeCenter: [number, number] = [79, 22];
@@ -86,7 +85,7 @@ export function EconomyGlobe({ active, basemap, onBasemapError, values, metric, 
         maxZoom,
         dragRotate: false,
         touchPitch: false,
-        attributionControl: false,
+        attributionControl: { compact: true },
         style: {
           version: 8,
           glyphs: globeGlyphs,
@@ -253,7 +252,6 @@ export function EconomyGlobe({ active, basemap, onBasemapError, values, metric, 
   return (
     <section className={styles.viewport} data-outlook={outlook} aria-label="交互式经济地球">
       <div className={styles.map} ref={container} data-ready={status === "ready"} />
-      {active && status === "ready" && <GlobeMapAttribution map={map} />}
       {status === "loading" && <GlobeLoading label="正在加载经济地球" />}
       {status === "unavailable" && <p className={styles.mapError} role="status">当前浏览器无法绘制地球。仍可从列表选择经济体。</p>}
     </section>

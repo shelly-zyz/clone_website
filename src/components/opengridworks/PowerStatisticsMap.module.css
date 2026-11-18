@@ -22,9 +22,11 @@
 .canvas:active { cursor: grabbing; }
 
 .controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 3px;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  gap: 1px;
   padding: 3px;
   border-radius: 7px;
   background: #111e2b;

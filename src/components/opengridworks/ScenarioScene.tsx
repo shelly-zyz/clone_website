@@ -1,8 +1,45 @@
 import type { ReactNode } from "react";
+import switcherStyles from "./PageSwitcher.module.css";
 import styles from "./ScenarioScene.module.css";
 
+type ScenarioOption = { id: string; label: string };
 type ScenarioPeriod = { id: string; label: string };
 type ScenarioRow = { id: string; label: string; value: number | null };
+
+export function ScenarioScene({
+  title, period, accent = "lime", options, selectedOption, onOptionChange, controls, globe, summary, footer,
+}: {
+  title: string;
+  period?: string | number;
+  accent?: "lime" | "cyan" | "amber";
+  options: readonly ScenarioOption[];
+  selectedOption: string;
+  onOptionChange: (id: string) => void;
+  controls?: ReactNode;
+  globe?: ReactNode;
+  summary: ReactNode;
+  footer?: ReactNode;
+}) {
+  return (
+    <section className={styles.scene} data-accent={accent} aria-label={title}>
+      <header className={styles.header}>
+        <h1>{title}</h1>
+        {controls}
+      </header>
+      <nav className={switcherStyles.bar} aria-label="切换视图">
+        {options.map(({ id, label }) => (
+          <button key={id} type="button" aria-pressed={id === selectedOption} onClick={() => onOptionChange(id)}>
+            {label}
+          </button>
+        ))}
+      </nav>
+      <div className={styles.globe} data-interactive={globe != null}>{globe}</div>
+      <aside className={styles.summary}>{summary}</aside>
+      {period !== undefined && <div className={styles.period} aria-hidden="true" key={period}>{period}</div>}
+      {footer && <div className={styles.footer}>{footer}</div>}
+    </section>
+  );
+}
 
 export function ScenarioPeriods({ periods, selected, onSelect, label = "目标年份" }: {
   periods: readonly ScenarioPeriod[];

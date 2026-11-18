@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDownUp, ArrowRight, ArrowUpRight, CircleHelp, Layers3, Map, Pause, Play, X } from "lucide-react";
+import { ArrowDownUp, ArrowRight, ArrowUpRight, BarChart3, CircleHelp, Layers3, Map, PanelRightClose, PanelRightOpen, Pause, Play, X } from "lucide-react";
 import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import type { PowerAnalysis } from "@/hooks/use-power-analysis";
 import { chinaProvinces } from "@/lib/china-provinces";
@@ -463,6 +463,9 @@ function summaryFor(data: PowerAnalysis, code: string) {
 export function PowerAnalysisRail({ data, selection, update, onChoose }: {
   data: PowerAnalysis; selection: readonly string[]; update: Update; onChoose: (code: string) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const railId = useId();
   const codes = selection.length ? selection : [nationalPowerCode];
   const code = codes[0];
   const summary = summaryFor(data, code);
@@ -471,7 +474,17 @@ export function PowerAnalysisRail({ data, selection, update, onChoose }: {
   const warning = data.missingArchive ? "分省档案暂不可读取。请稍后重试。"
     : data.missingVersion ? "所选发布版本暂不可读取。" : data.pending ? "正在读取统计数据…"
       : !data.coverage ? "本期暂无分省数据。" : null;
-  return <section className={styles.rail} aria-label="电力统计解读">
+  return <div className={styles.railRegion} data-power-analysis-dock={open ? "open" : "closed"}
+    data-power-rail-collapsed={collapsed ? "true" : undefined}>
+    <button type="button" className={styles.mobileRail} aria-expanded={open} aria-controls={railId} onClick={() => setOpen(value => !value)}>
+      <BarChart3 size={16} /> {open ? "收起电力解读" : "查看电力解读"}
+    </button>
+    <button type="button" className={styles.desktopRail} aria-expanded={!collapsed} aria-controls={railId}
+      aria-label={collapsed ? "展开电力解读" : "折叠电力解读"} title={collapsed ? "展开电力解读" : "折叠电力解读"}
+      onClick={() => setCollapsed(value => !value)}>
+      {collapsed ? <PanelRightOpen size={17} /> : <PanelRightClose size={17} />}
+    </button>
+    <aside id={railId} className={styles.rail} aria-label="电力统计解读">
       <header className={styles.railHeader}><h2>{powerRegionName(code)}</h2>
         <span>{data.frame.period} · {data.demo ? "演示" : subtitle}</span>
       </header>
@@ -522,5 +535,6 @@ export function PowerAnalysisRail({ data, selection, update, onChoose }: {
           technology: data.product.id === "solar-power" ? "solar" : "wind",
         })}>查看同地区风光情景 <ArrowUpRight size={14} /></a>
       </>}
-  </section>;
+    </aside>
+  </div>;
 }
