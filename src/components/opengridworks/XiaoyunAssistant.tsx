@@ -67,7 +67,7 @@ function loadContext(): XiaoyunContext {
 
 type Workspace = {
   slot: HTMLDivElement;
-  topic: Topic;
+  topic?: Topic;
   captureView: () => void;
 };
 

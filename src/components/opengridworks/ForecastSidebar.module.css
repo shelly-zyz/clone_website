@@ -10,7 +10,7 @@
 .panel {
   position: absolute;
   z-index: 45;
-  inset: var(--og-rail-top) var(--og-gutter) max(var(--og-globe-nav-space), calc(var(--og-assistant-bottom) + 106px)) auto;
+  inset: var(--og-rail-top) var(--og-gutter) max(var(--og-globe-nav-space), var(--og-assistant-clearance)) auto;
   width: var(--og-forecast-width);
   display: flex;
   flex-direction: column;

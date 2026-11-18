@@ -174,7 +174,7 @@
   z-index: 42;
   top: var(--og-rail-top);
   right: var(--og-gutter);
-  bottom: calc(var(--og-globe-nav-space) + 8px);
+  bottom: max(calc(var(--og-globe-nav-space) + 8px), var(--og-assistant-clearance));
   width: var(--og-power-rail);
   font-variant-numeric: tabular-nums;
 }

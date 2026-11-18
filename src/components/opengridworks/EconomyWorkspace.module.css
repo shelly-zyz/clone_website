@@ -129,7 +129,7 @@
   z-index: 45;
   top: var(--og-rail-top);
   right: var(--og-gutter);
-  bottom: calc(var(--og-globe-nav-space) + 6px);
+  bottom: max(calc(var(--og-globe-nav-space) + 6px), var(--og-assistant-clearance));
   width: var(--og-forecast-width);
   overflow: auto;
   overscroll-behavior: contain;

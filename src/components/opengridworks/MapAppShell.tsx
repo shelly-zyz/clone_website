@@ -5699,7 +5699,6 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
             </>
           ) : null}
           <HoverBubble tooltip={hoverTooltip} />
-          <XiaoyunAssistant topic={activeProject === "weather" ? "meteo" : activeProject} captureView={saveMapCamera} />
           <Toast message={toast} />
           {cinematic ? (
             <div className="og-cinematic-banner">
@@ -5724,6 +5723,10 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
             <Info size={18} />
           </button>
         </>
+      )}
+      {!resourceScene && (
+        <XiaoyunAssistant topic={activeProject === "weather" ? "meteo" : activeProject === "economy" ? undefined : activeProject}
+          captureView={saveMapCamera} />
       )}
     </main>
   );
