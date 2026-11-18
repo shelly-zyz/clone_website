@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { globeTopicOrder, globeTopics, workspaceHref, type WorkspaceTopic } from "@/lib/globe-topics";
 import { analysisHref, analysisTopics } from "@/lib/topic-analysis/catalog";
+import { BrandLogo } from "./BrandLogo";
 import type { IntroScene } from "./intro-particles";
 import styles from "./IntroLanding.module.css";
 
@@ -80,7 +81,7 @@ export function IntroLanding() {
   }
 
   return (
-    <main className={styles.landing} aria-label="OpenGridWorks 开屏" data-scene={status}>
+    <main className={styles.landing} aria-label="DataVista 开屏" data-scene={status}>
       <div className={styles.space} aria-hidden="true">
         <div className={styles.stars} />
         <div className={styles.poster}>
@@ -93,8 +94,7 @@ export function IntroLanding() {
       <div className={styles.frame}>
         <header className={styles.header}>
           <div className={styles.brand}>
-            <Image src="/images/opengridworks/logo-dark.webp" alt="" width={32} height={32} />
-            <span>OpenGridWorks</span>
+            <BrandLogo />
           </div>
           <nav className={styles.topNav} aria-label="平台导航">
             <Link href="#intro-globes">多维视图</Link>

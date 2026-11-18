@@ -50,8 +50,7 @@
   gap: 9px;
 }
 
-.brand { min-height: 40px; font-size: 16px; font-weight: 660; }
-.brand img { flex: none; }
+.brand { --brand-mark-size: 28px; min-height: 40px; }
 .topLinks { gap: clamp(14px, 2.3vw, 28px); }
 .topLinks a { color: #dce6eb; font-size: 13px; white-space: nowrap; }
 .topLinks a:hover { color: #fff; }
@@ -482,8 +481,7 @@
 
 @media (max-width: 620px) {
   .topbar { padding-inline: 12px; }
-  .brand { font-size: 14px; gap: 5px; }
-  .brand img { width: 23px; height: 23px; }
+  .brand { --brand-mark-size: 23px; }
   .topLinks a { font-size: 12px; }
   .heroContent { grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr); min-height: 223px; gap: 10px; padding: 5px 14px 20px; }
   .heroCopy h1 { font-size: clamp(32px, 8.3vw, 47px); letter-spacing: 0.01em; }

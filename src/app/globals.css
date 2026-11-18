@@ -259,15 +259,6 @@
 
 .og-workspace-brand {
   display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  color: #f4f6f8;
-  font-size: 14px;
-  font-weight: 650;
-}
-
-.og-workspace-brand img {
-  mix-blend-mode: screen;
 }
 
 .og-workspace-heading h1 {

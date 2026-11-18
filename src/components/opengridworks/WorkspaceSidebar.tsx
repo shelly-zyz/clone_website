@@ -1,11 +1,11 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { ArrowUpRight, ChevronDown, Play, Search, SlidersHorizontal, X } from "lucide-react";
 import { useId, useRef, useState, type ReactNode } from "react";
 import { globeTopics, type WorkspaceTopic } from "@/lib/globe-topics";
 import { rememberWorkspace } from "@/lib/workspace-context";
+import { BrandLogo } from "./BrandLogo";
 
 export type WorkspaceFilterOption = { value: string; label: string; disabled?: boolean };
 
@@ -80,9 +80,8 @@ export function WorkspaceSidebar({ topic, summary, leadingFilter, children, onSe
         </button>
         <div className="og-workspace-sidebar-content" key={topic}>
           <header className="og-workspace-heading">
-            <Link href="/" className="og-workspace-brand" aria-label="OpenGridWorks 首页" prefetch={false}>
-              <Image src="/images/opengridworks/logo-dark.webp" alt="" width={24} height={24} />
-              <span>OpenGridWorks</span>
+            <Link href="/" className="og-workspace-brand" aria-label="DataVista 首页" prefetch={false}>
+              <BrandLogo />
             </Link>
             <h1>{globeTopics[topic].title}</h1>
             <p>{summary}</p>

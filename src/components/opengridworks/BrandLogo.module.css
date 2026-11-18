@@ -1,0 +1,17 @@
+.logo {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.32em;
+  font-size: var(--brand-mark-size, 24px);
+}
+
+.symbol {
+  width: 1em;
+  height: auto;
+}
+
+.wordmark {
+  width: 4.15em;
+  height: auto;
+}

@@ -105,18 +105,8 @@
 }
 
 .brand {
+  --brand-mark-size: 25px;
   min-height: 44px;
-  gap: 8px;
-  font-size: 0.79rem;
-  font-weight: 650;
-  letter-spacing: 0.01em;
-}
-
-.brand img {
-  display: block;
-  width: 25px;
-  height: 25px;
-  border-radius: 8px;
 }
 
 .topNav { display: none; }
@@ -347,12 +337,7 @@
   }
 
   .header { min-height: 52px; }
-  .brand { gap: 11px; font-size: .94rem; }
-
-  .brand img {
-    width: 32px;
-    height: 32px;
-  }
+  .brand { --brand-mark-size: 32px; }
 
   .topNav {
     position: absolute;
