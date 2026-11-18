@@ -4,7 +4,7 @@
   overflow: hidden;
 }
 
-.map { position: absolute; inset: 0; }
+.viewport > .map { position: absolute; inset: 0; }
 .map[data-ready="false"] { visibility: hidden; }
 
 .mapError {
