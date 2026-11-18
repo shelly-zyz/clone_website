@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, ArrowUpRight, Sun, Wind } from "lucide-react";
+import { ArrowLeft, ArrowUpRight } from "lucide-react";
 import { useWorkspaceResource } from "@/hooks/use-workspace-resource";
 import { findChinaProvince } from "@/lib/china-provinces";
 import type { RenewableScenario } from "@/lib/topic-analysis/history";
@@ -13,8 +13,8 @@ import { ScenarioProvinceGlobe } from "./ScenarioProvinceGlobe";
 import styles from "./WeatherResourceScene.module.css";
 
 const options = [
-  { id: "wind", label: "风电", icon: Wind },
-  { id: "solar", label: "光伏", icon: Sun },
+  { id: "wind", label: "风电" },
+  { id: "solar", label: "光伏" },
 ] as const;
 const percentage = (value: number) => value.toLocaleString("zh-CN", { maximumFractionDigits: 1 }) + "%";
 

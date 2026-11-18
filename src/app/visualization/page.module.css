@@ -27,13 +27,10 @@
 .hero { color: #f3f8fa; background: var(--navy); }
 
 .topbar {
-  display: flex;
-  min-height: 60px;
+  position: relative;
+  min-height: var(--og-page-switcher-bottom);
   margin-inline: auto;
-  padding: 7px clamp(16px, 3.7vw, 55px);
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  padding: var(--og-page-header-top) clamp(16px, 3.7vw, 55px) 0;
 }
 
 .hero:has(.heroContent) {
@@ -42,18 +39,12 @@
 
 .hero:has(.heroContent) .topbar { max-width: 1510px; }
 
-.brand,
-.topLinks,
-.returnLink {
+.brand {
+  --brand-mark-size: 28px;
   display: inline-flex;
   align-items: center;
-  gap: 9px;
+  min-height: 40px;
 }
-
-.brand { --brand-mark-size: 28px; min-height: 40px; }
-.topLinks { gap: clamp(14px, 2.3vw, 28px); }
-.topLinks a { color: #dce6eb; font-size: 13px; white-space: nowrap; }
-.topLinks a:hover { color: #fff; }
 
 .heroContent {
   display: grid;
@@ -220,14 +211,14 @@
 .workbench {
   display: grid;
   grid-template-columns: 92px minmax(0, 1fr);
-  min-height: calc(100svh - 60px);
+  min-height: calc(100svh - var(--og-page-switcher-bottom));
 }
 
 .workbenchNav {
   position: sticky;
   top: 0;
   align-self: start;
-  min-height: calc(100svh - 60px);
+  min-height: calc(100svh - var(--og-page-switcher-bottom));
   max-height: 100svh;
   overflow: auto;
   padding: 9px 0 18px;
@@ -482,7 +473,6 @@
 @media (max-width: 620px) {
   .topbar { padding-inline: 12px; }
   .brand { --brand-mark-size: 23px; }
-  .topLinks a { font-size: 12px; }
   .heroContent { grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr); min-height: 223px; gap: 10px; padding: 5px 14px 20px; }
   .heroCopy h1 { font-size: clamp(32px, 8.3vw, 47px); letter-spacing: 0.01em; }
   .heroCopy p { margin-top: 10px; font-size: 13px; }

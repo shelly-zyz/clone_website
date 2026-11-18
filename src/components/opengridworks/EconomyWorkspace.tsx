@@ -15,7 +15,7 @@ import {
 } from "./economy-data";
 import { VerticalColorLegend } from "./VerticalColorLegend";
 import styles from "./EconomyWorkspace.module.css";
-import switcherStyles from "./SceneSwitcher.module.css";
+import switcherStyles from "./PageSwitcher.module.css";
 
 const views = [
   { id: "history", label: "统计地图" },
@@ -345,7 +345,7 @@ export function EconomyWorkspace({ active, basemap, onBasemapError, initialConte
 
   return (
     <>
-      <nav className={`${switcherStyles.bar} ${switcherStyles.scene}`} aria-label="经济地球视图" onKeyDown={event => {
+      <nav className={switcherStyles.bar} aria-label="经济地球视图" onKeyDown={event => {
         if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Home" && event.key !== "End") return;
         event.preventDefault();
         const next = event.key === "Home" ? "history" : event.key === "End" ? "outlook" : outlookActive ? "history" : "outlook";

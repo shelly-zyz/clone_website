@@ -85,7 +85,7 @@
   min-width: 0;
   min-height: calc(100svh - 24px);
   grid-template-rows: auto 1fr auto;
-  padding: 12px 14px 16px;
+  padding: 0 14px 16px;
 }
 
 .header {
@@ -97,7 +97,6 @@
 }
 
 .brand,
-.topNav,
 .primary,
 .controlButton {
   display: inline-flex;
@@ -108,8 +107,6 @@
   --brand-mark-size: 25px;
   min-height: 44px;
 }
-
-.topNav { display: none; }
 
 .controlButton {
   min-width: 40px;
@@ -338,26 +335,6 @@
 
   .header { min-height: 52px; }
   .brand { --brand-mark-size: 32px; }
-
-  .topNav {
-    position: absolute;
-    left: 50%;
-    display: flex;
-    height: 40px;
-    align-items: center;
-    gap: clamp(16px, 2.4vw, 37px);
-    padding: 0 clamp(18px, 2vw, 32px);
-    transform: translateX(-50%);
-    border-radius: 100px;
-    background: #141d1ede;
-  }
-
-  .topNav > a {
-    font-size: .75rem;
-    white-space: nowrap;
-  }
-
-  .topNav > a:hover { text-decoration: underline; }
 
   .poster img {
     top: 43.5%;

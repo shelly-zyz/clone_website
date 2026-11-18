@@ -44,11 +44,6 @@
   outline: 2px solid #9de3e9; outline-offset: 2px;
 }
 
-.viewTabs[class] {
-  min-height: 36px;
-  background: #13182ac9;
-  backdrop-filter: blur(12px);
-}
 .filters :global(.og-filter-select) select { min-height: 31px; padding-block: 5px; }
 .stage {
   position: absolute;

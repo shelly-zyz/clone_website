@@ -7,14 +7,14 @@
   display: grid;
   grid-template-areas:
     "header header header"
-    "options globe summary"
+    "globe globe summary"
     "period footer summary";
   grid-template-columns: minmax(150px, 0.93fr) minmax(0, 3.55fr) minmax(230px, 1.29fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
   column-gap: clamp(12px, 2vw, 32px);
   row-gap: 12px;
   align-items: center;
-  padding: var(--scene-padding);
+  padding: var(--og-page-header-top) var(--scene-padding) var(--scene-padding);
   color: #f4f7f5;
   pointer-events: none;
 }
@@ -24,8 +24,11 @@
 
 .header {
   grid-area: header;
+  align-self: start;
+  min-height: calc(var(--og-page-switcher-bottom) - var(--og-page-header-top));
   display: flex;
   flex-wrap: wrap;
+  align-content: flex-start;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -43,67 +46,7 @@
   white-space: nowrap;
 }
 
-.options {
-  position: relative;
-  grid-area: options;
-  display: grid;
-  justify-items: end;
-  gap: 12px;
-  padding: 38px 20px 38px 0;
-  pointer-events: auto;
-}
-
-.options::after {
-  position: absolute;
-  inset: 0 -13px 0 auto;
-  width: 42px;
-  border-radius: 48%;
-  border-right: 1px solid #7b8885;
-  content: "";
-  pointer-events: none;
-}
-
-.options button {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  width: fit-content;
-  max-width: 100%;
-  min-height: 43px;
-  padding: 3px;
-  border: 1px solid transparent;
-  border-radius: 24px;
-  color: #dce4e1;
-  font-size: 13px;
-  font-weight: 540;
-  text-align: right;
-  transition: background-color 160ms ease, color 160ms ease;
-}
-
-.options button:hover {
-  color: #fff;
-  background: #1a2623;
-}
-
-.options button[aria-pressed="true"] {
-  color: #131d0b;
-  background: var(--scene-accent);
-}
-
-.optionIcon {
-  order: 1;
-  display: inline-grid;
-  flex: none;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border: 1px solid #899994;
-  border-radius: 50%;
-}
-
-.options button[aria-pressed="true"] .optionIcon { border-color: #19231588; }
-.optionLabel { padding-inline: 9px; }
+.scene > nav { pointer-events: auto; }
 
 .globe {
   position: relative;
@@ -261,33 +204,25 @@
     column-gap: 12px;
   }
 
-  .options button { font-size: 12px; }
-  .optionLabel { padding-inline: 3px; }
   .period { font-size: clamp(32px, 7vw, 62px); }
 }
 
 @media (max-width: 660px) {
   .scene {
-    padding: max(env(safe-area-inset-top), 12px) 12px 0;
+    padding: var(--og-page-header-top) 12px 0;
     grid-template-areas:
       "header header"
-      "options options"
       "globe globe"
       "period footer"
       "summary summary";
     grid-template-columns: min-content minmax(0, 1fr);
-    grid-template-rows: auto auto minmax(115px, 1fr) auto minmax(84px, 22svh);
+    grid-template-rows: auto minmax(115px, 1fr) auto minmax(84px, 22svh);
     column-gap: 12px;
     row-gap: 7px;
   }
 
   .header { width: 100%; padding-right: 0; gap: 7px; }
   .header h1 { font-size: 19px; white-space: normal; }
-  .options { padding: 0; display: flex; flex-wrap: wrap; gap: 3px 6px; justify-content: flex-start; }
-  .options::after { display: none; }
-  .options button { min-height: 42px; border-color: #84938b6b; }
-  .optionIcon { order: 0; width: 28px; height: 28px; }
-  .optionIcon svg { width: 15px; height: 15px; }
   .summary { align-self: stretch; background: #0b1111e8; }
   .period { font-size: 36px; align-self: center; }
   .footer { justify-items: end; }

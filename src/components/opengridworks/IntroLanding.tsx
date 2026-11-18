@@ -9,6 +9,7 @@ import { analysisHref, analysisTopics } from "@/lib/topic-analysis/catalog";
 import { BrandLogo } from "./BrandLogo";
 import type { IntroScene } from "./intro-particles";
 import styles from "./IntroLanding.module.css";
+import switcherStyles from "./PageSwitcher.module.css";
 
 type SceneStatus = "loading" | "ready" | "static";
 
@@ -91,15 +92,15 @@ export function IntroLanding() {
         <div className={styles.veil} />
       </div>
 
+      <nav className={switcherStyles.bar} aria-label="平台导航">
+        <Link href="#intro-globes">多维视图</Link>
+        <Link href="/visualization">专题分析</Link>
+      </nav>
       <div className={styles.frame}>
         <header className={styles.header}>
           <div className={styles.brand}>
             <BrandLogo />
           </div>
-          <nav className={styles.topNav} aria-label="平台导航">
-            <Link href="#intro-globes">多维视图</Link>
-            <Link href="/visualization">专题分析</Link>
-          </nav>
           {status === "ready" && (
             <button className={styles.controlButton} type="button" aria-label={paused ? "继续开屏动画" : "暂停开屏动画"} onClick={playPause}>
               {paused ? <Play size={17} aria-hidden="true" /> : <Pause size={17} aria-hidden="true" />}

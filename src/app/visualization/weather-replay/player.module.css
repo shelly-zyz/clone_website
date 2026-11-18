@@ -10,7 +10,7 @@
 }
 
 .standalone {
-  min-height: calc(100svh - 60px);
+  min-height: calc(100svh - var(--og-page-switcher-bottom));
   padding: 20px max(16px, calc((100% - 1060px) / 2));
 }
 
@@ -240,7 +240,7 @@
   box-shadow: 0 9px 24px #070d1852;
 }
 .embedded .header {
-  top: 71px;
+  top: var(--og-page-switcher-bottom);
   left: 50%;
   width: min(492px, calc(100% - 550px));
   transform: translateX(-50%);
@@ -254,7 +254,7 @@
 }
 .embedded .loadState {
   position: absolute;
-  top: 71px;
+  top: var(--og-page-switcher-bottom);
   left: 50%;
   width: min(492px, calc(100% - 36px));
   transform: translateX(-50%);
@@ -298,8 +298,7 @@
 .barRow span:last-child { text-align: right; }
 
 @media (max-width: 900px) {
-  .embedded .loadState { top: 106px; }
-  .embedded .header { top: 106px; left: 9px; right: 9px; width: auto; transform: none; padding: 7px 9px; }
+  .embedded .header { left: 9px; right: 9px; width: auto; transform: none; padding: 7px 9px; }
   .embedded .controls { bottom: calc(var(--og-globe-nav-space, 68px) + 7px); left: 7px; right: 7px; width: auto; transform: none; }
   .embedded .stage .canvas {
     top: 203px;

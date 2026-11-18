@@ -14,7 +14,7 @@ import { generationSeries } from "@/lib/topic-analysis/history";
 import { analysisContextHref, type WorkspaceContext } from "@/lib/workspace-context";
 import { WorkspaceFilterSelect } from "./WorkspaceSidebar";
 import styles from "./PowerRegionPanel.module.css";
-import switcherStyles from "./SceneSwitcher.module.css";
+import switcherStyles from "./PageSwitcher.module.css";
 
 type PowerView = NonNullable<WorkspaceContext["powerView"]>;
 type Update = (patch: WorkspaceContext) => void;
@@ -25,7 +25,7 @@ const regionOptions = chinaProvinces.map(({ code, name }) => ({ value: code, lab
 
 export function PowerViews({ view, onView }: { view: PowerView; onView: (view: PowerView) => void }) {
   return (
-    <nav className={switcherStyles.bar + " " + switcherStyles.scene + " " + styles.viewTabs} aria-label="电力地图视图">
+    <nav className={switcherStyles.bar} aria-label="电力地图视图">
       <button type="button" aria-pressed={view === "facilities"} onClick={() => onView("facilities")}>设备</button>
       <button type="button" aria-pressed={view !== "facilities"} onClick={() => { if (view === "facilities") onView("generation"); }}>电力分析</button>
     </nav>

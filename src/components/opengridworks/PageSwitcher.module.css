@@ -1,0 +1,47 @@
+.bar {
+  position: absolute;
+  z-index: 47;
+  inset: var(--og-page-switcher-top) 0 auto;
+  width: max-content;
+  max-width: calc(100% - 2 * var(--og-page-switcher-gutter, 10px));
+  margin-inline: auto;
+  display: flex;
+  align-items: stretch;
+  min-height: var(--og-page-switcher-height);
+  padding-inline: 4px;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: none;
+  border-radius: 999px;
+  background: linear-gradient(145deg, rgb(85 82 78 / 64%), rgb(57 56 54 / 70%) 56%, rgb(33 34 36 / 76%));
+  backdrop-filter: blur(18px);
+}
+
+.bar > :is(button, a) {
+  display: flex;
+  flex: 1 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding-inline: clamp(5px, 1.4vw, 20px);
+  border-radius: inherit;
+  background: transparent;
+  color: #fff;
+  font-size: clamp(11px, 1.2vw, 13px);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.bar > :is([aria-pressed="true"], [aria-current="page"]) {
+  color: #ffdfa5;
+}
+
+.bar > :is(button, a):is(:hover, :focus-visible) {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+@media (max-width: 460px) {
+  .bar:has(> :nth-child(5)) > :is(button, a) {
+    padding-inline: 2px;
+  }
+}

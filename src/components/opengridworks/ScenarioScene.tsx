@@ -1,8 +1,8 @@
-import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import switcherStyles from "./PageSwitcher.module.css";
 import styles from "./ScenarioScene.module.css";
 
-type ScenarioOption = { id: string; label: string; icon?: LucideIcon };
+type ScenarioOption = { id: string; label: string };
 type ScenarioPeriod = { id: string; label: string };
 type ScenarioRow = { id: string; label: string; value: number | null };
 
@@ -26,11 +26,10 @@ export function ScenarioScene({
         <h1>{title}</h1>
         {controls}
       </header>
-      <nav className={styles.options} aria-label="切换视图">
-        {options.map(({ id, label, icon: Icon }) => (
+      <nav className={switcherStyles.bar} aria-label="切换视图">
+        {options.map(({ id, label }) => (
           <button key={id} type="button" aria-pressed={id === selectedOption} onClick={() => onOptionChange(id)}>
-            {Icon && <span className={styles.optionIcon}><Icon size={19} aria-hidden="true" /></span>}
-            <span className={styles.optionLabel}>{label}</span>
+            {label}
           </button>
         ))}
       </nav>

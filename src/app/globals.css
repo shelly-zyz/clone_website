@@ -53,6 +53,10 @@
 }
 
 :root {
+  --og-page-header-top: max(12px, env(safe-area-inset-top));
+  --og-page-switcher-top: calc(var(--og-page-header-top) + 46px);
+  --og-page-switcher-height: 44px;
+  --og-page-switcher-bottom: calc(var(--og-page-switcher-top) + var(--og-page-switcher-height) + 8px);
   color-scheme: normal;
   --background: #151d24;
   --foreground: #e2e8f0;
@@ -3303,17 +3307,16 @@
 
 .og-globe-workspace {
   --og-gutter: clamp(10px, 1.15vw, 16px);
-  --og-workspace-top: max(12px, env(safe-area-inset-top));
-  --og-rail-top: calc(var(--og-workspace-top) + 46px);
+  --og-workspace-top: var(--og-page-header-top);
+  --og-rail-top: var(--og-page-switcher-top);
   --og-stage-left: calc(var(--og-sidebar-width) + 2 * var(--og-gutter));
   --og-stage-right: var(--og-gutter);
-  --og-stage-top: calc(var(--og-rail-top) + 3px);
+  --og-stage-top: var(--og-page-switcher-bottom);
   --og-stage-footer: 6px;
   --og-mobile-dock: 0px;
   --og-assistant-bottom: 112px;
   --og-assistant-clearance: calc(var(--og-assistant-bottom) + 106px);
   --og-dock-size: min(33svh, 286px);
-  --og-switcher-top: var(--og-rail-top);
   --og-space-glow: 32 55 81;
   --og-space-haze: 70 99 151;
   --og-panel-fill: linear-gradient(155deg, rgb(33 47 62 / 46%), rgb(9 16 27 / 54%) 75%);
@@ -3365,8 +3368,10 @@
   --og-rail-top: var(--og-workspace-top);
 }
 
-.og-globe-workspace:is(.is-earth-project, .is-economy-project, .is-carbon-project, .is-power-project) {
-  --og-stage-top: calc(var(--og-switcher-top) + 52px);
+@media (min-width: 901px) {
+  .og-globe-workspace {
+    --og-page-switcher-gutter: max(var(--og-stage-left), var(--og-stage-right));
+  }
 }
 
 .og-globe-workspace.is-earth-project:has(.og-weather-replay-stage) {
@@ -3493,7 +3498,6 @@
 
 .og-globe-workspace.is-power-statistics:not(.is-cinematic) {
   --og-power-rail: clamp(208px, 17vw, 270px);
-  --og-stage-top: calc(var(--og-switcher-top) + 42px);
   --og-globe-nav-space: calc(76px + env(safe-area-inset-bottom, 0px));
   --og-stage-right: calc(var(--og-power-rail) + 2 * var(--og-gutter));
 }
@@ -3528,12 +3532,10 @@
   .og-globe-workspace {
     --og-stage-left: var(--og-gutter);
     --og-stage-right: var(--og-gutter);
-    --og-rail-top: calc(var(--og-workspace-top) + 46px);
   }
 
   .og-globe-workspace:is(.is-earth-project, .is-economy-project) {
-    --og-rail-top: calc(var(--og-workspace-top) + 46px);
-    --og-switcher-top: var(--og-rail-top);
+    --og-rail-top: var(--og-page-switcher-top);
   }
 
   .og-globe-workspace:not(.is-cinematic, .is-power-statistics, :has(.og-weather-replay-stage)):has(> .og-forecast-region[data-dock="open"]),
