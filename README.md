@@ -1,195 +1,204 @@
-# AI Website Cloner Template
+# OpenGridWorks
 
-<a href="https://github.com/JCodesMore/ai-website-cloner-template/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a> <a href="https://github.com/JCodesMore/ai-website-cloner-template/stargazers"><img src="https://img.shields.io/github/stars/JCodesMore/ai-website-cloner-template?style=flat" alt="Stars" /></a> <a href="https://discord.gg/hrTSX5yTpB"><img src="https://img.shields.io/discord/1400896964597383279?label=discord" alt="Discord" /></a>
+面向电力能源、气象地球与碳排放的交互式三维地图、专题可视化与多智能体（V11）分析平台。
 
-A reusable template for reverse-engineering any website into a clean, modern Next.js codebase using AI coding agents. 
+项目基于 Next.js App Router 构建，集成 MapLibre GL、Three.js、ECharts / AntV G2 / VChart 与 PostgreSQL（PostGIS / TimescaleDB），通过「小云」统一语音/文本智能体串联数据查询、图表生成、时序预测回测与站内导航。
 
-**Recommended: [Claude Code](https://docs.anthropic.com/en/docs/claude-code) with Opus 4.7 for best results** — but works with a variety of AI coding agents.
+## 核心功能
 
-Point it at a URL, run `/clone-website`, and your AI agent will inspect the site, extract design tokens and assets, write component specs, and dispatch parallel builders to reconstruct every section.
+- **多专题三维地球与地图**：
+  - **电力与电网基础设施**：展示中国电源项目与输电线路（基于本地 OSM 数据集与 PostGIS 动态矢量瓦片），支持省级统计与装机/发电量交互筛选。
+  - **气象地球与回放**：基于 NOAA GFS 格点场渲染全球风场、气温等气象要素，支持 `/visualization/weather-replay` 时序回放；无法连接 NOMADS 或缺少 `wgrib2` 时自动降级为内置示例场。
+  - **碳排放地球**：基于 PostgreSQL 中存储的 GRACED Power 全球逐日格点帧（`kgC/h`），支持按日期与部门切换观察。
+  - **宏观经济专题**：提供全球经济体指标三维地球与对比分析工作台。
+- **「小云」多智能体与语音交互（`/api/xiaoyun`）**：
+  - 右下角常驻交互入口，支持文本与浏览器语音输入/播报。
+  - 基于 Pi 运行时与站内工具集，支持自然语言查数、地图定位与图层开关、页面跳转、Three.js 三维技术机制拆解（Anatomy），以及已审核文档的证据检索与原文溯源。
+- **V11 数据、可视化与分析闭环**：
+  - **共用数据库 Agent（`/api/data-agent`、MCP `/api/mcp/data-agent`）**：基于已审核语义目录与固定 SQL / 受控查询，按版本快照与 `DataRef` 交接电力、气象、碳三大专题数据；支持国家统计局（NBS）月度数据定时采集与 `/data-review` 人工复核发布。
+  - **可视化服务（`/api/visualization`、MCP `/api/mcp/visualization`）**：支持 ECharts、VChart、AntV 单指标模板出图、Data Storytelling 自定义制图（含四段式文字解读）与可全屏数据看板。
+  - **异步分析与预测 Worker（`/api/analysis`、`npm run analysis:worker`）**：通过 PostgreSQL 任务队列（`results.analysis_job`）执行描述统计、KMeans 聚类、StatsForecast 时序预测与回测，并保留模型参数、数据版本与误差指标。
 
-## Demo
+## 技术栈
 
-[![Watch the demo](docs/design-references/comparison.png)](https://youtu.be/O669pVZ_qr0)
+| 领域 | 技术选型 |
+| --- | --- |
+| 前端框架 | Next.js 16 (App Router)、React 19、TypeScript 5 |
+| 样式与组件 | Tailwind CSS v4、shadcn/ui、Base UI、Lucide React |
+| 地图与三维渲染 | MapLibre GL、Three.js、d3-geo、TopoJSON |
+| 图表与可视化 | ECharts 6、AntV G2 5、VisActor VChart、mcp-echarts |
+| 智能体与协议 | `@earendil-works/pi-agent-core`、`@earendil-works/pi-ai`、`@modelcontextprotocol/sdk`、`@xiaoyun/voice` |
+| 数据与存储 | PostgreSQL（PostGIS、TimescaleDB）、S3 兼容对象存储（气象回放） |
+| 离线计算与脚本 | Python（`xarray`、`netCDF4`、`numpy`、StatsForecast）、Node.js 24+ |
 
-> Click the image above to watch the full demo on YouTube.
+## 页面路由与主要接口
 
-## Quick Start
+| 路径 | 用途 |
+| --- | --- |
+| `/` | 主地图应用与三维地球入口 |
+| `/workspace` | 综合分析工作台 |
+| `/visualization`、`/visualization/[topic]` | 电力、气象、碳、经济专题可视化与自定义制图 |
+| `/visualization/weather-replay` | 气象格点时序回放播放器 |
+| `/data-review` | 国家统计局等入库批次的人工审核页面（需审核令牌） |
+| `/api/xiaoyun` | 小云对话、语音与状态接口 |
+| `/api/data-agent`、`/api/mcp/data-agent` | 已发布指标目录、自然语言查数与 MCP 端点 |
+| `/api/visualization`、`/api/mcp/visualization` | 图表渲染与可视化 MCP 端点 |
+| `/api/analysis`、`/api/mcp/analysis` | 统计、聚类、预测与回测任务接口 |
+| `/api/weather-earth`、`/api/carbon-earth` | 气象地球与碳排放地球数据接口 |
+| `/api/data/vector-tiles/postgis/[z]/[x]/[y]` | PostGIS 电力设施动态矢量瓦片 |
+| `/api/database/health` | 数据库连接健康检查 |
 
-1. **Clone this repository**
-   ```bash
-   git clone https://github.com/JCodesMore/ai-website-cloner-template.git my-clone
-   cd my-clone
-   ```
-2. **Install dependencies**
+## 快速开始
+
+### 环境要求
+
+- **Node.js**：24+（见 `.nvmrc` 与 `package.json`）
+- **PostgreSQL**：建议搭配 PostGIS 与 TimescaleDB 扩展（完整 V11 数据库与矢量瓦片能力需要）
+- **可选工具**：
+  - `wgrib2`：用于拉取并解析 NOAA GFS 实时气象场
+  - Python 环境：用于运行 `scripts/sync-carbon-graced.py` 及分析 Worker
+
+### 本地开发
+
+1. **安装依赖**
+
    ```bash
    npm install
    ```
-3. **Start your AI agent** — Claude Code recommended:
+
+2. **配置环境变量**
+
+   参考 `.env.example` 创建 `.env.local`，按需填写数据库连接与模型凭据：
+
    ```bash
-   claude --chrome
+   cp .env.example .env.local
    ```
-4. **Run the skill**:
+
+   > 本地开发脚本 `npm run dev` 与 `npm run preview:open` 也会按约定从 `$HOME/.config/opengridworks/` 读取 `map-database.env`、`data-agent-database.env`、`xiaoyun-providers.env` 与 `database-tunnel.env`（仅用户可读权限 `0600`），避免将密钥放入仓库目录。
+
+3. **启动开发服务器**
+
+   ```bash
+   npm run dev
    ```
-   /clone-website <target-url1> [<target-url2> ...]
+
+   如需自动恢复 SSH 数据库隧道并执行本地预检后打开浏览器：
+
+   ```bash
+   npm run preview:open -- 3207
    ```
-5. **Customize** (optional) — after the base clone is built, modify as needed
 
-> Using a different agent? Open `AGENTS.md` for project instructions — most agents pick it up automatically.
-
-## Supported Platforms
-
-| Agent                                                         | Status                     |
-| ------------------------------------------------------------- | -------------------------- |
-| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | **Recommended** — Opus 4.7 |
-| [Codex CLI](https://github.com/openai/codex)                  | Supported                  |
-| [OpenCode](https://opencode.ai/)                              | Supported                  |
-| [GitHub Copilot](https://github.com/features/copilot)         | Supported                  |
-| [Cursor](https://cursor.com/)                                 | Supported                  |
-| [Windsurf](https://codeium.com/windsurf)                      | Supported                  |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli)     | Supported                  |
-| [Cline](https://github.com/cline/cline)                       | Supported                  |
-| [Roo Code](https://github.com/RooCodeInc/Roo-Code)            | Supported                  |
-| [Continue](https://continue.dev/)                             | Supported                  |
-| [Amazon Q](https://aws.amazon.com/q/developer/)               | Supported                  |
-| [Augment Code](https://www.augmentcode.com/)                  | Supported                  |
-| [Aider](https://aider.chat/)                                  | Supported                  |
-
-## Prerequisites
-
-- [Node.js](https://nodejs.org/) 24+
-- An AI coding agent (see [Supported Platforms](#supported-platforms))
-
-## Tech Stack
-
-- **Next.js 16** — App Router, React 19, TypeScript strict
-- **shadcn/ui** — Radix primitives + Tailwind CSS v4
-- **Tailwind CSS v4** — oklch design tokens
-- **Lucide React** — default icons (replaced by extracted SVGs during cloning)
-
-## How It Works
-
-The `/clone-website` skill runs a multi-phase pipeline:
-
-1. **Reconnaissance** — screenshots, design token extraction, interaction sweep (scroll, click, hover, responsive)
-2. **Foundation** — updates fonts, colors, globals, downloads all assets
-3. **Component Specs** — writes detailed spec files (`docs/research/components/`) with exact computed CSS values, states, behaviors, and content
-4. **Parallel Build** — dispatches builder agents in git worktrees, one per section/component
-5. **Assembly & QA** — merges worktrees, wires up the page, runs visual diff against the original
-
-Each builder agent receives the full component specification inline — exact `getComputedStyle()` values, interaction models, multi-state content, responsive breakpoints, and asset paths. No guessing.
-
-## Use Cases
-
-- **Platform migration** — rebuild a site you own from WordPress/Webflow/Squarespace into a modern Next.js codebase
-- **Lost source code** — your site is live but the repo is gone, the developer left, or the stack is legacy. Get the code back in a modern format
-- **Learning** — deconstruct how production sites achieve specific layouts, animations, and responsive behavior by working with real code
-
-## Not Intended For
-
-- **Phishing or impersonation** — this project must not be used for deceptive purposes, impersonation, or any activity that breaks the law.
-- **Passing off someone's design as your own** — logos, brand assets, and original copy belong to their owners.
-- **Violating terms of service** — some sites explicitly prohibit scraping or reproduction. Check first.
-
-## Project Structure
-
-```
-src/
-  app/              # Next.js routes
-  components/       # React components
-    ui/             # shadcn/ui primitives
-    icons.tsx       # Extracted SVG icons
-  lib/utils.ts      # cn() utility
-  types/            # TypeScript interfaces
-  hooks/            # Custom React hooks
-public/
-  images/           # Downloaded images from target
-  videos/           # Downloaded videos from target
-  seo/              # Favicons, OG images
-docs/
-  research/         # Extraction output & component specs
-  design-references/ # Screenshots
-scripts/
-  sync-agent-rules.sh  # Regenerate agent instruction files
-  sync-skills.mjs      # Regenerate /clone-website for all platforms
-AGENTS.md           # Agent instructions (single source of truth)
-CLAUDE.md           # Claude Code config (imports AGENTS.md)
-GEMINI.md           # Gemini CLI config (imports AGENTS.md)
-```
-
-## Commands
+### Docker 部署
 
 ```bash
-npm run dev    # Start dev server
-npm run build  # Production build
-npm run lint   # ESLint check
-npm run typecheck # TypeScript check
-npm run check  # Run lint + typecheck + build
+# 构建并运行生产容器（默认映射 3000 端口）
+docker compose up app --build
+
+# 运行开发容器（默认映射 3001 端口）
+docker compose up dev --build
 ```
 
-## Weather Data
+## 常用命令
 
-The weather view uses GFS fields from NOAA NOMADS and renders them with an earth.nullschool-style Canvas globe. Runtime data is cached in `.weather-cache/` and refreshed through:
+| 命令 | 说明 |
+| --- | --- |
+| `npm run dev` | 使用本地配置加载器启动 Next.js 开发服务器 |
+| `npm run build` | 执行 Next.js 生产构建 |
+| `npm run start` | 启动生产服务 |
+| `npm run lint` | 运行 ESLint 代码检查 |
+| `npm run typecheck` | 运行 `next typegen` 与 TypeScript 类型检查 |
+| `npm run check` | 依次执行 `lint`、`typecheck` 与 `build` |
+| `npm run preview:open` | 恢复数据库隧道、运行预检并打开本地预览 |
+| `npm run preview:ssh` | 通过私有 SSH 隧道打开远程工作台预览 |
+| `npm run weather:update` | 拉取并更新 `.weather-cache/` 中的 GFS 气象数据 |
+| `npm run carbon:sync` | 下载并预处理 GRACED 碳排放月度数据 |
+| `npm run carbon:import` | 将处理后的 GRACED 帧导入 PostgreSQL |
+| `npm run analysis:worker` | 启动 V11 异步统计与预测分析 Worker |
+
+## 数据接入与数据库初始化
+
+### 1. 数据库初始化与 V11 迁移
+
+在完成 `scripts/v11-schema-baseline.sql` 的目标数据库中，依次执行 `scripts/` 下的 V11 初始化与发布脚本（需先安装对应 PostgreSQL 版本的扩展并配置 TimescaleDB）：
+
+1. `scripts/v11-data-agent-extensions.sql`
+2. `scripts/v11-data-agent-schema.sql`
+3. `scripts/v11-data-agent-nbs.sql`
+4. `scripts/v11-data-agent-refresh-log.sql`
+5. `scripts/v11-data-agent-context.sql`
+6. `scripts/v11-data-agent-tiles.sql`
+7. `scripts/v11-xiaoyun-context.sql`
+8. `scripts/v11-data-agent-publish.sql`
+
+验证 Data Agent 与三专题基准数据：
 
 ```bash
-npm run weather:update
+node scripts/verify-v11-data-agent.mjs
+node scripts/verify-v11-data-agent-benchmarks.mjs
 ```
 
-The updater requires `wgrib2` to be installed and available on `PATH` for the same shell that starts Next.js. On Windows, install `wgrib2`, then run:
+### 2. 气象数据（NOAA GFS）
 
-```powershell
+气象地球从 NOAA NOMADS 获取 GFS 格点场并缓存在 `.weather-cache/`。运行更新前需确保 `wgrib2` 在当前 Shell 的 `PATH` 中可用：
+
+```bash
 wgrib2 -version
 npm run weather:update
 ```
 
-If `wgrib2` is missing or NOMADS cannot be reached, `/api/weather-earth?request=status` reports the problem and the UI falls back to the built-in demonstration field instead of presenting it as live data.
+当 `wgrib2` 不可用或无法访问 NOMADS 时，`/api/weather-earth?request=status` 会返回状态说明，前端将自动回退至内置演示场。
 
-## GRACED Carbon Data
+### 3. 碳排放数据（GRACED）
 
-The carbon-emission globe reads daily GRACED frames from PostgreSQL. Download and
-prepare one month with the Python environment that provides `xarray`, `netCDF4`,
-and `numpy`:
+碳排放地球从 PostgreSQL 读取逐日 GRACED 帧。先使用包含 `xarray`、`netCDF4` 与 `numpy` 的 Python 环境准备数据：
 
-```powershell
-& "C:\Users\53472\anaconda3\python.exe" scripts/sync-carbon-graced.py --sector Power --month 2026-04
+```bash
+python scripts/sync-carbon-graced.py --sector Power --month 2026-04
 ```
 
-Import the generated manifest and compressed daily frames:
+随后导入生成的 manifest 与压缩日帧（幂等写入 `website_data.carbon_emission_frames`，支持 `total`、`Power`、`Industry`、`Residential`、`GroundTransportation`、`DomesticAviation`、`InternationalAviation`、`InternationalShipping`）：
 
-```powershell
+```bash
 npm run carbon:import -- --manifest "../data/carbon-graced/processed/Power/2026-04/manifest.json"
 ```
 
-The importer stores one gzip-compressed Float32 grid per date and sector in
-`website_data.carbon_emission_frames`. It is idempotent and updates matching
-`(observed_on, sector)` rows instead of creating duplicates. Use a different
-official sector code (`total`, `Industry`, `Residential`,
-`GroundTransportation`, `DomesticAviation`, `InternationalAviation`, or
-`InternationalShipping`) to add another layer.
+## 项目结构
 
-### If using docker
-
-```bash
-docker compose up app --build # build and run the app
-docker compose up dev --build # run the app in dev mode on port 3001
+```text
+src/
+  app/
+    page.tsx                  # 主地图入口
+    workspace/                # 综合分析工作台
+    visualization/            # 专题可视化、自定义制图与气象回放
+    data-review/              # 数据入库审核台
+    api/                      # 小云、Data Agent、可视化、分析、MCP 与地图数据接口
+  components/
+    opengridworks/            # 地球视图、小云助手、能源/气象/经济业务组件
+    ui/                       # 基础 UI 组件（shadcn/ui）
+  lib/
+    xiaoyun/                  # 小云总 Agent 运行时、技能与工具编排
+    data-agent/               # 语义目录、固定查询与会话管理
+    visualization-agent/      # 图表模板与 Data Storytelling 封装
+    analysis-agent/           # 统计、聚类与预测任务调度
+    weather-replay/           # 气象回放数据处理与读取
+    topic-analysis/           # 专题分析计算与解读生成
+scripts/                      # SQL 迁移、数据同步/导入脚本、Worker 与 V11 验证脚本
+docs/                         # V11 架构、工具契约、气象回放与验收文档
+public/                       # 静态资源、地图数据、音频与示例文件
+deepagent/                    # 早期 DeepAgent 兼容实现
+vendor/                       # 本地语音包（@xiaoyun/voice）
 ```
 
-## Updating for Other Platforms
+## 延伸文档
 
-Two source-of-truth files power all platform support. Edit the source, then run the sync script:
+- [V11 共用数据库 Agent](docs/v11-data-agent.md)
+- [V11 小云业务说明](docs/v11-visualization-analysis-agents.md)
+- [小云总 Agent 工具与站内动作](docs/v11-xiaoyun-tools.md)
+- [Agent 业务规则与预测验收](docs/v11-agent-policy.md)
+- [V11 前四阶段验收记录](docs/v11-phase-1-4-acceptance.md)
+- [气象回放说明](docs/weather-replay.md)
+- [气候与可再生能源数据](docs/weather-model-forecast.md)
 
-| What                   | Source of truth                         | Sync command                       |
-| ---------------------- | --------------------------------------- | ---------------------------------- |
-| Project instructions   | `AGENTS.md`                             | `bash scripts/sync-agent-rules.sh` |
-| `/clone-website` skill | `.claude/skills/clone-website/SKILL.md` | `node scripts/sync-skills.mjs`     |
+## 许可证
 
-Each script regenerates the platform-specific copies automatically. Agents that read the source files natively need no regeneration.
-
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=JCodesMore/ai-website-cloner-template&type=Date)](https://star-history.com/#JCodesMore/ai-website-cloner-template&Date)
-
-## License
-
-MIT
+[MIT](LICENSE)
