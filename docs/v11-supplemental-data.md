@@ -1,22 +1,22 @@
 # 四专题补充数据入库与语义目录
 
-本轮按气象、电力、碳、经济核对用户提供的七组来源。覆盖基线来自项目代码及既有验收记录。正式 `zyz` 无法连接期间，实际基线和正式入库状态需要在服务器复核。Beads 追踪 `ogw-22p.9.91`。
+本轮按气象、电力、碳、经济核对用户提供的七组来源。逐数据集的时间、空间、单位、格式及入库状态见 [四专题补充数据清单](./v11-supplemental-dataset-inventory.md)。覆盖基线来自项目代码及既有验收记录。正式 `zyz` 无法连接期间，实际基线和正式入库状态需要在服务器复核。Beads 追踪 `ogw-22p.9.91`。
 
 ## 来源与缺口
 
 | 来源 | 专题与用途 | 核验结果及接入位置 |
 | --- | --- | --- |
 | `D:\10.19数据集\carbon databases` | 碳。先按文件确认排放、碳价、因子或栅格等实际产品，检查与既有 GRACED 和 OECD 碳贸易重叠 | 只有服务器路径，待通过 `/mnt/d/10.19数据集/carbon databases` 或 Windows 侧确认。先采集相对路径、大小、哈希、格式、版本及授权，再提取气体、部门、口径、单位、时空粒度。现有碳产品仍沿用各自的事实表。 |
-| [中国能源转型政策 v1](https://doi.org/10.6084/m9.figshare.32182515.v1) | 电力、碳及经济的政策研究 | 国家、省级、地级三个层级共有 1,736 个地区年度、36 个标签和小计字段，整理为 62,496 条分类计数。年份按生效日，地方表含 2025 年记录。多个标签可以来自同一政策，分类次数不能当作独立政策数。下载的 Stata 代码显示中央汇总段引用了部分 `local` 输入，层级比较需核实。 |
+| [中国能源转型政策 v1](https://doi.org/10.6084/m9.figshare.32182515.v1) | 电力、碳及经济的政策研究 | 本机已导入 7,223 个逐条政策 ID 和 62,496 条分类计数。国家、省级、地级三个层级共 1,736 个地区年度、36 个标签和小计字段。分类计数按生效日，地方表含 2025 年记录。多个标签可以来自同一政策，分类次数不能当作独立政策数。下载的 Stata 代码显示中央汇总段引用了部分 `local` 输入，层级比较需核实。 |
 | [Global Renewables Watch v1.0](https://github.com/microsoft/global-renewables-watch/releases/tag/v1.0) | 电力。全球陆上风机和商业光伏的卫星检测及季度分布 | 两个 GeoPackage 与 GitHub 发布 SHA-256 一致。风机 375,197 条，光伏 86,345 条，其中 5 条空几何保留且有标记。README 的光伏数为 86,410。原文件几何为 EPSG:3857，使用 WKB 和 SRID，保留原发布国家标签、地类及其他字段。建设季度是推断值，2017Q4 可能包含此前已建成设施。 |
-| [夜间灯光推算的 1 km 用电量及实际 GDP v1](https://doi.org/10.6084/m9.figshare.17004523.v1) | 电力的空间用电密度和经济的空间产出 | 两份 ZIP 各有 1992–2019 的 28 个年包，原压缩文件合计 6,182,719,292 字节。2019 年的两份样本通过 ZIP CRC，均为 36,080 × 15,517 的 World Mollweide 1,000 米浮点栅格，NoData 约为 −3.402823 × 10³⁸。论文报告用电单位 kWh、实际 GDP 为 2017 年不变价百万美元。正式登记到 SeaweedFS 和 V11 对象目录前，仍需逐年验证全量文件哈希、栅格头及聚合口径。 [论文](https://doi.org/10.1038/s41597-022-01322-5) |
+| [夜间灯光推算的 1 km 用电量及实际 GDP v1](https://doi.org/10.6084/m9.figshare.17004523.v1) | 电力的空间用电密度和经济的空间产出 | 两份 ZIP 各有 1992–2019 的 28 个年包，合计 6,182,719,292 字节。整包与发布方 MD5 一致，全部年度包通过 CRC，56 个栅格头已在本机数据库登记。1992–2013 为 36,080 × 15,515，2014–2019 为 36,080 × 15,517，均为 World Mollweide 1,000 米浮点栅格，NoData 约 −3.402823 × 10³⁸。论文报告用电单位 kWh、实际 GDP 为 2017 年不变价百万美元。正式 SeaweedFS 与 V11 对象目录待连通。 [论文](https://doi.org/10.1038/s41597-022-01322-5) |
 | [中国城市发电及电力部门 CO₂ 估算 v1](https://doi.org/10.6084/m9.figshare.30338773.v1) | 电力与碳共用一张城市年度事实表 | 352 个城市 × 20 年，7,040 条。保留源六位行政区划代码、英文城市名、工作簿行号和原单位。发电量为亿千瓦时，排放量为万吨 CO₂。研究用 PSO-BP 估算城市发电量，以 2021 年省级电力排放因子计算 2000–2019 年排放。 [论文](https://doi.org/10.1038/s41597-026-07484-w) · [计算代码](https://doi.org/10.6084/m9.figshare.30338803) |
 | [Awesome Public Datasets](https://github.com/awesomedata/awesome-public-datasets) | 多专题来源索引 | 电力的全球电厂库可补电厂坐标和容量，先与 OSM 资产核对。经济地球已用 World Bank WDI 的 GDP、人均 GDP、出口额，其他序列按指标代码检查。气象可对照 NOAA 地面站日观测与 Copernicus 再分析。碳相关条目先与服务器原始目录去重。 [WRI 全球电厂库](https://datasets.wri.org/datasets/global-power-plant-database) · [NOAA GHCN-Daily](https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.ncdc%3AC00861) · [Copernicus 气候数据](https://cds.climate.copernicus.eu/datasets) |
 | [Global Weather Data](https://global-weather-data.com/) | 气象。城市历史天气、城市预报、格点预报 | 网站公开提供产品介绍并显示下载额度及分档，匿名打开城市历史下载入口会显示账户登录。取得样本后需核验底层来源及版本、时区、变量和入库使用条件。城市历史观测或再分析可补 GFS/WRF/ClimaX 预报和既有回放的时间维度。 |
 
 ## 已核对的数据产品与字段
 
-**能源政策**。原始 ZIP 与 Figshare v1 的 MD5 一致，归档 CRC 通过。按清洁能源、能源革命、能源结构、能源转型、绿色能源、新能源、可再生能源七组检索词，分别提供中央和地方的详细清单、目标和工具分类、政策正文，以及 Stata 中间结果。详细清单包含 `gid`、标题、发文字号、公布和施行日期、时效性、制定机关和效力位阶等。分类表包含目标与工具的主类和子类，可筛减排、能效、电力转型、碳定价、财政金融和绿色产业。论文报告 7,295 份文本。附件内 7,308 个正文文件对应 7,223 个不同的 `gid`，其中 82 个 ID 出现在多个检索词目录，分类 CSV 可匹配其中 7,221 个 ID。保留论文与附件各自的数量。逐条导入时保留 `gid × 检索词` 关系和日期、分类来源，不按目录或 CSV 原始行数统计唯一政策。问答适合从公开元数据和多标签开始，正文发布另行核验原始文件的再分发条件。当前本机已入库的是行政层级的年度汇总。 [政策论文](https://doi.org/10.1038/s41597-026-08370-1) · [Figshare 发布包](https://doi.org/10.6084/m9.figshare.32182515.v1)
+**能源政策**。原始 ZIP 与 Figshare v1 的 MD5 一致，归档 CRC 通过。按清洁能源、能源革命、能源结构、能源转型、绿色能源、新能源、可再生能源七组检索词，分别提供中央和地方的详细清单、目标和工具分类、政策正文，以及 Stata 中间结果。详细清单包含 `gid`、标题、发文字号、公布和施行日期、时效性、制定机关和效力位阶等。分类表包含目标与工具的主类和子类，可筛减排、能效、电力转型、碳定价、财政金融和绿色产业。论文报告 7,295 份文本。附件内 7,308 个正文文件对应 7,223 个不同的 `gid`，其中 82 个 ID 出现在多个检索词目录，分类 CSV 可匹配其中 7,221 个 ID，6,551 个 ID 的分类字段有值。本机已导入逐条元数据、多标签和年度汇总，保留 `gid × 检索词` 关系、日期原文、分类来源和原正文归档路径。 [政策论文](https://doi.org/10.1038/s41597-026-08370-1) · [Figshare 发布包](https://doi.org/10.6084/m9.figshare.32182515.v1)
 
 **风光设施**。风机数据到单台点位，可按国家、首次识别季度和原地类统计台数。光伏到场站多边形，可统计空间分布和面积。附件另带风机的局部 UTM 字段及光伏的来源图层、原 `area` 字段。论文的伴随产品包括按国家推算的装机量，所核对的两个 GeoPackage 未提供逐站实测 MW 或 MWh 字段。`landcover_in_2018` 来自 2018 年地类基准，可用于设施与地类叠加，性质是固定年度的参考。2017Q4 表示已在序列起点识别到，新增量分析需与 2018Q1 后的首次识别分开。 [GRW 方法与使用说明](https://arxiv.org/html/2503.14860v1)
 
@@ -30,10 +30,10 @@
 
 | 专题 | 具体产品与补充指标 | 核验状态 |
 | --- | --- | --- |
-| 气象 | NOAA GHCN-Daily 的站点日最高／最低气温、降水和雪量，用于实测对照。Copernicus ERA5 单层逐小时可补格点风、温度和辐射。 [NOAA 数据说明](https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.ncdc%3AC00861) · [ERA5 产品](https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels) | 数据说明已核对。保留观测与再分析来源，先与项目现有回放时空范围去重。 |
-| 电力 | WRI 全球电厂库提供 `gppd_idnr`、坐标、容量 MW、燃料、投运年、业主和部分年度发电量 GWh，实际来源值和估算值有独立列。 [WRI 发布页](https://datasets.wri.org/datasets/global-power-plant-database) | 下载检查了官方仓库 CSV 快照，含 34,936 行、167 个国家代码。2019 年发电字段约 72% 为空，适合优先补电厂地点、燃料和装机。正式以固定发布 v1.3.0 下载项为准，与现有 OSM 和 GRW 资产按名称、坐标和设施层级对照。 |
-| 碳 | World Bank 的 EDGAR 国家和地区年度序列。`EN.GHG.CO2.MT.CE.AR5` 对应不含土地利用、土地利用变化与林业的 CO₂，`EN.GHG.ALL.MT.CE.AR5` 对应同边界的全部温室气体。 [CO₂ 指标](https://data.worldbank.org/indicator/EN.GHG.CO2.MT.CE.AR5) · [温室气体指标](https://data.worldbank.org/indicator/EN.GHG.ALL.MT.CE.AR5) | CO₂ 指标 API 已实测返回 1970–2024，含经济体及地区聚合。用途为国家年排放，与 GRACED 电力日格网、OECD 隐含碳贸易和城市电力碳分别使用。服务器碳目录仍待核对重叠。 |
-| 经济 | Harvard Atlas 按出口国、进口国、商品编码及年份提供贸易结构，并可分析商品复杂度。HS 1992 序列自 1995 年起，可补目前 WDI 总出口额的商品维度。 [Atlas 下载与分类说明](https://atlas.hks.harvard.edu/data-downloads) | 已核对下载说明。以商品编码版本为维度，保留校准方法，避免把不同 HS 版本直接拼接。 |
+| 气象 | NOAA GHCN-Daily 的站点日最高／最低气温、降水，用于实测对照。Copernicus ERA5 单层逐小时可补格点风、温度和辐射。 [NOAA 数据说明](https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.ncdc%3AC00861) · [ERA5 产品](https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels) | NOAA 首批导入 2024 年中国站点并保留观测质量码。ERA5 待和项目现有回放时空范围去重。 |
+| 电力 | WRI 全球电厂库提供 `gppd_idnr`、坐标、容量 MW、燃料、投运年、业主和部分年度发电量 GWh，来源报告值和模型估算值分别留存。 [WRI 发布页](https://datasets.wri.org/datasets/global-power-plant-database) | 官方 v1.3.0 已校验并在本机导入 34,936 行、167 个国家代码。2019 年发电字段约 72% 为空。正式导入时核对现有 OSM 和 GRW 资产的覆盖。 |
+| 碳 | World Bank 的 EDGAR 国家和地区年度序列。`EN.GHG.CO2.MT.CE.AR5` 对应不含土地利用、土地利用变化与林业的 CO₂，`EN.GHG.ALL.MT.CE.AR5` 对应同边界的全部温室气体。 [CO₂ 指标](https://data.worldbank.org/indicator/EN.GHG.CO2.MT.CE.AR5) · [温室气体指标](https://data.worldbank.org/indicator/EN.GHG.ALL.MT.CE.AR5) | 两项指标 1970–2024 年数据均已本机导入，保留经济体、地区聚合和缺测。与 GRACED 电力日格网、OECD 隐含碳贸易和城市电力碳分别使用。服务器碳目录仍待核对重叠。 |
+| 经济 | Harvard Atlas 按经济体、贸易伙伴或商品编码及年份提供贸易结构，并可分析商品复杂度。HS 1992 序列自 1995 年起，可补目前 WDI 总出口额的商品维度。 [Atlas 下载与分类说明](https://atlas.hks.harvard.edu/data-downloads) | 固定 v18.0 的双边年汇总与两位商品章文件，校验源哈希。按商品编码版本保留同源进口、出口，六位双边商品明细保留为独立产品。 |
 
 ## 数据模型与运行方式
 
@@ -51,10 +51,19 @@
 | `city.xlsx` | [城市工作簿](https://figshare.com/ndownloader/files/58663324) |
 | `national.dta` / `provincial.dta` / `prefecture.dta` | [国家](https://ndownloader.figshare.com/files/64283241) / [省级](https://ndownloader.figshare.com/files/64283253) / [地级](https://ndownloader.figshare.com/files/64283250) |
 | `wind.gpkg` / `solar.gpkg` | [风机](https://github.com/microsoft/global-renewables-watch/releases/download/v1.0/wind_all_2024q2_v1.gpkg) / [光伏](https://github.com/microsoft/global-renewables-watch/releases/download/v1.0/solar_all_2024q2_v1.gpkg) |
+| `policies.zip` | [逐条政策数据源包](https://ndownloader.figshare.com/files/64282698) |
+| `wdi-CO2.json` / `wdi-ALL.json` / `wdi-regions.json` | [CO₂ 观察值](https://api.worldbank.org/v2/country/all/indicator/EN.GHG.CO2.MT.CE.AR5?format=json&date=1970:2024&per_page=20000) / [全部温室气体](https://api.worldbank.org/v2/country/all/indicator/EN.GHG.ALL.MT.CE.AR5?format=json&date=1970:2024&per_page=20000) / [地区元数据](https://api.worldbank.org/v2/country/all?format=json&per_page=400) |
+| `wri-v1.3.0.zip` | [WRI 发布页的 v1.3.0 ZIP](https://datasets.wri.org/datasets/global-power-plant-database) |
+| `ghcnd-2024.csv.gz` / `ghcnd-stations.txt` | [2024 年观测](https://www.ncei.noaa.gov/pub/data/ghcn/daily/by_year/2024.csv.gz) / [站点元数据](https://www.ncei.noaa.gov/pub/data/ghcn/daily/ghcnd-stations.txt) |
+| `atlas-hs92-country-product-2.csv` / `atlas-hs92-country-country.csv` | [两位商品章](https://dataverse.harvard.edu/api/access/datafile/13685112?format=original) / [双边国家总额](https://dataverse.harvard.edu/api/access/datafile/13685107?format=original) |
+| `electricity.zip` / `gdp.zip` | [用电量栅格](https://ndownloader.figshare.com/files/31456843) / [GDP 栅格](https://ndownloader.figshare.com/files/31456837) |
 
 ```bash
 python3 scripts/import-v11-supplemental.py /path/to/verified-sources \
-  --dataset city --dataset policy --dataset wind --dataset solar
+  --dataset city --dataset policy --dataset policy-documents --dataset wind --dataset solar \
+  --dataset wri-plants --dataset wdi-emissions --dataset ghcn-cn-2024 --dataset atlas-trade
 ```
+
+栅格可用 `--dataset rasters` 计算并入库逐年度资产信息。正式对象登记时同时传 `--raster-s3-endpoint`，由已配置的 `boto3` 凭据访问 SeaweedFS `raw` 桶。导入在整包回读并比对 SHA-256 后写入 `catalog.file_object` 与按年资产记录，直接使用同一份原始发布压缩包。栅格专题地图的 COG、瓦片和区域统计需要后续派生层。
 
 复核正式库时，先核对现有发布目录与文件版本，然后运行导入并从只读角色和 MCP 检索目录。正式问数发布需为上述口径配置专用查询和版本审核，避免让城市年估算落入既有省级月度发电量或 GRACED 全球日帧查询。

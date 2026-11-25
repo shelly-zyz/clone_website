@@ -1,0 +1,235 @@
+# OpenGridWorks 四专题补充数据清单
+
+核验日期为 2026 年 11 月 25 日。清单覆盖本批七组来源及从 Awesome Public Datasets 筛出的具体产品。本机 PostgreSQL 已有 15 个源版本、2,307,277 条事实记录及 56 个年度栅格资产条目。正式 PostgreSQL `zyz` 和 SeaweedFS 尚未连通。同一城市工作簿及政策数据由多个专题引用，底表和源文件只登记一次。
+
+## 气象
+
+### NOAA GHCN-Daily China Station Observations (2024)
+
+- 数据名称：NOAA GHCN-Daily 中国站点逐日观测
+- 时间范围：2024-01-01 至 2024-12-31，逐日。各站各要素覆盖随实际观测变化。
+- 空间范围：NOAA 站点国家代码 `CH`，本批 201 个站点。
+- 空间分辨率：站点级点位，站间距不规则。
+- 数据单位：日最高／最低气温为 0.1 °C，日降水量为 0.1 mm。保留源整数与质量标记。
+- 数据格式：GZIP 压缩 CSV，站点清单为定宽 TXT。
+- 原始坐标系：十进制度经纬度。原始站点文件未单独标注 EPSG 编号。
+- 入库状态：本机已入库 197,587 条，含 34 条有源质量标记的降水记录。正式库待连通。
+- 数据来源：[NOAA GHCN-Daily 数据说明](https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.ncdc%3AC00861)
+
+### Global Weather Data – Historical City Weather
+
+- 数据名称：Global Weather Data 城市历史天气，基于 ERA5 再分析
+- 时间范围：逐小时，官网说明可回溯十年以上。实际首末日期随地点、变量和导出窗口核验。
+- 空间范围：全球逾 12,000 个居民地，实际地点列表待样本核验。
+- 空间分辨率：城市级点序列，底层 ERA5 网格不等同于城市采样分辨率。
+- 数据单位：随变量变化，包括温度、风速风向、降水、辐射和土壤变量。待导出字段与单位表核验。
+- 数据格式：CSV 或 API 响应。
+- 原始坐标系：以源地点经纬度表示，导出坐标基准待核验。
+- 入库状态：说明已核对。下载入口需登录，尚未取得站点导出样本。
+- 数据来源：[Global Weather Data](https://global-weather-data.com/)
+
+### Global Weather Data – City Forecasts
+
+- 数据名称：Global Weather Data 城市逐小时预报，基于 ECMWF
+- 时间范围：未来最多 15 天，逐小时，官网说明每日滚动更新四次。待核验起报与有效时间字段。
+- 空间范围：全球可查询居民地。
+- 空间分辨率：城市级点位序列。
+- 数据单位：随变量变化，包括温度、气压、风、降水和辐射。待样本核验单位与累计时段。
+- 数据格式：CSV 或 API 响应。
+- 原始坐标系：地点经纬度，导出坐标基准待核验。
+- 入库状态：说明已核对，待取得导出样本或授权 API。
+- 数据来源：[城市预报](https://global-weather-data.com/dashboard/forecast/)
+
+### Global Weather Data – Grid Forecasts
+
+- 数据名称：Global Weather Data 全球格点预报，基于 ECMWF
+- 时间范围：未来最多 15 天，逐小时。实际时次应以 NetCDF 时间轴或 API 响应为准。
+- 空间范围：全球常规经纬网，可按地理窗口提取。
+- 空间分辨率：项目介绍列出格点 API 为 0.25°，官网 FAQ 列出预报可达 0.1°。入库时按具体产品的坐标轴核验。
+- 数据单位：按变量及源文件属性，辐射和降水需附累计时段。
+- 数据格式：NetCDF 或格点 API 响应。
+- 原始坐标系：常规经纬网，具体 CRS 以文件头为准。
+- 入库状态：说明已核对，待取得导出样本或授权 API。
+- 数据来源：[格点预报](https://global-weather-data.com/dashboard/grid_forecast/)
+
+### Copernicus ERA5 Hourly Data on Single Levels
+
+- 数据名称：Copernicus ERA5 单层逐小时再分析
+- 时间范围：1940 年至今，逐小时，持续更新。
+- 空间范围：全球。
+- 空间分辨率：大气再分析产品 0.25° × 0.25°，海浪产品 0.5° × 0.5°。
+- 数据单位：按变量定义，例如 2 米气温 K，10 米风分量 m/s，累计降水 m，累计辐射 J/m²。
+- 数据格式：源产品 GRIB，按 CDS 选项可获取相应导出。
+- 原始坐标系：规则经纬度网格。
+- 入库状态：候选产品。待与项目既有 ERA5 覆盖做正式库查重，官方 CDS 下载需账户。
+- 数据来源：[Copernicus ERA5 目录](https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels)
+
+## 电力
+
+### Revised Global Electricity Consumption Grids (1992–2019)
+
+- 数据名称：Revised Global Electricity Consumption Grids (1992–2019)
+- 时间范围：1992、1993、…、2019，共 28 个年度。2016–2019 为以 2015 年为基准的模型延伸估算。
+- 空间范围：全球陆地输出网格，研究实际覆盖 134 个国家或地区。边界外填零，统计时需附覆盖范围。
+- 空间分辨率：1 公里 × 1 公里。
+- 数据单位：千瓦时（kWh / 年 / 像元）。
+- 数据格式：GeoTIFF（.tif）栅格，发布外层 ZIP 包含各年度 ZIP。
+- 原始坐标系：World Mollweide（等积投影）。
+- 入库状态：整包通过 Figshare MD5，各年度包通过 CRC，28 个 GeoTIFF 头已核对并登记在本机数据库。源数据宽 36,080 像元，高度按年为 15,515–15,517 像元。正式 SeaweedFS 待连通后登记。
+- 数据来源：[Figshare 栅格发布页](https://doi.org/10.6084/m9.figshare.17004523.v1) · [研究方法](https://doi.org/10.1038/s41597-022-01322-5)
+
+### Global Renewables Watch – Onshore Wind Turbines
+
+- 数据名称：Global Renewables Watch，全球陆上风机点位
+- 时间范围：2017Q4–2024Q2，按卫星影像首次识别季度。2017Q4 含初始基线设施。
+- 空间范围：全球陆上可被来源识别的风机。
+- 空间分辨率：单台风机点位。源影像采样尺度约为 4.7 m/像素，非点位定位误差指标。
+- 数据单位：台，另有季度、2018 年土地覆盖类别及局部 UTM 字段。
+- 数据格式：GeoPackage（.gpkg）点矢量。
+- 原始坐标系：EPSG:3857，局部 UTM 为附属属性。
+- 入库状态：本机已入库 375,197 条。正式库待连通。
+- 数据来源：[Global Renewables Watch v1.0](https://github.com/microsoft/global-renewables-watch/releases/tag/v1.0)
+
+### Global Renewables Watch – Commercial Solar PV
+
+- 数据名称：Global Renewables Watch，全球商业及公用事业光伏场边界
+- 时间范围：2017Q4–2024Q2，按卫星影像首次识别季度。
+- 空间范围：全球来源可识别的商业、工业及公用事业光伏场。
+- 空间分辨率：场站多边形，无固定像元。来源主要针对大面积设施。
+- 数据单位：处，另有原 `area`、季度和 2018 年地类。区域面积统计需先统一计算口径。
+- 数据格式：GeoPackage（.gpkg）面矢量。
+- 原始坐标系：EPSG:3857。
+- 入库状态：本机已入库 86,345 条，其中 5 条源几何为空。正式库待连通。
+- 数据来源：[Global Renewables Watch v1.0](https://github.com/microsoft/global-renewables-watch/releases/tag/v1.0)
+
+### WRI Global Power Plant Database v1.3.0
+
+- 数据名称：WRI Global Power Plant Database v1.3.0
+- 时间范围：电厂资产快照，投运年份依来源字段。报告发电量 2013–2019，估算发电量 2013–2017。
+- 空间范围：167 个国家或地区代码，34,936 座电厂。
+- 空间分辨率：电厂点位，定位精度随源资料变化。
+- 数据单位：装机 MW、年度发电 GWh。报告值和模型估算值分别保留。
+- 数据格式：ZIP 内 CSV，随附数据字典与发布说明。
+- 原始坐标系：WGS 84（EPSG:4326）。
+- 入库状态：官方 v1.3.0 附件已核对，本机已入库 34,936 条。正式库待连通并与现有 OSM 资产匹配。
+- 数据来源：[WRI 官方发布页](https://datasets.wri.org/datasets/global-power-plant-database)
+
+### China’s City-level Power Generation (2000–2019)
+
+- 数据名称：中国 352 个城市发电量估算
+- 时间范围：2000–2019 年，共 20 个年度。
+- 空间范围：中国大陆 30 个省级地区内的 352 个城市或地级行政单元，论文范围未含西藏。
+- 空间分辨率：城市／地级行政区级。
+- 数据单位：亿千瓦时（10⁸ kWh / 年 / 城市）。
+- 数据格式：Excel（.xlsx）表格。
+- 原始坐标系：无源几何，使用发布方六位行政区划代码引用地区。
+- 入库状态：本机 7,040 条城市年记录，与下方城市 CO₂ 指标共用事实表。正式库待连通。
+- 数据来源：[城市发电和排放工作簿](https://doi.org/10.6084/m9.figshare.30338773.v1)
+
+## 碳
+
+### China’s City-level Power-sector CO₂ Emissions (2000–2019)
+
+- 数据名称：中国 352 个城市电力部门 CO₂ 排放估算
+- 时间范围：2000–2019 年，共 20 个年度。
+- 空间范围：中国大陆 30 个省级地区内的 352 个城市或地级行政单元。
+- 空间分辨率：城市／地级行政区级。
+- 数据单位：万吨 CO₂（10⁴ t CO₂ / 年 / 城市）。由估算发电量和 2021 年省级电力排放因子计算。
+- 数据格式：Excel（.xlsx）表格，MATLAB 代码单独登记为方法证据。
+- 原始坐标系：无源几何，以发布方行政区划代码定位。
+- 入库状态：本机已随城市发电量工作簿入库 7,040 条共用记录。正式库待连通。
+- 数据来源：[城市电力碳论文](https://doi.org/10.1038/s41597-026-07484-w) · [计算代码](https://doi.org/10.6084/m9.figshare.30338803)
+
+### WDI/EDGAR CO₂ Emissions Excluding LULUCF
+
+- 数据名称：World Bank/EDGAR 二氧化碳年度排放（不含土地利用、土地利用变化和林业）
+- 时间范围：1970–2024 年，共 55 个年度，按世界银行快照 `2026-11-11`。
+- 空间范围：全球经济体及世界银行地区聚合。
+- 空间分辨率：经济体或地区聚合级，按源实体类型区分。
+- 数据单位：百万吨 CO₂ 当量（Mt CO₂e / 年）。本指标只统计 CO₂。
+- 数据格式：World Bank API JSON，支持 CSV 等分发格式。
+- 原始坐标系：无源几何，使用源经济体及聚合编码。
+- 入库状态：本机已入库 14,630 条年度键值，保留原缺测。正式库待连通查重。
+- 数据来源：[指标 EN.GHG.CO2.MT.CE.AR5](https://data.worldbank.org/indicator/EN.GHG.CO2.MT.CE.AR5)
+
+### WDI/EDGAR Total GHG Emissions Excluding LULUCF
+
+- 数据名称：World Bank/EDGAR 全部温室气体年度排放（不含土地利用、土地利用变化和林业）
+- 时间范围：1970–2024 年，共 55 个年度，按世界银行快照 `2026-11-11`。
+- 空间范围：全球经济体及世界银行地区聚合。
+- 空间分辨率：经济体或地区聚合级。
+- 数据单位：百万吨 CO₂ 当量（Mt CO₂e / 年）。该值已包含 CO₂，不能与上一指标相加。
+- 数据格式：World Bank API JSON，支持 CSV 等分发格式。
+- 原始坐标系：无源几何，使用源经济体及聚合编码。
+- 入库状态：本机已入库 14,630 条年度键值，保留原缺测。正式库待连通查重。
+- 数据来源：[指标 EN.GHG.ALL.MT.CE.AR5](https://data.worldbank.org/indicator/EN.GHG.ALL.MT.CE.AR5)
+
+### 服务器碳数据目录
+
+- 数据名称：`D:\10.19数据集\carbon databases` 中的待盘点数据集。
+- 时间范围、空间范围、空间分辨率、数据单位、数据格式、原始坐标系：待读取原始资料后逐项填充。
+- 入库状态：正式服务器未连通，尚未取得文件清单或修改该目录。
+
+## 经济
+
+### Revised Global Real GDP Grids (1992–2019)
+
+- 数据名称：Revised Global Real GDP Grids (1992–2019)
+- 时间范围：1992、1993、…、2019，共 28 个年度。
+- 空间范围：全球陆地输出网格，研究实际覆盖 175 个国家或地区。未覆盖区域按源编码标记。
+- 空间分辨率：1 公里 × 1 公里。
+- 数据单位：百万 2017 年不变价美元 / 年 / 像元。
+- 数据格式：GeoTIFF（.tif）栅格，发布外层 ZIP 包含各年度 ZIP。
+- 原始坐标系：World Mollweide（等积投影）。
+- 入库状态：整包通过 Figshare MD5，各年度包通过 CRC，28 个 GeoTIFF 头已核对并登记在本机数据库。源数据宽 36,080 像元，高度按年为 15,515–15,517 像元。正式 SeaweedFS 待连通后登记。
+- 数据来源：[Figshare 栅格发布页](https://doi.org/10.6084/m9.figshare.17004523.v1) · [研究方法](https://doi.org/10.1038/s41597-022-01322-5)
+
+### Harvard Atlas – Annual Bilateral Trade Totals (HS 1992)
+
+- 数据名称：Harvard Atlas 双边年度商品贸易总额（HS 1992 v18.0）
+- 时间范围：1995–2024 年，共 30 个年度。
+- 空间范围：UN Comtrade 覆盖的报告经济体及贸易伙伴。
+- 空间分辨率：报告经济体 × 贸易伙伴 × 年，商品维度为汇总。
+- 数据单位：进出口额均为当年价美元（USD）。
+- 数据格式：CSV。
+- 原始坐标系：无源几何，以 Growth Lab 经济体 ID 及来源三位代码定位。
+- 入库状态：本机已入库 879,014 条。正式库待连通。
+- 数据来源：[Harvard Dataverse 发布版及字典](https://doi.org/10.7910/DVN/T4CHWJ)
+
+### Harvard Atlas – Country Trade by HS 1992 Chapter
+
+- 数据名称：Harvard Atlas 经济体与两位商品章年度贸易（HS 1992 v18.0）
+- 时间范围：1995–2024 年，共 30 个年度。
+- 空间范围：源表含 232 个经济体代码及 97 个商品章代码。
+- 空间分辨率：经济体 × 两位商品章 × 年。
+- 数据单位：进出口额为当年价美元（USD）。全球市场份额为比例，另有商品复杂度相关指标。
+- 数据格式：CSV。发布方另有独立的六位双边商品文件。
+- 原始坐标系：无源几何，通过源经济体和商品编码关联维表。
+- 入库状态：本机已入库 628,179 条。正式库待连通。
+- 数据来源：[Harvard Dataverse 发布版及字典](https://doi.org/10.7910/DVN/T4CHWJ)
+
+## 电力、碳与经济共享的政策数据
+
+### China’s Energy-transition Policies – Policy-level Records
+
+- 数据名称：中国能源转型政策逐条元数据及目标／工具标签
+- 时间范围：原始研究 2000–2024 年。公布、施行日期按发布数据精度保留。
+- 空间范围：中国国家、省级和地级政策。原始附件按中央、地方及七个检索主题分组。
+- 空间分辨率：单条政策对应发布机构和适用行政范围。附件无逐条空间几何。
+- 数据单位：政策条目、分类标签，及同一条目在不同检索组的来源关系。
+- 数据格式：ZIP 中的 CSV、Stata DTA 和 TXT。已将逐条元数据及分类导入，正文以源文件成员路径定位。
+- 原始坐标系：无源几何，使用发布方政策 `gid` 及行政描述。
+- 入库状态：本机已入库 7,223 个不同 `gid`，其中 6,551 个有非空分类标签。正式库待连通。
+- 数据来源：[中国多层级能源转型政策 Figshare v1](https://doi.org/10.6084/m9.figshare.32182515.v1)
+
+### China’s Energy-transition Policies – Annual Classification Counts
+
+- 数据名称：中国能源转型政策年度标签计数，国家／省级／地级三份发布表
+- 时间范围：国家表 2001–2024、省级表 2000–2025、地级表 2004–2025。区间内有缺年度，按生效年统计。
+- 空间范围：中国国家、省级和地级行政层级。三张源表的地区年度数分别为 22、497、1,217。
+- 空间分辨率：行政层级 × 行政区 × 年 × 标签。
+- 数据单位：政策标签命中次数。同一政策可同时命中多个类别。
+- 数据格式：Stata（.dta）表格。
+- 原始坐标系：无源几何，以源行政区划代码或全国标识定位。
+- 入库状态：本机已入库 62,496 条分类计数。正式库待连通。
+- 数据来源：[中国多层级能源转型政策 Figshare v1](https://doi.org/10.6084/m9.figshare.32182515.v1)

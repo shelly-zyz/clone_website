@@ -2,9 +2,14 @@
 """Validate pinned upstream releases and load them through the V11 owner role."""
 
 import argparse
+from collections import defaultdict
 from contextlib import closing, ExitStack
 import csv
+from datetime import date
+from decimal import Decimal
+import gzip
 import hashlib
+import io
 import json
 import math
 from pathlib import Path
@@ -13,11 +18,18 @@ import sqlite3
 import struct
 import subprocess
 import tempfile
+from zipfile import ZipFile
+
+from v11_supplemental_raster import annual_assets, archive_in_s3
 
 
 CITY_DOI = 'https://doi.org/10.6084/m9.figshare.30338773.v1'
 POLICY_DOI = 'https://doi.org/10.6084/m9.figshare.32182515.v1'
 GRW_RELEASE = 'https://github.com/microsoft/global-renewables-watch/releases/tag/v1.0'
+WRI_URL = 'https://datasets.wri.org/datasets/global-power-plant-database'
+GHCN_BASE = 'https://www.ncei.noaa.gov/pub/data/ghcn/daily/'
+RASTER_DOI = 'https://doi.org/10.6084/m9.figshare.17004523.v1'
+ATLAS_DOI = 'https://doi.org/10.7910/DVN/T4CHWJ'
 
 POLICY_FILES = {
     'national': ('f9f7e9fa0c20e1798e1f5cd4d69b31ac', 22, 64283241),
@@ -41,15 +53,15 @@ GRW_FILES = {
 }
 
 
-def fingerprint(file, expected):
+def fingerprint(file, expected=None):
     sha256 = hashlib.sha256()
     md5 = hashlib.md5(usedforsecurity=False)
     with file.open('rb') as source:
         while block := source.read(1024 * 1024):
             sha256.update(block)
             md5.update(block)
-    checksum = md5.hexdigest() if len(expected) == 32 else sha256.hexdigest()
-    if checksum != expected:
+    checksum = md5.hexdigest() if expected and len(expected) == 32 else sha256.hexdigest()
+    if expected and checksum != expected:
         raise ValueError(f'{file.name} checksum differs from the pinned upstream release')
     return sha256.hexdigest()
 
@@ -137,6 +149,250 @@ def load_policy(root, writers):
                 })
 
 
+def load_policy_documents(root, writers):
+    file = root / 'policies.zip'
+    sha = fingerprint(file, '8e625d70df2e80d2a74336e9e47f1d3c')
+    metadata = defaultdict(set)
+    groups = defaultdict(set)
+    classifications = defaultdict(lambda: defaultdict(set))
+    bodies = defaultdict(set)
+    metadata_keys = ('政策标题', '公布日期', '施行日期', '制定机关')
+    label_keys = ('objective_main', 'objective_sub', 'instrument_main', 'instrument_sub')
+    with ZipFile(file) as archive:
+        for name in archive.namelist():
+            parts = name.split('/')
+            if len(parts) == 4 and parts[2].startswith('Policy texts_') and name.endswith('.txt'):
+                bodies[Path(name).stem].add(name)
+                continue
+            if not name.endswith('.csv'):
+                continue
+            _, keyword, filename = parts
+            is_metadata = filename.startswith('Policy detailed information list_')
+            if not is_metadata and not filename.startswith('Policy objectives and instruments_'):
+                continue
+            group = (keyword, Path(filename).stem.rsplit('_', 1)[1])
+            with archive.open(name) as item, io.TextIOWrapper(item, encoding='utf-8-sig') as stream:
+                for row in csv.DictReader(stream):
+                    gid = row.pop('gid').strip()
+                    if not gid:
+                        continue
+                    if not re.fullmatch(r'[0-9a-f]+', gid):
+                        raise ValueError(f'Invalid policy ID in {name}')
+                    groups[gid].add(group)
+                    if is_metadata:
+                        fields = {key: value.strip() for key, value in row.items()}
+                        metadata[gid].add(json.dumps(fields, ensure_ascii=False, sort_keys=True))
+                    else:
+                        labels = classifications[gid]
+                        for key in label_keys:
+                            if value := row[key].strip():
+                                labels[key].add(value)
+    if len(metadata) != 7223 or metadata.keys() != bodies.keys() or len(classifications) != 7221:
+        raise ValueError('Policy metadata, labels, and text index differ from the verified v1 archive')
+    for gid, variants in sorted(metadata.items()):
+        details = [json.loads(value) for value in sorted(variants)]
+        identifiers = {tuple(row[key] or None for key in metadata_keys) for row in details}
+        if len(identifiers) != 1:
+            raise ValueError(f'Conflicting policy identity fields for {gid}')
+        labels = {key: sorted(values) for key, values in classifications.get(gid, {}).items()}
+        lineage = {'search_groups': sorted(groups[gid]), 'text_members': sorted(bodies[gid])}
+        writers['policy_document'].writerow([
+            sha, gid, *identifiers.pop(), json.dumps(details, ensure_ascii=False),
+            json.dumps(lineage, ensure_ascii=False), json.dumps(labels, ensure_ascii=False),
+        ])
+    catalog(writers['source'], sha, 'cn_energy_transition_policy_documents', 'v1', '中国能源转型政策逐条元数据与分类',
+            ['power', 'carbon', 'economy'], POLICY_DOI, 'CC BY 4.0，导入发布的元数据及分类，正文保留归档定位', len(metadata), {
+                'table': 'standard.supplemental_policy_document', 'grain': 'PKULaw gid',
+                'classification_groups': label_keys, 'coverage': [2000, 2024],
+                'quality': {'missing_classification_id': len(metadata) - len(classifications),
+                            'ids_with_nonempty_labels': sum(bool(labels) for labels in classifications.values()),
+                            'paper_text_count': 7295},
+                'dates': '保留发布与施行日期的原字符串和精度。',
+                'source_groups': '保留七个检索词中的所有出现及中央／地方分组、源正文成员路径。',
+            })
+
+
+def read_wdi_response(raw, name):
+    header, records = json.loads(raw, parse_float=Decimal)
+    if header['page'] != 1 or header['pages'] != 1 or len(records) != header['total']:
+        raise ValueError(f'Incomplete World Bank response: {name}')
+    return header, records
+
+
+def load_wdi_emissions(root, writers):
+    region_file = (root / 'wdi-regions.json').read_bytes()
+    _, regions = read_wdi_response(region_file, 'regions')
+    by_iso3 = {item['id']: item for item in regions}
+    by_iso2 = {item['iso2Code']: item for item in regions}
+    for file_code, label in [('CO2', '二氧化碳'), ('ALL', '全部温室气体')]:
+        raw = (root / f'wdi-{file_code}.json').read_bytes()
+        sha = hashlib.sha256(raw).hexdigest()
+        version, records = read_wdi_response(raw, file_code)
+        indicator = f'EN.GHG.{file_code}.MT.CE.AR5'
+        keys = set()
+        kinds = defaultdict(int)
+        for row in records:
+            iso3 = row['countryiso3code']
+            iso2 = row['country']['id']
+            key = iso3 or iso2
+            region = by_iso3.get(iso3) or by_iso2.get(iso2)
+            kind = ('aggregate' if region['region']['id'] == 'NA' else 'economy') if region else 'unmapped'
+            year, value = int(row['date']), row['value']
+            if row['indicator']['id'] != indicator or (key, year) in keys or not 1970 <= year <= 2024:
+                raise ValueError(f'Invalid or duplicate World Bank row: {indicator}/{key}/{year}')
+            if value is not None and (not isinstance(value, (Decimal, int)) or not Decimal(value).is_finite()):
+                raise ValueError(f'Non-numeric World Bank observation: {indicator}/{key}/{year}')
+            keys.add((key, year))
+            kinds[kind] += 1
+            writers['wdi'].writerow([sha, indicator, key, row['country']['value'], kind, year, value, row['obs_status']])
+        if {year for _, year in keys} != set(range(1970, 2025)):
+            raise ValueError(f'Incomplete World Bank years for {indicator}')
+        catalog(writers['source'], sha, f'wdi_edgar_{file_code.lower()}_excl_lulucf', f'WDI {version["lastupdated"]}',
+                f'世界银行 EDGAR 年度{label}排放（不含 LULUCF）', ['carbon'],
+                f'https://data.worldbank.org/indicator/{indicator}', 'CC BY 4.0', len(keys), {
+                    'table': 'standard.supplemental_wdi_emissions', 'indicator': indicator, 'unit': 'Mt CO₂e',
+                    'coverage': [1970, 2024], 'grain': '经济体或地区聚合 × 年', 'quality': dict(kinds),
+                    'region_metadata_sha256': hashlib.sha256(region_file).hexdigest(),
+                    'missing': '保留源空值，地区聚合与单一经济体加总时分别筛选。',
+                })
+
+
+def load_wri_plants(root, writers):
+    file = root / 'wri-v1.3.0.zip'
+    sha = fingerprint(file, '59f3e57312a85eec3c281608e5f3c8f993d8fdad5dde179430dca42f2ac6ce99')
+    count = 0
+    countries = set()
+    fields = ('gppd_idnr', 'name', 'country', 'latitude', 'longitude', 'capacity_mw', 'primary_fuel')
+    with ZipFile(file) as archive, archive.open('global_power_plant_database.csv') as member:
+        for row in csv.DictReader(io.TextIOWrapper(member, encoding='utf-8-sig')):
+            plant = [row.pop(key).strip() for key in fields]
+            generation = {}
+            for year in range(2013, 2020):
+                published = row.pop(f'generation_gwh_{year}').strip()
+                estimated = row.pop(f'estimated_generation_gwh_{year}', '').strip()
+                note = row.pop(f'estimated_generation_note_{year}', '').strip()
+                generation[year] = {'reported_gwh': float(published) if published else None,
+                                    'estimated_gwh': float(estimated) if estimated else None,
+                                    'estimate_method': note or None}
+            writers['wri'].writerow([sha, *plant, json.dumps(row, ensure_ascii=False),
+                                     json.dumps(generation, allow_nan=False)])
+            countries.add(plant[2])
+            count += 1
+    if count != 34936 or len(countries) != 167:
+        raise ValueError(f'Unexpected WRI plant or country count: {count}/{len(countries)}')
+    catalog(writers['source'], sha, 'wri_global_power_plant_database', '1.3.0', 'WRI 全球电厂数据库', ['power'],
+            WRI_URL, 'CC BY 4.0', count, {
+                'table': 'standard.supplemental_wri_plant', 'grain': '电厂', 'crs': 'EPSG:4326',
+                'country_codes': len(countries), 'units': {'capacity': 'MW', 'generation': 'GWh'},
+                'coverage': {'reported_generation': [2013, 2019], 'estimated_generation': [2013, 2017]},
+                'missing': '公开列与估算列独立保存，空值不填零。',
+            })
+
+
+def load_ghcn_china_2024(root, writers):
+    data = root / 'ghcnd-2024.csv.gz'
+    station_file = root / 'ghcnd-stations.txt'
+    sha = fingerprint(data)
+    station_sha = fingerprint(station_file)
+    stations = {}
+    with station_file.open(encoding='utf-8', errors='replace') as source:
+        for line in source:
+            if line.startswith('CH'):
+                station_id = line[:11]
+                elevation = Decimal(line[31:37].strip())
+                stations[station_id] = (line[41:71].strip(), line[12:20].strip(), line[21:30].strip(),
+                                        None if elevation == Decimal('-999.9') else elevation)
+    elements = {'TMAX': '0.1 °C', 'TMIN': '0.1 °C', 'PRCP': '0.1 mm', 'SNOW': 'mm'}
+    selected = set()
+    count = 0
+    flagged = 0
+    with gzip.open(data, 'rt', encoding='ascii', newline='') as source:
+        for row in csv.reader(source):
+            if not row[0].startswith('CH') or row[2] not in elements:
+                continue
+            station, day, element, raw, measurement, quality, source_flag, observation_time = row
+            observed_on = date(int(day[:4]), int(day[4:6]), int(day[6:8]))
+            if station not in stations or observed_on.year != 2024:
+                raise ValueError(f'Unknown GHCN station or unexpected date: {station}/{day}')
+            selected.add(station)
+            value = None if raw == '-9999' else int(raw)
+            writers['ghcn_daily'].writerow([sha, station, observed_on, element, value, measurement, quality,
+                                            source_flag, observation_time])
+            count += 1
+            flagged += bool(quality)
+    for station in sorted(selected):
+        writers['ghcn_station'].writerow([sha, station, *stations[station]])
+    if not selected or not count:
+        raise ValueError('No China station records in the GHCN 2024 archive')
+    catalog(writers['source'], sha, 'noaa_ghcn_daily_china_2024', 'GHCN-Daily 2024 archive',
+            'NOAA GHCN-Daily 中国站点 2024 年日观测', ['meteo'], GHCN_BASE + 'by_year/2024.csv.gz',
+            'NOAA GHCN-Daily 公共档案，保留观测来源及质量标记', count, {
+                'table': 'standard.supplemental_ghcn_daily', 'crs': '经纬度点位', 'elements': elements,
+                'grain': '站点 × 当地观测日 × 要素', 'coverage': [2024], 'station_count': len(selected),
+                'quality_flagged': flagged, 'station_sha256': station_sha, 'scope': 'GHCN 站点代码前缀 CH',
+                'missing': '原始缺测标记 −9999 转为空，保留质量标记。',
+            })
+
+
+def load_rasters(root, writers, endpoint):
+    sources = [
+        ('electricity.zip', '9fee79f38045b607a1fc7a2e9e5d3a15', 'power', 'global_electricity_1km',
+         'Revised Global Electricity Consumption Grids (1992–2019)', 'kWh / 年 / 像元', 134),
+        ('gdp.zip', '6846422176440b2e391aad1241273f33', 'economy', 'global_real_gdp_1km',
+         'Revised Global Real GDP Grids (1992–2019)', '百万 2017 年美元 / 年 / 像元', 175),
+    ]
+    for filename, checksum, topic, dataset, title, unit, economies in sources:
+        file = root / filename
+        sha = fingerprint(file, checksum)
+        assets = annual_assets(file)
+        uri = archive_in_s3(endpoint, file, topic, dataset, sha) if endpoint else None
+        if uri:
+            writers['raster_object'].writerow([uri, sha, file.stat().st_size])
+        for asset in assets:
+            writers['raster'].writerow([sha, *asset, uri])
+        catalog(writers['source'], sha, dataset, 'v1', title, [topic], RASTER_DOI, 'CC BY 4.0', len(assets), {
+            'table': 'standard.supplemental_raster_asset', 'coverage': [1992, 2019], 'economies': economies,
+            'unit': unit, 'crs': 'World Mollweide', 'resolution_m': [1000, 1000], 'format': 'GeoTIFF',
+            'grain': '年度 × 像元', 'identity': 'nighttime_lights_research_estimate',
+            'coverage_note': '产品将未覆盖地区编码为零，区域计算需要覆盖掩膜。',
+        })
+
+
+def load_atlas_trade(root, writers):
+    releases = [
+        ('atlas-hs92-country-product-2.csv', 'b767f3c2dad599ecce2204a4b5ba9fa6', 13685112,
+         'country_hs2', 'Harvard Atlas 经济体与 HS 1992 商品章年度贸易', '经济体 × HS 1992 两位商品章 × 年'),
+        ('atlas-hs92-country-country.csv', '9c39659168dd5212f745572ba35b2a5c', 13685107,
+         'bilateral', 'Harvard Atlas 双边年度商品贸易总额', '报告经济体 × 贸易伙伴 × 年'),
+    ]
+    for filename, checksum, file_id, kind, title, grain in releases:
+        file = root / filename
+        sha = fingerprint(file, checksum)
+        years = set()
+        count = 0
+        with file.open(newline='', encoding='utf-8-sig') as source:
+            for row in csv.DictReader(source):
+                year = int(row['year'])
+                years.add(year)
+                writers['atlas'].writerow([
+                    sha, row['country_iso3_code'], row['country_id'], row.get('partner_iso3_code'),
+                    row.get('product_hs92_code'), row.get('partner_country_id') or row['product_id'], year,
+                    row['export_value'], row['import_value'], row.get('global_market_share'),
+                    row.get('distance'), row.get('cog'), row.get('pci'),
+                ])
+                count += 1
+        if years != set(range(1995, 2025)):
+            raise ValueError(f'Unexpected Harvard Atlas reporting period in {filename}')
+        catalog(writers['source'], sha, f'harvard_atlas_hs92_{kind}', '18.0', title, ['economy'], ATLAS_DOI,
+                'CC0 1.0', count, {
+                    'table': 'standard.supplemental_atlas_trade', 'grain': grain, 'coverage': [1995, 2024],
+                    'unit': '当年价 USD', 'classification': 'HS 1992',
+                    'file': f'https://dataverse.harvard.edu/api/access/datafile/{file_id}',
+                    'definitions': 'https://dataverse.harvard.edu/api/access/datafile/13685113',
+                    'lookup': 'https://doi.org/10.7910/DVN/3BAL1O',
+                })
+
+
 def wkb_from_geopackage(blob, srid, geometry_types):
     if not isinstance(blob, bytes) or len(blob) < 13 or blob[:3] != b'GP\x00' or blob[3] & 0xE0:
         raise ValueError('Missing or extended GeoPackage geometry')
@@ -197,19 +453,24 @@ def load_renewables(root, writers, tech):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('source_directory', type=Path)
-    parser.add_argument('--dataset', choices=('city', 'policy', 'wind', 'solar'), action='append', required=True)
+    loaders = {'city': load_city, 'policy': load_policy, 'policy-documents': load_policy_documents,
+               'wdi-emissions': load_wdi_emissions, 'wri-plants': load_wri_plants, 'ghcn-cn-2024': load_ghcn_china_2024,
+               'atlas-trade': load_atlas_trade}
+    parser.add_argument('--dataset', choices=(*loaders, 'wind', 'solar', 'rasters'), action='append', required=True)
+    parser.add_argument('--raster-s3-endpoint', help='Store and verify the raster archives through the configured S3 credentials')
     args = parser.parse_args()
     script = Path(__file__).with_name('v11-supplemental-ingest.sql').resolve()
     with tempfile.TemporaryDirectory(prefix='ogw-v11-supplemental-') as scratch:
         directory = Path(scratch)
         with ExitStack() as stack:
             writers = {name: csv.writer(stack.enter_context((directory / f'{name}.csv').open('w', newline='', encoding='utf-8')))
-                       for name in ('source', 'city', 'policy', 'feature')}
+                       for name in ('source', 'city', 'policy', 'policy_document', 'wdi', 'wri',
+                                    'ghcn_station', 'ghcn_daily', 'feature', 'raster', 'raster_object', 'atlas')}
             for name in dict.fromkeys(args.dataset):
-                if name == 'city':
-                    load_city(args.source_directory, writers)
-                elif name == 'policy':
-                    load_policy(args.source_directory, writers)
+                if name in loaders:
+                    loaders[name](args.source_directory, writers)
+                elif name == 'rasters':
+                    load_rasters(args.source_directory, writers, args.raster_s3_endpoint)
                 else:
                     load_renewables(args.source_directory, writers, name)
         subprocess.run(['psql', '--no-psqlrc', '--file', str(script)], cwd=directory, check=True)
