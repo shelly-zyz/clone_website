@@ -12,7 +12,7 @@ import hashlib
 import io
 import json
 import math
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import re
 import sqlite3
 import struct
@@ -358,6 +358,33 @@ def load_rasters(root, writers, endpoint):
         })
 
 
+def load_carbon_source_index(root, writers):
+    file = root / '00_数据文件索引.csv'
+    sha = fingerprint(file, '9974ed3b16bc03eb9e2ebbdd4b71a581654302e77f97fb10c69849b338eb5989')
+    columns = ['相对路径', '板块', '数据族', '文件名', '扩展名', '大小MB', '修改日期', '含义', '年份', '范围', '来源链接', '备注']
+    count = 0
+    with file.open(newline='', encoding='utf-8-sig') as source:
+        rows = csv.reader(source)
+        if next(rows) != columns:
+            raise ValueError('Unexpected server carbon file index columns')
+        for row in rows:
+            values = [value.strip() for value in row]
+            relative = PureWindowsPath(values[0])
+            if not relative.parts or relative.anchor or '..' in relative.parts:
+                raise ValueError(f'Unexpected relative path in the carbon file index at CSV row {rows.line_num}')
+            values[0] = relative.as_posix()
+            writers['carbon_index'].writerow([sha, *values])
+            count += 1
+    if count != 6434:
+        raise ValueError('Unexpected number of entries in the server carbon file index')
+    catalog(writers['source'], sha, 'cn_carbon_source_inventory', '2026-10-20', '服务器碳数据库逐文件清单', ['carbon'],
+            f's3://raw/carbon/carbon-source-inventory/{sha}/source-index.csv', '用户提供的项目内部数据盘点', count, {
+                'table': 'standard.supplemental_carbon_source_file', 'grain': '源文件相对路径',
+                'source_root': 'D:/10.19数据集/carbon databases', 'size_unit': 'MB（源索引）',
+                'coverage_note': '时间范围、空间范围及来源链接按各文件保留。目录条目用于追溯，业务指标仍按数据族入库。',
+            })
+
+
 def load_atlas_trade(root, writers):
     releases = [
         ('atlas-hs92-country-product-2.csv', 'b767f3c2dad599ecce2204a4b5ba9fa6', 13685112,
@@ -455,7 +482,7 @@ def main():
     parser.add_argument('source_directory', type=Path)
     loaders = {'city': load_city, 'policy': load_policy, 'policy-documents': load_policy_documents,
                'wdi-emissions': load_wdi_emissions, 'wri-plants': load_wri_plants, 'ghcn-cn-2024': load_ghcn_china_2024,
-               'atlas-trade': load_atlas_trade}
+               'atlas-trade': load_atlas_trade, 'carbon-source-index': load_carbon_source_index}
     parser.add_argument('--dataset', choices=(*loaders, 'wind', 'solar', 'rasters'), action='append', required=True)
     parser.add_argument('--raster-s3-endpoint', help='Store and verify the raster archives through the configured S3 credentials')
     args = parser.parse_args()
@@ -465,7 +492,8 @@ def main():
         with ExitStack() as stack:
             writers = {name: csv.writer(stack.enter_context((directory / f'{name}.csv').open('w', newline='', encoding='utf-8')))
                        for name in ('source', 'city', 'policy', 'policy_document', 'wdi', 'wri',
-                                    'ghcn_station', 'ghcn_daily', 'feature', 'raster', 'raster_object', 'atlas')}
+                                    'ghcn_station', 'ghcn_daily', 'feature', 'raster', 'raster_object', 'atlas',
+                                    'carbon_index')}
             for name in dict.fromkeys(args.dataset):
                 if name in loaders:
                     loaders[name](args.source_directory, writers)

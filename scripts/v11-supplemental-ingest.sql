@@ -150,6 +150,23 @@ CREATE TABLE IF NOT EXISTS standard.supplemental_raster_asset (
   UNIQUE (source_sha256, archive_member)
 );
 
+CREATE TABLE IF NOT EXISTS standard.supplemental_carbon_source_file (
+  source_sha256 text NOT NULL REFERENCES catalog.supplemental_source,
+  relative_path text NOT NULL CHECK (relative_path <> ''),
+  section text NOT NULL CHECK (section <> ''),
+  data_family text,
+  source_file_name text NOT NULL CHECK (source_file_name <> ''),
+  extension text,
+  size_mb numeric NOT NULL CHECK (size_mb >= 0),
+  source_modified_at text,
+  description text,
+  source_period text,
+  source_scope text,
+  source_url text,
+  notes text,
+  PRIMARY KEY (source_sha256, relative_path)
+);
+
 CREATE TABLE IF NOT EXISTS standard.supplemental_renewable_feature (
   source_sha256 text NOT NULL REFERENCES catalog.supplemental_source,
   feature_id bigint NOT NULL CHECK (feature_id > 0),
@@ -189,6 +206,7 @@ CREATE TEMP TABLE incoming_ghcn_daily (LIKE standard.supplemental_ghcn_daily INC
 CREATE TEMP TABLE incoming_atlas (LIKE standard.supplemental_atlas_trade INCLUDING ALL) ON COMMIT DROP;
 CREATE TEMP TABLE incoming_feature (LIKE standard.supplemental_renewable_feature INCLUDING ALL) ON COMMIT DROP;
 CREATE TEMP TABLE incoming_raster (LIKE standard.supplemental_raster_asset INCLUDING ALL) ON COMMIT DROP;
+CREATE TEMP TABLE incoming_carbon_index (LIKE standard.supplemental_carbon_source_file INCLUDING ALL) ON COMMIT DROP;
 CREATE TEMP TABLE incoming_raster_object (
   uri text PRIMARY KEY, sha256 text NOT NULL, size_bytes bigint NOT NULL CHECK (size_bytes > 0)
 ) ON COMMIT DROP;
@@ -204,6 +222,7 @@ CREATE TEMP TABLE incoming_raster_object (
 \copy pg_temp.incoming_atlas FROM 'atlas.csv' WITH (FORMAT csv)
 \copy pg_temp.incoming_feature FROM 'feature.csv' WITH (FORMAT csv)
 \copy pg_temp.incoming_raster FROM 'raster.csv' WITH (FORMAT csv)
+\copy pg_temp.incoming_carbon_index FROM 'carbon_index.csv' WITH (FORMAT csv)
 \copy pg_temp.incoming_raster_object FROM 'raster_object.csv' WITH (FORMAT csv)
 
 INSERT INTO catalog.supplemental_source SELECT * FROM pg_temp.incoming_source ON CONFLICT DO NOTHING;
@@ -219,6 +238,7 @@ INSERT INTO standard.supplemental_renewable_feature SELECT * FROM pg_temp.incomi
 INSERT INTO standard.supplemental_raster_asset AS existing SELECT * FROM pg_temp.incoming_raster
 ON CONFLICT (source_sha256, year) DO UPDATE SET archive_uri = EXCLUDED.archive_uri
 WHERE existing.archive_uri IS NULL AND EXCLUDED.archive_uri IS NOT NULL;
+INSERT INTO standard.supplemental_carbon_source_file SELECT * FROM pg_temp.incoming_carbon_index ON CONFLICT DO NOTHING;
 
 DO $$
 BEGIN
@@ -253,6 +273,8 @@ BEGIN
         SELECT count(*) FROM standard.supplemental_atlas_trade WHERE source_sha256 = source.source_sha256
         UNION ALL
         SELECT count(*) FROM standard.supplemental_raster_asset WHERE source_sha256 = source.source_sha256
+        UNION ALL
+        SELECT count(*) FROM standard.supplemental_carbon_source_file WHERE source_sha256 = source.source_sha256
         UNION ALL
         SELECT count(*) FROM standard.supplemental_renewable_feature WHERE source_sha256 = source.source_sha256
       ) AS counts

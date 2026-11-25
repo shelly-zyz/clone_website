@@ -1,15 +1,15 @@
 # 四专题补充数据入库与语义目录
 
-本轮按气象、电力、碳、经济核对用户提供的七组来源。逐数据集的时间、空间、单位、格式及入库状态见 [四专题补充数据清单](./v11-supplemental-dataset-inventory.md)。2026 年 11 月 25 日通过校园 VPN 复核正式 `zyz`。当前数据库智能体已发布 GRACED Power、GFS 和国家统计局能源月度数据，正式库还存在既有 `carbon_trade` 数据。采集账号有原始文件登记权限，专题表迁移需要 `green_ddl`。Beads 追踪 `ogw-22p.9.91`。
+本轮按气象、电力、碳、经济核对用户提供的七组来源。逐数据集的时间、空间、单位、格式及入库状态见 [四专题补充数据清单](./v11-supplemental-dataset-inventory.md)。2026 年 11 月 25 日通过校园 VPN 复核正式 `zyz`。当前数据库智能体已发布 GRACED Power、GFS 和国家统计局能源月度数据，正式库还存在既有 `carbon_trade` 数据。正式迁移已通过现有 `zyz` 登录和 `green_ddl` 角色完成，新增业务和碳源索引共 16 个目录版本。Beads 追踪 `ogw-22p.9.91`。
 
 ## 来源与缺口
 
 | 来源 | 专题与用途 | 核验结果及接入位置 |
 | --- | --- | --- |
-| `D:\10.19数据集\carbon databases` | 碳排放因子、碳足迹、碳经济和碳价、部门和总量格网 | WSL 路径 `/mnt/d/10.19数据集/carbon databases` 可读。索引含 6,434 项。已登记总览、索引以及首批 IPCC、CPCD、World Bank 碳价、OECD Net ECR、ICAP 和全国碳市场源文件。GRACED 总量及工业、OECD 足迹、天工、CEADs、EXIOBASE 和 Eora 按各自方法、版本、覆盖和正式库现有数据进一步核验。 |
+| `D:\10.19数据集\carbon databases` | 碳排放因子、碳足迹、碳经济和碳价、部门和总量格网 | WSL 路径 `/mnt/d/10.19数据集/carbon databases` 可读。索引的 6,434 项已导入正式库并登记为单独的碳数据目录。已登记总览、索引以及首批 IPCC、CPCD、World Bank 碳价、OECD Net ECR、ICAP 和全国碳市场源文件。GRACED 总量及工业、OECD 足迹、天工、CEADs、EXIOBASE 和 Eora 按各自方法、版本、覆盖和正式库现有数据进一步核验。 |
 | [中国能源转型政策 v1](https://doi.org/10.6084/m9.figshare.32182515.v1) | 电力、碳及经济的政策研究 | 本机已导入 7,223 个逐条政策 ID 和 62,496 条分类计数。国家、省级、地级三个层级共 1,736 个地区年度、36 个标签和小计字段。分类计数按生效日，地方表含 2025 年记录。多个标签可以来自同一政策，分类次数不能当作独立政策数。下载的 Stata 代码显示中央汇总段引用了部分 `local` 输入，层级比较需核实。 |
 | [Global Renewables Watch v1.0](https://github.com/microsoft/global-renewables-watch/releases/tag/v1.0) | 电力。全球陆上风机和商业光伏的卫星检测及季度分布 | 两个 GeoPackage 与 GitHub 发布 SHA-256 一致。风机 375,197 条，光伏 86,345 条，其中 5 条空几何保留且有标记。README 的光伏数为 86,410。原文件几何为 EPSG:3857，使用 WKB 和 SRID，保留原发布国家标签、地类及其他字段。建设季度是推断值，2017Q4 可能包含此前已建成设施。 |
-| [夜间灯光推算的 1 km 用电量及实际 GDP v1](https://doi.org/10.6084/m9.figshare.17004523.v1) | 电力的空间用电密度和经济的空间产出 | 两份 ZIP 各有 1992–2019 的 28 个年包，合计 6,182,719,292 字节。整包与发布方 MD5 一致，全部年度包通过 CRC，56 个栅格头已在本机数据库登记。1992–2013 为 36,080 × 15,515，2014–2019 为 36,080 × 15,517，均为 World Mollweide 1,000 米浮点栅格，NoData 约 −3.402823 × 10³⁸。论文报告用电单位 kWh、实际 GDP 为 2017 年不变价百万美元。两份原始 ZIP 已通过正式 SeaweedFS 完整回读，`catalog.file_object` 已登记，年度资产表待迁移。 [论文](https://doi.org/10.1038/s41597-022-01322-5) |
+| [夜间灯光推算的 1 km 用电量及实际 GDP v1](https://doi.org/10.6084/m9.figshare.17004523.v1) | 电力的空间用电密度和经济的空间产出 | 两份 ZIP 各有 1992–2019 的 28 个年包，合计 6,182,719,292 字节。整包与发布方 MD5 一致，全部年度包通过 CRC，56 个栅格头已在本机数据库登记。1992–2013 为 36,080 × 15,515，2014–2019 为 36,080 × 15,517，均为 World Mollweide 1,000 米浮点栅格，NoData 约 −3.402823 × 10³⁸。论文报告用电单位 kWh、实际 GDP 为 2017 年不变价百万美元。两份原始 ZIP 已通过正式 SeaweedFS 完整回读，`catalog.file_object` 和正式年度资产表均已登记，56 个年包都关联到原始归档。 [论文](https://doi.org/10.1038/s41597-022-01322-5) |
 | [中国城市发电及电力部门 CO₂ 估算 v1](https://doi.org/10.6084/m9.figshare.30338773.v1) | 电力与碳共用一张城市年度事实表 | 352 个城市 × 20 年，7,040 条。保留源六位行政区划代码、英文城市名、工作簿行号和原单位。发电量为亿千瓦时，排放量为万吨 CO₂。研究用 PSO-BP 估算城市发电量，以 2021 年省级电力排放因子计算 2000–2019 年排放。 [论文](https://doi.org/10.1038/s41597-026-07484-w) · [计算代码](https://doi.org/10.6084/m9.figshare.30338803) |
 | [Awesome Public Datasets](https://github.com/awesomedata/awesome-public-datasets) | 多专题来源索引 | 电力的全球电厂库可补电厂坐标和容量，先与 OSM 资产核对。经济地球已用 World Bank WDI 的 GDP、人均 GDP、出口额，其他序列按指标代码检查。气象可对照 NOAA 地面站日观测与 Copernicus 再分析。碳相关条目先与服务器原始目录去重。 [WRI 全球电厂库](https://datasets.wri.org/datasets/global-power-plant-database) · [NOAA GHCN-Daily](https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.ncdc%3AC00861) · [Copernicus 气候数据](https://cds.climate.copernicus.eu/datasets) |
 | [Global Weather Data](https://global-weather-data.com/) | 气象。城市历史天气、城市预报、格点预报 | 网站公开提供产品介绍并显示下载额度及分档，匿名打开城市历史下载入口会显示账户登录。取得样本后需核验底层来源及版本、时区、变量和入库使用条件。城市历史观测或再分析可补 GFS/WRF/ClimaX 预报和既有回放的时间维度。 |
@@ -46,6 +46,8 @@
 
 准备 Python 3.10 以上、`openpyxl`、`pandas` 和 `psql`。使用现有受限连接配置指向 `zyz`，登录需要具备 `SET ROLE green_ddl` 权限。输入目录按下表命名。
 
+服务器已配置 libpq 服务 `ogw_supplemental`，使用现有的 `zyz` 应用登录及持续有效的 `green_ddl` 成员权限。服务配置使用 `~/.config/opengridworks/supplemental-import.service`，它引用同目录下权限为 `0600` 的 `supplemental-import.pgpass`。每次执行从服务配置复用连接，凭据随账号密码轮换维护。网站查询、审核与 NBS 定时采集连接各有既定角色，专题迁移统一使用这条服务连接。
+
 | 输入名 | 原始下载项 |
 | --- | --- |
 | `city.xlsx` | [城市工作簿](https://figshare.com/ndownloader/files/58663324) |
@@ -59,6 +61,8 @@
 | `electricity.zip` / `gdp.zip` | [用电量栅格](https://ndownloader.figshare.com/files/31456843) / [GDP 栅格](https://ndownloader.figshare.com/files/31456837) |
 
 ```bash
+export PGSERVICEFILE="$HOME/.config/opengridworks/supplemental-import.service"
+export PGSERVICE=ogw_supplemental
 python3 scripts/import-v11-supplemental.py /path/to/verified-sources \
   --dataset city --dataset policy --dataset policy-documents --dataset wind --dataset solar \
   --dataset wri-plants --dataset wdi-emissions --dataset ghcn-cn-2024 --dataset atlas-trade
@@ -66,4 +70,11 @@ python3 scripts/import-v11-supplemental.py /path/to/verified-sources \
 
 栅格可用 `--dataset rasters` 计算并入库逐年度资产信息。正式对象登记时同时传 `--raster-s3-endpoint`，由已配置的 `boto3` 凭据访问 SeaweedFS `raw` 桶。导入在整包回读并比对 SHA-256 后写入 `catalog.file_object` 与按年资产记录，直接使用同一份原始发布压缩包。栅格专题地图的 COG、瓦片和区域统计需要后续派生层。
 
-本批校验源文件和导入脚本已放在服务器受限目录 `~/opengridworks-storage/supplemental-2026-11-25`。当前连接中，Mac 需将 SSH 显式绑定到 `route -n get 218.197.118.49` 显示的校园 VPN 接口，本次为 `utun7`。首次迁移应使用项目已授权的 `green_ddl` 连接。入库后从只读角色和 MCP 检索目录，并为补充口径配置独立的正式问数版本。
+服务器碳数据准入清单使用独立入口，按相对文件路径入库。它保存原文件的时间、空间范围、来源和数据族等元数据，用于治理和追溯。
+
+```bash
+python3 scripts/import-v11-supplemental.py '/mnt/d/10.19数据集/carbon databases' \
+  --dataset carbon-source-index
+```
+
+本批校验源文件、依赖和无交互复跑脚本已放在服务器受限目录 `~/opengridworks-storage/supplemental-2026-11-25`。该目录下的 `run-structured-ingest.sh` 默认复跑本批所有数据，也可用 `--dataset` 只复跑指定来源。如 Mac 默认路径上的 SSH 握手超时，可显式绑定 `route -n get 218.197.118.49` 显示的校园 VPN 接口，本次为 `utun7`。入库后从数据库智能体只读角色检索语义目录，业务问数按 V11 发布流程启用对应指标。
