@@ -39,6 +39,10 @@ GRACED 速率和统计局发电量的指标规则与查询数据版本一起返�
 
 公开读取入口为 `GET /api/data-agent/open/city`。例如 `?city_code=110000&metric=co2&year=2019` 查询城市电力碳排放估算，`format=csv` 下载同一结果。`metric=generation` 查询发电量估算，省略 `year` 返回该城市 2000–2019 年序列。JSON、CSV 均附来源、许可、单位、数据身份和发布版本。来源工作簿可由 [Figshare](https://doi.org/10.6084/m9.figshare.30338773.v1) 下载。通用查询、补充目录及项目会话继续通过各自授权入口提供。
 
+世界银行 WDI 的公开读取入口是 `GET /api/data-agent/open/economy`。例如 `?economy_code=CHN&metric=gdp&year=2024` 读取中国 2024 年现价美元 GDP。`metric=population` 读取总人口，省略 `year` 返回 2015–2024 年的已发布序列。`format=csv` 下载同一结果。输出附指标来源、署名、许可和附加条款。原始统计可在 [GDP 指标](https://data.worldbank.org/indicator/NY.GDP.MKTP.CD) 和 [总人口指标](https://data.worldbank.org/indicator/SP.POP.TOTL) 下载，适用 [世界银行数据条款](https://www.worldbank.org/ext/en/legal/terms-conditions/datasets)。
+
+对开放许可未逐项核实的资料提供来源链接。全球陆上风机和光伏边界引用 [Global Renewables Watch 官方发布](https://github.com/microsoft/global-renewables-watch/releases/tag/v1.0)。NOAA 日观测使用 [NCEI 官方档案](https://www.ncei.noaa.gov/products/land-based-station/global-historical-climatology-network-daily)，对外镜像按源观测的使用条款核验。内部碳源索引仅在受控目录查询。
+
 ## 国家统计局更新和审核
 
 服务器上的 WSL cron 每两小时扫描一次国家统计局发布索引。脚本提取全国月报 13 项观测并保存原文哈希、原文、结构化值和校验结果。现有国家数据月表继续提供历史和省级序列。新闻发布表只补充实际发布的全国报告期，1–2 月合报需要单独处理。

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { cityDatasets } from "@/lib/data-agent/contracts";
 import { dataAgentErrorResponse } from "@/lib/data-agent/http.server";
+import { openAnnualResponse } from "@/lib/data-agent/open-annual.server";
 import { queryData } from "@/lib/data-agent/query.server";
 
 export const runtime = "nodejs";
@@ -17,7 +18,6 @@ const source = {
   license: "CC BY 4.0",
   license_url: "https://creativecommons.org/licenses/by/4.0/",
 } as const;
-const csvCell = (value: string | null) => `"${(value ?? "").replaceAll('"', '""')}"`;
 
 export async function GET(request: Request) {
   const input = filters.safeParse(Object.fromEntries(new URL(request.url).searchParams));
@@ -31,23 +31,7 @@ export async function GET(request: Request) {
       start_date: year ? `${year}-01-01` : undefined,
       end_date: year ? `${year}-12-31` : undefined,
     });
-    const version = result.data_ref.version;
-    const unit = result.metric.unit;
-    const rows = result.rows.map(row => ({
-      city_code, year: row.time_start.slice(0, 4), value: row.value, quality_flag: row.quality_flag,
-    }));
-    const headers = { "Cache-Control": "public, max-age=300", "Access-Control-Allow-Origin": "*" };
-    if (format === "csv") {
-      const csv = ["city_code,year,metric,value,unit,quality_flag,data_identity,version,source,attribution,license,license_url",
-        ...rows.map(row => [city_code, row.year, result.metric.metric_code, row.value, unit, String(row.quality_flag),
-          result.metric.data_identity, version, source.url, source.attribution, source.license, source.license_url].map(csvCell).join(",")),
-      ];
-      return new Response("\uFEFF" + csv.join("\r\n") + "\r\n", { headers: {
-        ...headers, "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="${city_code}-${metric}.csv"`,
-      } });
-    }
-    return Response.json({ status: result.status, metric: result.metric, version, source, rows }, { headers });
+    return openAnnualResponse({ result, entity: { column: "city_code", code: city_code }, source, metric, format });
   } catch (error) {
     return dataAgentErrorResponse(error);
   }

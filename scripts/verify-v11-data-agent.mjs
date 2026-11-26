@@ -115,6 +115,20 @@ if (expanded) {
   assert.match(await download.text(), /2639\.232.*research_estimate.*CC BY 4\.0/);
   open.searchParams.set("metric", "raw");
   assert.equal((await fetch(open, { signal: AbortSignal.timeout(10000) })).status, 400);
+
+  const publicEconomy = new URL("/api/data-agent/open/economy?economy_code=CHN&metric=gdp&year=2024", base);
+  const gdp = await fetch(publicEconomy, { signal: AbortSignal.timeout(10000) });
+  assert.equal(gdp.status, 200);
+  const published = await gdp.json();
+  assert.deepEqual(published.rows, [{ economy_code: "CHN", year: "2024", value: "18729668435848", quality_flag: 0 }]);
+  assert.match(published.source.terms_url, /worldbank.org/);
+  publicEconomy.searchParams.set("metric", "population");
+  publicEconomy.searchParams.set("format", "csv");
+  const population = await fetch(publicEconomy, { signal: AbortSignal.timeout(10000) });
+  assert.match(population.headers.get("content-type"), /^text\/csv/);
+  assert.match(await population.text(), /1408975000.*World Development Indicators.*CC BY 4\.0.*terms-conditions\/datasets/);
+  publicEconomy.searchParams.set("dataset_id", "internal");
+  assert.equal((await fetch(publicEconomy, { signal: AbortSignal.timeout(10000) })).status, 400);
 }
 
 const mcp = new Client({ name: "verify-v11-data-agent", version: "1.0.0" });
