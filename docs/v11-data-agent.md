@@ -16,6 +16,8 @@ V11 第 1.5 节规定模块通过 `DataRef` 交接。第 2.4–2.7 节规定数�
 | 气象 | NOAA GFS 全球气温、10 米和 100 米风速、地面阵风、相对湿度、比湿、海平面气压、地面气压、可降水量、对流有效位能 | 返回每个预报帧的格点算术均值，保留起报和有效时刻。默认选择查询范围内最新已入库起报。 |
 | 电力 | 国家统计局总发电量本期、累计、本期同比和累计同比，五类分电源本期值，原煤、原油、原油加工量和天然气本期值 | 覆盖全国和 31 个省级地区。指标各自限定产品和单位，来源空值保持 `null`。 |
 | 碳 | GRACED Power 全球日帧格点排放速率合计、非零格点数、总格点数 | 速率使用 `kgC/h`。每日帧均保留原帧与档案哈希。 |
+| 电力、碳 | 中国 352 城市年度发电量和电力部门 CO₂，2000–2019 年 | 研究估算，单位分别是亿千瓦时和万吨 CO₂。按六位 `city_code` 查询，使用来源行政区划和原值。 |
+| 经济 | 世界银行 WDI 名义 GDP 和总人口，2015–2024 年 | 按三位 `economy_code` 查询，单位分别是现价美元和人。保留缺测。 |
 
 目录中的 `metric` 是该版本默认指标，`metrics` 列出该版本当前获准查询的全部指标。查询用 `metric_code` 选择指标，电力查询可在该指标的 `series_codes` 中用 `product` 选择产品。省略 `metric_code` 时沿用原默认指标。旧版引用可继续使用，旧版只提供当时发布的指标。
 
@@ -29,9 +31,13 @@ GRACED 速率和统计局发电量的指标规则与查询数据版本一起返�
 
 1. 在完成 `scripts/v11-schema-baseline.sql` 的 `zyz` 库中，以管理员执行 `scripts/v11-data-agent-extensions.sql`。宿主先安装与 PostgreSQL 主版本匹配的扩展文件，并为 TimescaleDB 配置 `shared_preload_libraries`。再以 `zyz` 依次执行 `v11-data-agent-schema.sql`、`v11-data-agent-nbs.sql`、`v11-data-agent-refresh-log.sql`、`v11-data-agent-context.sql` 和 `v11-data-agent-tiles.sql`，文件都在 `scripts/` 下。升级 API 服务后执行 `v11-data-agent-publish.sql` 发布已有源表。
 2. 在服务端配置 `DATA_AGENT_DATABASE_URL`。生产环境给 JSON 和 MCP 客户端配置同一个服务端 Bearer token。自然语言入口另需配置 `DATA_AGENT_PI_ENABLED=true` 与 `DEEPSEEK_API_KEY`。
-3. `GET /api/data-agent` 读取当前目录。`POST /api/data-agent` 接受 `catalog`、`query`、`ask` 和会话操作。Streamable HTTP MCP 路径为 `/api/mcp/data-agent`，提供 `list_published_catalog`、`query_published_data` 和 `resolve_project_result`。
-4. 运行 `node scripts/verify-v11-data-agent.mjs` 验证三个专题。加 `--pi` 验证自然语言工具调用，加 `--sessions` 验证追问、会话恢复和业务取数。
+3. `GET /api/data-agent` 读取当前目录。`POST /api/data-agent` 接受 `catalog`、`query`、`ask` 和会话操作。Streamable HTTP MCP 路径为 `/api/mcp/data-agent`。查询工具包括 `list_published_catalog`、`list_supplemental_catalog`、`list_published_entities`、`query_published_data` 和 `resolve_project_result`。
+4. 正式发布城市和经济指标前，先执行 `v11-supplemental-ingest.sql` 并核对已导入城市源与 WDI 暂存快照，再执行 `v11-city-economy-publication.sql`、`v11-supplemental-metric-catalog.sql`。区域气象另需 `v11-weather-model-forecast.sql`。升级校园版后运行 `node scripts/verify-v11-data-agent.mjs --supplemental`。加 `--pi` 验证自然语言工具调用，加 `--sessions` 验证追问、会话恢复和业务取数。
 5. 配置 `DATA_AGENT_DATABASE_URL`、`DATA_AGENT_VERIFY_URL` 和现有业务令牌 `DATA_AGENT_TOKEN`，运行 `node scripts/verify-v11-data-agent-benchmarks.mjs`，用独立只读 SQL 对照三个专题的已发布数值、单位、缺测与版本。加 `--live` 验证真实 Pi 会话的诊断确认、图表与 StatsForecast 回测复用同一结果，以及跨项目访问隔离。
+
+城市中文名按发布工作簿的六位代码与 [2019 年区划数据 v2.3.1](https://github.com/modood/Administrative-divisions-of-China/releases/tag/2.3.1) 匹配，用于查找城市，原始名称及代码保留在数据引用中。原表中少数历史及兵团城市代码保留对应的源地名。
+
+公开读取入口为 `GET /api/data-agent/open/city`。例如 `?city_code=110000&metric=co2&year=2019` 查询城市电力碳排放估算，`format=csv` 下载同一结果。`metric=generation` 查询发电量估算，省略 `year` 返回该城市 2000–2019 年序列。JSON、CSV 均附来源、许可、单位、数据身份和发布版本。来源工作簿可由 [Figshare](https://doi.org/10.6084/m9.figshare.30338773.v1) 下载。通用查询、补充目录及项目会话继续通过各自授权入口提供。
 
 ## 国家统计局更新和审核
 

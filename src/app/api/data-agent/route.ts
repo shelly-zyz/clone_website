@@ -1,4 +1,4 @@
-import { dataRequestSchema, topicSchema } from "@/lib/data-agent/contracts";
+import { dataRequestSchema, dataTopicSchema } from "@/lib/data-agent/contracts";
 import { authorizeDataAgent, dataAgentErrorResponse } from "@/lib/data-agent/http.server";
 import { askDataAgent } from "@/lib/data-agent/pi.server";
 import { listDataCatalog, queryData } from "@/lib/data-agent/query.server";
@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 export async function GET(request: Request) {
   const unauthorized = authorizeDataAgent(request);
   if (unauthorized) return unauthorized;
-  const topic = topicSchema.optional().safeParse(new URL(request.url).searchParams.get("topic") ?? undefined);
+  const topic = dataTopicSchema.optional().safeParse(new URL(request.url).searchParams.get("topic") ?? undefined);
   if (!topic.success) return Response.json({ error: "专题不存在。" }, { status: 400 });
   try {
     return Response.json(await listDataCatalog(topic.data), { headers: { "Cache-Control": "no-store" } });

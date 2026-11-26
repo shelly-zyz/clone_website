@@ -3,25 +3,41 @@ import "server-only";
 import { withBusinessAction } from "@/lib/agent-runtime/policy.server";
 import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
-import { generationProducts, powerProducts, type DataQuery, type Topic } from "./contracts";
+import { cityDatasets, datasets, generationProducts, powerProducts, type DataQuery, type DataTopic } from "./contracts";
+import { cityCodesForName } from "./city-names";
 import { catalogEntry, resolveVersion, versionSelect, type VersionRow } from "./catalog.server";
 import { DataAgentError, readDataAgent } from "./database.server";
 import type { QueryDiagnosis } from "./query-diagnosis";
 
-export async function listDataCatalog(topic?: Topic, version?: string) {
+export async function listDataCatalog(topic?: DataTopic, version?: string) {
   return readDataAgent(async (client) => {
     const versions = await client.query<VersionRow>(`${versionSelect}
       WHERE ($1::text IS NULL OR v.topic_id = $1)
         AND (CASE WHEN $2::text IS NULL THEN v.is_current ELSE v.version = $2 END)
-      ORDER BY v.topic_id, (v.dataset_id = 'meteo_gfs_forecast') DESC, v.dataset_id`, [topic ?? null, version ?? null]);
+      ORDER BY v.topic_id, (v.dataset_id = ANY($3::text[])) DESC, v.dataset_id`, [topic ?? null, version ?? null, Object.values(datasets)]);
     const catalog = versions.rows.map(catalogEntry);
-    const power = versions.rows.find((row) => row.topic_id === "power");
+    const power = versions.rows.find((row) => row.dataset_id === datasets.power);
     if (!power || topic !== "power") return { datasets: catalog };
     const regions = await client.query<{ code: string; name: string }>(`
       SELECT DISTINCT entity_code AS code, source_ref->>'region_name' AS name
       FROM standard.std_data_agent_fact WHERE topic_id = 'power' AND dataset_version_id = $1 ORDER BY code`, [power.id]);
-    const products = new Set(catalog[0].metrics.flatMap((metric) => metric.series_codes ?? generationProducts));
+    const products = new Set(catalogEntry(power).metrics.flatMap((metric) => metric.series_codes ?? generationProducts));
     return { datasets: catalog, region_codes: regions.rows, products: powerProducts.filter((product) => products.has(product)) };
+  });
+}
+
+export async function listDataEntities(topic: DataTopic, datasetId: string, search: string, version?: string) {
+  const cityCodes = datasetId === cityDatasets.power || datasetId === cityDatasets.carbon ? cityCodesForName(search) : [];
+  return readDataAgent(async client => {
+    const { rows } = await client.query<{ code: string; name: string }>(`
+      SELECT DISTINCT f.entity_code AS code, COALESCE(f.source_ref->>'region_name', f.entity_code) AS name
+      FROM catalog.dataset_version v JOIN standard.std_data_agent_fact f
+        ON f.topic_id = v.topic_id AND f.dataset_version_id = v.id
+      WHERE v.topic_id = $1 AND v.dataset_id = $2
+        AND (CASE WHEN $4::text IS NULL THEN v.is_current ELSE v.version = $4 END)
+        AND (f.entity_code = ANY($5::text[]) OR lower(f.entity_code) = lower($3) OR strpos(lower(f.source_ref->>'region_name'), lower($3)) > 0)
+      ORDER BY 1, 2 LIMIT 20`, [topic, datasetId, search, version ?? null, cityCodes]);
+    return rows;
   });
 }
 
@@ -67,7 +83,7 @@ async function diagnoseQuery(client: PoolClient, query: DataQuery, filters: unkn
   };
 }
 
-const legacySeries = { power: generationProducts, meteo: ["temperature"], carbon: ["Power"] } as const;
+const legacySeries = { power: generationProducts, meteo: ["temperature"], carbon: ["Power"], economy: ["annual"] } as const;
 
 const outputSchema = [
   { name: "time_start", type: "datetime" }, { name: "issue_time", type: "datetime?" },
@@ -87,14 +103,20 @@ async function executeDataQuery(query: DataQuery) {
     const metric = entry.metrics.find(({ metric_code }) => metric_code === (query.metric_code ?? entry.metric.metric_code));
     if (!metric) throw new DataAgentError("INVALID_METRIC", "该指标未在所选专题和版本发布，或当前未通过审核。");
     const comparison = query.topic === "power" && query.province_comparison === true;
-    if (comparison && metric.time_grain !== "month") {
+    if (comparison && (version.dataset_id !== datasets.power || metric.time_grain !== "month")) {
       throw new DataAgentError("INVALID_METRIC", "省级比较仅支持同一月份、同一口径的月度指标。");
     }
-    const entity = query.topic === "power" ? query.region_code : query.topic === "meteo" ? query.region_code ?? "global" : "global";
-    if (query.topic === "power" && entity !== "000000000000") {
+    const city = "city_code" in query ? query.city_code : undefined;
+    const cityDataset = version.dataset_id === cityDatasets.power || version.dataset_id === cityDatasets.carbon;
+    if (cityDataset !== Boolean(city)) {
+      throw new DataAgentError("INVALID_REGION", cityDataset ? "请指定该版本中的六位城市代码。" : "城市代码仅适用于城市年度数据。");
+    }
+    const entity = city ?? (query.topic === "economy" ? query.economy_code : query.topic === "power" ? query.region_code
+      : query.topic === "meteo" ? query.region_code ?? "global" : "global");
+    if (cityDataset || query.topic === "economy" || (query.topic === "power" && entity !== "000000000000")) {
       const region = await client.query(`
         SELECT 1 FROM standard.std_data_agent_fact
-        WHERE topic_id = 'power' AND dataset_version_id = $1 AND entity_code = $2 LIMIT 1`, [version.id, entity]);
+        WHERE topic_id = $1 AND dataset_version_id = $2 AND entity_code = $3 LIMIT 1`, [query.topic, version.id, entity]);
       if (!region.rowCount) throw new DataAgentError("INVALID_REGION", "该版本中没有此地区编码。");
     }
     const seriesCodes: readonly string[] = metric.series_codes ?? legacySeries[query.topic];
@@ -137,7 +159,9 @@ async function executeDataQuery(query: DataQuery) {
     const effectiveQuery = {
       topic: query.topic, version: version.version, start_date: query.start_date, end_date: query.end_date,
       limit: query.limit,
-      ...(query.topic === "power" ? { region_code: entity, product: series, ...(comparison ? { province_comparison: true as const } : {}) } : {}),
+      ...(city ? { city_code: city } : {}),
+      ...(query.topic === "economy" ? { economy_code: entity } : {}),
+      ...(query.topic === "power" && !city ? { region_code: entity, product: series, ...(comparison ? { province_comparison: true as const } : {}) } : {}),
       ...(query.topic === "meteo" && issueTime ? { issue_time: issueTime } : {}),
       ...(query.topic === "meteo" && query.model ? { model: query.model, region_code: entity } : {}),
       // Keep the legacy replay hash for a version's default metric.

@@ -2,7 +2,7 @@ import "server-only";
 
 import { appendBusinessAudit, withAgentRun, withBusinessAction } from "@/lib/agent-runtime/policy.server";
 import { createHash, randomBytes } from "node:crypto";
-import { dataQuerySchema, type QueryRange, type Topic, type SessionScope } from "./contracts";
+import { dataQuerySchema, type QueryRange, type DataTopic, type SessionScope } from "./contracts";
 import { DataAgentError, runDataAgentWrite } from "./database.server";
 import { withMetricRules } from "./metric-rules";
 import { askDataAgent } from "./pi.server";
@@ -28,7 +28,7 @@ export async function assertDataProject(projectId: string, key: string | null) {
   });
 }
 
-export async function createDataProject(topic: Topic, name: string) {
+export async function createDataProject(topic: DataTopic, name: string) {
   const projectKey = randomBytes(32).toString("base64url");
   return runDataAgentWrite(contextWriter, async (client) => {
     const { rows: [project] } = await client.query<{ id: string }>(
@@ -53,7 +53,7 @@ export async function createDataSession(projectId: string, key: string | null) {
 export async function readDataSession(projectId: string, sessionId: string, key: string | null, includePending = false) {
   const hash = projectHash(key);
   return runDataAgentWrite(contextWriter, async (client) => {
-    const { rows: [session] } = await client.query<{ topic: Topic; revision: number; summary: unknown; last_result_id: string | null; xiaoyun_pending?: unknown; xiaoyun_analysis_pending?: unknown }>(`
+    const { rows: [session] } = await client.query<{ topic: DataTopic; revision: number; summary: unknown; last_result_id: string | null; xiaoyun_pending?: unknown; xiaoyun_analysis_pending?: unknown }>(`
       SELECT p.topic, s.revision, s.summary${includePending ? ", s.xiaoyun_pending, s.xiaoyun_analysis_pending" : ""}, (
         SELECT t.result_id FROM projects.data_session_turn t
         WHERE t.session_id = s.id AND t.result_id IS NOT NULL ORDER BY t.revision DESC LIMIT 1
@@ -81,14 +81,14 @@ export async function resolveDataResult(projectId: string, resultId: string, key
 }
 
 export async function askDataSession(
-  topic: Topic, question: string, scope: Omit<SessionScope, "revision"> & { revision?: number }, key: string | null, signal: AbortSignal,
+  topic: DataTopic, question: string, scope: Omit<SessionScope, "revision"> & { revision?: number }, key: string | null, signal: AbortSignal,
   xiaoyun?: { originalMessage: string; baseResultId?: string; latestVersion: boolean; requestId?: string; resume?: boolean;
     resumedFromPending?: boolean; confirmedRange?: QueryRange },
 ) {
   return withBusinessAction("data", "session_query", () => executeDataSession(topic, question, scope, key, signal, xiaoyun), scope.project_id);
 }
 
-async function executeDataSession(topic: Topic, question: string, scope: Omit<SessionScope, "revision"> & { revision?: number },
+async function executeDataSession(topic: DataTopic, question: string, scope: Omit<SessionScope, "revision"> & { revision?: number },
   key: string | null, signal: AbortSignal, xiaoyun: Parameters<typeof askDataSession>[5]) {
   const session = await readDataSession(scope.project_id, scope.session_id, key);
   if (session.topic === topic && xiaoyun?.requestId) {

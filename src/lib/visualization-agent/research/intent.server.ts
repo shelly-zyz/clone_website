@@ -83,7 +83,7 @@ export async function planIntent(message: string, domain: Domain, artifact: Arti
         artifact ? { configuration: artifact.recipe, chart: artifact.prepared.plan.chart } : undefined,
       guided: Boolean(guided), dialogue: guided?.dialogue,
       business_datasets: catalog.business_datasets.filter(item => active.has(item.domain)),
-      available: { published: catalog.published.filter(entry => active.has({ power: "electricity", meteo: "meteorology", carbon: "carbon" }[entry.topic] as Domain))
+      available: { published: catalog.published.filter(entry => active.has({ power: "electricity", meteo: "meteorology", carbon: "carbon", economy: "economy" }[entry.topic] as Domain))
         .map(entry => ({ topic: entry.topic, metrics: entry.metrics.map(metric => [metric.metric_code, metric.name, metric.unit, metric.series_codes]) })),
       power_regions: active.has("electricity") ? catalog.power_regions : undefined,
       economy_editions: active.has("economy") ? catalog.economic_editions : undefined,

@@ -3,10 +3,13 @@ import { regionalWeatherModel, weatherRegionCode } from "../weather-model-foreca
 
 export const topicSchema = z.enum(["meteo", "power", "carbon"]);
 export type Topic = z.infer<typeof topicSchema>;
+export const dataTopicSchema = z.enum([...topicSchema.options, "economy"]);
+export type DataTopic = z.infer<typeof dataTopicSchema>;
 
 export const datasets = {
-  meteo: "meteo_gfs_forecast", power: "power_nbs_monthly", carbon: "carbon_graced_power",
+  meteo: "meteo_gfs_forecast", power: "power_nbs_monthly", carbon: "carbon_graced_power", economy: "economy_wdi_annual",
 } as const;
+export const cityDatasets = { power: "power_research_city_annual", carbon: "carbon_research_city_annual" } as const;
 
 export const generationProducts = ["electricity", "thermal-power", "hydro-power", "nuclear-power", "wind-power", "solar-power"] as const;
 export const powerProducts = [...generationProducts, "raw-coal", "crude-oil", "crude-processing", "natural-gas"] as const;
@@ -14,6 +17,7 @@ export const powerProducts = [...generationProducts, "raw-coal", "crude-oil", "c
 const queryDate = z.iso.date().refine((date) => !date.startsWith("0000"), "年份必须大于零");
 const issueTime = z.iso.datetime({ offset: true }).refine((date) => new Date(date).getUTCFullYear() > 0, "起报时间无效");
 const commonFilters = {
+  dataset_id: z.string().regex(/^[a-z][a-z0-9_]{0,79}$/).optional(),
   version: z.string().regex(/^[0-9a-f]{64}$/).optional(),
   metric_code: z.string().regex(/^[a-z][a-z0-9_]{0,79}$/).optional(),
   start_date: queryDate.optional(),
@@ -25,13 +29,18 @@ export const dataQuerySchema = z.discriminatedUnion("topic", [
   z.strictObject({ topic: z.literal("meteo"), ...commonFilters, issue_time: issueTime.optional(),
     model: regionalWeatherModel.optional(), region_code: weatherRegionCode.optional() }),
   z.strictObject({ topic: z.literal("power"), ...commonFilters,
-    province_comparison: z.literal(true).optional(),
+    province_comparison: z.literal(true).optional(), city_code: z.string().regex(/^\d{6}$/).optional(),
     region_code: z.string().regex(/^\d{12}$/).default("000000000000"), product: z.enum(powerProducts).optional() }),
-  z.strictObject({ topic: z.literal("carbon"), ...commonFilters }),
+  z.strictObject({ topic: z.literal("carbon"), ...commonFilters, city_code: z.string().regex(/^\d{6}$/).optional() }),
+  z.strictObject({ topic: z.literal("economy"), ...commonFilters,
+    economy_code: z.string().regex(/^[A-Z0-9]{3}$/) }),
 ]).refine(query => query.topic !== "meteo" || Boolean(query.model) === Boolean(query.region_code),
   "区域气象预报须同时指定模型和地区。").refine(({ start_date, end_date }) => !start_date || !end_date || start_date <= end_date, "起始日期必须早于或等于结束日期").refine(query =>
   query.topic !== "power" || !query.province_comparison || (query.region_code === "000000000000" && query.start_date?.endsWith("-01") &&
-    query.end_date && query.start_date.slice(0, 7) === query.end_date.slice(0, 7)), "省级比较须指定同一月份，起始日为当月首日且不限定单一地区。");
+    query.end_date && query.start_date.slice(0, 7) === query.end_date.slice(0, 7)), "省级比较须指定同一月份，起始日为当月首日且不限定单一地区。")
+  .refine(query => query.topic !== "power" || !query.city_code ||
+    (!query.province_comparison && !query.product && query.region_code === "000000000000"), "城市年值不可与省级比较、地区或分电源条件一起使用。")
+  .refine(query => query.topic !== "meteo" || !query.model || !query.dataset_id, "区域气象预报由模型和地区确定数据集。");
 
 export type DataQuery = z.infer<typeof dataQuerySchema>;
 export type QueryRange = { start_date: string; end_date: string };
@@ -41,7 +50,7 @@ export type SessionScope = z.infer<typeof sessionScope>;
 
 const metricRulesSchema = z.object({
   id: z.string(),
-  period: z.enum(["daily_rate", "monthly_value", "year_to_date", "monthly_yoy", "year_to_date_yoy"]),
+  period: z.enum(["daily_rate", "monthly_value", "year_to_date", "monthly_yoy", "year_to_date_yoy", "annual_value"]),
   aggregation: z.literal("published_values_only"),
   missing: z.literal("preserve_null"),
   forecast: z.enum(["same_series", "unsupported"]),
@@ -60,10 +69,10 @@ export const metricSchema = z.object({
 export type PublishedMetric = z.infer<typeof metricSchema>;
 
 export const dataRequestSchema = z.discriminatedUnion("action", [
-  z.strictObject({ action: z.literal("catalog"), topic: topicSchema.optional() }),
+  z.strictObject({ action: z.literal("catalog"), topic: dataTopicSchema.optional() }),
   z.strictObject({ action: z.literal("query"), query: dataQuerySchema }),
-  z.strictObject({ action: z.literal("ask"), topic: topicSchema, question: z.string().trim().min(1).max(500), session: sessionScope.optional() }),
-  z.strictObject({ action: z.literal("create_project"), topic: topicSchema, name: z.string().trim().min(1).max(120) }),
+  z.strictObject({ action: z.literal("ask"), topic: dataTopicSchema, question: z.string().trim().min(1).max(500), session: sessionScope.optional() }),
+  z.strictObject({ action: z.literal("create_project"), topic: dataTopicSchema, name: z.string().trim().min(1).max(120) }),
   z.strictObject({ action: z.literal("create_session"), project_id: z.uuid() }),
   z.strictObject({ action: z.literal("get_session"), project_id: z.uuid(), session_id: z.uuid() }),
   z.strictObject({ action: z.literal("resolve_result"), project_id: z.uuid(), result_id: z.uuid() }),

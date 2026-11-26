@@ -4,15 +4,17 @@ import { businessLimits, withAgentRun, type AgentGuard } from "@/lib/agent-runti
 import { Agent, type AgentTool } from "@earendil-works/pi-agent-core";
 import { createModels } from "@earendil-works/pi-ai";
 import { deepseekProvider } from "@earendil-works/pi-ai/providers/deepseek";
-import { dataQuerySchema, powerProducts, type DataQuery, type Topic } from "./contracts";
+import { cityDatasets, dataQuerySchema, powerProducts, type DataQuery, type DataTopic } from "./contracts";
+import { cityNameInQuestion } from "./city-names";
 import { listWeatherForecastRegions } from "@/lib/weather-model-forecast.server";
 import { DataAgentError } from "./database.server";
-import { listDataCatalog, queryData } from "./query.server";
+import { listDataCatalog, listDataEntities, queryData } from "./query.server";
 
-const topicScope: Record<Topic, string> = {
-  meteo: "GFS 已入库预报帧的全球格点均值，包括气温、风速、湿度、气压等。按起报和有效日期筛选。WRF 和 ClimaX 可查已发布地区的 10 米风速。城市和经纬度点须有对应的已发布地区。",
-  power: "国家统计局能源月度原值，包括总发电量的本期、累计、同比，分电源发电量本期值及部分燃料指标。可查单地区时间序列；也可使用 province_comparison 比较同一月份、同指标同产品的省级已发布数据。",
-  carbon: "GRACED Power 电力部门全球日帧格点排放速率合计、非零格点数和总格点数。地区、其他部门和跨日总排放量不在当前范围。",
+const topicScope: Record<DataTopic, string> = {
+  meteo: "GFS 已入库预报帧的全球格点均值，包括气温、风速、湿度、气压等。用户说最新已入库 GFS 时，省略起报和日期条件，查询会选择该指标最新已发布起报；只要一个值则传 limit=1。WRF 和 ClimaX 可查已发布地区的 10 米风速。城市和经纬度点须有对应的已发布地区。",
+  power: "国家统计局能源月度原值支持各省同月比较。中国城市年度发电量是研究估算，使用 city_code 查询，不作为月报或用电量。",
+  carbon: "GRACED Power 提供全球电力日帧指标。中国城市年度电力部门 CO₂ 排放是研究估算，使用 city_code 查询，不是城市全行业排放。",
+  economy: "世界银行 WDI 提供经济体年度现价美元 GDP 和人口。查询须指定三位经济体代码 economy_code，可通过目录核对。年度查询用当年 1 月 1 日到 12 月 31 日。不得自行换算为不变价或人均指标。",
 };
 
 const dateParameters = { start_date: { type: "string", description: "含首日，YYYY-MM-DD" },
@@ -41,11 +43,11 @@ type Conversation = {
   recent: { question: string; status: string }[];
 };
 
-export async function askDataAgent(topic: Topic, question: string, signal: AbortSignal, conversation?: Conversation) {
+export async function askDataAgent(topic: DataTopic, question: string, signal: AbortSignal, conversation?: Conversation) {
   return withAgentRun("data", signal, guard => runDataAgent(topic, question, guard, conversation));
 }
 
-async function runDataAgent(topic: Topic, question: string, guard: AgentGuard, conversation?: Conversation) {
+async function runDataAgent(topic: DataTopic, question: string, guard: AgentGuard, conversation?: Conversation) {
   const { models, model, apiKey, thinkingLevel } = getPiModel();
 
   const timeout = guard.signal;
@@ -75,11 +77,27 @@ async function runDataAgent(topic: Topic, question: string, guard: AgentGuard, c
   });
 
   const tools = [
-    makeTool("search_semantic_catalog", "读取目标版本已审核的指标和地区编码", {}, async () => {
+    makeTool("search_semantic_catalog", "读取已审核指标。可同时指定数据集及要查找的地区名称或代码。", {
+      dataset_id: { type: "string" }, entity_search: { type: "string", description: "城市/经济体名称、拼音或代码" },
+    }, async args => {
       const pinned = conversation?.boundBase && !conversation.boundBase.latestVersion ? conversation.previous?.version : undefined;
       context ??= await listDataCatalog(topic, pinned);
       if (pinned && !context.datasets.length) {
         throw new DataAgentError("VERSION_NOT_FOUND", "原查询版本不可用。可以明确要求使用最新发布版本重新查询。");
+      }
+      const search = args as { dataset_id?: string; entity_search?: string };
+      const match = context.datasets.find(dataset => dataset.dataset_id === search.dataset_id);
+      const city = topic === "power" || topic === "carbon" ? cityNameInQuestion(question) : undefined;
+      const cityDataset = city && (topic === "power" || topic === "carbon")
+        ? context.datasets.find(dataset => dataset.dataset_id === cityDatasets[topic]) : undefined;
+      if (match && typeof search.entity_search === "string" && search.entity_search.trim().length >= 2 &&
+        search.entity_search.length <= 80) {
+        const entities = await listDataEntities(topic, match.dataset_id, search.entity_search.trim(), match.version);
+        if (entities.length || !cityDataset) return { ...context, entity_matches: entities };
+      }
+      if (city && cityDataset) {
+        return { ...context, entity_dataset_id: cityDataset.dataset_id,
+          entity_matches: await listDataEntities(topic, cityDataset.dataset_id, city, cityDataset.version) };
       }
       return context;
     }),
@@ -88,6 +106,9 @@ async function runDataAgent(topic: Topic, question: string, guard: AgentGuard, c
     ] : []),
     makeTool("query_approved_metric", "用固定只读模板返回指定指标，不接受 SQL 或任意聚合", {
       metric_code: { type: "string", description: "当前专题目录中与问题口径一致的指标编码" },
+      dataset_id: { type: "string", description: "指标所属数据集编码" },
+      ...(topic === "power" || topic === "carbon" ? { city_code: { type: "string", description: "城市年度指标必填，目录返回的六位城市代码" } } : {}),
+      ...(topic === "economy" ? { economy_code: { type: "string", description: "目录中的三位经济体代码" } } : {}),
       ...(conversation?.previous && !conversation.boundBase ? {
         follow_up: { type: "boolean", description: "仅当用户引用上一结果时，沿用上次的筛选和数据版本" },
         latest_version: { type: "boolean", description: "仅当用户明确请求切换到最新数据版本时设为 true" },
@@ -123,10 +144,15 @@ async function runDataAgent(topic: Topic, question: string, guard: AgentGuard, c
       if (inherited.topic === "meteo" && (changedRegionalSeries || (regional && latest_version))) {
         delete inherited.issue_time;
       }
+      if (regional) delete filters.dataset_id;
+      const selected = context.datasets.find(dataset => filters.dataset_id === dataset.dataset_id)
+        ?? context.datasets.find(dataset => dataset.metrics.some(metric => metric.metric_code === filters.metric_code))
+        ?? context.datasets[0];
       const plan = dataQuerySchema.safeParse({ ...inherited, ...filters, topic,
         version: regional
           ? (!latest_version && !changedRegionalSeries ? previous?.version : undefined)
-          : (conversation?.boundBase ? context.datasets[0].version : (!latest_version && previous?.version) || context.datasets[0].version),
+          : (conversation?.boundBase ? context.datasets[0].version
+            : ((!latest_version && previous?.version && (!filters.metric_code || selected.version === previous.version)) || selected.version)),
       });
       if (!plan.success) return { code: "INVALID_FILTER", issues: plan.error.issues.map((issue) => issue.message) };
       if (!plan.data.metric_code) return { code: "METRIC_REQUIRED", message: "请指定目录中的指标编码。" };

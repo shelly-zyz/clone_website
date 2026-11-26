@@ -23,7 +23,9 @@ async function runWithKey(body, status, projectKey) {
 }
 
 const catalog = await run({ action: "catalog" });
-assert.deepEqual(catalog.datasets.map(({ topic }) => topic).sort(), ["carbon", "meteo", "power"]);
+const expanded = process.argv.includes("--supplemental");
+const topics = new Set(catalog.datasets.map(({ topic }) => topic));
+for (const topic of ["carbon", "meteo", "power", ...(expanded ? ["economy"] : [])]) assert.ok(topics.has(topic), topic);
 
 const powerQuery = { topic: "power", start_date: "2025-01-01", end_date: "2025-03-31" };
 const [power, meteo, carbon] = await Promise.all([
@@ -83,11 +85,56 @@ assert.equal(unsupportedMetric.code, "INVALID_METRIC");
 const unsupportedSeries = await run({ action: "query", query: { ...samples[2][0], product: "wind-power" } }, 422);
 assert.equal(unsupportedSeries.code, "INVALID_SERIES");
 
+if (expanded) {
+  const samples = [
+    [{ topic: "power", city_code: "110000", start_date: "2019-01-01", end_date: "2019-12-31" }, "464", "research_estimate"],
+    [{ topic: "carbon", city_code: "110000", start_date: "2019-01-01", end_date: "2019-12-31" }, "2639.232", "research_estimate"],
+    [{ topic: "economy", economy_code: "CHN", start_date: "2024-01-01", end_date: "2024-12-31" }, "18729668435848", "official_statistics"],
+    [{ topic: "economy", economy_code: "CHN", metric_code: "wdi_population_total", start_date: "2024-01-01", end_date: "2024-12-31" },
+      "1408975000", "official_statistics"],
+  ];
+  for (const [query, expected, identity] of samples) {
+    const response = await run({ action: "query", query });
+    assert.deepEqual(response.rows.map(({ value }) => value), [expected]);
+    assert.equal(response.metric.data_identity, identity);
+    assert.equal(response.metric.rules.missing, "preserve_null");
+    assert.deepEqual(await run({ action: "query", query: response.query }), response);
+  }
+  await run({ action: "query", query: { topic: "economy" } }, 400);
+  await run({ action: "query", query: { topic: "carbon", metric_code: "city_power_co2_annual" } }, 422);
+  await run({ action: "query", query: { topic: "power", city_code: "999999" } }, 422);
+  const open = new URL("/api/data-agent/open/city?city_code=110000&metric=co2&year=2019", base);
+  const response = await fetch(open, { signal: AbortSignal.timeout(10000) });
+  assert.equal(response.status, 200);
+  const publicData = await response.json();
+  assert.equal(publicData.source.license, "CC BY 4.0");
+  assert.deepEqual(publicData.rows.map(row => row.value), ["2639.232"]);
+  open.searchParams.set("format", "csv");
+  const download = await fetch(open, { signal: AbortSignal.timeout(10000) });
+  assert.match(download.headers.get("content-type"), /^text\/csv/);
+  assert.match(await download.text(), /2639\.232.*research_estimate.*CC BY 4\.0/);
+  open.searchParams.set("metric", "raw");
+  assert.equal((await fetch(open, { signal: AbortSignal.timeout(10000) })).status, 400);
+}
+
 const mcp = new Client({ name: "verify-v11-data-agent", version: "1.0.0" });
 try {
   await mcp.connect(new StreamableHTTPClientTransport(new URL("/api/mcp/data-agent", base), { requestInit: { headers: authorization } }));
   const tools = await mcp.listTools();
-  assert.deepEqual(tools.tools.map(({ name }) => name).sort(), ["list_published_catalog", "query_published_data", "resolve_project_result"]);
+  const names = new Set(tools.tools.map(({ name }) => name));
+  for (const name of ["list_published_catalog", "query_published_data", "resolve_project_result"]) assert.ok(names.has(name));
+  if (expanded) {
+    const metadata = await mcp.callTool({ name: "list_supplemental_catalog", arguments: {} });
+    assert.equal(metadata.structuredContent.datasets.length, 25);
+    const metrics = metadata.structuredContent.metrics;
+    assert.equal(new Set(metrics.map(metric => metric.topic_id)).size, 4);
+    assert.equal(new Set(metrics.map(metric => metric.source_sha256)).size, 16);
+    assert.ok(metrics.every(metric => metric.aggregation && metric.missing && metric.entity_type && metric.unit));
+    const cities = await mcp.callTool({ name: "list_published_entities", arguments: {
+      topic: "carbon", dataset_id: "carbon_research_city_annual", search: "Beijing",
+    } });
+    assert.deepEqual(cities.structuredContent.entities, [{ code: "110000", name: "Beijing" }]);
+  }
   const directory = await mcp.callTool({ name: "list_published_catalog", arguments: {} });
   assert.deepEqual(directory.structuredContent, catalog);
   const result = await mcp.callTool({ name: "query_published_data", arguments: { query: samples[2][0] } });
@@ -160,6 +207,11 @@ if (process.argv.includes("--pi")) {
     ["power", "查国家统计局 2025 年 3 月全国发电量本期同比增长。", "electricity_generation_yoy", "%", "1.8"],
     ["carbon", "查 GRACED Power 2026 年 7 月 31 日全球日帧非零格点数。", "global_grid_nonzero_cell_count", "格点", "34045"],
   ];
+  if (expanded) examples.push(
+    ["power", "北京 2019 年的城市发电量估算是多少？", "city_power_generation_annual", "亿千瓦时", "464"],
+    ["carbon", "北京 2019 年的电力部门碳排放估算是多少？", "city_power_co2_annual", "万吨 CO₂", "2639.232"],
+    ["economy", "世界银行 WDI 的中国 2024 年现价美元 GDP 是多少？", "wdi_gdp_current_usd", "美元", "18729668435848"],
+  );
   for (const [topic, question, metricCode, unit, expected] of examples) {
     const result = await run({ action: "ask", topic, question });
     assert.equal(result.mode, "pi");

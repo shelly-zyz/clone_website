@@ -7,6 +7,7 @@ import { z } from "zod";
 import { getAnalysisJob } from "@/lib/agent-runtime/store";
 import { analysisResultSchema } from "@/lib/agent-runtime/analysis-result";
 import { catalogEntry, resolveVersion } from "@/lib/data-agent/catalog.server";
+import { cityDatasets } from "@/lib/data-agent/contracts";
 import { readDataAgent, runDataAgentWrite } from "@/lib/data-agent/database.server";
 import { listDataCatalog, queryData } from "@/lib/data-agent/query.server";
 import { resolveDataResult } from "@/lib/data-agent/state.server";
@@ -21,7 +22,7 @@ import { dataIdentity, domains, economyMetrics, VisualizationError, type Busines
   type DatasetProfile, type DatasetRequest, type VisualizationDataContract } from "./contracts";
 
 export type ProjectAccess = { project_id: string; key: string };
-export const datasetDomain = { power: "electricity", meteo: "meteorology", carbon: "carbon" } as const;
+export const datasetDomain = { power: "electricity", meteo: "meteorology", carbon: "carbon", economy: "economy" } as const;
 const hash = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
 
 const urlSchema = z.url({ protocol: /^https?$/ }).refine(value => {
@@ -106,7 +107,7 @@ function validateDataset(data: VisualizationDataContract, query: DatasetRequest)
 const seriesLabels: Record<string, string> = { electricity: "全部电源", "thermal-power": "火电", "hydro-power": "水电", "wind-power": "风电",
   "solar-power": "太阳能", "nuclear-power": "核电" };
 const sourceLinks = { power: "https://data.stats.gov.cn/", carbon: "https://carbonmonitor-graced.com/datasets.html",
-  meteo: "https://www.ncei.noaa.gov/products/weather-climate-models/global-forecast" };
+  meteo: "https://www.ncei.noaa.gov/products/weather-climate-models/global-forecast", economy: "https://data.worldbank.org/" };
 
 async function fromDataResult(result: DataResult, publication?: string): Promise<VisualizationDataContract> {
   const { data_ref: ref, metric, rows, query } = result;
@@ -422,12 +423,15 @@ export async function resolveDatasets(requests: DatasetRequest[], access: Projec
 export async function researchCatalog() {
   const [catalog, power] = await Promise.all([listDataCatalog().catch(() => undefined), listDataCatalog("power").catch(() => undefined)]);
   const published = catalog?.datasets ?? [];
-  const business_datasets: BusinessDataset[] = published.flatMap(({ topic, metrics }) => metrics.map(metric => ({
+  const business_datasets: BusinessDataset[] = published.filter(({ dataset_id }) =>
+    dataset_id !== cityDatasets.power && dataset_id !== cityDatasets.carbon).flatMap(({ topic, metrics }) => metrics.map(metric => ({
     id: "published:" + metric.metric_code, label: businessNames[metric.metric_code] ?? metric.name, domain: datasetDomain[topic],
     unit: metric.unit, frequency: metric.time_grain,
     request: { kind: "published", query: topic === "power"
       ? { topic, metric_code: metric.metric_code, limit: 120, region_code: "000000000000" }
-      : { topic, metric_code: metric.metric_code, limit: 120 } },
+      : topic === "economy"
+        ? { topic, metric_code: metric.metric_code, limit: 120, economy_code: "CHN" }
+        : { topic, metric_code: metric.metric_code, limit: 120 } },
   })));
   business_datasets.unshift({ id: "annual-capacity", label: "装机量 · 全国年末", domain: "electricity", unit: "GW", frequency: "year",
     request: { kind: "annual-capacity", source: "electricity", start_year: +powerRecords[0].year, end_year: +powerRecords.at(-1)!.year } });
