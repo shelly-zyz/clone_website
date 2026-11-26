@@ -6,22 +6,35 @@ import { join } from "node:path";
 import { parseEnv, promisify } from "node:util";
 
 const run = promisify(execFile);
+const sslRequest = Buffer.alloc(8);
+sslRequest.writeUInt32BE(8);
+sslRequest.writeUInt32BE(80877103, 4);
 
-function localListener(port) {
+function probePostgres(port) {
   return new Promise(resolve => {
-    const socket = createConnection({ host: "127.0.0.1", port, timeout: 1000 });
-    function finish(listening) {
+    let connected = false;
+    const socket = createConnection({ host: "127.0.0.1", port, timeout: 2000 });
+    function finish(status) {
       socket.destroy();
-      resolve(listening);
+      resolve(status);
     }
-    socket.once("connect", () => finish(true));
-    socket.once("timeout", () => finish(false));
-    socket.once("error", () => finish(false));
+    socket.once("connect", () => {
+      connected = true;
+      // PostgreSQL answers SSLRequest before authentication, even when TLS is disabled.
+      socket.write(sslRequest);
+    });
+    socket.once("data", data => {
+      finish(data.length === 1 && (data[0] === 0x53 || data[0] === 0x4e) ? "ready" : "unreachable");
+    });
+    socket.once("end", () => finish("unreachable"));
+    socket.once("timeout", () => finish("unreachable"));
+    socket.once("error", error => finish(!connected && error.code === "ECONNREFUSED" ? "closed" : "unreachable"));
   });
 }
 
 export function localDatabaseTunnel() {
-  const path = join(homedir(), ".config", "opengridworks", "database-tunnel.env");
+  const directory = join(homedir(), ".config", "opengridworks");
+  const path = join(directory, "database-tunnel.env");
   let stat;
   try {
     stat = lstatSync(path);
@@ -40,17 +53,36 @@ export function localDatabaseTunnel() {
     throw new Error("数据库隧道配置中的主机或端口无效。");
   }
   async function ensure(port) {
-    if (await localListener(Number(port))) return;
+    const localPort = Number(port);
+    const socketPath = join(directory, `database-tunnel-${localPort}.sock`);
+    // Leave room for OpenSSH's temporary suffix within macOS's Unix socket path limit.
+    const controlSocket = process.platform !== "win32" && Buffer.byteLength(socketPath) < 86 ? socketPath : undefined;
+    let status = await probePostgres(localPort);
+    if (status === "ready") return;
+    if (status === "unreachable") {
+      // Only ask the SSH process started by this script to release its forward.
+      if (controlSocket) {
+        await run("ssh", ["-S", controlSocket, "-O", "exit", SSH_HOST], { timeout: 2_000 }).catch(() => {});
+        status = await probePostgres(localPort);
+        if (status === "ready") return;
+      }
+      if (status !== "closed") throw new Error(`本机端口 ${localPort} 未能转发到 PostgreSQL。`);
+    }
     try {
       await run("ssh", [
         "-fNT", "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes", "-o", "ConnectTimeout=10",
         "-o", "IPQoS=none",
+        ...(controlSocket ? ["-S", controlSocket, "-o", "ControlMaster=yes", "-o", "ControlPersist=no"] : []),
         "-o", "ExitOnForwardFailure=yes", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=2",
         "-L", `127.0.0.1:${port}:${PG_HOST}:${PG_PORT}`, SSH_HOST,
       ], { timeout: 15_000 });
     } catch {
       // Another preview may have established the shared forward in the meantime.
-      if (!await localListener(Number(port))) throw new Error("无法连接已配置的数据库 SSH 隧道。");
+      if (await probePostgres(localPort) === "ready") return;
+      throw new Error(`无法建立本机端口 ${localPort} 的数据库 SSH 隧道。`);
+    }
+    if (await probePostgres(localPort) !== "ready") {
+      throw new Error(`本机端口 ${localPort} 的 SSH 隧道无法连到 PostgreSQL。`);
     }
   }
   return () => Promise.all(ports.map(ensure));
