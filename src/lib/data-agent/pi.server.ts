@@ -11,7 +11,7 @@ import { DataAgentError } from "./database.server";
 import { listDataCatalog, listDataEntities, queryData } from "./query.server";
 
 const topicScope: Record<DataTopic, string> = {
-  meteo: "GFS 已入库预报帧的全球格点均值，包括气温、风速、湿度、气压等。用户说最新已入库 GFS 时，省略起报和日期条件，查询会选择该指标最新已发布起报；只要一个值则传 limit=1。WRF 和 ClimaX 可查已发布地区的 10 米风速。城市和经纬度点须有对应的已发布地区。",
+  meteo: "GFS 提供全球格点预报均值；查询最新已入库 GFS 时省略起报和日期，只要一个值则传 limit=1。ERA5 提供目录覆盖地点的历史逐小时再分析，按 coverage 中的地点代码 location_code 和 UTC 日期查原值，不传 model 或 issue_time。WRF 和 ClimaX 可查已发布地区的 10 米风速。",
   power: "国家统计局能源月度原值支持各省同月比较。中国城市年度发电量是研究估算，使用 city_code 查询，不作为月报或用电量。",
   carbon: "GRACED Power 提供全球电力日帧指标。中国城市年度电力部门 CO₂ 排放是研究估算，使用 city_code 查询，不是城市全行业排放。",
   economy: "世界银行 WDI 提供经济体年度现价美元 GDP 和人口。查询须指定三位经济体代码 economy_code，可通过目录核对。年度查询用当年 1 月 1 日到 12 月 31 日。不得自行换算为不变价或人均指标。",
@@ -118,6 +118,7 @@ async function runDataAgent(topic: DataTopic, question: string, guard: AgentGuar
         issue_time: { type: "string", description: "可选，ISO 8601 起报时刻" },
         model: { type: "string", enum: ["wrf", "climax"], description: "区域预报来源，全球 GFS 不传此项" },
         region_code: { type: "string", description: "与 model 同时传，使用已发布地区编码" },
+        location_code: { type: "string", description: "只用于 ERA5 历史查数，填所选指标 coverage 中与问题相符的地点编码" },
       } : {}),
       ...(topic === "power" ? { region_code: { type: "string" }, province_comparison: { type: "boolean", description: "只在用户明确要求各省同月比较时为 true，不指定单地区" }, product: { type: "string", enum: powerProducts } } : {}),
     }, async (args) => {
@@ -126,8 +127,9 @@ async function runDataAgent(topic: DataTopic, question: string, guard: AgentGuar
       const { follow_up, latest_version, ...filters } = parameters;
       const previous = conversation?.boundBase || follow_up ? conversation?.previous : undefined;
       if (previous?.topic === "meteo" && ((filters.model && filters.model !== previous.model) ||
-          (filters.region_code && filters.region_code !== previous.region_code)) && conversation?.boundBase) {
-        return { code: "INVALID_FILTER", message: "变更预报模型或地区需要开始新的查询。" };
+          (filters.region_code && filters.region_code !== previous.region_code) ||
+          (filters.location_code && filters.location_code !== previous.location_code)) && conversation?.boundBase) {
+        return { code: "INVALID_FILTER", message: "变更气象产品或地点需要开始新的查询。" };
       }
       const regional = topic === "meteo" && (filters.model || previous?.topic === "meteo" && previous.model);
       const changedRegionalSeries = previous?.topic === "meteo" && ((filters.model && filters.model !== previous.model) ||

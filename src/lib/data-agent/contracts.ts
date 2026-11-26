@@ -10,6 +10,7 @@ export const datasets = {
   meteo: "meteo_gfs_forecast", power: "power_nbs_monthly", carbon: "carbon_graced_power", economy: "economy_wdi_annual",
 } as const;
 export const cityDatasets = { power: "power_research_city_annual", carbon: "carbon_research_city_annual" } as const;
+export const era5HistoryDataset = "meteo_era5_city_history";
 
 export const generationProducts = ["electricity", "thermal-power", "hydro-power", "nuclear-power", "wind-power", "solar-power"] as const;
 export const powerProducts = [...generationProducts, "raw-coal", "crude-oil", "crude-processing", "natural-gas"] as const;
@@ -27,7 +28,7 @@ const commonFilters = {
 
 export const dataQuerySchema = z.discriminatedUnion("topic", [
   z.strictObject({ topic: z.literal("meteo"), ...commonFilters, issue_time: issueTime.optional(),
-    model: regionalWeatherModel.optional(), region_code: weatherRegionCode.optional() }),
+    model: regionalWeatherModel.optional(), region_code: weatherRegionCode.optional(), location_code: weatherRegionCode.optional() }),
   z.strictObject({ topic: z.literal("power"), ...commonFilters,
     province_comparison: z.literal(true).optional(), city_code: z.string().regex(/^\d{6}$/).optional(),
     region_code: z.string().regex(/^\d{12}$/).default("000000000000"), product: z.enum(powerProducts).optional() }),
@@ -40,7 +41,10 @@ export const dataQuerySchema = z.discriminatedUnion("topic", [
     query.end_date && query.start_date.slice(0, 7) === query.end_date.slice(0, 7)), "省级比较须指定同一月份，起始日为当月首日且不限定单一地区。")
   .refine(query => query.topic !== "power" || !query.city_code ||
     (!query.province_comparison && !query.product && query.region_code === "000000000000"), "城市年值不可与省级比较、地区或分电源条件一起使用。")
-  .refine(query => query.topic !== "meteo" || !query.model || !query.dataset_id, "区域气象预报由模型和地区确定数据集。");
+  .refine(query => query.topic !== "meteo" || !query.model || !query.dataset_id, "区域气象预报由模型和地区确定数据集。")
+  .refine(query => query.topic !== "meteo" || !query.location_code ||
+    (!query.model && !query.issue_time && (!query.dataset_id || query.dataset_id === era5HistoryDataset)),
+  "ERA5 历史天气使用地点代码和 UTC 日期。");
 
 export type DataQuery = z.infer<typeof dataQuerySchema>;
 export type QueryRange = { start_date: string; end_date: string };
@@ -50,7 +54,7 @@ export type SessionScope = z.infer<typeof sessionScope>;
 
 const metricRulesSchema = z.object({
   id: z.string(),
-  period: z.enum(["daily_rate", "monthly_value", "year_to_date", "monthly_yoy", "year_to_date_yoy", "annual_value"]),
+  period: z.enum(["hourly_value", "daily_rate", "monthly_value", "year_to_date", "monthly_yoy", "year_to_date_yoy", "annual_value"]),
   aggregation: z.literal("published_values_only"),
   missing: z.literal("preserve_null"),
   forecast: z.enum(["same_series", "unsupported"]),
@@ -61,9 +65,13 @@ export type MetricRules = z.infer<typeof metricRulesSchema>;
 
 export const metricSchema = z.object({
   metric_code: z.string(), name: z.string(), unit: z.string(), time_grain: z.string(),
-  data_identity: z.enum(["forecast", "official_statistics", "research_estimate"]),
+  data_identity: z.enum(["forecast", "official_statistics", "research_estimate", "reanalysis"]),
   source_name: z.string(), definition: z.string(), review_status: z.literal("approved"),
   series_codes: z.array(z.string()).nonempty().optional(),
+  coverage: z.object({
+    start: z.iso.datetime(), end: z.iso.datetime(),
+    location_code: weatherRegionCode, location_name: z.string(),
+  }).optional(),
   rules: metricRulesSchema.optional(),
 });
 export type PublishedMetric = z.infer<typeof metricSchema>;

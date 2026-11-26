@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { PoolClient } from "pg";
-import { cityDatasets, datasets, metricSchema, type DataQuery, type DataTopic } from "./contracts";
+import { cityDatasets, datasets, era5HistoryDataset, metricSchema, type DataQuery, type DataTopic } from "./contracts";
 import { weatherModelDatasets } from "../weather-model-forecast";
 import { DataAgentError } from "./database.server";
 import { withMetricRules } from "./metric-rules";
@@ -39,7 +39,7 @@ export function catalogEntry(row: VersionRow) {
 }
 
 type VersionQuery = Pick<DataQuery, "topic" | "version" | "dataset_id" | "metric_code"> &
-  Partial<Pick<Extract<DataQuery, { topic: "meteo" }>, "model" | "region_code" | "issue_time">> & { city_code?: string };
+  Partial<Pick<Extract<DataQuery, { topic: "meteo" }>, "model" | "region_code" | "issue_time" | "location_code">> & { city_code?: string };
 
 export async function resolveVersion(client: PoolClient, query: VersionQuery) {
   if (query.topic === "meteo" && query.model && query.region_code) {
@@ -54,7 +54,8 @@ export async function resolveVersion(client: PoolClient, query: VersionQuery) {
     return rows[0];
   }
   const cityDataset = (query.topic === "power" || query.topic === "carbon") && query.city_code ? cityDatasets[query.topic] : undefined;
-  const preferred = cityDataset ?? datasets[query.topic];
+  const selectedDataset = cityDataset ?? (query.topic === "meteo" && query.location_code ? era5HistoryDataset : undefined);
+  const preferred = selectedDataset ?? datasets[query.topic];
   const { rows } = await client.query<VersionRow>(`${versionSelect}
     WHERE v.topic_id = $1
       AND (($3::text IS NULL AND v.is_current) OR v.version = $3)
@@ -67,7 +68,7 @@ export async function resolveVersion(client: PoolClient, query: VersionQuery) {
           AND (v.metrics_snapshot ? $5 OR v.metric_snapshot->>'metric_code' = $5)
       ))
       ORDER BY (v.dataset_id = $2) DESC, v.published_at DESC, v.id DESC LIMIT 1`,
-  [query.topic, preferred, query.version ?? null, query.dataset_id ?? cityDataset ?? null, query.metric_code ?? null]);
+  [query.topic, preferred, query.version ?? null, query.dataset_id ?? selectedDataset ?? null, query.metric_code ?? null]);
   if (!rows[0] && query.metric_code && !query.dataset_id && !query.version) {
     throw new DataAgentError("INVALID_METRIC", "该指标未在所选专题发布，或当前未通过审核。");
   }

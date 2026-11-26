@@ -24,6 +24,7 @@ async function runWithKey(body, status, projectKey) {
 
 const catalog = await run({ action: "catalog" });
 const expanded = process.argv.includes("--supplemental");
+const era5 = process.argv.includes("--era5");
 const topics = new Set(catalog.datasets.map(({ topic }) => topic));
 for (const topic of ["carbon", "meteo", "power", ...(expanded ? ["economy"] : [])]) assert.ok(topics.has(topic), topic);
 
@@ -41,6 +42,29 @@ assert.equal(meteo.data_ref.units.value, "°C");
 assert.ok(meteo.rows.length > 0 && meteo.rows.every((row) => row.issue_time === meteo.query.issue_time && row.source_ref.payload_sha256));
 assert.equal(carbon.data_ref.units.value, "kgC/h");
 assert.ok(carbon.rows.length > 0 && carbon.rows.every((row) => row.source_ref.archive_sha256 && row.issue_time === null));
+
+if (era5) {
+  const dataset = catalog.datasets.find(entry => entry.dataset_id === "meteo_era5_city_history");
+  assert.equal(dataset?.row_count, 2160);
+  const query = { topic: "meteo", location_code: "shanghai", start_date: "2026-10-20", end_date: "2026-10-20" };
+  for (const [metric_code, unit, value] of [
+    ["era5_air_temperature_2m", "°C", "23.2"], ["era5_wind_speed_10m", "m/s", "1.79"], ["era5_precipitation_1h", "mm", "0"],
+  ]) {
+    const result = await run({ action: "query", query: { ...query, metric_code } });
+    assert.equal(result.metric.data_identity, "reanalysis");
+    assert.equal(result.metric.unit, unit);
+    assert.equal(result.metric.coverage.start, "2026-10-20T00:00:00Z");
+    assert.equal(result.metric.coverage.end, "2026-11-18T23:00:00Z");
+    assert.equal(result.rows.length, 24);
+    assert.equal(result.rows[0].value, value);
+    assert.equal(result.rows[0].source_ref.source_sha256, "683cdf85bf7435290f2d5cf5eb850d7b831dc9effb0ec09801dbd96b85fc5170");
+    assert.ok(result.rows.every(row => row.entity_code === "shanghai" && row.issue_time === null && row.quality_flag === 0));
+    assert.deepEqual(await run({ action: "query", query: result.query }), result);
+  }
+  await run({ action: "query", query: { ...query, location_code: "beijing" } }, 422);
+  await run({ action: "query", query: { ...query, issue_time: "2026-10-20T00:00:00Z" } }, 400);
+  assert.equal(meteo.data_ref.dataset_id, "meteo_gfs_forecast");
+}
 
 const replay = await run({ action: "query", query: power.query });
 assert.deepEqual(replay.data_ref, power.data_ref);
@@ -153,6 +177,13 @@ try {
   assert.deepEqual(directory.structuredContent, catalog);
   const result = await mcp.callTool({ name: "query_published_data", arguments: { query: samples[2][0] } });
   assert.deepEqual(result.structuredContent, results[2]);
+  if (era5) {
+    const history = await mcp.callTool({ name: "query_published_data", arguments: {
+      query: { topic: "meteo", location_code: "shanghai", start_date: "2026-10-20", end_date: "2026-10-20" },
+    } });
+    assert.equal(history.structuredContent?.data_ref.dataset_id, "meteo_era5_city_history");
+    assert.equal(history.structuredContent.rows.length, 24);
+  }
   const badArguments = await mcp.callTool({ name: "list_published_catalog", arguments: { unknown: true } });
   assert.equal(badArguments.isError, true);
 } finally {
@@ -225,6 +256,9 @@ if (process.argv.includes("--pi")) {
     ["power", "北京 2019 年的城市发电量估算是多少？", "city_power_generation_annual", "亿千瓦时", "464"],
     ["carbon", "北京 2019 年的电力部门碳排放估算是多少？", "city_power_co2_annual", "万吨 CO₂", "2639.232"],
     ["economy", "世界银行 WDI 的中国 2024 年现价美元 GDP 是多少？", "wdi_gdp_current_usd", "美元", "18729668435848"],
+  );
+  if (era5) examples.push(
+    ["meteo", "查上海 2026 年 10 月 20 日 UTC 的 ERA5 逐小时 2 米历史气温。", "era5_air_temperature_2m", "°C"],
   );
   for (const [topic, question, metricCode, unit, expected] of examples) {
     const result = await run({ action: "ask", topic, question });

@@ -14,12 +14,30 @@ V11 第 1.5 节规定模块通过 `DataRef` 交接。第 2.4–2.7 节规定数�
 | 专题 | 查询范围 | 口径 |
 | --- | --- | --- |
 | 气象 | NOAA GFS 全球气温、10 米和 100 米风速、地面阵风、相对湿度、比湿、海平面气压、地面气压、可降水量、对流有效位能 | 返回每个预报帧的格点算术均值，保留起报和有效时刻。默认选择查询范围内最新已入库起报。 |
+| 气象 | ERA5 上海逐小时 2 米气温、10 米风速和前一小时降水量。首批为 2026-10-20 至 2026-11-18 UTC | 再分析格点历史数据，单位为 °C、m/s、mm。降水按标记时刻前一小时累计。 |
 | 电力 | 国家统计局总发电量本期、累计、本期同比和累计同比，五类分电源本期值，原煤、原油、原油加工量和天然气本期值 | 覆盖全国和 31 个省级地区。指标各自限定产品和单位，来源空值保持 `null`。 |
 | 碳 | GRACED Power 全球日帧格点排放速率合计、非零格点数、总格点数 | 速率使用 `kgC/h`。每日帧均保留原帧与档案哈希。 |
 | 电力、碳 | 中国 352 城市年度发电量和电力部门 CO₂，2000–2019 年 | 研究估算，单位分别是亿千瓦时和万吨 CO₂。按六位 `city_code` 查询，使用来源行政区划和原值。 |
 | 经济 | 世界银行 WDI 名义 GDP 和总人口，2015–2024 年 | 按三位 `economy_code` 查询，单位分别是现价美元和人。保留缺测。 |
 
 目录中的 `metric` 是该版本默认指标，`metrics` 列出该版本当前获准查询的全部指标。查询用 `metric_code` 选择指标，电力查询可在该指标的 `series_codes` 中用 `product` 选择产品。省略 `metric_code` 时沿用原默认指标。旧版引用可继续使用，旧版只提供当时发布的指标。
+
+### ERA5 历史天气
+
+首批使用 [Open-Meteo 历史接口](https://open-meteo.com/en/docs/historical-weather-api) 显式选取 ERA5 的上海样本，请求点为 31.22222°N、121.45806°E，返回格点为 31.25°N、121.50°E。长期采集可使用 [Copernicus Climate Data Store](https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels-timeseries) 的正式下载产品，接入时核对单位、下载授权与来源版本。
+
+从已验证的 Shanghai ERA5 JSON 生成事务脚本并用迁移连接执行。脚本校验 UTC 连续性、覆盖和单位，将原始字节与 SHA-256 登记到 `catalog.era5_history_source`，再写入标准事实和语义目录。可先加 `--dry-run` 演练。同一源重复导入复用版本。覆盖扩展时保留已经发布的时间范围。
+
+```sh
+node scripts/import-era5-history.mjs --file /path/to/era5-shanghai.json \
+  --start 2026-10-20 --end 2026-11-18 | psql -X -v ON_ERROR_STOP=1
+```
+
+通过通用查询或 MCP 的 `query_published_data` 查询历史天气。日期按 UTC 解释。历史数据使用 `location_code`，预报仍沿用原有 GFS 参数。可用 `node scripts/verify-v11-data-agent.mjs --supplemental --era5` 回归两种查询。
+
+```json
+{"action":"query","query":{"topic":"meteo","location_code":"shanghai","metric_code":"era5_air_temperature_2m","start_date":"2026-10-20","end_date":"2026-10-20"}}
+```
 
 GRACED 速率和统计局发电量的指标规则与查询数据版本一起返回并随结果保存。规则有独立的版本标识，应用按已发布快照的指标、单位、时间粒度和来源类型匹配，历史查询的版本及哈希无需改写。GRACED 按日保留 `kgC/h`，月度发电量保留发布原值及缺测。年初至本月累计与累计同比跨年重置，当前只开放查数、出图和统计，本期发电量及本期同比可按实际连续观测预检预测。
 

@@ -3,7 +3,7 @@ import "server-only";
 import { withBusinessAction } from "@/lib/agent-runtime/policy.server";
 import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
-import { cityDatasets, datasets, generationProducts, powerProducts, type DataQuery, type DataTopic } from "./contracts";
+import { cityDatasets, datasets, era5HistoryDataset, generationProducts, powerProducts, type DataQuery, type DataTopic } from "./contracts";
 import { cityCodesForName } from "./city-names";
 import { catalogEntry, resolveVersion, versionSelect, type VersionRow } from "./catalog.server";
 import { DataAgentError, readDataAgent } from "./database.server";
@@ -111,9 +111,14 @@ async function executeDataQuery(query: DataQuery) {
     if (cityDataset !== Boolean(city)) {
       throw new DataAgentError("INVALID_REGION", cityDataset ? "请指定该版本中的六位城市代码。" : "城市代码仅适用于城市年度数据。");
     }
-    const entity = city ?? (query.topic === "economy" ? query.economy_code : query.topic === "power" ? query.region_code
+    const era5History = version.dataset_id === era5HistoryDataset;
+    const location = query.topic === "meteo" ? query.location_code : undefined;
+    if (era5History !== Boolean(location)) {
+      throw new DataAgentError("INVALID_REGION", era5History ? "请指定该版本中的 ERA5 地点代码。" : "地点代码适用于 ERA5 历史天气。");
+    }
+    const entity = city ?? location ?? (query.topic === "economy" ? query.economy_code : query.topic === "power" ? query.region_code
       : query.topic === "meteo" ? query.region_code ?? "global" : "global");
-    if (cityDataset || query.topic === "economy" || (query.topic === "power" && entity !== "000000000000")) {
+    if (cityDataset || era5History || query.topic === "economy" || (query.topic === "power" && entity !== "000000000000")) {
       const region = await client.query(`
         SELECT 1 FROM standard.std_data_agent_fact
         WHERE topic_id = $1 AND dataset_version_id = $2 AND entity_code = $3 LIMIT 1`, [query.topic, version.id, entity]);
@@ -129,7 +134,7 @@ async function executeDataQuery(query: DataQuery) {
         "SELECT issue_time FROM catalog.weather_model_releases WHERE dataset_version_id = $1", [version.id]);
       issueTime = run.rows[0].issue_time.toISOString();
     }
-    if (query.topic === "meteo" && issueTime === null) {
+    if (query.topic === "meteo" && !era5History && issueTime === null) {
       const latest = await client.query<{ issue_time: Date | null }>(`
         SELECT max(issue_time) AS issue_time FROM standard.std_data_agent_fact
         WHERE ${factFilters()}`, filters);
@@ -160,6 +165,7 @@ async function executeDataQuery(query: DataQuery) {
       topic: query.topic, version: version.version, start_date: query.start_date, end_date: query.end_date,
       limit: query.limit,
       ...(city ? { city_code: city } : {}),
+      ...(location ? { location_code: location } : {}),
       ...(query.topic === "economy" ? { economy_code: entity } : {}),
       ...(query.topic === "power" && !city ? { region_code: entity, product: series, ...(comparison ? { province_comparison: true as const } : {}) } : {}),
       ...(query.topic === "meteo" && issueTime ? { issue_time: issueTime } : {}),

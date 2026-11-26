@@ -7,7 +7,7 @@ import { z } from "zod";
 import { getAnalysisJob } from "@/lib/agent-runtime/store";
 import { analysisResultSchema } from "@/lib/agent-runtime/analysis-result";
 import { catalogEntry, resolveVersion } from "@/lib/data-agent/catalog.server";
-import { cityDatasets } from "@/lib/data-agent/contracts";
+import { cityDatasets, era5HistoryDataset } from "@/lib/data-agent/contracts";
 import { readDataAgent, runDataAgentWrite } from "@/lib/data-agent/database.server";
 import { listDataCatalog, queryData } from "@/lib/data-agent/query.server";
 import { resolveDataResult } from "@/lib/data-agent/state.server";
@@ -126,7 +126,8 @@ async function fromDataResult(result: DataResult, publication?: string): Promise
     dimensions: { shape: category ? "category" : "time", time_grain: metric.time_grain },
     time_zone: "UTC", unit: metric.unit, data_type: metric.data_identity, source_url: sources, source_version: ref.version,
     publication_time: publication ?? null, retrieved_at: new Date().toISOString(), last_updated_at: publication ?? null,
-    model_id: query.topic === "meteo" ? "GFS" : null, model_version: null, forecast_origin: rows[0]?.issue_time ?? null,
+    model_id: ref.dataset_id === era5HistoryDataset ? "ERA5" : query.topic === "meteo" ? "GFS" : null,
+    model_version: null, forecast_origin: rows[0]?.issue_time ?? null,
     interval_method: null, transform_history: [], aggregation_method: "按发布原值", rules: metric.rules?.interpretation ?? metric.definition,
     truncated: ref.quality.truncated, region_label: category ? "同月各省" : label,
   }, rows.map(row => ({
@@ -424,14 +425,15 @@ export async function researchCatalog() {
   const [catalog, power] = await Promise.all([listDataCatalog().catch(() => undefined), listDataCatalog("power").catch(() => undefined)]);
   const published = catalog?.datasets ?? [];
   const business_datasets: BusinessDataset[] = published.filter(({ dataset_id }) =>
-    dataset_id !== cityDatasets.power && dataset_id !== cityDatasets.carbon).flatMap(({ topic, metrics }) => metrics.map(metric => ({
+    dataset_id !== cityDatasets.power && dataset_id !== cityDatasets.carbon).flatMap(({ topic, dataset_id, metrics }) => metrics.map(metric => ({
     id: "published:" + metric.metric_code, label: businessNames[metric.metric_code] ?? metric.name, domain: datasetDomain[topic],
     unit: metric.unit, frequency: metric.time_grain,
     request: { kind: "published", query: topic === "power"
       ? { topic, metric_code: metric.metric_code, limit: 120, region_code: "000000000000" }
       : topic === "economy"
         ? { topic, metric_code: metric.metric_code, limit: 120, economy_code: "CHN" }
-        : { topic, metric_code: metric.metric_code, limit: 120 } },
+        : { topic, metric_code: metric.metric_code, limit: 120,
+          ...(dataset_id === era5HistoryDataset ? { location_code: metric.coverage?.location_code } : {}) } },
   })));
   business_datasets.unshift({ id: "annual-capacity", label: "装机量 · 全国年末", domain: "electricity", unit: "GW", frequency: "year",
     request: { kind: "annual-capacity", source: "electricity", start_year: +powerRecords[0].year, end_year: +powerRecords.at(-1)!.year } });
