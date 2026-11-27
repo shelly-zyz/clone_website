@@ -37,6 +37,7 @@ export type WorkspaceContext = {
   powerPeers?: string;
   powerDemo?: "monthly";
   basemap?: string;
+  immersive?: "1";
   layers?: string;
   tech?: string;
   labels?: string;
@@ -119,6 +120,7 @@ export function readWorkspaceContext(search: URLSearchParams): WorkspaceContext 
     powerPeers: readList(search.get("powerPeers")),
     powerDemo: powerView === "generation" && search.get("powerDemo") === "monthly" ? "monthly" : undefined,
     basemap: readId(search.get("basemap")),
+    immersive: search.get("immersive") === "1" ? "1" : undefined,
     layers: readList(search.get("layers")),
     tech: readList(search.get("tech")),
     labels: readId(search.get("labels")),

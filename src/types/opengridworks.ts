@@ -30,6 +30,7 @@ export type CustomLayerKey = "customCorridor" | "customHeatmap";
 export type MapThemeKey =
   | "nasa"
   | "cartoDark"
+  | "light"
   | "deepOcean"
   | "eox"
   | "satellite"
@@ -55,6 +56,7 @@ export type RegionTargetId =
   | "france"
   | "europe"
   | "china"
+  | "shenzhen"
   | "india"
   | "japan";
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDownUp, ArrowRight, ArrowUpRight, BarChart3, CircleHelp, Layers3, Map, PanelRightClose, PanelRightOpen, Pause, Play, X } from "lucide-react";
+import { ArrowDownUp, ArrowRight, ArrowUpRight, BarChart3, CircleHelp, Layers3, Map, Maximize2, PanelRightClose, PanelRightOpen, Pause, Play, Sun, X } from "lucide-react";
 import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import type { PowerAnalysis } from "@/hooks/use-power-analysis";
 import { chinaProvinces } from "@/lib/china-provinces";
@@ -23,11 +23,27 @@ const failText = "暂无可核实数据";
 const grainLabels = { annual: "年度", monthly: "月度", ytd: "年内累计" };
 const regionOptions = chinaProvinces.map(({ code, name }) => ({ value: code, label: name }));
 
-export function PowerViews({ view, onView }: { view: PowerView; onView: (view: PowerView) => void }) {
+export function PowerViews({ view, onView, lightMode, onToggleLightMode, onImmersive }: {
+  view: PowerView;
+  onView: (view: PowerView) => void;
+  lightMode: boolean;
+  onToggleLightMode?: () => void;
+  onImmersive?: () => void;
+}) {
   return (
-    <nav className={switcherStyles.bar} aria-label="电力地图视图">
+    <nav className={`${switcherStyles.bar} og-power-view-switcher`} aria-label="电力地图视图">
       <button type="button" aria-pressed={view === "facilities"} onClick={() => onView("facilities")}>设备</button>
       <button type="button" aria-pressed={view !== "facilities"} onClick={() => { if (view === "facilities") onView("generation"); }}>电力分析</button>
+      {onToggleLightMode && (
+        <button className="og-power-view-action" type="button" aria-pressed={lightMode} onClick={onToggleLightMode}>
+          <Sun size={15} aria-hidden="true" /> 明亮模式
+        </button>
+      )}
+      {onImmersive && (
+        <button className="og-power-view-action" type="button" onClick={onImmersive}>
+          <Maximize2 size={15} aria-hidden="true" /> 沉浸视图
+        </button>
+      )}
     </nav>
   );
 }

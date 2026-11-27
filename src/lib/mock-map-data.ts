@@ -86,6 +86,12 @@ export const sourceLayers: SourceLayerMeta[] = [
   { key: "osmSubs", label: "OSM 变电站（美国）", layerKind: "substation" },
 ];
 
+export const shenzhenBounds = { west: 113.751453, south: 22.396343, east: 114.628466, north: 22.861749 };
+
+const shenzhenTarget: RegionTarget = {
+  id: "shenzhen", code: "440300", label: "深圳", center: [114.19, 22.63], zoom: 9.9, pitch: 0, bearing: 0, enabled: true,
+};
+
 export const regionTargets: RegionTarget[] = [
   { id: "global", code: "GL", label: "全球", center: [55, 24], zoom: 1.92, pitch: 0, bearing: 0, enabled: true },
   { id: "united-states", code: "US", label: "美国", center: [-96, 38], zoom: 4.15, pitch: 38, bearing: -18, enabled: true },
@@ -96,6 +102,7 @@ export const regionTargets: RegionTarget[] = [
   { id: "china", code: "CN", label: "中国", center: [104, 35], zoom: 3.9, pitch: 36, bearing: 14, enabled: true },
   { id: "india", code: "IN", label: "印度", center: [78, 22], zoom: 4.2, pitch: 38, bearing: 7, enabled: true },
   { id: "japan", code: "JP", label: "日本", center: [138, 37], zoom: 4.9, pitch: 42, bearing: 18, enabled: true },
+  shenzhenTarget,
 ];
 
 export const regions: RegionMeta[] = [
@@ -148,9 +155,26 @@ export const regions: RegionMeta[] = [
     countryCodes: ["JP"],
     bounds: [{ west: 128.5, south: 30, east: 146, north: 46.5 }],
   },
+  {
+    ...shenzhenTarget,
+    countryCodes: [],
+    bounds: [shenzhenBounds],
+  },
 ];
 
 export const mapThemes: MapTheme[] = [
+  {
+    key: "light",
+    label: "明亮模式",
+    description: "浅灰街道底图",
+    tileUrls: ["https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}"],
+    attribution: "Esri, HERE, Garmin, © OpenStreetMap contributors and the GIS user community",
+    background: "#eef2f6",
+    maxzoom: 13,
+    rasterOpacity: 1,
+    rasterSaturation: 0,
+    rasterContrast: 0,
+  },
   {
     key: "nasa",
     label: "NASA",
@@ -685,7 +709,8 @@ export function getRegionStats(
 ): RegionStats {
   const region = dataset.regions.find((item) => item.id === regionId) ?? dataset.regions[0];
   const assets = dataset.energyAssets
-    .filter((asset) => regionMatchesCountry(region, asset.countryCode))
+    .filter((asset) => region.id === "shenzhen"
+      ? containsCoordinate(region, asset.lng, asset.lat) : regionMatchesCountry(region, asset.countryCode))
     .filter((asset) => visibleTechnologies[asset.technology] !== false)
     .filter((asset) => activeSizeMin === null || asset.capacityMw >= activeSizeMin);
 
