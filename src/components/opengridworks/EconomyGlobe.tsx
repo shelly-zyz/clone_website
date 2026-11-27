@@ -127,11 +127,8 @@ export function EconomyGlobe({ active, rotating, basemap, onBasemapError, values
     }
 
     map.current = view;
-    const firstPaint = window.setTimeout(() => { if (view.isStyleLoaded()) setStatus("ready"); }, 2200);
-    view.once("load", () => {
-      clearTimeout(firstPaint);
-      setStatus("ready");
-    });
+    // The globe can draw as local geometry arrives while optional basemap tiles are still pending.
+    view.once("style.load", () => setStatus("ready"));
     const saveCamera = () => {
       const params = new URLSearchParams(window.location.search);
       if (window.location.pathname !== "/workspace" || params.get("topic") !== "economy") return;
@@ -142,14 +139,12 @@ export function EconomyGlobe({ active, rotating, basemap, onBasemapError, values
     view.on("moveend", saveCamera);
     const onContextLoss = () => setStatus("unavailable");
     const onContextRestore = () => {
-      if (view.isStyleLoaded()) setStatus("ready");
-      else view.once("style.load", () => setStatus("ready"));
+      setStatus("ready");
     };
     view.getCanvas().addEventListener("webglcontextlost", onContextLoss);
     view.getCanvas().addEventListener("webglcontextrestored", onContextRestore);
     const stopObservingViewport = observeMapViewport(view);
     return () => {
-      clearTimeout(firstPaint);
       stopObservingViewport();
       view.getCanvas().removeEventListener("webglcontextlost", onContextLoss);
       view.getCanvas().removeEventListener("webglcontextrestored", onContextRestore);
