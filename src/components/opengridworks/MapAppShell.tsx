@@ -4828,6 +4828,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
     setActiveMapTheme(theme);
     replaceWorkspaceContext({ basemap: theme });
   }, []);
+  const toggleLightMode = () => setBasemap(lightMode ? darkMapTheme.current : "light");
   const setImmersive = useCallback((open: boolean) => {
     setCinematic(open);
     setActivePanel(null);
@@ -5446,7 +5447,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
           {activeProject === "power" && !cinematic && (
             <PowerViews view={powerView} onView={selectPowerView}
               lightMode={lightMode}
-              onToggleLightMode={powerFacilities ? () => setBasemap(lightMode ? darkMapTheme.current : "light") : undefined}
+              onToggleLightMode={powerFacilities ? toggleLightMode : undefined}
               onImmersive={powerFacilities ? () => setImmersive(true) : undefined} />
           )}
           {activeProject === "weather" && (
@@ -5651,6 +5652,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
           {cinematic ? (
             <div className="og-cinematic-banner" role="region" aria-label="沉浸视图">
               <strong>{powerFacilities && focusedRegion === "shenzhen" ? "深圳 · 沉浸视图" : "沉浸视图"}</strong>
+              {powerFacilities && <button type="button" aria-pressed={lightMode} onClick={toggleLightMode}>明亮模式</button>}
               <button type="button" onClick={() => setImmersive(false)}>退出沉浸视图</button>
             </div>
           ) : null}
