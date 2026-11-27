@@ -263,9 +263,6 @@ const carbonTargets = [
 ];
 
 
-const globeSpinStepDurationMs = 1000;
-const globeSpinSecondsPerCycle = 240;
-const globeSpinMaxZoom = 2.5;
 const labelPresetKeys = ["zoom-v2", "zoom-v1", "lines-only", "no-labels", "bleed"] as const satisfies readonly LabelPreset[];
 const initialLabelSettings: LabelSettings = {
   preset: "zoom-v2",
@@ -2522,6 +2519,7 @@ function EarthProjectViewport({ active, hash, onLoad, onLocation }: {
 
 function MapViewport({
   active,
+  rotating,
   activeProject,
   visibleTechnologies,
   visibleLayers,
@@ -2554,6 +2552,7 @@ function MapViewport({
   onScreenshotComplete,
 }: {
   active: boolean;
+  rotating: boolean;
   activeProject: ProjectMode;
   visibleTechnologies: BooleanRecord<TechnologyKey>;
   visibleLayers: BooleanRecord<LayerKey>;
@@ -2863,9 +2862,9 @@ function MapViewport({
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !ready || !active || !["power", "carbon"].includes(activeProject)) return;
+    if (!map || !ready || !active || !rotating || cinematic) return;
     return startGlobeRotation(map);
-  }, [active, activeProject, ready]);
+  }, [active, cinematic, ready, rotating]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -3145,72 +3144,6 @@ function MapViewport({
       duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 390,
     });
   }, [active, focusRequest, ready]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !ready || cinematic || !active) {
-      return;
-    }
-
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      return;
-    }
-
-    const canvas = map.getCanvas();
-    let pointerIsDown = false;
-    let wheelResumeTimer = 0;
-
-    const spinGlobe = (event?: { type?: string; viewportResize?: boolean }) => {
-      if (event?.viewportResize || document.hidden || pointerIsDown || wheelResumeTimer || map.isMoving() || map.getZoom() > globeSpinMaxZoom) {
-        return;
-      }
-
-      const center = map.getCenter();
-      map.easeTo({
-        center: [center.lng - (360 / globeSpinSecondsPerCycle), center.lat],
-        duration: globeSpinStepDurationMs,
-        easing: (progress) => progress,
-        essential: false,
-      });
-    };
-
-    const pauseForPointer = () => {
-      pointerIsDown = true;
-      map.stop();
-    };
-
-    const resumeAfterPointer = () => {
-      pointerIsDown = false;
-      spinGlobe();
-    };
-
-    const pauseForWheel = () => {
-      window.clearTimeout(wheelResumeTimer);
-      wheelResumeTimer = window.setTimeout(() => {
-        wheelResumeTimer = 0;
-        spinGlobe();
-      }, globeSpinStepDurationMs);
-    };
-
-    canvas.addEventListener("pointerdown", pauseForPointer);
-    canvas.addEventListener("wheel", pauseForWheel, { passive: true });
-    window.addEventListener("pointerup", resumeAfterPointer);
-    window.addEventListener("pointercancel", resumeAfterPointer);
-    map.on("moveend", spinGlobe);
-    document.addEventListener("visibilitychange", spinGlobe);
-    spinGlobe();
-
-    return () => {
-      canvas.removeEventListener("pointerdown", pauseForPointer);
-      canvas.removeEventListener("wheel", pauseForWheel);
-      window.removeEventListener("pointerup", resumeAfterPointer);
-      window.removeEventListener("pointercancel", resumeAfterPointer);
-      map.off("moveend", spinGlobe);
-      document.removeEventListener("visibilitychange", spinGlobe);
-      window.clearTimeout(wheelResumeTimer);
-      map.stop();
-    };
-  }, [active, cinematic, ready]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -4773,6 +4706,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
   const [activeSizeMin, setActiveSizeMin] = useState<number | null>(initialContext.minMw ?? null);
 
   const [weatherDocument, setWeatherDocument] = useState<Document | null>(null);
+  const [globeRotating, setGlobeRotating] = useState(false);
   const [carbonPlaying, setCarbonPlaying] = useState(false);
   const [publishedPowerAssets, setPublishedPowerAssets] = useState<PublishedPowerAssets>();
   const [chinaMap, setChinaMap] = useState<typeof import("@/lib/china-map-data") | null>();
@@ -4803,6 +4737,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
   }, []);
 
   const changeProject = useCallback(({ topic, context }: WorkspaceSelection) => {
+    setGlobeRotating(false);
     setActivePanel(null);
     setSelectedFeature(null);
     setHoverTooltip(null);
@@ -5395,6 +5330,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
           <div className="og-workspace-map-layer" hidden={!sharedMapActive}>
             <MapViewport
               active={sharedMapActive}
+              rotating={globeRotating}
               activeProject={activeProject === "carbon" ? "carbon" : "power"}
               visibleTechnologies={visibleTechnologies}
               visibleLayers={visibleLayers}
@@ -5457,6 +5393,7 @@ export function MapAppShell({ initialProject = "power", initialContext = {} }: {
           <WorkspaceSidebar
             topic={activeProject}
             summary={sidebarSummary}
+            rotation={sharedMapActive ? { playing: globeRotating, toggle: () => setGlobeRotating(value => !value) } : undefined}
             onSearch={activeProject === "power" && powerView === "facilities" ? () => togglePanel("search") : undefined}
             leadingFilter={activeProject === "power" && powerView === "facilities" ? (
               <WorkspaceFilterSelect

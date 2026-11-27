@@ -47,8 +47,9 @@ function mapLayers(values: EconomyValue[], metric: EconomyMetric, outlook: boole
   return { fill, points };
 }
 
-export function EconomyGlobe({ active, basemap, onBasemapError, values, metric, outlook, selected, country, camera, cameraRevision = 0, onSelect }: {
+export function EconomyGlobe({ active, rotating, basemap, onBasemapError, values, metric, outlook, selected, country, camera, cameraRevision = 0, onSelect }: {
   active: boolean;
+  rotating: boolean;
   basemap: MapTheme;
   onBasemapError: () => void;
   values: EconomyValue[];
@@ -168,9 +169,9 @@ export function EconomyGlobe({ active, basemap, onBasemapError, values, metric, 
 
   useEffect(() => {
     const view = map.current;
-    if (!view || !active || status !== "ready") return;
+    if (!view || !active || !rotating || status !== "ready") return;
     return startGlobeRotation(view);
-  }, [active, status]);
+  }, [active, rotating, status]);
 
   useEffect(() => {
     const view = map.current;

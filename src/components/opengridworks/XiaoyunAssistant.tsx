@@ -131,7 +131,7 @@ function microphoneHelp(message: string) {
     return "录音设备无法启动，可能被其他软件占用或被系统限制。请关闭其他录音应用，检查系统麦克风权限和声音输入设备后重试。";
   }
   if (/https|localhost|getusermedia|secure context/i.test(message)) {
-    return "当前页面不支持录音。请在独立浏览器中打开本机网站，使用 HTTPS 或 localhost 地址，不要在受限的内嵌预览里录音。";
+    return "浏览器只允许在可信 HTTPS 或本机 localhost 页面启用麦克风。请使用支持录音的网站地址。";
   }
   return "请检查浏览器麦克风权限和系统声音输入设备；内嵌预览受限时，在独立浏览器打开网站后重试。文字输入仍可使用。";
 }
@@ -207,6 +207,7 @@ function XiaoyunRuntime({ workspace, children }: { workspace: Workspace | null; 
       });
       if (check.signal.aborted) return;
       if (response.status === 401) {
+        setConnectionError("");
         setRequiresToken(true);
         return;
       }
@@ -647,6 +648,9 @@ function XiaoyunRuntime({ workspace, children }: { workspace: Workspace | null; 
       // Its UI and wake() both call this public method; cloud speech errors stay in the SDK UI.
       assistant.setMicEnabled = async enabled => {
         try {
+          if (enabled && (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia)) {
+            throw new Error("麦克风需要 HTTPS 或 localhost 页面");
+          }
           if (enabled) void loadGreeting();
           await setMicEnabled(enabled);
           if (enabled && !disposed) setMicrophoneError("");

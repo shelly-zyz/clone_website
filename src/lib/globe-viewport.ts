@@ -65,6 +65,7 @@ export function startGlobeRotation(map: Map) {
   let resumeTimer: number | undefined;
   let running = true;
   let paused = false;
+  let rotating = false;
 
   const clearTimers = () => {
     if (rotationTimer !== undefined) window.clearTimeout(rotationTimer);
@@ -97,7 +98,7 @@ export function startGlobeRotation(map: Map) {
   };
 
   const rotate = () => {
-    if (!running || paused || heldInteractions.size > 0 || !map.isStyleLoaded()) return;
+    if (!running || paused || heldInteractions.size > 0 || document.hidden) return;
     const { lng, lat } = map.getCenter();
     map.easeTo({
       center: [lng + globeRotationDegrees, lat],
@@ -117,10 +118,12 @@ export function startGlobeRotation(map: Map) {
   };
 
   const handleMoveStart = (event: { globeAutoRotation?: boolean }) => {
-    if (!event.globeAutoRotation) pause();
+    rotating = Boolean(event.globeAutoRotation);
+    if (!rotating) pause();
   };
 
   const handleMoveEnd = (event: { globeAutoRotation?: boolean }) => {
+    rotating = false;
     if (event.globeAutoRotation) scheduleRotation(180);
     else resume();
   };
@@ -142,8 +145,16 @@ export function startGlobeRotation(map: Map) {
   document.addEventListener("keyup", handleKeyUp);
   map.on("movestart", handleMoveStart);
   map.on("moveend", handleMoveEnd);
-  if (map.isStyleLoaded()) scheduleRotation(650);
-  else map.once("load", () => scheduleRotation(650));
+  const handleVisibility = () => {
+    if (document.hidden) {
+      pause();
+      if (rotating) map.stop();
+    } else {
+      resume();
+    }
+  };
+  document.addEventListener("visibilitychange", handleVisibility);
+  scheduleRotation(650);
 
   return () => {
     running = false;
@@ -156,5 +167,7 @@ export function startGlobeRotation(map: Map) {
     document.removeEventListener("keyup", handleKeyUp);
     map.off("movestart", handleMoveStart);
     map.off("moveend", handleMoveEnd);
+    document.removeEventListener("visibilitychange", handleVisibility);
+    if (rotating) map.stop();
   };
 }

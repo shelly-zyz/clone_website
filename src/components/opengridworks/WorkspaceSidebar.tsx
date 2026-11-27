@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpRight, ChevronDown, Play, Search, SlidersHorizontal, X } from "lucide-react";
+import { ArrowUpRight, ChevronDown, Pause, Play, Search, SlidersHorizontal, X } from "lucide-react";
 import { useId, useRef, useState, type ReactNode } from "react";
 import { globeTopics, type WorkspaceTopic } from "@/lib/globe-topics";
 import { rememberWorkspace } from "@/lib/workspace-context";
@@ -31,9 +31,10 @@ export function WorkspaceFilterSelect({ label, options, value, onChange }: {
   );
 }
 
-export function WorkspaceSidebar({ topic, summary, leadingFilter, children, onSearch }: {
+export function WorkspaceSidebar({ topic, summary, rotation, leadingFilter, children, onSearch }: {
   topic: WorkspaceTopic;
   summary: string;
+  rotation?: { playing: boolean; toggle: () => void };
   leadingFilter?: ReactNode;
   children: ReactNode;
   onSearch?: () => void;
@@ -90,6 +91,12 @@ export function WorkspaceSidebar({ topic, summary, leadingFilter, children, onSe
             <Play size={13} fill="currentColor" aria-hidden="true" />
             播放开场
           </Link>
+          {rotation && (
+            <button className="og-workspace-action" type="button" onClick={rotation.toggle} aria-pressed={rotation.playing}>
+              {rotation.playing ? <Pause size={13} aria-hidden="true" /> : <Play size={13} aria-hidden="true" />}
+              {rotation.playing ? "暂停自转" : "播放自转"}
+            </button>
+          )}
           {leadingFilter}
           {onSearch ? (
             <button className="og-workspace-action" type="button" onClick={() => {

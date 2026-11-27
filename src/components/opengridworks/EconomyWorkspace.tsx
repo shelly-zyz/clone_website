@@ -231,6 +231,7 @@ export function EconomyWorkspace({ active, basemap, onBasemapError, initialConte
   const [profileOpen, setProfileOpen] = useState<boolean>();
   const profileTrigger = useRef<HTMLButtonElement>(null);
   const viewId = useId();
+  const [rotating, setRotating] = useState(false);
   const [wasActive, setWasActive] = useState(active);
 
   const restoreContext = useCallback((context: WorkspaceContext) => {
@@ -244,6 +245,7 @@ export function EconomyWorkspace({ active, basemap, onBasemapError, initialConte
   }, []);
   if (wasActive !== active) {
     setWasActive(active);
+    setRotating(false);
     if (active) restoreContext(initialContext ?? {});
   }
 
@@ -338,7 +340,7 @@ export function EconomyWorkspace({ active, basemap, onBasemapError, initialConte
     ?? [{ value: String(year), label: `${year} 年` }];
 
   const globe = (
-    <EconomyGlobe active={active} basemap={basemap} onBasemapError={onBasemapError} values={outlookActive ? forecastValues : values}
+    <EconomyGlobe active={active} rotating={rotating} basemap={basemap} onBasemapError={onBasemapError} values={outlookActive ? forecastValues : values}
       metric={metric} outlook={outlookActive} selected={selected} country={country} camera={camera} cameraRevision={cameraRevision}
       onSelect={pickCountry} />
   );
@@ -370,7 +372,8 @@ export function EconomyWorkspace({ active, basemap, onBasemapError, initialConte
             ticks={["≥ " + formatEconomyAmount(max, metric), "≤ " + formatEconomyAmount(min, metric)]}
             note="对数色阶 · 深灰为缺测" />}
       </div>
-      <WorkspaceSidebar topic="economy" summary={outlookActive ? "世界银行 GEP · 实际 GDP 增速预测" : "世界银行 WDI · 全球经济指标"}>
+      <WorkspaceSidebar topic="economy" rotation={{ playing: rotating, toggle: () => setRotating(value => !value) }}
+        summary={outlookActive ? "世界银行 GEP · 实际 GDP 增速预测" : "世界银行 WDI · 全球经济指标"}>
         <section className={styles.filters} aria-label={outlookActive ? "增长展望筛选" : "经济数据筛选"}>
           {snapshot && <CountrySearch countries={snapshot.countries} onSelect={chooseCountry} />}
           <WorkspaceFilterSelect label="国家或地区" options={countryOptions} value={country} onChange={chooseCountry} />

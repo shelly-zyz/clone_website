@@ -101,8 +101,7 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
 }) {
   const legendId = useId();
   const final = replay.rain.length - 1;
-  // Every topic view starts playing from the first frame and loops until the user takes over.
-  const [playing, setPlaying] = useState(() => typeof window === "undefined" || !window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  const [playing, setPlaying] = useState(false);
   const [playedView, setPlayedView] = useState(view);
   const { west, east, south, north } = replay.bounds;
   const initialCell = initialPoint && initialPoint[0] >= west && initialPoint[0] <= east && initialPoint[1] >= south && initialPoint[1] <= north
@@ -125,11 +124,11 @@ function ReplayControls({ replay, geography, region, view, onViewChange, initial
   const selectedCell = point;
   const planView = view === "rain" || view === "accumulation";
   const [sourceFrame, setSourceFrame] = useState(initialFrame);
-  const [index, setIndex] = useState(0);
+  const [index, setIndex] = useState(() => Math.min(initialFrame ?? 0, final));
   if (playedView !== view) {
     setPlayedView(view);
     setIndex(0);
-    setPlaying(!window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+    setPlaying(false);
   }
   const [chromeVisible, setChromeVisible] = useState(true);
   if (sourceFrame !== initialFrame) {
